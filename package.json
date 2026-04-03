@@ -1,0 +1,108 @@
+{
+  "name": "otterscript-vscode",
+  "displayName": "OtterScript Language Support",
+  "description": "Syntax highlighting, snippets, and function support for OtterScript",
+  "publisher": "sighanse",
+  "contributors": [
+    {
+      "name": "Sigurd Hansen",
+      "email": "sigurd.hansen@gmail.com"
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sighanse/otterscript-vscode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sighanse/otterscript-vscode/issues"
+  },
+  "homepage": "https://github.com/sighanse/otterscript-vscode",
+  "license": "MIT",
+  "version": "0.1.0",
+  "icon": "images/logo.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets"
+  ],
+  "keywords": [
+    "otterscript",
+    "otter",
+    "inedo",
+    "proget",
+    "automation",
+    "devops",
+    "configuration-management"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "otterscript",
+        "aliases": [
+          "OtterScript",
+          "otterscript"
+        ],
+        "extensions": [
+          ".otter",
+          ".oscript"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "otterscript",
+        "scopeName": "source.otterscript",
+        "path": "./syntaxes/otterscript.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "otterscript",
+        "path": "./snippets/otterscript.json"
+      }
+    ],
+    "configuration": {
+      "title": "OtterScript",
+      "properties": {
+        "otterscript.completion.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable auto-completion suggestions"
+        },
+        "otterscript.signatureHelp.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable signature help for functions and operations"
+        },
+        "otterscript.hover.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable hover information for functions and operations"
+        }
+      }
+    },
+    "colors": [
+      {
+        "id": "otterscript.errorBackground",
+        "description": "Background color for syntax errors",
+        "defaults": {
+          "dark": "#FF000022",
+          "light": "#FF000022"
+        }
+      },
+      {
+        "id": "otterscript.warningBackground",
+        "description": "Background color for warnings",
+        "defaults": {
+          "dark": "#FFA50022",
+          "light": "#FFA50022"
+        }
+      }
+    ],
+    "commands": []
+  }
+}

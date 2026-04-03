@@ -1,0 +1,48 @@
+{
+  // Enforce consistent Markdown style without fighting GitHub rendering
+
+  // MD013: Line length
+  // Disabled because:
+  // - GitHub renders long lines well
+  // - URLs, code blocks, and tables often exceed limits
+  "line-length": false,
+
+  // MD033: Inline HTML
+  // Allowed because:
+  // - GitHub Markdown supports inline HTML
+  // - Used occasionally for layout or emphasis
+  "no-inline-html": false,
+
+  // MD041: First line in file should be a top-level heading
+  // Disabled because:
+  // - Some files don’t start with H1
+  "first-line-heading": false,
+
+  // MD029: Ordered list item prefix
+  // Keep flexible: Markdown auto-renumbers anyway
+  "ol-prefix": false,
+
+  // MD024: Multiple headings with same content
+  // Common in structured docs with repeated files like CHANGELOG.md
+  "no-duplicate-heading": {
+    "siblings_only": true
+  },
+
+  // MD026: Trailing punctuation in headings
+  // Allow punctuation for natural-language headings
+  "no-trailing-punctuation": false,
+
+  // MD036: Emphasis used instead of a heading
+  // Allow in prose documentation
+  "no-emphasis-as-heading": false,
+
+  // MD040: Fenced code language
+  // IMPORTANT: Keep this ON for documentation quality
+  "fenced-code-language": true,
+
+  // MD046: Code block style
+  // Enforce triple-backtick style consistently
+  "code-block-style": {
+    "style": "fenced"
+  }
+}

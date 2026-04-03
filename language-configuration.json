@@ -1,0 +1,102 @@
+{
+  "$schema": "vscode://schemas/language-configuration",
+  "comments": {
+    "lineComment": "#",
+    "blockComment": ["/*", "*/"]
+  },
+  "brackets": [
+    ["{", "}"],
+    ["[", "]"],
+    ["(", ")"],
+    ["<%", "%>"]
+  ],
+  "autoClosingPairs": [
+    {
+      "open": "{",
+      "close": "}"
+    },
+    {
+      "open": "[",
+      "close": "]"
+    },
+    {
+      "open": "(",
+      "close": ")"
+    },
+    {
+      "open": "\"",
+      "close": "\"",
+      "notIn": ["string", "comment"]
+    },
+    {
+      "open": "'",
+      "close": "'",
+      "notIn": ["string", "comment"]
+    },
+    {
+      "open": "/*",
+      "close": "*/",
+      "notIn": ["string"]
+    },
+    {
+      "open": "<%",
+      "close": "%>",
+      "notIn": ["string", "comment"]
+    },
+    {
+      "open": ">>",
+      "close": ">>",
+      "notIn": ["string"]
+    }
+  ],
+  "surroundingPairs": [
+    ["{", "}"],
+    ["[", "]"],
+    ["(", ")"],
+    ["\"", "\""],
+    ["'", "'"],
+    ["/*", "*/"],
+    ["<%", "%>"],
+    [">>", ">>"]
+  ],
+  "folding": {
+    "offSide": false,
+    "markers": {
+      "start": "^\\s*#region\\b",
+      "end": "^\\s*#endregion\\b"
+    }
+  },
+  "wordPattern": "(-?\\d*\\.\\d\\w*)|([a-zA-Z][a-zA-Z0-9_-]*)|([$@%]\\{?[a-zA-Z][a-zA-Z0-9_\\- ]*\\}?)|(::)",
+  "indentationRules": {
+    "increaseIndentPattern": "^\\s*(if|foreach|for|try|with|module|\\{)\\b.*$",
+    "decreaseIndentPattern": "^\\s*(\\}|else|catch)\\b.*$"
+  },
+  "onEnterRules": [
+    {
+      "beforeText": "^\\s*\\{",
+      "afterText": "^\\s*\\}",
+      "action": {
+        "indent": "indent"
+      }
+    },
+    {
+      "beforeText": "^\\s*\\{",
+      "action": {
+        "indent": "indent"
+      }
+    },
+    {
+      "beforeText": "^\\s*\\}",
+      "action": {
+        "indent": "outdent"
+      }
+    },
+    {
+      "beforeText": "^\\s*#.*$",
+      "action": {
+        "indent": "none",
+        "appendText": "# "
+      }
+    }
+  ]
+}

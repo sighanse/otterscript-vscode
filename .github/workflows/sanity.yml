@@ -1,0 +1,56 @@
+name: Sanity
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  sanity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install JSONC parser
+        run: npm install --no-save jsonc-parser
+
+      - name: Validate extension.js
+        run: node -c extension.js
+
+      - name: Validate docs.js
+        run: node -e "require('./docs.js')"
+
+      - name: Validate JSON files
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('package.json', 'utf8'))"
+          node -e "JSON.parse(require('fs').readFileSync('language-configuration.json', 'utf8'))"
+          node -e "JSON.parse(require('fs').readFileSync('syntaxes/otterscript.tmLanguage.json', 'utf8'))"
+
+      - name: Validate JSONC files
+        run: |
+          node -e "
+            const fs = require('fs');
+            const { parse } = require('jsonc-parser');
+            const text = fs.readFileSync('snippets/otterscript.json', 'utf8');
+            const errors = [];
+            parse(text, errors);
+            if (errors.length) {
+              console.error(errors);
+              process.exit(1);
+            }
+          "

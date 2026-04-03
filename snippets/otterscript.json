@@ -1,0 +1,165 @@
+// OtterScript snippets: Structural templates only. Functions and operations are provided via completion providers.
+{
+  "For Each Loop": {
+    "prefix": "foreach",
+    "body": [
+      "foreach $${1:item} in ${2:@(values)} {",
+      "    ${3:# loop body}",
+      "}"
+    ],
+    "description": "Iteration block statement"
+  },
+  "If Statement": {
+    "prefix": "if",
+    "body": ["if ${1:condition} {", "    ${2:# body}", "}"],
+    "description": "Predicate statement"
+  },
+  "If-Else Statement": {
+    "prefix": "ifelse",
+    "body": [
+      "if ${1:condition} {",
+      "    ${2:# true body}",
+      "} else {",
+      "    ${3:# false body}",
+      "}"
+    ],
+    "description": "If-Else predicate statement"
+  },
+  "Try-Catch Block": {
+    "prefix": "try",
+    "body": [
+      "try {",
+      "    ${1:# protected code}",
+      "} catch {",
+      "    ${2:# error handler}",
+      "}"
+    ],
+    "description": "Try-Catch error handling block"
+  },
+  "Map Literal": {
+    "prefix": "map",
+    "body": ["%(", "    ${1:key}: ${2:value}", ")"],
+    "description": "Create a map literal"
+  },
+  "Vector Literal": {
+    "prefix": "vec",
+    "body": ["@(${1:values})"],
+    "description": "Create a vector literal"
+  },
+  "Template Block": {
+    "prefix": "template",
+    "body": [
+      "<% ${1:statement} { %>",
+      "    ${2}",
+      "<% } %>"],
+    "description": "OtterScript text template block using <% %> syntax"
+  },
+  "Template Foreach": {
+    "prefix": "tplforeach",
+    "body": [
+      "<% foreach ${1:%item} in ${2:@values} { %>",
+      "    ${3}",
+      "<% } %>"
+    ],
+    "description": "Template foreach loop"
+  },
+  "Template If Else": {
+    "prefix": "tplif",
+    "body": [
+      "<% if ${1:condition} { %>",
+      "    ${2}",
+      "<% } else { %>",
+      "    ${3}",
+      "<% } %>"
+    ],
+    "description": "Template if/else block"
+  },
+  "If Match Regex": {
+    "prefix": "ifMatchesRegex",
+    "body": [
+      "if $$MatchesRegex(${1:text}, \"${2:pattern}\") {",
+      "    ${3:# matched}",
+      "}"
+    ],
+    "description": "Test if string matches regex pattern"
+  },
+  "Split String to Vector": {
+    "prefix": "splitToVector",
+    "body": [
+      "@${1:parts} = @Split(\"${2:text}\", \"${3:,}\"${4:, ${5:count}});"
+    ],
+    "description": "Split string into vector using @Split"
+  },
+  "Join Vector to String": {
+    "prefix": "joinIntoString",
+    "body": ["$${1:result} = $$Join(\"${2:, }\", @${3:vector});"],
+    "description": "Join vector elements into a string"
+  },
+  "File Exists Check": {
+    "prefix": "ifexists",
+    "body": [
+      "if $$FileExists(\"${1:C:\\\\path\\\\to\\\\file}\") {",
+      "    ${2:# file exists}",
+      "}"
+    ],
+    "description": "Check if a file exists"
+  },
+  "Directory Exists Check": {
+    "prefix": "ifdirexists",
+    "body": [
+      "if $$DirectoryExists(\"${1:C:\\\\path\\\\to\\\\directory}\") {",
+      "    ${2:# directory exists}",
+      "}"
+    ],
+    "description": "Check if a directory exists"
+  },
+  "Module Definition": {
+    "prefix": "module",
+    "body": [
+      "module ${1:ModuleName} <${2:out $$param=\"default\"}> {",
+      "    ${3:# module body}",
+      "}"
+    ],
+    "description": "Define a reusable module"
+  },
+  "Call Module": {
+    "prefix": "call",
+    "body": ["call ${1:ModuleName} (", "    ${2:param}: ${3:value}", ");"],
+    "description": "Call a defined module"
+  },
+  "With Directive": {
+    "prefix": "with",
+    "body": ["with ${1:retry=3, timeout=30} {", "    ${2:# operations}", "}"],
+    "description": "Execution directive block"
+  },
+  "Set Variable": {
+    "prefix": "set",
+    "body": ["set ${1:local} \\$${2:variableName} = ${3:value};"],
+    "description": "Assign a value to a variable"
+  },
+  "Global Variable": {
+    "prefix": "global",
+    "body": ["global \\$${1:variableName} = ${2:value};"],
+    "description": "Declare a global variable"
+  },
+  "Throw Error": {
+    "prefix": "throw",
+    "body": ["throw \"${1:error message}\";"],
+    "description": "Throw an error (can be caught by try-catch)"
+  },
+  "Sleep": {
+    "prefix": "sleep",
+    "body": ["Sleep ${1:10};"],
+    "description": "Pause execution for specified seconds"
+  },
+  "For Each Affected Package": {
+    "prefix": "foreachaffected",
+    "body": ["foreach $${1:package} in @AffectedPackages {", "    $2", "}"],
+    "description": "Iterate over affected packages"
+  },
+  "For Each API Key": {
+    "prefix": "foreachapikey",
+    "body": ["foreach $${1:apiKey} in @ApiKeys {", "    $2", "}"],
+    "description": "Iterate over API keys"
+  }
+}

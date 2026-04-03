@@ -1,0 +1,35 @@
+{
+  // Treat repository snippet files as JSON with comments
+  "files.associations": {
+    "snippets/*.json": "jsonc",
+    ".vscode/*.json": "jsonc"  // VS Code workspace settings
+  },
+  // JSON tooling
+  "json.validate.enable": true,
+  "json.schemas": [
+    {
+      "fileMatch": ["snippets/*.json"],
+      "url": "vscode://schemas/snippets"
+    }
+  ],
+  // Indentation & whitespace stability
+  "editor.insertSpaces": true,
+  "editor.tabSize": 2,
+  "editor.detectIndentation": false,
+  "editor.renderWhitespace": "boundary",
+  "editor.renderControlCharacters": true,
+
+  // File hygiene
+  "files.eol": "\n",
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+
+  // Use the same markdownlint rules in VS Code as in CI
+  "markdownlint.configFile": ".markdownlint.jsonc",
+
+  // Git
+  "git.branchProtection": ["main"],
+  "git.branchProtectionPrompt": "alwaysCommitToNewBranch",
+  "git.branchRandomName.enable": true,
+  "git.autofetch": true
+}

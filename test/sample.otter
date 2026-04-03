@@ -1,0 +1,300 @@
+###############################################################################
+# SAMPLE.OTTER
+#
+# This file is intended for testing:
+# - Syntax highlighting
+# - Hover (keywords, scalar functions, vector functions, variables)
+# - Signature help
+# - Completion
+# - Error tolerance in grammar
+###############################################################################
+
+###############################################################################
+# BASIC VARIABLES & ASSIGNMENTS
+###############################################################################
+
+set $name = "OtterScript";
+set $count = 3;
+set $pi = 3.14;
+
+global $environment = $EnvironmentName;
+
+###############################################################################
+# CONTROL FLOW (KEYWORD HOVER)
+###############################################################################
+
+if $count == 3 {
+    Log-Information "Count is three";
+} else {
+    Log-Warning "Count is not three";
+    Log-Debug "message";
+}
+# Intentional mistake: missing $
+# Grammar should recover after this
+if count == 1 {
+    Log-Warning "This condition is invalid but highlighting should recover";
+}
+
+if $count == "sws" {
+    # Comment inside if
+    Log-Information "Still works";
+}
+
+#if $count == 3 {
+#    Log-Information "Missing brace test";
+# missing }
+
+if $count = 3 & $count < 5 {
+    # invalid operator: single &
+}
+
+###############################################################################
+# FOREACH (VECTOR + VARIABLE SCOPE)
+###############################################################################
+
+foreach $item in @("one", "two", "three") {
+    Log-Information $item;
+}
+
+###############################################################################
+# TRY / CATCH / THROW
+###############################################################################
+
+try {
+    throw "Something went wrong intentionally";
+} catch {
+    Log-Error "Caught an error";
+}
+
+###############################################################################
+# CORE SCALAR FUNCTIONS (HOVER + SIGNATURE)
+###############################################################################
+
+$lower = $ToLower("HELLO");
+$upper = $ToUpper("world");
+$trimmed = $Trim(" padded ");
+$sub = $Substring("abcdef", 1, 3);
+$replaced = $Replace("hello world", "world", "otter");
+
+###############################################################################
+# JSON FUNCTIONS
+###############################################################################
+
+$json = $ToJson(%(
+    name: "example",
+    count: $count,
+    values: @(1, 2, 3)
+));
+
+$map = $FromJson($json);
+
+###############################################################################
+# STRING & REGEX
+###############################################################################
+
+if $MatchesRegex("abc123", "[a-z]+[0-9]+") {
+    Log-Information "Regex matched";
+}
+
+$result = $RegexReplace("abc123", "[0-9]+", "XYZ");
+
+###############################################################################
+# MATH & NUMERIC FUNCTIONS
+###############################################################################
+
+$total = $Expr("1 + 2 * 3");
+$inc = $Increment(4);
+$dec = $Decrement(10);
+$abs = $Abs(-42);
+$ceil = $Ceiling(2.3);
+$floor = $Floor(2.9);
+
+###############################################################################
+# $Compare FUNCTION
+###############################################################################
+# Valid operator forms: < > <= >= = !=
+# Returns "true" or "false"
+
+if $Compare(5, >, 3) {
+    Log-Information "5 > 3";
+}
+
+if $Compare("abc", =, "abc") {
+    Log-Information "Strings are equal";
+}
+
+# ProGet-style example
+if $Compare($VulnerabilityScore, >=, 7.5) {
+    Log-Warning "High vulnerability score";
+}
+
+# Forced numeric comparison
+#
+if $Compare("07", >, "6", true) {
+    Log-Information "Numeric forcing works";
+}
+
+# Unknown operator (should trigger diagnostics but not break highlighting)
+if $count == 3 $count < 5 {
+    Log-Information "Unknown operator";
+}
+
+if $tru == "test1" {
+    Log-Information "Test 1";
+}
+if $DirectoryExists("C:\\path\\to\\directory") {
+    #  dsfsfd
+}
+if $a == "test2" {
+    Log-Information "Test 2";
+}
+
+###############################################################################
+# LOOP CONTROL STATEMENTS
+###############################################################################
+
+foreach $i in @(1,2,3) {
+    if $i == 2 {
+        continue;
+    }
+    if $x == 3 {
+        break;
+    }
+    Log-Information $i;
+}
+# continue outside loop — should warn but not break
+continue;
+for i = 1 to 100
+local
+
+###############################################################################
+# FILE SYSTEM
+###############################################################################
+
+if $FileExists("C:\\temp\\file.txt") {
+    Log-Information "File exists";
+}
+
+if $DirectoryExists("C:\\temp") {
+    Log-Information "Directory exists";
+}
+
+###############################################################################
+# DATE / TIME
+###############################################################################
+
+$now = $Date();
+$utc = $DateUtc("yyyy-MM-ddTHH:mm:ss");
+
+###############################################################################
+# VECTORS & VECTOR FUNCTIONS
+###############################################################################
+
+@numbers = @(1, 2, 3, 4, 5);
+@range = @Range(5, 3);
+@parts = @Split("a,b,c", ",");
+@combined = @ListConcat(@(1,2), @(3,4));
+
+###############################################################################
+# PROGET-SPECIFIC VARIABLES & VECTORS
+###############################################################################
+
+foreach $pkg in @AffectedPackages {
+    Log-Warning "$pkg.Name affected versions: $pkg.AffectedVersions";
+}
+
+foreach $key in @ApiKeys {
+    Log-Information "API key: $key.Name expires $key.ExpirationDate";
+}
+
+###############################################################################
+# PROGET FUNCTIONS
+###############################################################################
+
+$hash = $PackageHash("hex", "sha512");
+$description = $PackageProperty("description", "none");
+$auth = $EncodeBasicAuth("user", "password");
+
+###############################################################################
+# MODULES
+###############################################################################
+
+module ExampleModule <out $result = "default"> {
+    set $result = "computed value";
+}
+
+call ExampleModule(
+    result: $value
+);
+
+###############################################################################
+# WITH DIRECTIVE (EXECUTION DIRECTIVES)
+###############################################################################
+
+with retry=3, timeout=30 {
+    Log-Information "Executing with retry and timeout";
+}
+
+with retry=3
+    {
+    with timeout=10 {
+        Log-Information "Nested with works";
+    }
+}
+
+with retry=3 {
+    if $count > 1 {
+        Log-Information "Inside with + if";
+    }
+}
+
+###############################################################################
+# SWIM STRINGS
+###############################################################################
+
+>>This is a swim string
+that spans multiple lines>>
+
+>==8>This is a swim string
+that spans multiple lines>==8>
+
+>--8>This is a swim string
+that spans multiple lines>--8>
+
+>>This is swim
+# this should not be a comment
+>>
+
+###############################################################################
+# TEMPLATE SYNTAX (HIGHLIGHTING + EMBEDDING)
+###############################################################################
+
+<% foreach %p in @AffectedPackages { %>
+* $(%p.Name) $(%p.AffectedVersions)
+<% } %>
+
+###############################################################################
+# UNKNOWN SYMBOL DIAGNOSTICS
+###############################################################################
+$Base64DecZZode("Test");
+@RangZZe(1, 5, 2)
+Log-InformatZZion "message"; # It's done
+@AffectedPackages "";
+###############################################################################
+# OTHER STATEMENTS
+###############################################################################
+
+raise-error "Shit hits the fan"
+
+await;
+await TokenName;
+
+warn;
+fail;
+
+force normal;
+
+$url = $UrlEncode("https://www.github.com")
+$encoded = $HtmlEncode("test")
+$fullPath = $PathCombine("path1", "path2")
+

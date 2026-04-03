@@ -1,0 +1,14 @@
+.git/
+.github/
+.gitignore
+.vscode/
+node_modules/
+test/
+.DS_Store
+*.vsix
+*.ps1
+*.log
+*.tmp
+CONTRIBUTING.md
+SECURITY.md
+.markdownlint.jsonc

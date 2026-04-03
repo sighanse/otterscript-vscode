@@ -1,0 +1,517 @@
+{
+  "scopeName": "source.otterscript",
+  "name": "OtterScript",
+  "fileTypes": [".otter", ".oscript"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#special-headers" },
+    { "include": "#swim-strings" },
+    { "include": "#with-block" },
+    { "include": "#if-block" },
+    { "include": "#keywords" },
+    { "include": "#statements" },
+    { "include": "#proget-variables" },
+    { "include": "#variables" },
+    { "include": "#literals" },
+    { "include": "#templating" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.otterscript",
+          "match": "#.*$"
+        },
+        {
+          "name": "comment.line.double-slash.otterscript",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.otterscript",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "special-headers": {
+      "patterns": [
+        {
+          "name": "comment.line.special.header.otterscript",
+          "match": "^##AH:\\s*([^:]+):\\s*(.*)$",
+          "captures": {
+            "1": { "name": "entity.name.tag.otterscript" },
+            "2": { "name": "string.unquoted.otterscript" }
+          }
+        }
+      ]
+    },
+    "if-block": {
+      "patterns": [
+        {
+          "name": "meta.statement.if.otterscript",
+          "begin": "\\bif\\b",
+          "beginCaptures": {
+            "0": { "name": "keyword.control.if.otterscript" }
+          },
+          "end": "\\}",
+          "patterns": [
+            {
+              "begin": "(?=\\{)",
+              "end": "\\{",
+              "endCaptures": {
+                "0": {
+                  "name": "punctuation.section.block.begin.otterscript"
+                }
+              },
+              "patterns": [
+                { "include": "#comments" },
+                { "include": "#condition-operators" },
+                { "include": "#variables" },
+                { "include": "#literals" },
+                { "include": "#operators" }
+              ]
+            },
+            {
+              "patterns": [
+                { "include": "#comments" },
+                { "include": "#if-block" },
+                { "include": "#with-block" },
+                { "include": "#statements" },
+                { "include": "#keywords" },
+                { "include": "#variables" },
+                { "include": "#literals" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "with-block": {
+      "patterns": [
+        {
+          "name": "meta.statement.with.otterscript",
+          "begin": "\\bwith\\b",
+          "beginCaptures": {
+            "0": { "name": "keyword.control.with.otterscript" }
+          },
+          "end": "\\}",
+          "patterns": [
+            {
+              "begin": "\\G",
+              "end": "\\{",
+              "endCaptures": {
+                "0": { "name": "punctuation.section.block.begin.otterscript" }
+              },
+              "patterns": [
+                { "include": "#comments" },
+                { "include": "#condition-operators" },
+                { "include": "#execution-directives" },
+                { "include": "#variables" },
+                { "include": "#literals" },
+                { "include": "#operators" }
+              ]
+            },
+            { "include": "#comments" },
+            { "include": "#with-block" },
+            { "include": "#if-block" },
+            { "include": "#statements" },
+            { "include": "#keywords" },
+            { "include": "#variables" },
+            { "include": "#literals" }
+          ]
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.otterscript",
+          "match": "\\b(else|foreach|for|in|set|raise-error|global|local|call|return|break|continue|try|catch|throw|fail|error|warn|force\\s+normal|await)\\b"
+        },
+        {
+          "name": "storage.modifier.otterscript",
+          "match": "\\b(global|local|out)\\b"
+        },
+        {
+          "name": "support.class.context.otterscript",
+          "match": "\\b(server|role|deployable|directory)\\b"
+        },
+        {
+          "name": "support.function.variable.otterscript",
+          "match": "\\$(ToJson|FromJson|HtmlEncode|UrlEncode|Base64Encode|Base64Decode|ListCount|ListItem|PathCombine|Eval|Date|DateUtc|Trim|ToLower|ToUpper|Substring|Replace|Join|MatchesRegex|RegexReplace|Expr|Increment|Decrement|Abs|Ceiling|Floor|Compare|FileExists|DirectoryExists|ServerName|EnvironmentName)\\("
+        },
+        {
+        "name": "support.function.vector.otterscript",
+        "match": "@(Split|ListConcat|ListInsert|ListRemove|ListSet|MapKeys|Range|RegexFind)\\("
+        },
+        {
+          "name": "constant.language.otterscript",
+          "match": "\\b(true|false)\\b"
+        }
+      ]
+    },
+    "proget-variables": {
+      "patterns": [
+        {
+          "name": "variable.other.readwrite.otterscript.proget",
+          "match": "@(AffectedPackages|ApiKeys|BuildIssues)\\b"
+        },
+        {
+          "name": "variable.other.readwrite.otterscript.proget",
+          "match": "\\$(BuildId|BuildNumber|BuildProjectName|BuildReleaseNumber|FeedId|FeedName|FeedType|NotifierId|NotifierName|PackageComplianceDetails|PackageComplianceResult|PackageEvent|PackageGroup|PackageId|PackageName|PackageSize|PackageVersion|UserName|VulnerabilityId|VulnerabilityScore|VulnerabilitySeverity|VulnerabilitySummary|WebBaseUrl|WorkingDirectory)\\b"
+        },
+        {
+          "name": "support.function.otterscript.proget",
+          "match": "\\$(EncodeBasicAuth|PackageHash|PackageProperty)\\("
+        }
+      ]
+    },
+    "execution-directives": {
+      "patterns": [
+        {
+          "name": "keyword.directive.otterscript",
+          "match": "\\b(retry|timeout|executionPolicy|async|lock|isolation|credentials)\\b"
+        },
+        {
+          "name": "constant.language.execution-policy.otterscript",
+          "match": "\\b(always|onChange)\\b"
+        }
+      ]
+    },
+    "statements": {
+      "patterns": [
+        {
+          "name": "meta.statement.action.otterscript",
+          "begin": "(?<=^|[;\\{\\}\\s])(?!(if|else|foreach|for|set|raise-error|global|local|call|module|return|break|continue|try|catch|throw|fail|error|warn|await|with)\\b)([a-zA-Z][a-zA-Z0-9_-]*::)?([a-zA-Z][a-zA-Z0-9_-]+)\\s*(?:(\"[^\"]*\"|'[^']*'|[^;\\{\\}\\s(]+))?\\s*(\\()?",
+          "beginCaptures": {
+            "2": { "name": "entity.name.namespace.otterscript" },
+            "3": { "name": "entity.name.function.action.otterscript" },
+            "4": { "name": "string.unquoted.positional.otterscript" },
+            "5": {
+              "name": "punctuation.definition.parameters.begin.otterscript"
+            }
+          },
+          "end": "(;|(?=\\n)|(?=\\}))",
+          "endCaptures": {
+            "0": { "name": "punctuation.terminator.statement.otterscript" }
+          },
+          "patterns": [
+            { "include": "#proget-variables" },
+            { "include": "#variables" },
+            { "include": "#literals" },
+            {
+              "name": "keyword.operator.assignment.otterscript",
+              "match": "(=>|:)"
+            },
+            {
+              "name": "variable.parameter.otterscript",
+              "match": "\\b[a-zA-Z][a-zA-Z0-9_-]*\\s*(?=:|=|=>)"
+            },
+            {
+              "name": "variable.output.otterscript",
+              "match": "=>\\s*([$@%])\\{?[a-zA-Z][a-zA-Z0-9_\\- ]*\\}?",
+              "captures": {
+                "1": { "name": "storage.type.variable.otterscript" }
+              }
+            },
+            {
+              "name": "punctuation.separator.parameters.otterscript",
+              "match": ","
+            }
+          ]
+        },
+        {
+          "name": "meta.statement.call-module.otterscript",
+          "begin": "\\bcall\\b",
+          "end": ";",
+          "patterns": [
+            { "include": "#proget-variables" },
+            { "include": "#variables" },
+            { "include": "#literals" },
+            {
+              "name": "entity.name.function.otterscript",
+              "match": "([a-zA-Z][a-zA-Z0-9_-]*::)?[a-zA-Z][a-zA-Z0-9_-]+"
+            }
+          ]
+        },
+        {
+          "name": "meta.statement.assign.otterscript",
+          "begin": "\\bset\\b",
+          "end": ";",
+          "patterns": [
+            { "include": "#proget-variables" },
+            { "include": "#variables" },
+            { "include": "#literals" },
+            {
+              "name": "keyword.operator.assignment.otterscript",
+              "match": "="
+            }
+          ]
+        },
+        {
+          "name": "meta.statement.module.otterscript",
+          "begin": "\\bmodule\\b",
+          "beginCaptures": {
+            "0": { "name": "keyword.control.module.otterscript" }
+          },
+          "end": "\\}",
+          "patterns": [
+            {
+              "name": "entity.name.type.module.otterscript",
+              "match": "[a-zA-Z][a-zA-Z0-9_-]*"
+            },
+            { "include": "#module-parameters" },    
+            { "include": "#comments" },
+            { "include": "#with-block" },
+            { "include": "#if-block" },
+            { "include": "#statements" },
+            { "include": "#keywords" },
+            { "include": "#variables" },
+            { "include": "#literals" }
+          ]
+        },
+        {
+          "name": "meta.statement.apply-template.otterscript",
+          "begin": "\\bApply-Template\\b",
+          "end": ";",
+          "patterns": [
+            {
+              "name": "keyword.argument.template.otterscript",
+              "match": "\\b(OutputVariable|InputFile|OutputFile|Literal|AdditionalVariables)\\b"
+            },
+            { "include": "#proget-variables" },
+            { "include": "#variables" },
+            { "include": "#literals" },
+            {
+              "name": "meta.map.additional-variables.otterscript",
+              "begin": "AdditionalVariables:\\s*%\\(",
+              "end": "\\)",
+              "patterns": [
+                {
+                  "match": "([a-zA-Z][a-zA-Z0-9_-]*)\\s*:",
+                  "captures": {
+                    "1": { "name": "variable.other.key.otterscript" }
+                  }
+                },
+                { "include": "#proget-variables" },
+                { "include": "#literals" },
+                { "include": "#variables" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "module-parameters": {
+      "patterns": [
+        {
+          "name": "meta.module-parameter.otterscript",
+          "begin": "<",
+          "end": ">",
+          "patterns": [
+            {
+              "name": "keyword.modifier.otterscript",
+              "match": "\\bout\\b"
+            },
+            {
+              "name": "variable.parameter.module.otterscript",
+              "match": "([$@%])[a-zA-Z][a-zA-Z0-9_\\-]*",
+              "captures": {
+                "1": { "name": "storage.type.variable.otterscript" }
+              }
+            },
+            {
+              "name": "keyword.operator.default.otterscript",
+              "match": "="
+            },
+            {
+              "name": "string.unquoted.default.otterscript",
+              "match": "[a-zA-Z][a-zA-Z0-9_\\-]*"
+            }
+          ]
+        }
+      ]
+    },
+    "variables": {
+      "patterns": [
+        {
+          "name": "variable.other.otterscript",
+          "match": "\\$\\{?[a-zA-Z][a-zA-Z0-9_\\- ]*\\}?"
+        },
+        {
+          "name": "variable.vector.otterscript",
+          "match": "@\\{?[a-zA-Z][a-zA-Z0-9_\\- ]*\\}?"
+        },
+        {
+          "name": "variable.map.otterscript",
+          "match": "%\\{?[a-zA-Z][a-zA-Z0-9_\\- ]*\\}?"
+        },
+        {
+          "name": "support.variable.indexed.otterscript",
+          "match": "[@%]\\{?[a-zA-Z][a-zA-Z0-9_\\- ]*\\}?(\\[[^\\]]+\\]|\\.[a-zA-Z][a-zA-Z0-9_-]*)"
+        },
+        {
+          "name": "meta.nested-evaluate.otterscript",
+          "begin": "\\$\\(",
+          "end": "\\)",
+          "patterns": [
+            { "include": "#proget-variables" },
+            { "include": "#variables" },
+            { "include": "#literals" },
+            {
+              "name": "support.variable.indexed.otterscript",
+              "match": "[@%]\\{?[a-zA-Z][a-zA-Z0-9_\\- ]*\\}?(\\[[^\\]]+\\]|\\.[a-zA-Z][a-zA-Z0-9_-]*)"
+            }
+          ]
+        },
+        {
+          "name": "constant.character.escape.otterscript",
+          "match": "`[$@%]|`n|`t|`r|``"
+        }
+      ]
+    },
+    "swim-strings": {
+      "patterns": [
+        {
+          "name": "string.unquoted.swim.otterscript",
+          "comment": "Fish sentinels: >>, >--=>, >==8> (any 0-5 non-> chars)",
+          "begin": "(?:>[^>]{0,5}>)",
+          "beginCaptures": {
+            "0": { "name": "punctuation.definition.string.begin.otterscript" }
+          },
+          "end": "(?:>[^>]{0,5}>)",
+          "endCaptures": {
+            "0": { "name": "punctuation.definition.string.end.otterscript" }
+          },
+          "patterns": [
+            { "include": "#nested-expressions" },
+            {
+              "match": ".",
+              "name": "meta.string.content.otterscript"
+            }
+          ]
+        }
+      ]
+    },
+    "literals": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.otterscript",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            {
+              "name": "constant.character.escape.otterscript",
+              "match": "\\\\."
+            },
+            { "include": "#nested-expressions" }
+          ]
+        },
+        {
+          "name": "string.quoted.single.otterscript",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.otterscript",
+              "match": "\\\\."
+            },
+            { "include": "#nested-expressions" }
+          ]
+        },
+        {
+          "name": "constant.numeric.otterscript",
+          "match": "-?\\b\\d+(\\.\\d+)?\\b"
+        },
+        {
+          "name": "meta.vector.otterscript",
+          "begin": "@\\(",
+          "end": "\\)",
+          "patterns": [
+            { "include": "#literals" },
+            { "include": "#proget-variables" },
+            { "include": "#variables" }
+          ]
+        },
+        {
+          "name": "meta.map.otterscript",
+          "begin": "%\\(",
+          "end": "\\)",
+          "patterns": [
+            {
+              "match": "([a-zA-Z][a-zA-Z0-9_-]*)\\s*:",
+              "captures": {
+                "1": { "name": "variable.other.key.otterscript" }
+              }
+            },
+            { "include": "#literals" },
+            { "include": "#proget-variables" },
+            { "include": "#variables" }
+          ]
+        }
+      ]
+    },
+    "nested-expressions": {
+      "patterns": [
+        {
+          "name": "meta.nested-evaluate.otterscript",
+          "begin": "\\$\\(",
+          "end": "\\)",
+          "patterns": [
+            { "include": "#proget-variables" },
+            { "include": "#variables" },
+            { "include": "#literals" }
+          ]
+        },
+        {
+          "name": "support.variable.indexed.otterscript",
+          "match": "[@%]\\{?[a-zA-Z][a-zA-Z0-9_\\- ]*\\}?(?:\\[[^\\]]+\\]|\\.[a-zA-Z][a-zA-Z0-9_-]*)+"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.comparison.otterscript",
+          "match": "(==|!=|<=|>=|<|>)"
+        },
+        {
+          "name": "keyword.operator.assignment.otterscript",
+          "match": "="
+        }
+      ]
+    },
+    "condition-operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.logical.otterscript",
+          "match": "&&|\\|\\||!"
+        }
+      ]
+    },
+    "templating": {
+      "patterns": [
+        {
+          "name": "meta.template.tag.otterscript",
+          "begin": "<%",
+          "end": "%>",
+          "patterns": [
+            {
+              "name": "keyword.control.template.otterscript",
+              "match": "\\b(if|else|foreach|in)\\b"
+            },
+            { "include": "#if-block" },
+            { "include": "#proget-variables" },
+            { "include": "#variables" },
+            { "include": "#operators" },
+            { "include": "#literals" }
+          ]
+        },
+        {
+          "name": "constant.character.escape.template.otterscript",
+          "match": "<`%"
+        }
+      ]
+    }
+  }
+}

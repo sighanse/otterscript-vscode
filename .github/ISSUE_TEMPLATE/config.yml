@@ -1,0 +1,10 @@
+blank_issues_enabled: false
+
+contact_links:
+  - name: Questions / Usage help
+    url: https://github.com/sighanse/otterscript-vscode/discussions
+    about: Ask questions or discuss usage here.
+
+  - name: Security issues
+    url: https://github.com/sighanse/otterscript-vscode/security
+    about: Report security vulnerabilities privately

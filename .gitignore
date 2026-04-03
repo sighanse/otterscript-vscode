@@ -1,0 +1,11 @@
+node_modules/
+.npn
+*.tgz
+.vscode/*
+!.vscode/settings.json
+*.log
+*.tmp
+*.ps1
+*.vsix
+.DS_Store
+Thumbs.db

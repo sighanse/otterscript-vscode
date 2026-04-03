@@ -1,0 +1,46 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      upload_vsix:
+        description: "Upload VSIX artifact"
+        type: boolean
+        default: false
+
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Use Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Package extension (validation only)
+        run: npx vsce package --no-yarn
+
+      - name: Upload VSIX artifact (opt-in)
+        if: ${{ inputs.upload_vsix }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: otterscript-vsix
+          path: "*.vsix"
+          if-no-files-found: error

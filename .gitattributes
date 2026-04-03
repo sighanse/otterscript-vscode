@@ -1,0 +1,24 @@
+# Default behaviour
+* text=auto
+
+# Source Files
+*.js text eol=lf
+*.json text eol=lf
+*.jsonc text eol=lf
+*.sh text eol=lf
+
+# OtterScript
+*.otter text eol=lf
+*.oscript text eol=lf
+
+# Documentation
+*.txt text eol=lf
+*.md text eol=lf
+
+# YAML (Github Actions, configs)
+*.yml  text eol=lf
+*.yaml text eol=lf
+
+# Binaries
+*.png binary
+*.vsix binary
