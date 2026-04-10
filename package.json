@@ -37,6 +37,7 @@
     "configuration-management"
   ],
   "main": "./extension.js",
+  "activationEvents": [ "onLanguage:otterscript" ],
   "contributes": {
     "languages": [
       {
