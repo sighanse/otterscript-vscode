@@ -12,6 +12,9 @@
       "url": "vscode://schemas/snippets"
     }
   ],
+  // TypeScript & JavaScript
+  "js/ts.implicitProjectConfig.checkJs": true,
+  "js/ts.preferences.includePackageJsonAutoImports": "auto",
   // Indentation & whitespace stability
   "editor.insertSpaces": true,
   "editor.tabSize": 2,
