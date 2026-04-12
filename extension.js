@@ -68,6 +68,12 @@ function activate(context) {
   } = docs;
 
 
+  /**
+   * Builds a word-boundary RegExp that matches any of the given names.
+   *
+   * @param {Iterable<string>} names
+   * @returns {RegExp}
+   */
   function buildWordRegex(names) {
     return new RegExp(
       `\\b(${[...names]
@@ -83,6 +89,18 @@ function activate(context) {
     "true","false","null"
   ]);
 
+
+  /**
+   * Returns true if the given position is inside a quoted string
+   * or a line comment.
+   *
+   * This uses a fast, best-effort heuristic and does not attempt
+   * full parsing.
+   *
+   * @param {string} line
+   * @param {number} position
+   * @returns {boolean}
+   */
   function isInStringOrComment(line, position) {
     const prefix = line.slice(0, position);
 
@@ -98,6 +116,12 @@ function activate(context) {
     return doubleQuotes % 2 === 1 || singleQuotes % 2 === 1;
   }
 
+  /**
+   * Replaces quoted string literals in a line with empty placeholders.
+   *
+   * @param {string} line
+   * @returns {string}
+   */
   function stripStrings(line) {
     return line
       // double-quoted strings
@@ -106,8 +130,24 @@ function activate(context) {
       .replace(/'([^'\\]|\\.)*'/g, "''");
   }
 
-  function validateDocs(label, docs) {
-    for (const [key, doc] of Object.entries(docs)) {
+  /**
+   * Performs best-effort validation of documentation tables.
+   *
+   * This function intentionally validates unknown input and
+   * reports warnings instead of throwing.
+   *
+   * @param {string} label Human-readable category label (e.g. "keywordDocs")
+   * @param {Record<string, unknown>} docs Documentation table to validate
+   */
+    function validateDocs(label, docs) {
+      for (const [key, rawDoc] of Object.entries(docs)) {
+        /** @type {any} */
+        const doc = rawDoc;
+
+      if (!doc || typeof doc !== "object") {
+        console.warn(`[docs] ${label}.${key} is not an object`);
+        continue;
+      }
       if (!doc.name || typeof doc.name !== "string") {
         console.warn(`[docs] ${label}.${key} is missing required 'name'`);
       }
@@ -170,7 +210,10 @@ function activate(context) {
               ? scalarFunctionDocs[name]
               : vectorFunctionDocs[name];
 
+          // No matching function found at the cursor position
           if (!fn) return null;
+          // Signature help only makes sense when a concrete signature exists
+          if (!fn.signature) return null;
 
           let activeParam = 0;
           let inString = false;
@@ -631,14 +674,6 @@ function activate(context) {
         markdown.appendMarkdown(doc.documentation);
       }
 
-      if (doc.properties?.length) {
-        markdown.appendMarkdown(
-          `**Properties:**\n\n${doc.properties
-            .map(p => `- \`${p}\``)
-            .join("\n")}\n\n`
-        );
-      }
-
       return new vscode.Hover(markdown, symbolRange);
     }
 });
@@ -651,6 +686,11 @@ function activate(context) {
 
   context.subscriptions.push(diagnostics);
 
+  /**
+   * Updates diagnostics for an OtterScript document.
+   *
+   * @param {import('vscode').TextDocument} document
+   */
   function updateDiagnostics(document) {
     if (document.languageId !== "otterscript") return;
 
