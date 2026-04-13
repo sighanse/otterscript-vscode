@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in contributing to OtterScript Language Support for VS Code!
+Thanks for your interest in contributing to OtterScript Language Extension for VS Code!
 
 Contributions are welcome and appreciated.
 

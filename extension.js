@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * OtterScript VS Code extension entry point.
+ * OtterScript Language Extension entry point.
  *
  * RESPONSIBILITIES
  * 1. Register language features (completion, hover, signature help)
@@ -94,7 +94,7 @@ function activate(context) {
 
     // Show user-friendly error message
     vscode.window.showErrorMessage(
-      "OtterScript Language Support failed to load documentation data. " +
+      "OtterScript Language Extension failed to load documentation data. " +
       "The extension could not be activated. Check the developer console for details."
     );
 
