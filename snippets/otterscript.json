@@ -134,12 +134,14 @@
   },
   "Set Variable": {
     "prefix": "set",
-    "body": ["set ${1:local} \\$${2:variableName} = ${3:value};"],
-    "description": "Assign a value to a variable"
+    "body": [
+      "set ${1|local,global|} $${2:variableName} = ${3:value};"
+    ],
+    "description": "Assign a value to a variable (omit scope for default)"
   },
   "Global Variable": {
     "prefix": "global",
-    "body": ["global \\$${1:variableName} = ${2:value};"],
+    "body": ["global $${1:variableName} = ${2:value};"],
     "description": "Declare a global variable"
   },
   "Throw Error": {

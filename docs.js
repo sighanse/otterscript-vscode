@@ -228,15 +228,11 @@ const keywordDocs = {
     description: "Used for declarative bindings.",
     documentation: `
 Does not perform iteration in OtterScript. It's typically used for declarative bindings, not flow control.
-`
-},
-  'error': {
-    name: "error",
-    signature: "error \"message\";",
-    description: "Raises an execution error and stops processing.",
-    documentation: `
-Raises an execution error with the specified message.
-Errors immediately halt execution unless caught by a surrounding \`try\` block.
+**Syntax:**
+\`\`\`otterscript
+for i = 1 to 100
+\`\`\`
+Although this looks like a loop in other languages, it does not perform iteration in OtterScript. It's typically used for declarative bindings, not flow control.
 `
 },
   'return': {
@@ -344,7 +340,7 @@ if $PackageSize > 1000000 {
 **Notes:**
 - The expression must evaluate to a boolean value
 - Can be combined with \`else\`
-    `
+`
   },
   'else': {
     name: "else",
@@ -400,7 +396,7 @@ try {
 **Notes:**
 - Errors raised inside \`try\` do not immediately terminate execution
 - Control passes to \`catch\` on error
-    `
+`
   },
   catch: {
     name: "catch",
@@ -562,7 +558,14 @@ Sets the execution status to **Warn** while allowing execution to continue.
 
 **Syntax:**
 \`\`\`otterscript
-warn;
+try
+{
+    throw Something failed;
+}
+catch
+{
+    warn;
+}
 \`\`\`
 
 **Notes:**
@@ -911,8 +914,8 @@ $sub = $Substring("Hello World", 6, 5);
   },
   Replace: {
     name: "$Replace",
-    signature: "$Replace(text, oldValue, newValue)",
-    snippet: "\\$Replace(${1:text}, ${2:oldValue}, ${3:newValue})",
+    signature: "$Replace(text, oldValue, newValue, [ignoreCase])",
+    snippet: "\\$Replace(${1:text}, ${2:oldValue}, ${3:newValue}, ${4|false,true|})",
     description: "Replaces all occurrences of a substring within a string.",
     documentation: `
 Replaces all occurrences of a specified substring with another substring.
@@ -921,6 +924,7 @@ Replaces all occurrences of a specified substring with another substring.
 - \`text\` - The source string
 - \`oldValue\` - The substring to replace
 - \`newValue\` - The replacement substring
+- \`ignoreCase\` *(optional)* - When \`true\`, performs a case-insensitive comparison
 
 **Returns:** String with replacements
 

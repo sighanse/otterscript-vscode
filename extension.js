@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * OtterScript VS Code extension entry point.
  *
@@ -16,6 +17,8 @@
  * @license MIT
  * @see docs.js - Plain data documentation module
  * @see package.json - Extension manifest and configuration schema
+ * @see syntaxes/otterscript.tmLanguage.json - TextMate grammar (syntax highlighting)
+ * @see snippets/otterscript.json - Snippets for structural templates only
  * @see {@link https://github.com/sighanse/otterscript-vscode} - Github repository
  */
 
@@ -186,7 +189,8 @@ function activate(context) {
    * Performs best-effort validation of documentation tables.
    *
    * This function intentionally validates unknown input and
-   * reports warnings instead of throwing.
+   * reports warnings instead of throwing, even if critical
+   * fields (name/description) are missing.
    *
    * @param {string} label Human-readable category label (e.g. "keywordDocs")
    * @param {Record<string, unknown>} docs Documentation table to validate
@@ -247,7 +251,7 @@ function activate(context) {
   const knownOperations = new Set(Object.keys(operationDocs));
 
   // REGEX PATTERNS FOR SYMBOL DETECTION
-  const operationRegex = buildWordRegex(knownOperations);
+  const operationRegex = () => buildWordRegex(knownOperations);
   const scalarCallRegex = () => /\$([A-Za-z][A-Za-z0-9_]*)\s*\(/g;
   const vectorCallRegex = () => /@([A-Za-z][A-Za-z0-9_]*)\s*\(/g;
   const operationCallRegex = () => /\b([A-Za-z][A-Za-z-]*)\b/g;
@@ -321,11 +325,13 @@ function activate(context) {
           const help = new vscode.SignatureHelp();
           help.signatures = [sig];
           help.activeSignature = 0;
-          help.activeParameter = Math.min(
-            activeParam,
-            sig.parameters.length - 1
-          );
-
+          // Only set activeParameter when parameters were extracted.
+          if (sig.parameters.length > 0) {
+            help.activeParameter = Math.min(
+              activeParam,
+              sig.parameters.length - 1
+            );
+          }
           return help;
         }
       },
@@ -350,7 +356,7 @@ function activate(context) {
         provideCompletionItems(document, position) {
           // Check if completion is enabled in settings
           if (!completionEnabled) {
-            return [];  // Return empty list to indicate no completions (don't return null to avoid errors);
+            return [];  // Return empty list to indicate no completions
           }
 
           const linePrefix = document
@@ -695,6 +701,12 @@ function activate(context) {
         return null;
       }
 
+      // Prevent hover inside strings or comments
+      const line = document.lineAt(position.line).text;
+      if (isInStringOrComment(line, position.character)) {
+        return null;
+      }
+
       // 1. TEMPLATE TAGS (<% and %>)
       // OtterScript uses ASP-style template tags for embedding code
 
@@ -736,16 +748,23 @@ function activate(context) {
       // 3. KEYWORDS (if, foreach, with, set, etc.)
       // Control flow and language keywords.
 
-      const wordRange = document.getWordRangeAtPosition(
+      // Special-case multi-word keyword: "force normal"
+      const forceRange = document.getWordRangeAtPosition(
         position,
-        /\b[a-zA-Z]+(?:-[a-zA-Z]+)*\b/
+        /\bforce\s+normal\b/
       );
+
+      const wordRange = forceRange
+        ?? document.getWordRangeAtPosition(
+            position,
+            /\b[a-zA-Z]+(?:-[a-zA-Z]+)*\b/ // single token, hyphens allowed; NEVER spaces
+          );
 
       if (wordRange) {
         const word = document.getText(wordRange);
 
-        // Check if it's a known keyword (not a $ or @ prefixed symbol)
-        if (knownKeywords.has(word) && !word.startsWith("$") && !word.startsWith("@")){
+        // Check if it's a known keyword
+        if (knownKeywords.has(word)) {
           const doc = keywordDocs[word];
           const markdown = new vscode.MarkdownString();
           markdown.appendMarkdown(`### ${doc.name}\n\n`);
@@ -779,7 +798,7 @@ function activate(context) {
       // Built-in operations. Distinguished by hyphenated names.
       const operationRange = document.getWordRangeAtPosition(
       position,
-      operationRegex
+      operationRegex()
       );
 
       if (operationRange) {
@@ -805,7 +824,6 @@ function activate(context) {
       // Most general case - matches any $ or @ prefixed identifier
       // Checks scalar functions, vector functions, and variables
       // Must be LAST because it matches many things
-
       const symbolRange = document.getWordRangeAtPosition(
         position,
         /[@$][A-Za-z][A-Za-z0-9]*/  // $Name or @Name (no spaces)
@@ -852,9 +870,9 @@ function activate(context) {
 
       return new vscode.Hover(markdown, symbolRange);
     }
-});
+  });
 
- // ============================================================
+  // ============================================================
   // DIAGNOSTICS (ERRORS & WARNINGS)
   // ============================================================
   // Provides real-time syntax checking and problem detection.
@@ -938,8 +956,18 @@ function activate(context) {
           if (!inString) {
             inString = true;
             stringChar = ch;
-          } else if (ch === stringChar && rawLine[col - 1] !== '\\') {
-            inString = false;
+          } else if (ch === stringChar) {
+            // Check if this quote is escaped
+            let backslashCount = 0;
+            let pos = col - 1;
+            while (pos >= 0 && rawLine[pos] === '\\') {
+              backslashCount++;
+              pos--;
+            }
+            // If odd number of backslashes, quote is escaped (don't exit string)
+            if (backslashCount % 2 === 0) {
+              inString = false;
+            }
           }
           continue;
         }
@@ -997,6 +1025,9 @@ function activate(context) {
           }
           if (ch === '}') {
             braces--;
+            if (braces < 0) {
+              lastPos = document.offsetAt(new vscode.Position(lineIndex, col));
+            }
           }
         }
       }
@@ -1118,11 +1149,11 @@ function activate(context) {
               document.positionAt(lastPos),
               document.positionAt(lastPos + 1)
             ),
-            "Unbalanced braces",
+            braces > 0 ? "Unclosed brace(s)" : "Unexpected closing brace",
             vscode.DiagnosticSeverity.Error   // Red squiggly - must fix
           )
         );
-     }
+    }
     // Update VS Code's diagnostic panel with all found issues
     diagnostics.set(document.uri, issues);
   }
