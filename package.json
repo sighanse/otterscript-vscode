@@ -1,6 +1,6 @@
 {
   "name": "otterscript-vscode",
-  "displayName": "OtterScript Language Support",
+  "displayName": "OtterScript Language Extension",
   "description": "Syntax highlighting, snippets, and function support for OtterScript",
   "publisher": "sighanse",
   "contributors": [

@@ -1,4 +1,4 @@
-# OtterScript Language Support
+# OtterScript Language Extension
 
 This extension provides syntax highlighting, code snippets, and function support for OtterScript used in Inedo products (Otter, BuildMaster, ProGet).
 
@@ -23,7 +23,7 @@ This extension started as a learning project while implementing [custom webhook 
 This extension is in active development and currently considered early-stage.
 Features may change as the extension evolves.
 
-**Testing scope:**  
+**Testing scope:**
 This extension is primarily developed and tested against **ProGet** usage
 (particularly custom webhook action context).
 While OtterScript is shared across Otter, BuildMaster, and ProGet, not all
@@ -42,7 +42,7 @@ Feedback, issues, and pull requests are welcome.
 
 1. Open VS Code
 2. Go to Extensions (Ctrl+Shift+X)
-3. Search for "OtterScript Language Support"
+3. Search for "OtterScript Language Extension"
 4. Click Install
 
 ## Getting Started
