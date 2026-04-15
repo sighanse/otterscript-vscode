@@ -43,20 +43,6 @@
 
 /** @typedef {Record<string, DocEntry>} DocsTable */
 
-/**
- * Describes a language syntax concept that does not correspond
- * to a concrete symbol (for example: swim strings, template tags,
- * or renderer-only placeholders).
- *
- * SyntaxDocs are documentation-only:
- * - they are not included in completion
- * - they are surfaced only when explicitly selected by hover logic
- *
- * @typedef {string} SyntaxDoc
- */
-
-/** @typedef {Record<string, SyntaxDoc>} SyntaxDocsTable */
-
 // ============================================================
 // OPERATION DOCS
 // ============================================================
@@ -69,8 +55,6 @@ const operationDocs = {
     snippet: 'Log-Debug "${1:message}";$0',
     description: "Writes a debug-level message to the execution log.",
     documentation: `
-Writes a debug-level message to the execution log.
-
 **Usage:**
 \`\`\`otterscript
 Log-Debug "Calculated value: $value";
@@ -88,8 +72,6 @@ Log-Debug "Calculated value: $value";
     snippet: 'Log-Information "${1:message}";$0',
     description: "Writes an informational message to the execution log.",
     documentation: `
-Writes an informational message to the execution log.
-
 **Usage:**
 \`\`\`otterscript
 Log-Information "Deployment started";
@@ -107,8 +89,6 @@ Log-Information "Deployment started";
     snippet: 'Log-Warning "${1:message}";$0',
     description: "Writes a warning message to the execution log.",
     documentation: `
-Writes a warning message to the execution log.
-
 **Usage:**
 \`\`\`otterscript
 Log-Warning "Configuration value is deprecated";
@@ -126,8 +106,6 @@ Log-Warning "Configuration value is deprecated";
     snippet: 'Log-Error "${1:message}";$0',
     description: "Writes an error message to the execution log.",
     documentation: `
-Writes an error message to the execution log.
-
 **Usage:**
 \`\`\`otterscript
 Log-Error "Failed to connect to server";
@@ -138,6 +116,55 @@ Log-Error "Failed to connect to server";
 - Does not automatically halt execution
 - Combine with \`throw\` to stop execution
 `
+  },
+  'Post-Http': {
+    name: 'Post-Http',
+    signature: 'Post-Http(Url: <text>, [Method: <integer>], [ContentType: <text>], [TextData: <text>], [FormData: %(...)], ...)',
+    description: 'Executes an HTTP POST/PUT/PATCH request to a URL, typically used for RESTful operations.',
+    snippet: 'Post-Http(\n    Url: "${1:https://example.com}",\n    ${2:ContentType: "application/json",}\n    ${3:TextData: "${4:request body}"},\n    ${5:FormData: %(\n        ${6:key}: "${7:value}"\n    )},\n    ${8:LogResponseBody: true}\n);',
+    documentation: `
+**Required Argument:**
+- \`Url\` - The target URL (text)
+
+**Optional Arguments:**
+- \`Method\` - HTTP method (integer: 0=POST, 1=PUT, 2=PATCH)
+- \`ContentType\` - Request content type (text)
+- \`TextData\` - Direct text input for request body (overrides FormData)
+- \`FormData\` - Map of form data key/value pairs (e.g., \`%(key1: "value1", key2: "value2")\`)
+- \`LogRequestData\` - Log the request data (true/false)
+- \`LogResponseBody\` - Log the response body (true/false)
+- \`ResponseBody\` - Store response body in a variable (text)
+- \`ErrorStatusCodes\` - Comma-separated status codes or ranges that indicate failure (default: "400:599")
+- \`RequestHeaders\` - Map of request headers (e.g., \`%(Authorization: "Bearer token")\`)
+- \`MaxResponseLength\` - Maximum response length in bytes (integer)
+- \`ProxyRequest\` - Proxy through the server in context (true/false)
+- \`Credentials\` - Name of stored credentials (text)
+- \`UserName\` - Basic auth username (text)
+- \`Password\` - Basic auth password (text)
+- \`IgnoreSslErrors\` - Ignore SSL certificate errors (true/false)
+
+**Example:**
+\`\`\`otterscript
+# POST form data to a test service
+Post-Http(
+    Url: "http://httpbin.org/post",
+    FormData: %(
+        Var1: "value1",
+        Var2: "value2"
+    ),
+    LogResponseBody: true
+);
+
+# POST JSON with Bearer token
+Post-Http(
+    Url: "https://api.example.com/data",
+    ContentType: "application/json",
+    TextData: $ToJson(%( name: "Test", value: 123 )),
+    RequestHeaders: %( Authorization: "Bearer $ApiToken" ),
+    LogResponseBody: true
+);
+\`\`\`
+`
   }
 };
 
@@ -145,20 +172,32 @@ Log-Error "Failed to connect to server";
 // SYNTAX DOCS
 // ============================================================
 
-/** @type {SyntaxDocsTable} */
+/** @type {DocsTable} */
 const syntaxDocs = {
-  swimString: `
-### Swim string (\`>...>\` fish sentinels)
-
-A multi-line unquoted string literal delimited by matching fish sentinels
-(e.g. \`>>\`, \`>==8>\`, \`>--=>\`).
-
+  swimString: {
+    name: "Swim string",
+    signature: ">> ... >> or >==8> ... >==8> etc...",
+    documentation: "Multi-line unquoted string literal with matching fish sentinels.",
+    description: `
 - Preserves line breaks
 - Quotes do not need escaping
 - Supports expression evaluation using \`$()\`
-`,
+
+**Example:**
+\`\`\`otterscript
+$text = >>
+This can span
+multiple lines
+>>;
+\`\`\`
+`
+  },
   // Template tags
-  templateOpen: `
+  templateOpen: {
+    name: "Template Open (<% ... %>)",
+    signature: "<% ... %>",
+    description: "Embed OtterScript code inside text templates.",
+    documentation: `
 ### Templating Tag
 **Syntax:** \`<% ... %>\`
 
@@ -170,18 +209,20 @@ Used to embed OtterScript code inside text templates.
   * $(%p.Name)
 <% } %>
 \`\`\`
-`,
-  templateClose: `
-### Closing Templating Tag
-Closes a template code block started with \`<% \`.
-`,
+`
+  },
+  templateClose: {
+    name: "Template Close (%>)",
+    signature: "%>",
+    description: "Closes a template code block.",
+    documentation: "Closes a template code block started with `<%`"
+  },
   // Expression delimiters
-  mapExpr: `
-### Map Expression
-**Syntax:** \`%(key: value, key2: value2)\`
-
-Creates a map (dictionary/object) literal.
-
+  mapExpr: {
+    name: "Map Expression",
+    signature: "%(key: value, key2: value2)",
+    description: "Creates a map (dictionary/object) literal.",
+    documentation: `
 **Example:**
 \`\`\`otterscript
 $config = %(
@@ -190,30 +231,33 @@ $config = %(
     debug: true
 );
 \`\`\`
-`,
-  vectorExpr: `
-### Vector Expression
-**Syntax:** \`@(value1, value2, value3)\`
-
-Creates a vector (array/list) literal.
-
+`
+  },
+  vectorExpr: {
+    name: "Vector Expression",
+    signature: "@(value1, value2, value3)",
+    description: "Creates a vector (array/list) literal.",
+    documentation: `
 **Example:**
 \`\`\`otterscript
 @colors = @("red", "green", "blue");
 $first = @colors[0];
 \`\`\`
-`,
-  nestedEval: `
-### Nested Evaluation
-**Syntax:** \`$(expression)\`
-
-Evaluates an expression inside a string. Used when variable expansion is needed inside quoted strings.
+`
+  },
+  nestedEval: {
+    name: "Nested Evaluation",
+    signature: "$(expression)",
+    description: "Evaluates an expression inside a string.",
+    documentation: `
+Used when variable expansion is needed inside quoted strings.
 
 **Example:**
 \`\`\`otterscript
 $message = "Value: $(@list[0])";
 \`\`\`
 `
+  }
 };
 
 // ============================================================
@@ -248,7 +292,6 @@ This has no elements; if this statment is found, the execution engine ends the c
     signature: "local $variable = value;",
     description: "Declares a local variable scoped to the current block.",
     documentation: `
-Declares a variable that exists only within the current block scope.
 Local variables override outer variables of the same name.
 `
 },
@@ -285,7 +328,7 @@ If break is used outside of an iteration block, a warning will be written to the
     name: 'foreach',
     description: 'Iterates over items in a vector. Works in both OtterScript code and template tags.',
     documentation: `
-Iterates over each item in a vector. Can be used in two contexts:
+Can be used in two contexts:
 
 **OtterScript Code Block:**
 \`\`\`otterscript
@@ -314,7 +357,37 @@ foreach $pkg in @AffectedPackages {
   },
   'in': {
     name: "in",
-    description: "Specifies the vector to iterate over in a foreach statement."
+    description: "Specifies the vector to iterate over in a foreach statement.",
+    documentation: `
+The \`in\` keyword is used within a \`foreach\` statement to connect the iteration variable with the vector (list) being enumerated.
+
+**Syntax:**
+\`\`\`otterscript
+foreach $variable in @vector {
+    # loop body
+}
+\`\`\`
+
+**Parameters:**
+- \`$variable\` - The variable that receives each item during iteration
+- \`@vector\` - The vector (list) to iterate over
+
+**Example:**
+\`\`\`otterscript
+set @items = @("apple", "banana", "cherry");
+
+foreach $item in @items {
+    Log-Information "Current item: $item";
+}
+\`\`\`
+
+**Collections you can loop over:**
+- List Variables: \`@ServersInGroup(database-nodes)\`
+- Built-in Functions: \`@Range(1,5)\`
+- Literal Arrays: \`@(App1, App2, App3)\`
+
+**Note:** The \`in\` keyword is only valid within a \`foreach\` statement and cannot be used elsewhere.
+`
   },
   'if': {
     name: "if",
@@ -536,8 +609,6 @@ raise-error "message";
     name: "await",
     description: "Pauses execution until asynchronous blocks have completed.",
     documentation: `
-Pauses the execution engine until asynchronous blocks complete.
-
 **Syntax:**
 \`\`\`otterscript
 await;
@@ -613,98 +684,189 @@ const variableDocs = {
     BuildId: {
       name: "$BuildId",
       description: "The numeric ID of the current build.",
+      documentation: `
+**Available in:** ProGet
+`
     },
     BuildNumber: {
       name: "$BuildNumber",
       description: "The display number of the current build.",
+      documentation: `
+**Available in:** ProGet
+`
     },
     BuildProjectName: {
       name: "$BuildProjectName",
       description: "The name of the project associated with the build.",
+      documentation: `
+**Available in:** ProGet
+`
     },
     BuildReleaseNumber: {
       name: "$BuildReleaseNumber",
       description: "The release number associated with the current build.",
+      documentation: `
+**Available in:** ProGet
+`
     },
     FeedId: {
       name: "$FeedId",
       description: "The unique identifier of the feed in scope.",
+      documentation: `
+**Available in:** ProGet
+`
     },
     FeedName: {
       name: "$FeedName",
       description: "The name of the feed in scope.",
+      documentation: `
+**Available in:** ProGet
+`
     },
     FeedType: {
       name: "$FeedType",
       description: "The type of feed (NuGet, npm, PyPI, etc.).",
+      documentation: `
+**Available in:** ProGet
+`
     },
     NotifierId: {
       name: "$NotifierId",
       description: "The unique identifier of the notifier handling the event.",
+      documentation: `
+**Available in:** ProGet
+`
     },
     NotifierName: {
       name: "$NotifierName",
       description: "The name of the notifier handling the event.",
+      documentation: `
+**Available in:** ProGet
+`
     },
     PackageComplianceDetails: {
       name: "$PackageComplianceDetails",
       description: "Detailed compliance information for the package.",
+      documentation: `
+**Available in:** ProGet
+`
     },
     PackageComplianceResult: {
       name: "$PackageComplianceResult",
       description: "The overall compliance result for the package.",
+      documentation: `
+**Available in:** ProGet
+`
     },
     PackageEvent: {
       name: "$PackageEvent",
-      description: "The event that triggered the webhook.",
+      description: "Returns the name of the event which triggered the current notifier.",
+      documentation: `
+**Available in:** ProGet
+
+| $PackageEvent   | Description            |
+| --------------- | ---------------------- |
+| PKGADD          | Package Created        |
+| PKGDEL          | Package Deleted        |
+| PKGDPL          | Package Deployed       |
+| PKGMDF          | Package Overwritten    |
+| PKGPGD          | Package Purged         |
+| PKGPMT          | Package Promoted       |
+| PKGSTA          | Package Status Updated |
+
+**Example:**
+\`\`\`otterscript
+%( title: "**Feed**", value: $FeedName )
+\`\`\``
     },
     PackageGroup: {
       name: "$PackageGroup",
       description: "The package group associated with the event.",
+      documentation: `
+**Available in:** ProGet
+`
     },
     PackageId: {
       name: "$PackageId",
       description: "The identifier of the affected package.",
+      documentation: `
+**Available in:** ProGet
+`
     },
     PackageName: {
       name: "$PackageName",
       description: "The name of the affected package.",
+      documentation: `
+**Available in:** ProGet
+`
     },
     PackageSize: {
       name: "$PackageSize",
       description: "The size of the affected package in bytes.",
+      documentation: `
+**Available in:** ProGet
+`
     },
     PackageVersion: {
       name: "$PackageVersion",
       description: "The version of the affected package.",
+      documentation: `
+**Available in:** ProGet
+
+**Example:**
+\`\`\`otterscript
+      %( title: "**Version**", value: $PackageVersion )
+\`\`\`
+`
     },
     UserName: {
       name: "$UserName",
       description: "The name of the user associated with the event.",
+      documentation: `
+**Available in:** ProGet
+`
     },
     VulnerabilityId: {
       name: "$VulnerabilityId",
       description: "The identifier of the vulnerability.",
+      documentation: `
+**Available in:** ProGet
+`
     },
     VulnerabilityScore: {
       name: "$VulnerabilityScore",
       description: "The numeric score assigned to the vulnerability.",
+      documentation: `
+**Available in:** ProGet
+`
     },
     VulnerabilitySeverity: {
       name: "$VulnerabilitySeverity",
       description: "The severity classification of the vulnerability.",
+      documentation: `
+**Available in:** ProGet
+`
     },
     VulnerabilitySummary: {
       name: "$VulnerabilitySummary",
       description: "A short summary of the vulnerability.",
+      documentation: `
+**Available in:** ProGet
+`
     },
     WebBaseUrl: {
       name: "$WebBaseUrl",
       description: "The base URL of the ProGet web application.",
+      documentation: `
+**Available in:** ProGet
+`
     },
     WorkingDirectory: {
       name: "$WorkingDirectory",
       description: "Returns the current working directory.",
+      documentation: `
+**Available in:** Otter
+`
     }
 };
 
@@ -716,12 +878,10 @@ const variableDocs = {
 const scalarFunctionDocs = {
   ToJson: {
     name: "$ToJson",
-    snippet: '\\$ToJson("${1:data}");$0',
+    snippet: '\\$ToJson(${1:data})${0}',
     signature: "$ToJson(data)",
     description: "Converts an OtterScript value to JSON.",
     documentation: `
-Converts an OtterScript value to JSON.
-
 **Parameters:**
 - \`data\` - The data to encode as JSON (scalar, vector, or map)
 
@@ -756,8 +916,6 @@ $json = $ToJson(%(
       snippet: "\\$HtmlEncode(${1:text})",
       description: "Encodes a string for safe use in HTML.",
       documentation: `
-Encodes a string for safe use in HTML.
-
 **Parameters:**
 - \`text\` - The string to HTML-encode
 
@@ -776,8 +934,6 @@ $encoded = $HtmlEncode("<script>alert('xss')</script>");
     snippet: "\\$UrlEncode(${1:text})",
     description: "Encodes a string for safe use in URLs.",
     documentation: `
-Encodes a string for safe use in URLs.
-
 **Parameters:**
 - \`text\` - The string to URL-encode
 
@@ -815,8 +971,6 @@ $fullPath = $PathCombine("C:\\Websites", "MyApp", "web.config");
     snippet: "\\$Eval(${1:expression})",
     description: "Evaluates a string containing variable expressions.",
     documentation: `
-Evaluates a string containing variable expressions.
-
 **Parameters:**
 - \`expression\` - String containing variable references to expand
 
@@ -834,10 +988,8 @@ $result = $Eval($template);  # Expands $name
     name: "$ToLower",
     signature: "$ToLower(text)",
     snippet: "\\$ToLower(${1:text})",
-    description: "Converts a string to lowercase.",
+    description: "Converts a string to lowercase characters.",
     documentation: `
-Converts the specified string to lowercase characters.
-
 **Parameters:**
 - \`text\` - The string to convert to lowercase
 
@@ -854,10 +1006,8 @@ $lower = $ToLower("Hello World");
     name: "$ToUpper",
     signature: "$ToUpper(text)",
     snippet: "\\$ToUpper(${1:text})",
-    description: "Converts a string to uppercase.",
+    description: "Converts a string to uppercase characters.",
     documentation: `
-Converts the specified string to uppercase characters.
-
 **Parameters:**
 - \`text\` - The string to convert to uppercase
 
@@ -992,7 +1142,8 @@ $sortable = $Date("s");
     snippet: "\\$DateUtc(${1:format})",
     description: 'Returns the current UTC date and time.',
     documentation: `
-Returns the current UTC date and time in the specified .NET datetime format string, or ISO 8601 format (yyyy-MM-ddTHH:mm:ss) if no format is specified.
+Returns the current UTC date and time in the specified .NET datetime format string,
+or ISO 8601 format (yyyy-MM-ddTHH:mm:ss) if no format is specified.
 
 **Parameters:**
 - \`Format\` - (Optional) A .NET datetime format string
@@ -1242,8 +1393,7 @@ $result = $Floor(3.8);
     name: "$Compare",
     signature: "$Compare(arg1, operator, arg2, [asNumber])",
     snippet: "\\$Compare(${1:value1}, ${2|<,>,<=,>=,=,!=|}, ${3:value2}${4:, true})",
-    description:
-      "Compares two scalar values and returns \"true\" or \"false\".",
+    description: "Compares two scalar values and returns \"true\" or \"false\".",
     documentation: `
 Compares two scalar values using the specified operator.
 
@@ -1470,8 +1620,6 @@ const vectorFunctionDocs = {
     snippet: "@Split(\"${1:text}\", \"${2:,}\"${3:, ${4:count}})",
     description: 'Splits a string into substrings based on a specified separator.',
     documentation: `
-Splits a string into substrings based on a specified separator.
-
 **Parameters:**
 - \`Text\` - The string to split
 - \`Separator\` - The delimiter used to split the string
@@ -1495,8 +1643,6 @@ Splits a string into substrings based on a specified separator.
     snippet: "@ListConcat(${1:@list1}, ${2:@list2})",
     description: 'Creates a list containing the contents of each list in sequence.',
     documentation: `
-Creates a list containing the contents of each list in sequence.
-
 **Parameters:**
 - \`list1, list2, ...\` - Lists to concatenate
 
@@ -1647,8 +1793,6 @@ Finds all matches of a regular expression in a string, optionally returning only
     signature: '@AffectedPackages',
     description: 'Returns a list of packages affected by the vulnerability in the current scope.',
     documentation: `
-Returns a list of packages affected by the vulnerability in the current scope.
-
 **Properties:**
 - \`Name\` - Package name (string)
 - \`AffectedVersions\` - Affected version range (string)
@@ -1666,8 +1810,6 @@ Returns a list of packages affected by the vulnerability in the current scope.
     signature: '@ApiKeys',
     description: 'Returns a list of API Keys in the current scope.',
     documentation: `
-Returns a list of API Keys in the current scope.
-
 **Properties:**
 - \`Name\` - API Key name
 - \`LastUsedDate\` - Date last used
@@ -1688,8 +1830,6 @@ foreach $key in @ApiKeys {
     signature: '@BuildIssues(includeClosed)',
     description: 'Returns a list of issues on the build in the current scope.',
     documentation: `
-Returns a list of issues on the build in the current scope.
-
 **Parameters:**
 - \`includeClosed\` - Optional, include closed issues
 
