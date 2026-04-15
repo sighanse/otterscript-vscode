@@ -1060,6 +1060,9 @@ function activate(context) {
     // Run diagnostics when a new file is opened (handles files opened after activation)
     vscode.workspace.onDidOpenTextDocument(updateDiagnostics),
 
+    // Clean up diagnostics when a file is closed to prevent stale error markers
+    vscode.workspace.onDidCloseTextDocument(doc => diagnostics.delete(doc.uri)),
+
     // ---------- Language Feature Providers ----------
     // All providers are registered here for cleanup on deactivation
     signatureHelpProvider,
