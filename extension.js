@@ -257,6 +257,53 @@ function activate(context) {
     return md;
   }
 
+  /**
+   * @typedef {Object} DocEntry
+   * @property {string} name Human-readable name shown in completion and hover
+   * @property {string} description Short summary shown in IntelliSense
+   * @property {string=} signature Usage syntax
+   * @property {string=} snippet VS Code snippet insertion text
+   * @property {string=} documentation Extended Markdown documentation
+   */
+  /**
+   * @param {DocEntry} doc
+   * @param {vscode.CompletionItemKind} kind
+   * @param {string} sortPrefix  e.g. "1_", "2_"
+   * @param {string | vscode.SnippetString} insertText
+   * @returns {vscode.CompletionItem}
+   */
+  function buildCompletionItem(doc, kind, sortPrefix, insertText) {
+    const item = new vscode.CompletionItem(
+      { label: doc.name, description: doc.description },
+      kind
+    );
+    item.insertText = insertText;
+    item.detail = doc.signature ?? doc.description;
+    item.documentation = doc.documentation
+      ? new vscode.MarkdownString(doc.documentation)
+      : undefined;
+    item.sortText = `${sortPrefix}${doc.name}`;
+    return item;
+  }
+
+  /**
+   * Checks if the cursor is in a valid position for showing completions.
+   * Completions are disabled when:
+   * - The user has disabled them via settings
+   * - The cursor is inside a string literal
+   * - The cursor is inside a comment
+   *
+   * @param {vscode.TextDocument} document - The current text document
+   * @param {vscode.Position} position - The current cursor position
+   * @returns {boolean} - True if completions should be shown, false otherwise
+   */
+  function isValidCompletionPosition(document, position) {
+    if (!completionEnabled) return false;
+    const line = document.lineAt(position.line).text;
+    const cursor = position.character;
+    return !isInStringOrComment(line, cursor);
+  }
+
   // RUN VALIDATION ON ALL DOCUMENTATION SOURCES
   validateDocs("scalarFunctionDocs", scalarFunctionDocs); // $ToJson, $Base64Encode, etc.
   validateDocs("operationDocs", operationDocs);           // Log-Information, Log-Warning, Log-Error, etc.
@@ -360,7 +407,7 @@ function activate(context) {
       ","   // Trigger on comma (when moving to next parameter)
     );
 
- // ------------------------------------------------------------
+  // ------------------------------------------------------------
   // SCALAR FUNCTION COMPLETION PROVIDER ($Function)
   // ------------------------------------------------------------
   // Shows completions for scalar functions when user types '$'.
@@ -375,10 +422,8 @@ function activate(context) {
       "otterscript",
       {
         provideCompletionItems(document, position) {
-          // Check if completion is enabled in settings
-          if (!completionEnabled) {
-            return [];  // Return empty list to indicate no completions
-          }
+          // Check if completion is enabled and not in a string/comment
+          if (!isValidCompletionPosition(document, position)) return [];
 
           const linePrefix = document
             .lineAt(position.line)
@@ -390,47 +435,16 @@ function activate(context) {
 
           const typed = match[1];
 
-          return Object.keys(scalarFunctionDocs)
-            .filter(name =>
-              name.toLowerCase().startsWith(typed.toLowerCase())
-            )
-            .map(name => {
-              const doc = scalarFunctionDocs[name];
-
-              // Create completion item with function icon
-              const item = new vscode.CompletionItem(
-                doc.name,
-                vscode.CompletionItemKind.Function
-              );
-
-              // Determine what text to insert when user selects this completion
-              if (doc.snippet) {
-                // Use custom snippet from docs.js (includes $0, $1 tabstops)
-                // Strip leading \$ because $ already exists in text
-                item.insertText = new vscode.SnippetString(
-                  doc.snippet.replace(/^\\\$/, "")
-                );
-              } else {
-                // Fallback for scalar functions without snippets
-                item.insertText = new vscode.SnippetString(`${name}($0)`)
-              }
-
-              // Secondary info shown in completion details pane
-              item.detail = doc.signature;
-
-              // Extended documentation shown in tooltip (Markdown supported)
-              item.documentation = doc.documentation
-                ? new vscode.MarkdownString(doc.documentation)
-                : undefined;
-
-              // Controls sorting order in completion list (1_ = priority)
-              item.sortText = `1_${name}`;
-
-              // Trigger signature help when '(' is typed after the function name
-              item.command = { command: 'editor.action.triggerParameterHints', title: '' };
-
-              return item;
-            });
+          return Object.entries(scalarFunctionDocs)
+              .filter(([name]) => name.toLowerCase().startsWith(typed.toLowerCase()))
+              .map(([name, doc]) => {
+                  const snippet = doc.snippet
+                    ? new vscode.SnippetString(doc.snippet.replace(/^\\\$/, ""))
+                    : new vscode.SnippetString(`${name}(\${0})`);
+                  const item = buildCompletionItem(doc, vscode.CompletionItemKind.Function, '1_', snippet);
+                  item.command = { command: 'editor.action.triggerParameterHints', title: '' };
+                  return item;
+              });
         }
       },
       "$"   // Trigger character - provider runs when user types this
@@ -450,10 +464,8 @@ function activate(context) {
       "otterscript",
       {
         provideCompletionItems(document, position) {
-          // Check if completion is enabled in settings
-          if (!completionEnabled) {
-            return [];  // Return empty list to indicate no completions (don't return null to avoid errors)
-          }
+          // Check if completion is enabled and not in a string/comment
+          if (!isValidCompletionPosition(document, position)) return [];
 
           const text = document
             .lineAt(position.line)
@@ -466,28 +478,15 @@ function activate(context) {
           const typed = match[1];
 
           // Filter variables by what user typed and create completion items
-          return Object.keys(variableDocs)
-            .filter(name =>
-              name.toLowerCase().startsWith(typed.toLowerCase())
-            )
-            .map(name => {
-              const doc = variableDocs[name];
-
-              // Create completion item with variable icon (different from function icon)
-              const item = new vscode.CompletionItem(
-                doc.name,
-                vscode.CompletionItemKind.Variable
-              );
-              item.insertText = doc.name.startsWith("$") ? doc.name.slice(1) : doc.name;
-              // Show description in completion details pane
-              item.detail = doc.description;
-              // Sort AFTER scalar functions (2_ vs 1_ in function provider)
-              item.sortText = `2_${doc.name}`;
-
-              // Note: No signature help trigger needed for variables
-
-              return item;
-            });
+          return Object.entries(variableDocs)
+              .filter(([name]) => name.toLowerCase().startsWith(typed.toLowerCase()))
+              .map(([name, doc]) => {
+                  // Remove leading $ for insertion (user already typed it)
+                  const snippet = doc.snippet
+                    ? new vscode.SnippetString(doc.snippet.replace(/^\\\$/, ""))
+                    : name.startsWith("$") ? name.slice(1) : name;
+                  return buildCompletionItem(doc, vscode.CompletionItemKind.Variable, '2_', snippet);
+          });
         }
       },
       "$"   // Trigger character - same as scalar function provider
@@ -503,10 +502,8 @@ function activate(context) {
       "otterscript",
       {
         provideCompletionItems(document, position) {
-          // Check if completion is enabled in settings
-          if (!completionEnabled) {
-            return [];
-          }
+          // Check if completion is enabled and not in a string/comment
+          if (!isValidCompletionPosition(document, position)) return [];
 
           // Get text from line start to cursor
           const linePrefix = document
@@ -520,53 +517,23 @@ function activate(context) {
           const typed = match[1];
 
           // Filter vector docs by what user typed
-          return Object.keys(vectorFunctionDocs)
-            .filter(name =>
-              name.toLowerCase().startsWith(typed.toLowerCase())
-            )
-            .map(name => {
-              const doc = vectorFunctionDocs[name];
-
-              // Detect if this is a function (has parameters) or a variable
-              const isFunction = doc.signature?.includes("(");
-
-              // Create completion item with appropriate icon
-              const item = new vscode.CompletionItem(
-                doc.name,
-                isFunction
-                  ? vscode.CompletionItemKind.Function
-                  : vscode.CompletionItemKind.Variable
-              );
-
-              // Remove leading '@' for insertion (user already typed it)
-              const insertName = doc.name.replace(/^\s*@/, "");
-              if (isFunction) {
-                // Function: insert name with parentheses and cursor inside
-                item.insertText = new vscode.SnippetString(
-                  doc.snippet ?? `${insertName}($0)`
-                );
-              } else {
-                // Variable: insert name only (no parentheses needed)
-                item.insertText = new vscode.SnippetString(`${insertName}`);
-              }
-
-              // Secondary info shown in completion details pane
-              // For functions: shows signature (e.g., "@Split($text, $delim)")
-              // For variables: falls back to "@Name" format
-              item.detail = doc.signature || `@${name}`;
-
-              // Extended documentation in tooltip (Markdown supported)
-              item.documentation = doc.documentation
-                ? new vscode.MarkdownString(doc.documentation)
-                : undefined;
-
-              // Sort order: variables (1_) BEFORE functions (2_)
-              item.sortText = isFunction
-                ? `2_${name}`   // Functions appear lower in list
-                : `1_${name}`;  // Variables appear higher in list
-
-              return item;
-            });
+          return Object.entries(vectorFunctionDocs)
+              .filter(([name]) => name.toLowerCase().startsWith(typed.toLowerCase()))
+              .map(([name, doc]) => {
+                  const isFunction = doc.signature?.includes("(");
+                  const insertName = name.replace(/^\s*@/, "");
+                  // Prefer doc.snippet if it exists, otherwise fall back to default pattern
+                  const insertText = isFunction
+                      ? new vscode.SnippetString(
+                          (doc.snippet?.replace(/^\s*@/, "") || `${insertName}(\${0})`)
+                        )
+                      : insertName;
+                  const kind = isFunction
+                      ? vscode.CompletionItemKind.Function
+                      : vscode.CompletionItemKind.Variable;
+                  const sortPrefix = isFunction ? '2_' : '1_';
+                  return buildCompletionItem(doc, kind, sortPrefix, insertText);
+              });
         }
       },
       "@"   // Trigger character - provider runs when user types this
@@ -584,19 +551,12 @@ function activate(context) {
       "otterscript",
       {
         provideCompletionItems(document, position) {
-          // Check if completion is enabled in settings
-          if (!completionEnabled) {
-            return [];
-          }
+          // Check if completion is enabled and not in a string/comment
+          if (!isValidCompletionPosition(document, position)) return [];
 
           const line = document.lineAt(position.line).text;
           const cursor = position.character;
           const prefix = line.slice(0, cursor);
-
-          // Do not trigger inside strings or comments
-          if (isInStringOrComment(line, cursor)) {
-            return [];
-          }
 
           // Match: word at cursor position (letters + hyphens allowed)
           const match = prefix.match(/\b([A-Za-z]+(?:-[A-Za-z]+)*)$/);
@@ -609,94 +569,32 @@ function activate(context) {
             return [];
           }
 
-          // KEYWORD COMPLETIONS
-          const keywordItems = [...knownKeywords]
-            .filter(name =>
-              name.toLowerCase().startsWith(typed.toLowerCase())
-            )
-            .map(name => {
-              const doc = keywordDocs[name];
+          const items = [];
 
-              // Create completion item with label + description
-              const item = new vscode.CompletionItem(
-                {
-                  label: doc.name,
-                  description: doc.description
-                },
-                vscode.CompletionItemKind.Function
-              );
-
-              // Determine what text to insert
-              if (doc.snippet) {
-                // Use custom snippet from docs.js (includes tabstops)
-                item.insertText = new vscode.SnippetString(doc.snippet);
-              } else {
-                // Fallback: insert keyword only (no auto-parentheses or semicolon)
-                item.insertText = doc.name;
+          // Operations (priority 0_)
+          for (const [name, doc] of Object.entries(operationDocs)) {
+              if (name.toLowerCase().startsWith(typed.toLowerCase())) {
+                  const snippet = doc.snippet
+                      ? new vscode.SnippetString(doc.snippet)
+                      : new vscode.SnippetString(`${name} "\${0}";`);
+                  const item = buildCompletionItem(doc, vscode.CompletionItemKind.Function, '0_', snippet);
+                  items.push(item);
               }
-              // Secondary info shown in completion details pane
-              item.detail = doc.signature ?? doc.description ?? "OtterScript keyword";
+          }
 
-              // Extended documentation in tooltip (Markdown supported)
-              item.documentation = doc.documentation
-                ? new vscode.MarkdownString(doc.documentation)
-                : undefined;
-
-              // Keywords appear AFTER operations (1_ vs 0_)
-              item.sortText = `1_${name}`;
-
-              return item;
-            });
-
-          // OPERATION COMPLETIONS
-          const operationItems = [...knownOperations]
-            .filter(name =>
-              name.toLowerCase().startsWith(typed.toLowerCase())
-            )
-            .map(name => {
-              const doc = operationDocs[name];
-
-              // Create completion item with label + description
-              const item = new vscode.CompletionItem(
-                {
-                  label: doc.name,
-                  description: doc.description
-                },
-                vscode.CompletionItemKind.Function
-              );
-
-              // Determine what text to insert
-              if (doc.snippet) {
-                // Use snippet from docs.js
-                item.insertText = new vscode.SnippetString(doc.snippet);
-              } else {
-                // Fallback: Insert operation name with quoted string placeholder
-                item.insertText = new vscode.SnippetString(
-                  `${doc.name} "$0";`
-                );
+          // Keywords (priority 1_)
+          for (const [name, doc] of Object.entries(keywordDocs)) {
+              if (name.toLowerCase().startsWith(typed.toLowerCase())) {
+                  const snippet = doc.snippet
+                      ? new vscode.SnippetString(doc.snippet)
+                      : name;
+                  const item = buildCompletionItem(doc, vscode.CompletionItemKind.Keyword, '1_', snippet);
+                  items.push(item);
               }
-              // Secondary info in completion details pane
-              item.detail = doc.signature ?? doc.description ?? "OtterScript operation";
-
-              // Extended documentation in tooltip
-              item.documentation = doc.documentation
-                ? new vscode.MarkdownString(doc.documentation)
-                : undefined;
-
-              // Operations appear ABOVE keywords (0_ priority)
-              item.sortText = `0_${name}`;
-
-              return item;
-            });
-
-        // Return operations first (higher priority), then keywords
-        // VS Code will display operations above keywords due to sortText
-        return [
-          ...operationItems,
-          ...keywordItems
-        ];
-        }
+          }
+          return items;
       }
+  }
       // Note: No trigger character specified - this provider runs on every keystroke
       // The 3-character minimum prevents excessive triggering
     );
