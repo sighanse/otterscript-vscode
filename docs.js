@@ -43,20 +43,6 @@
 
 /** @typedef {Record<string, DocEntry>} DocsTable */
 
-/**
- * Describes a language syntax concept that does not correspond
- * to a concrete symbol (for example: swim strings, template tags,
- * or renderer-only placeholders).
- *
- * SyntaxDocs are documentation-only:
- * - they are not included in completion
- * - they are surfaced only when explicitly selected by hover logic
- *
- * @typedef {string} SyntaxDoc
- */
-
-/** @typedef {Record<string, SyntaxDoc>} SyntaxDocsTable */
-
 // ============================================================
 // OPERATION DOCS
 // ============================================================
@@ -145,20 +131,32 @@ Log-Error "Failed to connect to server";
 // SYNTAX DOCS
 // ============================================================
 
-/** @type {SyntaxDocsTable} */
+/** @type {DocsTable} */
 const syntaxDocs = {
-  swimString: `
-### Swim string (\`>...>\` fish sentinels)
-
-A multi-line unquoted string literal delimited by matching fish sentinels
-(e.g. \`>>\`, \`>==8>\`, \`>--=>\`).
-
+  swimString: {
+    name: "Swim string",
+    signature: ">> ... >> or >==8> ... >==8> etc...",
+    documentation: "Multi-line unquoted string literal with matching fish sentinels.",
+    description: `
 - Preserves line breaks
 - Quotes do not need escaping
 - Supports expression evaluation using \`$()\`
-`,
+
+**Example:**
+\`\`\`otterscript
+$text = >>
+This can span
+multiple lines
+>>;
+\`\`\`
+`
+  },
   // Template tags
-  templateOpen: `
+  templateOpen: {
+    name: "Template Open (<% ... %>)",
+    signature: "<% ... %>",
+    description: "Embed OtterScript code inside text templates.",
+    documentation: `
 ### Templating Tag
 **Syntax:** \`<% ... %>\`
 
@@ -170,18 +168,20 @@ Used to embed OtterScript code inside text templates.
   * $(%p.Name)
 <% } %>
 \`\`\`
-`,
-  templateClose: `
-### Closing Templating Tag
-Closes a template code block started with \`<% \`.
-`,
+`
+  },
+  templateClose: {
+    name: "Template Close (%>)",
+    signature: "%>",
+    description: "Closes a template code block.",
+    documentation: "Closes a template code block started with `<%`"
+  },
   // Expression delimiters
-  mapExpr: `
-### Map Expression
-**Syntax:** \`%(key: value, key2: value2)\`
-
-Creates a map (dictionary/object) literal.
-
+  mapExpr: {
+    name: "Map Expression",
+    signature: "%(key: value, key2: value2)",
+    description: "Creates a map (dictionary/object) literal.",
+    documentation: `
 **Example:**
 \`\`\`otterscript
 $config = %(
@@ -190,30 +190,33 @@ $config = %(
     debug: true
 );
 \`\`\`
-`,
-  vectorExpr: `
-### Vector Expression
-**Syntax:** \`@(value1, value2, value3)\`
-
-Creates a vector (array/list) literal.
-
+`
+  },
+  vectorExpr: {
+    name: "Vector Expression",
+    signature: "@(value1, value2, value3)",
+    description: "Creates a vector (array/list) literal.",
+    documentation: `
 **Example:**
 \`\`\`otterscript
 @colors = @("red", "green", "blue");
 $first = @colors[0];
 \`\`\`
-`,
-  nestedEval: `
-### Nested Evaluation
-**Syntax:** \`$(expression)\`
-
-Evaluates an expression inside a string. Used when variable expansion is needed inside quoted strings.
+`
+  },
+  nestedEval: {
+    name: "Nested Evaluation",
+    signature: "$(expression)",
+    description: "Evaluates an expression inside a string.",
+    documentation: `
+Used when variable expansion is needed inside quoted strings.
 
 **Example:**
 \`\`\`otterscript
 $message = "Value: $(@list[0])";
 \`\`\`
 `
+  }
 };
 
 // ============================================================

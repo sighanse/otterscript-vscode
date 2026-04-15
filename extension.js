@@ -262,7 +262,7 @@ function activate(context) {
   validateDocs("operationDocs", operationDocs);           // Log-Information, Log-Warning, Log-Error, etc.
   validateDocs("vectorFunctionDocs", vectorFunctionDocs); // @Split, @Join, etc.
   validateDocs("variableDocs", variableDocs);             // $BuildId, $FeedName, etc.
-  //validateDocs("syntaxDocs", syntaxDocs); // syntaxDocs is a special case - it's a flat object with string values, not a table of entries
+  validateDocs("syntaxDocs", syntaxDocs);                 // Template tags, swim strings, expression delimiters, etc.
   validateDocs("keywordDocs", keywordDocs);               // if, foreach, with, set, etc.
 
   // KNOWLEDGE BASES (Fast Lookup Sets)
@@ -736,11 +736,11 @@ function activate(context) {
         const text = document.getText(templateRange);
         if (text === '<%') {
           return new vscode.Hover(
-                new vscode.MarkdownString(syntaxDocs.templateOpen), templateRange);
-          }
+                buildHoverMarkdown(syntaxDocs.templateOpen), templateRange);
+        }
         if (text === '%>') {
           return new vscode.Hover(
-                new vscode.MarkdownString(syntaxDocs.templateClose), templateRange);
+                buildHoverMarkdown(syntaxDocs.templateClose), templateRange);
         }
       }
 
@@ -755,15 +755,15 @@ function activate(context) {
           const text = document.getText(exprRange);
           if (text === '%(') {
               return new vscode.Hover(
-                  new vscode.MarkdownString(syntaxDocs.mapExpr), exprRange);
+                  buildHoverMarkdown(syntaxDocs.mapExpr), exprRange);
           }
           if (text === '@(') {
               return new vscode.Hover(
-                  new vscode.MarkdownString(syntaxDocs.vectorExpr),exprRange);
+                  buildHoverMarkdown(syntaxDocs.vectorExpr),exprRange);
           }
           if (text === '$(') {
               return new vscode.Hover(
-                  new vscode.MarkdownString(syntaxDocs.nestedEval),exprRange);
+                  buildHoverMarkdown(syntaxDocs.nestedEval),exprRange);
           }
       }
       // 3. KEYWORDS (if, foreach, with, set, etc.)
@@ -803,9 +803,7 @@ function activate(context) {
 
       if (swimRange) {
         return new vscode.Hover(
-          new vscode.MarkdownString(syntaxDocs.swimString),
-          swimRange
-        );
+          buildHoverMarkdown(syntaxDocs.swimString), swimRange);
       }
 
       // 5. OPERATIONS (Log-Information, Log-Warning, Log-Error, etc.)
