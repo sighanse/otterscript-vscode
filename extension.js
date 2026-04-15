@@ -236,6 +236,27 @@ function activate(context) {
     }
   }
 
+  /**
+   * Builds a standardised hover MarkdownString from a documentation entry.
+   * @param {Readonly<{ name: string, signature?: string, description?: string, documentation?: string }>} doc
+   * @returns {vscode.MarkdownString}
+   */
+  function buildHoverMarkdown(doc) {
+    const md = new vscode.MarkdownString();
+    md.appendMarkdown(`### ${doc.name}\n\n`);
+    if (doc.signature) {
+      md.appendMarkdown(`**Signature:** \`${doc.signature}\`\n\n`);
+    }
+    if (doc.description) {
+      md.appendMarkdown(`${doc.description}\n\n`);
+    }
+    if (typeof doc.documentation === "string") {
+      md.appendMarkdown(doc.documentation);
+    }
+    md.isTrusted = false;  // Default is false. true enables richer formatting, but we don't need that for now.
+    return md;
+  }
+
   // RUN VALIDATION ON ALL DOCUMENTATION SOURCES
   validateDocs("scalarFunctionDocs", scalarFunctionDocs); // $ToJson, $Base64Encode, etc.
   validateDocs("operationDocs", operationDocs);           // Log-Information, Log-Warning, Log-Error, etc.
@@ -766,15 +787,8 @@ function activate(context) {
         // Check if it's a known keyword
         if (knownKeywords.has(word)) {
           const doc = keywordDocs[word];
-          const markdown = new vscode.MarkdownString();
-          markdown.appendMarkdown(`### ${doc.name}\n\n`);
-          markdown.appendMarkdown(`${doc.description}\n\n`);
-
-          // Add extended documentation if available (optional field)
-          if (typeof doc.documentation === "string") {
-            markdown.appendMarkdown(doc.documentation);
-          }
-          return new vscode.Hover(markdown, wordRange);
+          // Make hover
+          return new vscode.Hover(buildHoverMarkdown(doc), wordRange);
         }
       }
 
@@ -805,19 +819,11 @@ function activate(context) {
         const opName = document.getText(operationRange);
         const doc = operationDocs[opName];
 
-        if (doc) {
-          const md = new vscode.MarkdownString();
-          md.appendMarkdown(`### ${doc.name}\n\n`);
-          md.appendMarkdown(`**Signature:** \`${doc.signature}\`\n\n`);
-          md.appendMarkdown(`${doc.description}\n\n`);
+        // No documentation found
+        if (!doc) return null;
 
-          // Add extended documentation if available
-          if (doc.documentation) {
-            md.appendMarkdown(doc.documentation);
-          }
-
-          return new vscode.Hover(md, operationRange);
-        }
+        // Make hover
+        return new vscode.Hover(buildHoverMarkdown(doc), operationRange);
       }
 
       // 6. SYMBOLS ($function, @vector, $variable)
@@ -845,35 +851,14 @@ function activate(context) {
         doc = vectorFunctionDocs[name];
       }
 
-      // No documentation found for this symbol
+      // No documentation found
       if (!doc) return null;
 
-      // Build hover content with Markdown formatting
-      const markdown = new vscode.MarkdownString();
-
-      // Heading (bold in VS Code UI)
-      markdown.appendMarkdown(`### ${doc.name}\n\n`);
-
-      if (doc.signature) {
-        markdown.appendMarkdown(`**Signature:** \`${doc.signature}\`\n\n`);
-      }
-
-      // Short description (required per validateDocs)
-      if (doc.description) {
-        markdown.appendMarkdown(`${doc.description}\n\n`);
-      }
-
-      // Extended documentation (optional, can be multi-line)
-      if (typeof doc.documentation === "string") {
-        markdown.appendMarkdown(doc.documentation);
-      }
-
-      return new vscode.Hover(markdown, symbolRange);
+      // Make hover
+      return new vscode.Hover(buildHoverMarkdown(doc), symbolRange);
     }
   });
 
- // ============================================================
-  // DIAGNOSTICS (ERRORS & WARNINGS)
   // ============================================================
   // DIAGNOSTICS (ERRORS & WARNINGS)
   // ============================================================
