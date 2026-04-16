@@ -728,6 +728,31 @@ const variableDocs = {
       description: "The type of feed (NuGet, npm, PyPI, etc.).",
       documentation: `
 **Available in:** ProGet
+
+**Feed types:**
+
+- alpine
+- asset
+- cargo
+- chocolatey
+- composer
+- conan
+- conda
+- cran
+- docker
+- helm
+- maven(Java)
+- npm
+- npm
+- nuget
+- powershell
+- pypi
+- romp
+- rpm(yum)
+- rubygems
+- terraform
+- universal
+- vsix
 `
     },
     NotifierId: {
