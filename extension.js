@@ -333,10 +333,18 @@ function activate(context) {
   const vectorCallRegex = () => /@([A-Za-z][A-Za-z0-9_]*)\s*\(/g;
   const operationCallRegex = () => /\b([A-Za-z][A-Za-z-]*)\b/g;
 
+  // REGEX PATTERNS FOR SIGNATURE HELP
+  const scalarSignatureRegex = () => /\$([A-Za-z][A-Za-z0-9_]*)\s*\(([^()]*)$/;
+  const vectorSignatureRegex = () => /@([A-Za-z][A-Za-z0-9_]*)\s*\(([^()]*)$/;
+  const operationSignatureRegex = () => /(?:^|\s)([A-Za-z][A-Za-z-]*)\s*\(([^()]*)$/;
+
   // ============================================================
-  // SIGNATURE HELP
+  // SIGNATURE HELP PROVIDER
   // ============================================================
-  // Provides parameter hints for $scalar(...) and @vector(...)
+  // Shows parameter hints for:
+  //   - Scalar functions: $ToJson(value)
+  //   - Vector functions: @Split(text, delimiter)
+  //   - Operations: Post-Http(Url: ..., [options...])
 
   const signatureHelpProvider =
     vscode.languages.registerSignatureHelpProvider(
@@ -344,71 +352,144 @@ function activate(context) {
       {
         provideSignatureHelp(document, position) {
           // Check if the signature help provider is enabled in settings
-          if (!signatureHelpEnabled) {
-            return null;
+          if (!signatureHelpEnabled) return null;
+
+          // Get all text from document start to cursor position
+          // This enables multi-line function call detection
+          const startPos = new vscode.Position(0, 0);
+          const textBeforeCursor = document.getText(new vscode.Range(
+            new vscode.Position(Math.max(0, position.line - 10), 0),  // Last 10 lines max
+            position
+          ));
+          // Try each pattern to find the function call
+          let match = null;
+          let fn = null;
+          let args = null;
+
+          // 1. Check scalar functions ($Func)
+          const scalarMatch = textBeforeCursor.match(scalarSignatureRegex());
+          if (scalarMatch) {
+            match = scalarMatch;
+            fn = scalarFunctionDocs[match[1]];
+            args = match[2];
           }
 
-          const line = document.lineAt(position.line).text.slice(0, position.character);
+          // 2. Check vector functions (@Func)
+          if (!fn) {
+            const vectorMatch = textBeforeCursor.match(vectorSignatureRegex());
+            if (vectorMatch) {
+              match = vectorMatch;
+              fn = vectorFunctionDocs[match[1]];
+              args = match[2];
+            }
+          }
 
-          // Find the last function call before cursor
-          const match = line.match(/([@$])([A-Za-z][A-Za-z0-9]*)\s*\(([^()]*)$/);
-          if (!match) return null;
+          // 3. Check operations (Post-Http, Log-Information, etc.)
+          if (!fn) {
+            const opMatch = textBeforeCursor.match(operationSignatureRegex());
+            if (opMatch) {
+              match = opMatch;
+              fn = operationDocs[match[1]];
+              args = match[2];
+            }
+          }
 
-          const [, prefix, name, args] = match;
-          // Look up function documentation based on prefix type
-          const fn =
-            prefix === "$"
-              ? scalarFunctionDocs[name]
-              : vectorFunctionDocs[name];
+          // Validate we have everything needed
+          if (!fn?.signature || !match) return null;
+          if (typeof args !== 'string') return null;
 
-          // No matching function found at the cursor position
-          if (!fn) return null;
-          // Signature help only makes sense when a concrete signature exists
-          if (!fn.signature) return null;
+          // Active parameter detection
 
-          // Count which parameter the cursor is inside by scanning arguments
-          // Example: For "$Func(one, |two, three)" -> activeParam = 1 (zero-based)
           let activeParam = 0;
-          let inString = false;   // Track if we're inside quotes
-          let quote = null;       // Track which quote type we're in (' or ")
+          let inString = false;
+          let quote = null;
+          let parenDepth = 0;   // Track ( ) nesting
+          let braceDepth = 0;   // Track [ ] nesting
+          let curlyDepth = 0;   // Track { } nesting
 
-          for (const ch of args) {
-            // Toggle string state - ignore commas inside quotes
+          for (let i = 0; i < args.length; i++) {
+            const ch = args[i];
+            const nextCh = args[i + 1];
+
+            // --- Handle string literals ---
+            // Toggle string state when encountering unescaped quotes
             if ((ch === '"' || ch === "'") && !inString) {
               inString = true;
               quote = ch;
-            } else if (ch === quote) {
-              inString = false;
-            } else if (!inString && ch === ",") {
+              continue;
+            }
+
+            if (inString && ch === quote) {
+              // Check if quote is escaped (odd number of backslashes before it)
+              let backslashCount = 0;
+              let j = i - 1;
+              while (j >= 0 && args[j] === '\\') {
+                backslashCount++;
+                j--;
+              }
+              if (backslashCount % 2 === 0) {
+                inString = false;
+              }
+              continue;
+            }
+
+            // Skip all processing inside strings
+            if (inString) continue;
+
+            // --- Track nesting depth for different bracket types ---
+            if (ch === '(') parenDepth++;
+            if (ch === ')') parenDepth--;
+            if (ch === '[') braceDepth++;
+            if (ch === ']') braceDepth--;
+            if (ch === '{') curlyDepth++;
+            if (ch === '}') curlyDepth--;
+
+            // --- Count commas as parameter separators ---
+            // Only count commas at the top level (depth === 0 for all bracket types)
+            if (ch === ',' && parenDepth === 0 && braceDepth === 0 && curlyDepth === 0) {
               activeParam++;
             }
           }
 
-          // Build the signature help UI object
-          const sig = new vscode.SignatureInformation(
-            fn.signature,
-            fn.documentation
-          );
+          // ============================================================
+          // BUILD SIGNATURE HELP UI
+          // ============================================================
+
+          const sig = new vscode.SignatureInformation(fn.signature, fn.documentation);
 
           // Parse signature to extract individual parameters
-          const paramList = fn.signature.match(/\(([^)]+)\)/);
-          if (paramList) {
-            sig.parameters = paramList[1]
-              .split(",")
-              .map(p => new vscode.ParameterInformation(p.trim()));
+          // Handles nested parentheses in signature (e.g., "Func(a, (b + c), d)")
+          const paramMatch = fn.signature.match(/\(([\s\S]*)\)/);
+          if (paramMatch) {
+            const paramText = paramMatch[1];
+            const params = [];
+            let depth = 0;
+            let start = 0;
+
+            for (let i = 0; i < paramText.length; i++) {
+              const ch = paramText[i];
+              if (ch === '(') depth++;
+              if (ch === ')') depth--;
+              if (ch === ',' && depth === 0) {
+                params.push(paramText.substring(start, i).trim());
+                start = i + 1;
+              }
+            }
+            params.push(paramText.substring(start).trim());
+
+            sig.parameters = params.map(p => new vscode.ParameterInformation(p));
           }
 
           // Prepare the response
           const help = new vscode.SignatureHelp();
           help.signatures = [sig];
           help.activeSignature = 0;
-          // Only set activeParameter when parameters were extracted.
+
+          // Only set activeParameter when parameters were extracted
           if (sig.parameters.length > 0) {
-            help.activeParameter = Math.min(
-              activeParam,
-              sig.parameters.length - 1
-            );
+            help.activeParameter = Math.min(activeParam, sig.parameters.length - 1);
           }
+
           return help;
         }
       },
