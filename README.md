@@ -90,3 +90,7 @@ Please see [SECURITY.md](https://github.com/sighanse/otterscript-vscode/blob/mai
 ## License
 
 MIT
+
+## Code of Conduct
+
+This project follows the [Contributor Covenant Code of Conduct](https://github.com/sighanse/otterscript-vscode/blob/main/CODE_OF_CONDUCT.md).

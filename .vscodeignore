@@ -10,6 +10,7 @@ test/
 *.log
 *.tmp
 CONTRIBUTING.md
+CODE_OF_CONDUCT.md
 SECURITY.md
 package-lock.json
 .markdownlint.jsonc
