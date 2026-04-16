@@ -11,4 +11,5 @@ test/
 *.tmp
 CONTRIBUTING.md
 SECURITY.md
+package-lock.json
 .markdownlint.jsonc
