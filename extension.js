@@ -266,13 +266,15 @@ function activate(context) {
    * @property {string=} documentation Extended Markdown documentation
    */
   /**
-   * @param {DocEntry} doc
-   * @param {vscode.CompletionItemKind} kind
-   * @param {string} sortPrefix  e.g. "1_", "2_"
-   * @param {string | vscode.SnippetString} insertText
+   * Builds a completion item with consistent formatting.
+   * @param {DocEntry} doc - Documentation object
+   * @param {vscode.CompletionItemKind} kind - Item kind (Function, Variable, etc.)
+   * @param {string} sortPrefix - Sort order prefix (e.g., "0_", "1_")
+   * @param {string | vscode.SnippetString} insertText - Text to insert
+   * @param {boolean} [triggerSignatureHelp=false] - Whether to trigger signature help after insertion
    * @returns {vscode.CompletionItem}
    */
-  function buildCompletionItem(doc, kind, sortPrefix, insertText) {
+  function buildCompletionItem(doc, kind, sortPrefix, insertText, triggerSignatureHelp = false) {
     const item = new vscode.CompletionItem(
       { label: doc.name, description: doc.description },
       kind
@@ -283,6 +285,13 @@ function activate(context) {
       ? new vscode.MarkdownString(doc.documentation)
       : undefined;
     item.sortText = `${sortPrefix}${doc.name}`;
+
+    if (triggerSignatureHelp) {
+      item.command = {
+        command: 'editor.action.triggerParameterHints',
+        title: ''
+      };
+    }
     return item;
   }
 
@@ -436,13 +445,12 @@ function activate(context) {
           const typed = match[1];
 
           return Object.entries(scalarFunctionDocs)
-              .filter(([name]) => name.toLowerCase().startsWith(typed.toLowerCase()))
-              .map(([name, doc]) => {
+              .filter(([key]) => key.toLowerCase().startsWith(typed.toLowerCase()))
+              .map(([_key, doc]) => {
                   const snippet = doc.snippet
                     ? new vscode.SnippetString(doc.snippet.replace(/^\\\$/, ""))
-                    : new vscode.SnippetString(`${name}(\${0})`);
-                  const item = buildCompletionItem(doc, vscode.CompletionItemKind.Function, '1_', snippet);
-                  item.command = { command: 'editor.action.triggerParameterHints', title: '' };
+                    : new vscode.SnippetString(doc.name.replace(/^\$/, ""));
+                  const item = buildCompletionItem(doc, vscode.CompletionItemKind.Function, '1_', snippet, true);
                   return item;
               });
         }
@@ -479,13 +487,13 @@ function activate(context) {
 
           // Filter variables by what user typed and create completion items
           return Object.entries(variableDocs)
-              .filter(([name]) => name.toLowerCase().startsWith(typed.toLowerCase()))
-              .map(([name, doc]) => {
+              .filter(([key]) => key.toLowerCase().startsWith(typed.toLowerCase()))
+              .map(([_key, doc]) => {
                   // Remove leading $ for insertion (user already typed it)
                   const snippet = doc.snippet
-                    ? new vscode.SnippetString(doc.snippet.replace(/^\\\$/, ""))
-                    : name.startsWith("$") ? name.slice(1) : name;
-                  return buildCompletionItem(doc, vscode.CompletionItemKind.Variable, '2_', snippet);
+                    ? new vscode.SnippetString(doc.snippet?.replace(/^\$/, ""))
+                    : new vscode.SnippetString(doc.name?.replace(/^\$/, ""))
+                  return buildCompletionItem(doc, vscode.CompletionItemKind.Variable, '2_', snippet, false);
           });
         }
       },
@@ -518,21 +526,21 @@ function activate(context) {
 
           // Filter vector docs by what user typed
           return Object.entries(vectorFunctionDocs)
-              .filter(([name]) => name.toLowerCase().startsWith(typed.toLowerCase()))
-              .map(([name, doc]) => {
+              .filter(([key]) => key.toLowerCase().startsWith(typed.toLowerCase()))
+              .map(([_key, doc]) => {
                   const isFunction = doc.signature?.includes("(");
-                  const insertName = name.replace(/^\s*@/, "");
+                  const insertName = doc.name.replace(/^@/, "");
                   // Prefer doc.snippet if it exists, otherwise fall back to default pattern
                   const insertText = isFunction
                       ? new vscode.SnippetString(
-                          (doc.snippet?.replace(/^\s*@/, "") || `${insertName}(\${0})`)
-                        )
-                      : insertName;
+                          (doc.snippet?.replace(/^@/, "") || `${insertName}(\${0})`))
+                      : new vscode.SnippetString(
+                          (doc.snippet?.replace(/^@/, "") || `${insertName}\${0}`));
                   const kind = isFunction
                       ? vscode.CompletionItemKind.Function
                       : vscode.CompletionItemKind.Variable;
                   const sortPrefix = isFunction ? '2_' : '1_';
-                  return buildCompletionItem(doc, kind, sortPrefix, insertText);
+                  return buildCompletionItem(doc, kind, sortPrefix, insertText, true);
               });
         }
       },
@@ -577,7 +585,7 @@ function activate(context) {
                   const snippet = doc.snippet
                       ? new vscode.SnippetString(doc.snippet)
                       : new vscode.SnippetString(`${name} "\${0}";`);
-                  const item = buildCompletionItem(doc, vscode.CompletionItemKind.Function, '0_', snippet);
+                  const item = buildCompletionItem(doc, vscode.CompletionItemKind.Function, '0_', snippet, true);
                   items.push(item);
               }
           }
@@ -588,13 +596,13 @@ function activate(context) {
                   const snippet = doc.snippet
                       ? new vscode.SnippetString(doc.snippet)
                       : name;
-                  const item = buildCompletionItem(doc, vscode.CompletionItemKind.Keyword, '1_', snippet);
+                  const item = buildCompletionItem(doc, vscode.CompletionItemKind.Keyword, '1_', snippet, false);
                   items.push(item);
               }
           }
           return items;
+        }
       }
-  }
       // Note: No trigger character specified - this provider runs on every keystroke
       // The 3-character minimum prevents excessive triggering
     );
@@ -1026,16 +1034,16 @@ function activate(context) {
     // ============================================================
     // After scanning the entire file, report if braces don't match
     if (braces !== 0) {
-        issues.push(
-          new vscode.Diagnostic(
-            new vscode.Range(
-              document.positionAt(lastPos),
-              document.positionAt(lastPos + 1)
-            ),
-            braces > 0 ? "Unclosed brace(s)" : "Unexpected closing brace",
-            vscode.DiagnosticSeverity.Error   // Red squiggly - must fix
-          )
-        );
+      issues.push(
+        new vscode.Diagnostic(
+          new vscode.Range(
+            document.positionAt(lastPos),
+            document.positionAt(lastPos + 1)
+          ),
+          braces > 0 ? "Unclosed brace(s)" : "Unexpected closing brace",
+          vscode.DiagnosticSeverity.Error   // Red squiggly - must fix
+        )
+      );
     }
     // Update VS Code's diagnostic panel with all found issues
     diagnostics.set(document.uri, issues);
