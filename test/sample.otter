@@ -313,6 +313,13 @@ Log-Information "$ToUpper should not hover here";
 # OTHER STATEMENTS
 ###############################################################################
 
+/*
+   function test() {
+       $unknownFunction();  // Should NOT show "unknown scalar function"
+       { } { } {            // Should NOT affect brace count
+   }
+*/
+
 raise-error "Shit hits the fan"
 await;
 warn;
@@ -325,3 +332,4 @@ $Replace("a,b,c", ",", "|", true);   # extra argument
 $url = $UrlEncode("https://www.github.com")
 $encoded = $HtmlEncode("test")
 $fullPath = $PathCombine("path1", "path2")
+

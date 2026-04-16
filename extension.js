@@ -266,13 +266,15 @@ function activate(context) {
    * @property {string=} documentation Extended Markdown documentation
    */
   /**
-   * @param {DocEntry} doc
-   * @param {vscode.CompletionItemKind} kind
-   * @param {string} sortPrefix  e.g. "1_", "2_"
-   * @param {string | vscode.SnippetString} insertText
+   * Builds a completion item with consistent formatting.
+   * @param {DocEntry} doc - Documentation object
+   * @param {vscode.CompletionItemKind} kind - Item kind (Function, Variable, etc.)
+   * @param {string} sortPrefix - Sort order prefix (e.g., "0_", "1_")
+   * @param {string | vscode.SnippetString} insertText - Text to insert
+   * @param {boolean} [triggerSignatureHelp=false] - Whether to trigger signature help after insertion
    * @returns {vscode.CompletionItem}
    */
-  function buildCompletionItem(doc, kind, sortPrefix, insertText) {
+  function buildCompletionItem(doc, kind, sortPrefix, insertText, triggerSignatureHelp = false) {
     const item = new vscode.CompletionItem(
       { label: doc.name, description: doc.description },
       kind
@@ -283,6 +285,13 @@ function activate(context) {
       ? new vscode.MarkdownString(doc.documentation)
       : undefined;
     item.sortText = `${sortPrefix}${doc.name}`;
+
+    if (triggerSignatureHelp) {
+      item.command = {
+        command: 'editor.action.triggerParameterHints',
+        title: ''
+      };
+    }
     return item;
   }
 
@@ -324,10 +333,18 @@ function activate(context) {
   const vectorCallRegex = () => /@([A-Za-z][A-Za-z0-9_]*)\s*\(/g;
   const operationCallRegex = () => /\b([A-Za-z][A-Za-z-]*)\b/g;
 
+  // REGEX PATTERNS FOR SIGNATURE HELP
+  const scalarSignatureRegex = () => /\$([A-Za-z][A-Za-z0-9_]*)\s*\(([^()]*)$/;
+  const vectorSignatureRegex = () => /@([A-Za-z][A-Za-z0-9_]*)\s*\(([^()]*)$/;
+  const operationSignatureRegex = () => /(?:^|\s)([A-Za-z][A-Za-z-]*)\s*\(([^()]*)$/;
+
   // ============================================================
-  // SIGNATURE HELP
+  // SIGNATURE HELP PROVIDER
   // ============================================================
-  // Provides parameter hints for $scalar(...) and @vector(...)
+  // Shows parameter hints for:
+  //   - Scalar functions: $ToJson(value)
+  //   - Vector functions: @Split(text, delimiter)
+  //   - Operations: Post-Http(Url: ..., [options...])
 
   const signatureHelpProvider =
     vscode.languages.registerSignatureHelpProvider(
@@ -335,71 +352,144 @@ function activate(context) {
       {
         provideSignatureHelp(document, position) {
           // Check if the signature help provider is enabled in settings
-          if (!signatureHelpEnabled) {
-            return null;
+          if (!signatureHelpEnabled) return null;
+
+          // Get all text from document start to cursor position
+          // This enables multi-line function call detection
+          const startPos = new vscode.Position(0, 0);
+          const textBeforeCursor = document.getText(new vscode.Range(
+            new vscode.Position(Math.max(0, position.line - 10), 0),  // Last 10 lines max
+            position
+          ));
+          // Try each pattern to find the function call
+          let match = null;
+          let fn = null;
+          let args = null;
+
+          // 1. Check scalar functions ($Func)
+          const scalarMatch = textBeforeCursor.match(scalarSignatureRegex());
+          if (scalarMatch) {
+            match = scalarMatch;
+            fn = scalarFunctionDocs[match[1]];
+            args = match[2];
           }
 
-          const line = document.lineAt(position.line).text.slice(0, position.character);
+          // 2. Check vector functions (@Func)
+          if (!fn) {
+            const vectorMatch = textBeforeCursor.match(vectorSignatureRegex());
+            if (vectorMatch) {
+              match = vectorMatch;
+              fn = vectorFunctionDocs[match[1]];
+              args = match[2];
+            }
+          }
 
-          // Find the last function call before cursor
-          const match = line.match(/([@$])([A-Za-z][A-Za-z0-9]*)\s*\(([^()]*)$/);
-          if (!match) return null;
+          // 3. Check operations (Post-Http, Log-Information, etc.)
+          if (!fn) {
+            const opMatch = textBeforeCursor.match(operationSignatureRegex());
+            if (opMatch) {
+              match = opMatch;
+              fn = operationDocs[match[1]];
+              args = match[2];
+            }
+          }
 
-          const [, prefix, name, args] = match;
-          // Look up function documentation based on prefix type
-          const fn =
-            prefix === "$"
-              ? scalarFunctionDocs[name]
-              : vectorFunctionDocs[name];
+          // Validate we have everything needed
+          if (!fn?.signature || !match) return null;
+          if (typeof args !== 'string') return null;
 
-          // No matching function found at the cursor position
-          if (!fn) return null;
-          // Signature help only makes sense when a concrete signature exists
-          if (!fn.signature) return null;
+          // Active parameter detection
 
-          // Count which parameter the cursor is inside by scanning arguments
-          // Example: For "$Func(one, |two, three)" -> activeParam = 1 (zero-based)
           let activeParam = 0;
-          let inString = false;   // Track if we're inside quotes
-          let quote = null;       // Track which quote type we're in (' or ")
+          let inString = false;
+          let quote = null;
+          let parenDepth = 0;   // Track ( ) nesting
+          let braceDepth = 0;   // Track [ ] nesting
+          let curlyDepth = 0;   // Track { } nesting
 
-          for (const ch of args) {
-            // Toggle string state - ignore commas inside quotes
+          for (let i = 0; i < args.length; i++) {
+            const ch = args[i];
+            const nextCh = args[i + 1];
+
+            // --- Handle string literals ---
+            // Toggle string state when encountering unescaped quotes
             if ((ch === '"' || ch === "'") && !inString) {
               inString = true;
               quote = ch;
-            } else if (ch === quote) {
-              inString = false;
-            } else if (!inString && ch === ",") {
+              continue;
+            }
+
+            if (inString && ch === quote) {
+              // Check if quote is escaped (odd number of backslashes before it)
+              let backslashCount = 0;
+              let j = i - 1;
+              while (j >= 0 && args[j] === '\\') {
+                backslashCount++;
+                j--;
+              }
+              if (backslashCount % 2 === 0) {
+                inString = false;
+              }
+              continue;
+            }
+
+            // Skip all processing inside strings
+            if (inString) continue;
+
+            // --- Track nesting depth for different bracket types ---
+            if (ch === '(') parenDepth++;
+            if (ch === ')') parenDepth--;
+            if (ch === '[') braceDepth++;
+            if (ch === ']') braceDepth--;
+            if (ch === '{') curlyDepth++;
+            if (ch === '}') curlyDepth--;
+
+            // --- Count commas as parameter separators ---
+            // Only count commas at the top level (depth === 0 for all bracket types)
+            if (ch === ',' && parenDepth === 0 && braceDepth === 0 && curlyDepth === 0) {
               activeParam++;
             }
           }
 
-          // Build the signature help UI object
-          const sig = new vscode.SignatureInformation(
-            fn.signature,
-            fn.documentation
-          );
+          // ============================================================
+          // BUILD SIGNATURE HELP UI
+          // ============================================================
+
+          const sig = new vscode.SignatureInformation(fn.signature, fn.documentation);
 
           // Parse signature to extract individual parameters
-          const paramList = fn.signature.match(/\(([^)]+)\)/);
-          if (paramList) {
-            sig.parameters = paramList[1]
-              .split(",")
-              .map(p => new vscode.ParameterInformation(p.trim()));
+          // Handles nested parentheses in signature (e.g., "Func(a, (b + c), d)")
+          const paramMatch = fn.signature.match(/\(([\s\S]*)\)/);
+          if (paramMatch) {
+            const paramText = paramMatch[1];
+            const params = [];
+            let depth = 0;
+            let start = 0;
+
+            for (let i = 0; i < paramText.length; i++) {
+              const ch = paramText[i];
+              if (ch === '(') depth++;
+              if (ch === ')') depth--;
+              if (ch === ',' && depth === 0) {
+                params.push(paramText.substring(start, i).trim());
+                start = i + 1;
+              }
+            }
+            params.push(paramText.substring(start).trim());
+
+            sig.parameters = params.map(p => new vscode.ParameterInformation(p));
           }
 
           // Prepare the response
           const help = new vscode.SignatureHelp();
           help.signatures = [sig];
           help.activeSignature = 0;
-          // Only set activeParameter when parameters were extracted.
+
+          // Only set activeParameter when parameters were extracted
           if (sig.parameters.length > 0) {
-            help.activeParameter = Math.min(
-              activeParam,
-              sig.parameters.length - 1
-            );
+            help.activeParameter = Math.min(activeParam, sig.parameters.length - 1);
           }
+
           return help;
         }
       },
@@ -436,13 +526,12 @@ function activate(context) {
           const typed = match[1];
 
           return Object.entries(scalarFunctionDocs)
-              .filter(([name]) => name.toLowerCase().startsWith(typed.toLowerCase()))
-              .map(([name, doc]) => {
+              .filter(([key]) => key.toLowerCase().startsWith(typed.toLowerCase()))
+              .map(([_key, doc]) => {
                   const snippet = doc.snippet
                     ? new vscode.SnippetString(doc.snippet.replace(/^\\\$/, ""))
-                    : new vscode.SnippetString(`${name}(\${0})`);
-                  const item = buildCompletionItem(doc, vscode.CompletionItemKind.Function, '1_', snippet);
-                  item.command = { command: 'editor.action.triggerParameterHints', title: '' };
+                    : new vscode.SnippetString(doc.name.replace(/^\$/, ""));
+                  const item = buildCompletionItem(doc, vscode.CompletionItemKind.Function, '1_', snippet, true);
                   return item;
               });
         }
@@ -479,13 +568,13 @@ function activate(context) {
 
           // Filter variables by what user typed and create completion items
           return Object.entries(variableDocs)
-              .filter(([name]) => name.toLowerCase().startsWith(typed.toLowerCase()))
-              .map(([name, doc]) => {
+              .filter(([key]) => key.toLowerCase().startsWith(typed.toLowerCase()))
+              .map(([_key, doc]) => {
                   // Remove leading $ for insertion (user already typed it)
                   const snippet = doc.snippet
-                    ? new vscode.SnippetString(doc.snippet.replace(/^\\\$/, ""))
-                    : name.startsWith("$") ? name.slice(1) : name;
-                  return buildCompletionItem(doc, vscode.CompletionItemKind.Variable, '2_', snippet);
+                    ? new vscode.SnippetString(doc.snippet?.replace(/^\$/, ""))
+                    : new vscode.SnippetString(doc.name?.replace(/^\$/, ""))
+                  return buildCompletionItem(doc, vscode.CompletionItemKind.Variable, '2_', snippet, false);
           });
         }
       },
@@ -518,21 +607,21 @@ function activate(context) {
 
           // Filter vector docs by what user typed
           return Object.entries(vectorFunctionDocs)
-              .filter(([name]) => name.toLowerCase().startsWith(typed.toLowerCase()))
-              .map(([name, doc]) => {
+              .filter(([key]) => key.toLowerCase().startsWith(typed.toLowerCase()))
+              .map(([_key, doc]) => {
                   const isFunction = doc.signature?.includes("(");
-                  const insertName = name.replace(/^\s*@/, "");
+                  const insertName = doc.name.replace(/^@/, "");
                   // Prefer doc.snippet if it exists, otherwise fall back to default pattern
                   const insertText = isFunction
                       ? new vscode.SnippetString(
-                          (doc.snippet?.replace(/^\s*@/, "") || `${insertName}(\${0})`)
-                        )
-                      : insertName;
+                          (doc.snippet?.replace(/^@/, "") || `${insertName}(\${0})`))
+                      : new vscode.SnippetString(
+                          (doc.snippet?.replace(/^@/, "") || `${insertName}\${0}`));
                   const kind = isFunction
                       ? vscode.CompletionItemKind.Function
                       : vscode.CompletionItemKind.Variable;
                   const sortPrefix = isFunction ? '2_' : '1_';
-                  return buildCompletionItem(doc, kind, sortPrefix, insertText);
+                  return buildCompletionItem(doc, kind, sortPrefix, insertText, true);
               });
         }
       },
@@ -577,7 +666,7 @@ function activate(context) {
                   const snippet = doc.snippet
                       ? new vscode.SnippetString(doc.snippet)
                       : new vscode.SnippetString(`${name} "\${0}";`);
-                  const item = buildCompletionItem(doc, vscode.CompletionItemKind.Function, '0_', snippet);
+                  const item = buildCompletionItem(doc, vscode.CompletionItemKind.Function, '0_', snippet, true);
                   items.push(item);
               }
           }
@@ -588,13 +677,13 @@ function activate(context) {
                   const snippet = doc.snippet
                       ? new vscode.SnippetString(doc.snippet)
                       : name;
-                  const item = buildCompletionItem(doc, vscode.CompletionItemKind.Keyword, '1_', snippet);
+                  const item = buildCompletionItem(doc, vscode.CompletionItemKind.Keyword, '1_', snippet, false);
                   items.push(item);
               }
           }
           return items;
+        }
       }
-  }
       // Note: No trigger character specified - this provider runs on every keystroke
       // The 3-character minimum prevents excessive triggering
     );
@@ -884,16 +973,33 @@ function activate(context) {
         }
 
         // --- Skip block comments (/* ... */) ---
-        // Track across line boundaries (simple implementation)
         if (!inString && swimDelimiter === null &&
             ch === '/' && rawLine[col + 1] === '*') {
-          while (
-            lineIndex < lines.length &&
-            !(rawLine[col] === '*' && rawLine[col + 1] === '/')
-          ) {
-            col++;
+          // Found the start of a block comment
+          let commentEnded = false;
+
+          // Search for '*/' across lines
+          while (lineIndex < lines.length && !commentEnded) {
+            const currentLine = lines[lineIndex];
+
+            // Find '*/' in the current line
+            const endIndex = currentLine.indexOf('*/', col);
+
+            if (endIndex !== -1) {
+              // Found the end of the comment on this line
+              col = endIndex + 2;  // Move past '*/'
+              commentEnded = true;
+            } else {
+              // Comment continues to next line
+              lineIndex++;
+              col = 0;  // Reset column for the next line
+
+              // If we've moved past the last line, stop
+              if (lineIndex >= lines.length) {
+                break;
+              }
+            }
           }
-          col++;
           continue;
         }
 
@@ -1026,16 +1132,16 @@ function activate(context) {
     // ============================================================
     // After scanning the entire file, report if braces don't match
     if (braces !== 0) {
-        issues.push(
-          new vscode.Diagnostic(
-            new vscode.Range(
-              document.positionAt(lastPos),
-              document.positionAt(lastPos + 1)
-            ),
-            braces > 0 ? "Unclosed brace(s)" : "Unexpected closing brace",
-            vscode.DiagnosticSeverity.Error   // Red squiggly - must fix
-          )
-        );
+      issues.push(
+        new vscode.Diagnostic(
+          new vscode.Range(
+            document.positionAt(lastPos),
+            document.positionAt(lastPos + 1)
+          ),
+          braces > 0 ? "Unclosed brace(s)" : "Unexpected closing brace",
+          vscode.DiagnosticSeverity.Error   // Red squiggly - must fix
+        )
+      );
     }
     // Update VS Code's diagnostic panel with all found issues
     diagnostics.set(document.uri, issues);
