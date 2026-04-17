@@ -31,6 +31,8 @@ constructs or product-specific behaviors have been tested equally.
 
 Feedback, issues, and pull requests are welcome.
 
+See [CHANGELOG.md](https://github.com/sighanse/otterscript-vscode/blob/main/CHANGELOG.md) for release notes.
+
 ## What this extension does NOT do
 
 - It does not validate or execute OtterScript
