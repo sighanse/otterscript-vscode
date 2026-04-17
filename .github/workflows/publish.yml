@@ -30,13 +30,15 @@ jobs:
           node-version: 24
           cache: 'npm'
 
+      - name: Install dependencies
+        run: npm ci
+
       - name: Validate package
         run: npx vsce package --no-yarn
 
       - name: Publish to Marketplace
         if: env.VSCE_PAT != ''
         run: npx vsce publish
-
 
       - name: Publish to Open VSX
         if: env.OVSX_PAT != ''

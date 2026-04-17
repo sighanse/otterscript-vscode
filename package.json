@@ -24,8 +24,11 @@
     "vscode": "^1.85.0"
   },
   "devDependencies": {
-    "@vscode/vsce": "^2.26.0",
+    "@eslint/js": "^10.0.1",
     "@types/vscode": "1.85.0",
+    "@vscode/vsce": "^2.26.0",
+    "eslint": "^10.2.0",
+    "globals": "^17.5.0",
     "jsonc-parser": "^3.3.1",
     "ovsx": "^0.10.1"
   },
@@ -43,7 +46,9 @@
     "configuration-management"
   ],
   "main": "./extension.js",
-  "activationEvents": [ "onLanguage:otterscript" ],
+  "activationEvents": [
+    "onLanguage:otterscript"
+  ],
   "contributes": {
     "languages": [
       {
@@ -111,5 +116,8 @@
       }
     ],
     "commands": []
+  },
+  "scripts": {
+    "lint": "eslint ."
   }
 }
