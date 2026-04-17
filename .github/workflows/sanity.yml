@@ -28,7 +28,7 @@ jobs:
           cache: 'npm'
 
       - name: Install JSONC parser
-        run: npm install --no-save jsonc-parser
+        run: npm install jsonc-parser
 
       - name: Validate extension.js
         run: node -c extension.js
