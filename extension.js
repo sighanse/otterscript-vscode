@@ -193,11 +193,11 @@ function activate(context) {
    * fields (name/description) are missing.
    *
    * @param {string} label Human-readable category label (e.g. "keywordDocs")
-   * @param {Record<string, unknown>} docs Documentation table to validate
+   * @param {Record<string, unknown>} docsTable Documentation table to validate
    */
-  function validateDocs(label, docs) {
+  function validateDocs(label, docsTable) {
     // Iterate through each documentation entry (e.g., "ToJson", "Split", etc.)
-    for (const [key, rawDoc] of Object.entries(docs)) {
+    for (const [key, rawDoc] of Object.entries(docsTable)) {
       /** @type {any} */
       const doc = rawDoc;
 
@@ -356,7 +356,6 @@ function activate(context) {
 
           // Get all text from document start to cursor position
           // This enables multi-line function call detection
-          const startPos = new vscode.Position(0, 0);
           const textBeforeCursor = document.getText(new vscode.Range(
             new vscode.Position(Math.max(0, position.line - 10), 0),  // Last 10 lines max
             position
@@ -409,7 +408,6 @@ function activate(context) {
 
           for (let i = 0; i < args.length; i++) {
             const ch = args[i];
-            const nextCh = args[i + 1];
 
             // --- Handle string literals ---
             // Toggle string state when encountering unescaped quotes
