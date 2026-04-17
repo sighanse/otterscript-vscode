@@ -24,7 +24,9 @@
     "vscode": "^1.85.0"
   },
   "devDependencies": {
-    "jsonc-parser": "^3.3.1"
+    "@vscode/vsce": "^2.26.0",
+    "jsonc-parser": "^3.3.1",
+    "ovsx": "^0.10.1"
   },
   "categories": [
     "Programming Languages",
