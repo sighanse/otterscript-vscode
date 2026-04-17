@@ -3,6 +3,11 @@ name: Sanity
 on:
   pull_request:
   workflow_dispatch:
+    inputs:
+      delete_cache:
+        description: "Delete NPM Cache"
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -25,15 +30,24 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
+          cache: 'npm'
 
-      - name: Install JSONC parser
-        run: npm install --no-save jsonc-parser
+      - name: Delete npm cache
+        if: ${{ inputs.delete_cache }}
+        run: npm cache clean --force
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
 
       - name: Validate extension.js
         run: node -c extension.js
 
       - name: Validate docs.js
         run: node -e "require('./docs.js')"
+
+      - name: ESLint
+        run: npx eslint .
+        continue-on-error: true
 
       - name: Validate JSON files
         run: |

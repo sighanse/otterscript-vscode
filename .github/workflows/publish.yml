@@ -28,6 +28,10 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 24
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
 
       - name: Validate package
         run: npx vsce package --no-yarn
@@ -35,7 +39,6 @@ jobs:
       - name: Publish to Marketplace
         if: env.VSCE_PAT != ''
         run: npx vsce publish
-
 
       - name: Publish to Open VSX
         if: env.OVSX_PAT != ''

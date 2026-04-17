@@ -31,6 +31,8 @@ constructs or product-specific behaviors have been tested equally.
 
 Feedback, issues, and pull requests are welcome.
 
+See [CHANGELOG.md](https://github.com/sighanse/otterscript-vscode/blob/main/CHANGELOG.md) for release notes.
+
 ## What this extension does NOT do
 
 - It does not validate or execute OtterScript
@@ -90,3 +92,7 @@ Please see [SECURITY.md](https://github.com/sighanse/otterscript-vscode/blob/mai
 ## License
 
 MIT
+
+## Code of Conduct
+
+This project follows the [Contributor Covenant Code of Conduct](https://github.com/sighanse/otterscript-vscode/blob/main/CODE_OF_CONDUCT.md).

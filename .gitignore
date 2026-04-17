@@ -1,5 +1,5 @@
 node_modules/
-.npn
+.npm
 *.tgz
 .vscode/*
 !.vscode/settings.json

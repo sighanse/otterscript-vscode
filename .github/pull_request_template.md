@@ -10,7 +10,7 @@
 - [ ] Hover / docs
 - [ ] Snippets
 - [ ] Diagnostics
-- [ ] Docs / README updated (if applicable)
+- [ ] Documentation updated
 - [ ] Other
 
 ## Related Issue
