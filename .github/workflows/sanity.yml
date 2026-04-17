@@ -37,7 +37,7 @@ jobs:
         run: npm cache clean --force
 
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Validate extension.js
         run: node -c extension.js
