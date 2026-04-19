@@ -46,8 +46,13 @@ jobs:
         run: node -e "require('./docs.js')"
 
       - name: ESLint
+        id: eslint
         run: npm run lint
         continue-on-error: true
+
+      - name: Report ESLint warning
+        if: ${{ steps.eslint.outcome == 'failure' }}
+        run: echo "::warning::ESLint reported issues. See log output above."
 
       - name: Validate JSON files
         run: |
