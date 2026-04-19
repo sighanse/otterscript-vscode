@@ -22,7 +22,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/vscode": "1.85.0",
-    "@vscode/vsce": "^2.26.0",
+    "@vscode/vsce": "^3.9.1",
     "eslint": "^10.2.0",
     "globals": "^17.5.0",
     "jsonc-parser": "^3.3.1",
@@ -117,6 +117,5 @@
     "lint": "eslint .",
     "package": "vsce package --no-yarn",
     "vscode:prepublish": "npm run lint"
-
   }
 }
