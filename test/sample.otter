@@ -320,6 +320,9 @@ Log-Information "$ToUpper should not hover here";
    }
 */
 
+/* comment {{{
+end */
+
 raise-error "Shit hits the fan"
 await;
 warn;

@@ -976,32 +976,28 @@ function activate(context) {
         // --- Skip block comments (/* ... */) ---
         if (!inString && swimDelimiter === null &&
             ch === '/' && rawLine[col + 1] === '*') {
-          // Found the start of a block comment
-          let commentEnded = false;
 
-          // Search for '*/' across lines
-          while (lineIndex < lines.length && !commentEnded) {
+          // Advance past /*
+          col += 2;
+
+          while (lineIndex < lines.length) {
             const currentLine = lines[lineIndex];
-
-            // Find '*/' in the current line
             const endIndex = currentLine.indexOf('*/', col);
 
             if (endIndex !== -1) {
-              // Found the end of the comment on this line
-              col = endIndex + 2;  // Move past '*/'
-              commentEnded = true;
-            } else {
-              // Comment continues to next line
-              lineIndex++;
-              col = 0;  // Reset column for the next line
-
-              // If we've moved past the last line, stop
-              if (lineIndex >= lines.length) {
-                break;
-              }
+              // Found the end of the block comment
+              col = endIndex + 2;
+              break;
             }
+
+            // Move to next line
+            lineIndex++;
+            col = 0;
           }
-          continue;
+
+          // Stop processing this line.
+          // The outer line loop will re-read rawLine for the new lineIndex.
+          break;
         }
 
         // --- Count braces for balance checking ---
