@@ -686,6 +686,44 @@ function activate(context) {
     );
 
   // ------------------------------------------------------------
+  // MAP EXPRESSION COMPLETION PROVIDER (%)
+  // ------------------------------------------------------------
+  // Map variables are user-defined and cannot be enumerated,
+  // so this provider intentionally returns no completion items.
+
+  const mapCompletionProvider =
+  vscode.languages.registerCompletionItemProvider(
+    "otterscript",
+    {
+      provideCompletionItems(document, position) {
+        // Check if completion is enabled and not in a string/comment
+        if (!isValidCompletionPosition(document, position)) return [];
+
+        // Ensure syntaxDocs and mapExpr exist
+        if (!syntaxDocs?.mapExpr) {
+          console.warn('[completion] syntaxDocs.mapExpr is missing, cannot provide % completion');
+          return [];
+        }
+        const item = new vscode.CompletionItem(
+          syntaxDocs.mapExpr.name,
+          vscode.CompletionItemKind.Text
+        );
+
+        item.detail = syntaxDocs.mapExpr.description;
+        item.documentation = new vscode.MarkdownString(syntaxDocs.mapExpr.documentation);
+
+        // Explain only; do not insert text
+        item.insertText = "";
+        item.sortText = "~";
+
+        return [item];
+      }
+    },
+    "%"
+  );
+
+
+  // ------------------------------------------------------------
   // OPERATION COMPLETION (Log-Information, etc.)
   // ------------------------------------------------------------
   // Provides completions for OtterScript operations and keywords.
@@ -1323,6 +1361,7 @@ function activate(context) {
     functionCompletionProvider,
     variableCompletionProvider,
     vectorCompletionProvider,
+    mapCompletionProvider,
     operationCompletionProvider,
     hoverProvider,
     CodeActionsProvider,

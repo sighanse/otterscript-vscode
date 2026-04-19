@@ -221,8 +221,11 @@ Used to embed OtterScript code inside text templates.
   mapExpr: {
     name: "Map Expression",
     signature: "%(key: value, key2: value2)",
-    description: "Creates a map (dictionary/object) literal.",
+    description: "User-defined map literal",
     documentation: `
+Map expressions use the \`%(...)\` syntax to define key/value pairs.
+Maps are user-defined and have no built-in variable names.
+
 **Example:**
 \`\`\`otterscript
 $config = %(

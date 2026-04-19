@@ -337,3 +337,10 @@ $Replace("a,b,c", ",", "|", true);   # extra argument
 $url = $UrlEncode("https://www.github.com")
 $encoded = $HtmlEncode("test")
 $fullPath = $PathCombine("path1", "path2")
+
+$json = $ToJson(%(
+    name: "example",
+    count: $count,
+    values: @(1, 2, 3)
+));
+
