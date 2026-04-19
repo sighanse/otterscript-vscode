@@ -46,7 +46,7 @@ jobs:
         run: node -e "require('./docs.js')"
 
       - name: ESLint
-        run: npx eslint .
+        run: npm run lint
         continue-on-error: true
 
       - name: Validate JSON files

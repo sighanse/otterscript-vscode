@@ -114,6 +114,9 @@
     "commands": []
   },
   "scripts": {
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "package": "vsce package --no-yarn",
+    "vscode:prepublish": "npm run lint"
+
   }
 }
