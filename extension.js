@@ -768,8 +768,26 @@ function activate(context) {
           return null;
         }
 
-        // Prevent hover inside strings or comments
         const line = document.lineAt(position.line).text;
+
+        // Match #region / #endregion at the cursor position
+        const regionMatch = line.match(/#(end)?region\b/);
+        if (regionMatch) {
+          const start = line.indexOf(regionMatch[0]);
+          const end = start + regionMatch[0].length;
+
+          const range = new vscode.Range(
+            new vscode.Position(position.line, start),
+            new vscode.Position(position.line, end)
+          );
+
+          const doc = keywordDocs[regionMatch[0]];
+          if (doc) {
+            return new vscode.Hover(buildHoverMarkdown(doc), range);
+          }
+        }
+
+        // Prevent hover inside strings or comments
         if (isInStringOrComment(line, position.character)) {
           return null;
         }

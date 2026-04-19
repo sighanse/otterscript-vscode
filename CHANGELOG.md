@@ -8,6 +8,7 @@
   - Insert missing $ prefix for variables.
   - Replace invalid boolean operators
   - These fixes are user‑initiated via the editor lightbulb and operate only on the precise diagnostic range.
+- Editor folding using `#region` / `#endregion` directives (editor-only)
 
 ### Fixed
 
