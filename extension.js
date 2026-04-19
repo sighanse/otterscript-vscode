@@ -1131,26 +1131,21 @@ function activate(context) {
         if (!inString && swimDelimiter === null &&
             ch === '/' && rawLine[col + 1] === '*') {
 
-          // Advance past /*
-          col += 2;
-
           while (lineIndex < lines.length) {
             const currentLine = lines[lineIndex];
-            const endIndex = currentLine.indexOf('*/', col);
+            const endIndex = currentLine.indexOf('*/');
 
             if (endIndex !== -1) {
               // Found the end of the block comment
-              col = endIndex + 2;
               break;
             }
 
             // Move to next line
             lineIndex++;
-            col = 0;
           }
 
           // Stop processing this line.
-          // The outer line loop will re-read rawLine for the new lineIndex.
+          // The outer line loop will re-read rawLine for the updated lineIndex.
           break;
         }
 
