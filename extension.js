@@ -112,6 +112,65 @@ function activate(context) {
     vectorFunctionDocs
   } = docs;
 
+  /**
+   * Creates a quick-fix that inserts a missing '$' at the diagnostic position.
+   * @param {vscode.TextDocument} document
+   * @param {vscode.Diagnostic} diagnostic
+   * @returns {vscode.CodeAction}
+   */
+  function createMissingDollarFix(document, diagnostic) {
+    const action = new vscode.CodeAction(
+      "Insert missing '$'",
+      vscode.CodeActionKind.QuickFix
+    );
+
+    action.diagnostics = [diagnostic];
+    action.isPreferred = true;
+
+    const edit = new vscode.WorkspaceEdit();
+    edit.insert(
+      document.uri,
+      diagnostic.range.start,
+      "$"
+    );
+
+    action.edit = edit;
+    return action;
+  }
+
+  /**
+   * Creates a quick-fix that replaces invalid boolean operators.
+   * @param {vscode.TextDocument} document
+   * @param {vscode.Diagnostic} diagnostic
+   * @returns {vscode.CodeAction | null}
+   */
+  function createInvalidOperatorFix(document, diagnostic) {
+    const text = document.getText(diagnostic.range);
+
+    let replacement = null;
+    if (text === "&") replacement = "&&";
+    if (text === "|") replacement = "||";
+
+    if (!replacement) return null;
+
+    const action = new vscode.CodeAction(
+      "Replace with valid boolean operator",
+      vscode.CodeActionKind.QuickFix
+    );
+
+    action.diagnostics = [diagnostic];
+    action.isPreferred = true;
+
+    const edit = new vscode.WorkspaceEdit();
+    edit.replace(
+      document.uri,
+      diagnostic.range,
+      replacement
+    );
+
+    action.edit = edit;
+    return action;
+  }
 
   /**
    * Builds a word-boundary RegExp that matches any of the given names.
@@ -846,6 +905,38 @@ function activate(context) {
   );
 
   // ============================================================
+  // QUICK FIX CODE ACTION PROVIDER
+  // ============================================================
+  // Provides lightbulb (💡) quick-fix actions for selected
+  // diagnostics emitted by this extension.
+
+  const CodeActionsProvider = vscode.languages.registerCodeActionsProvider(
+      "otterscript",
+      {
+        provideCodeActions(document, range, context) {
+          const actions = [];
+
+          for (const diagnostic of context.diagnostics) {
+
+            if (diagnostic.code === "missing-dollar") {
+              actions.push(createMissingDollarFix(document, diagnostic));
+            }
+
+            if (diagnostic.code === "invalid-operator") {
+              const fix = createInvalidOperatorFix(document, diagnostic);
+              if (fix) actions.push(fix);
+            }
+          }
+
+          return actions;
+        }
+      },
+      {
+        providedCodeActionKinds: [vscode.CodeActionKind.QuickFix]
+      }
+  );
+
+  // ============================================================
   // DIAGNOSTICS (ERRORS & WARNINGS)
   // ============================================================
   // Provides real-time syntax checking and problem detection.
@@ -899,16 +990,19 @@ function activate(context) {
         }
 
         // Report error with squiggly underline under the variable name
-        issues.push(
-          new vscode.Diagnostic(
-            new vscode.Range(
-              new vscode.Position(i, startIndex),                 // Start of variable
-              new vscode.Position(i, startIndex + varName.length) // End of variable
-            ),
-            `Missing '$' before variable: ${varName}. Use $${varName}`,
-            vscode.DiagnosticSeverity.Error   // Red squiggly (must fix)
-          )
+        const diagnostic = new vscode.Diagnostic(
+          new vscode.Range(
+            new vscode.Position(i, startIndex),                 // Start of variable
+            new vscode.Position(i, startIndex + varName.length) // End of variable
+          ),
+          `Missing '$' before variable: ${varName}. Use $${varName}`,
+          vscode.DiagnosticSeverity.Error   // Red squiggly (must fix)
         );
+
+        // Stable diagnostic identifier
+        diagnostic.code = "missing-dollar";
+
+        issues.push(diagnostic);
       }
     }
 
@@ -1109,16 +1203,18 @@ function activate(context) {
               continue;
             }
 
-            issues.push(
-              new vscode.Diagnostic(
-                new vscode.Range(
-                  new vscode.Position(lineIndex, j),
-                  new vscode.Position(lineIndex, j + 1)
-                ),
-                `Invalid logical operator '${ch}'. Use '${ch}${ch}'.`,
-                vscode.DiagnosticSeverity.Warning
-              )
+            const diagnostic = new vscode.Diagnostic(
+              new vscode.Range(
+                new vscode.Position(lineIndex, j),
+                new vscode.Position(lineIndex, j + 1)
+              ),
+              `Invalid logical operator '${ch}'. Use '${ch}${ch}'.`,
+              vscode.DiagnosticSeverity.Warning
             );
+            // Stable diagnostic identifier
+            diagnostic.code = "invalid-operator";
+
+            issues.push(diagnostic);
           }
         }
       }
@@ -1173,7 +1269,8 @@ function activate(context) {
     variableCompletionProvider,
     vectorCompletionProvider,
     operationCompletionProvider,
-    hoverProvider
+    hoverProvider,
+    CodeActionsProvider
   );
 }
 
