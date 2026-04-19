@@ -19,6 +19,10 @@
 *.yml  text eol=lf
 *.yaml text eol=lf
 
+# Other
+.vscodeignore text eol=lf
+.gitignore    text eol=lf
+
 # Binaries
 *.png binary
 *.vsix binary
