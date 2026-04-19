@@ -931,10 +931,10 @@ function activate(context) {
   const CodeActionsProvider = vscode.languages.registerCodeActionsProvider(
       "otterscript",
       {
-        provideCodeActions(document, range, context) {
+        provideCodeActions(document, _range, codeActionContext) {
           const actions = [];
 
-          for (const diagnostic of context.diagnostics) {
+          for (const diagnostic of codeActionContext.diagnostics) {
 
             if (diagnostic.code === "missing-dollar") {
               actions.push(createMissingDollarFix(document, diagnostic));
