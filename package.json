@@ -116,6 +116,8 @@
   "scripts": {
     "lint": "eslint .",
     "package": "vsce package --no-yarn",
-    "vscode:prepublish": "npm run lint"
+    "vscode:prepublish": "npm run lint",
+    "publish:vsce": "vsce publish",
+    "publish:ovsx": "ovsx publish --no-dependencies"
   }
 }

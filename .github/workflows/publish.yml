@@ -38,10 +38,10 @@ jobs:
 
       - name: Publish to Marketplace
         if: env.VSCE_PAT != ''
-        run: npx vsce publish
+        run: npm run publish:vsce
 
       - name: Publish to Open VSX
         if: env.OVSX_PAT != ''
-        run: npx ovsx publish --no-dependencies
+        run: npm run publish:ovsx
 
 
