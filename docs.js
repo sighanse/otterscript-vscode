@@ -672,6 +672,16 @@ Forces the execution status back to **Normal**, overriding a previous Warn or Fa
 force normal;
 \`\`\`
 `
+  },
+  "#region": {
+    name: "#region",
+    description: "Marks a collapsible editor region.",
+    documentation: "Editor-only folding directive. `#region` / `#endregion` create a collapsible section in the editor and have no effect on OtterScript execution."
+  },
+  "#endregion": {
+    name: "#endregion",
+    description: "Ends a collapsible editor region.",
+    documentation: "Editor-only folding directive. Used to close a `#region` block. This affects editor folding only and has no runtime meaning."
   }
 };
 

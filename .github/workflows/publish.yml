@@ -33,15 +33,15 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
-      - name: Validate package
-        run: npx vsce package --no-yarn
+      - name: Package extension (validation only)
+        run: npm run package
 
       - name: Publish to Marketplace
         if: env.VSCE_PAT != ''
-        run: npx vsce publish
+        run: npm run publish:vsce
 
       - name: Publish to Open VSX
         if: env.OVSX_PAT != ''
-        run: npx ovsx publish --no-dependencies
+        run: npm run publish:ovsx
 
 

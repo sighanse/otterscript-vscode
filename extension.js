@@ -112,6 +112,65 @@ function activate(context) {
     vectorFunctionDocs
   } = docs;
 
+  /**
+   * Creates a quick-fix that inserts a missing '$' at the diagnostic position.
+   * @param {vscode.TextDocument} document
+   * @param {vscode.Diagnostic} diagnostic
+   * @returns {vscode.CodeAction}
+   */
+  function createMissingDollarFix(document, diagnostic) {
+    const action = new vscode.CodeAction(
+      "Insert missing '$'",
+      vscode.CodeActionKind.QuickFix
+    );
+
+    action.diagnostics = [diagnostic];
+    action.isPreferred = true;
+
+    const edit = new vscode.WorkspaceEdit();
+    edit.insert(
+      document.uri,
+      diagnostic.range.start,
+      "$"
+    );
+
+    action.edit = edit;
+    return action;
+  }
+
+  /**
+   * Creates a quick-fix that replaces invalid boolean operators.
+   * @param {vscode.TextDocument} document
+   * @param {vscode.Diagnostic} diagnostic
+   * @returns {vscode.CodeAction | null}
+   */
+  function createInvalidOperatorFix(document, diagnostic) {
+    const text = document.getText(diagnostic.range);
+
+    let replacement = null;
+    if (text === "&") replacement = "&&";
+    if (text === "|") replacement = "||";
+
+    if (!replacement) return null;
+
+    const action = new vscode.CodeAction(
+      "Replace with valid boolean operator",
+      vscode.CodeActionKind.QuickFix
+    );
+
+    action.diagnostics = [diagnostic];
+    action.isPreferred = true;
+
+    const edit = new vscode.WorkspaceEdit();
+    edit.replace(
+      document.uri,
+      diagnostic.range,
+      replacement
+    );
+
+    action.edit = edit;
+    return action;
+  }
 
   /**
    * Builds a word-boundary RegExp that matches any of the given names.
@@ -700,147 +759,242 @@ function activate(context) {
   //   5. Operations (Log-Information, Log-Error, etc.) - Built-in actions
   //   6. Symbols ($function, @vector, $variable) - Most general, check last
 
-  const hoverProvider = vscode.languages.registerHoverProvider("otterscript", {
-    provideHover(document, position) {
-      // Check if hover is enabled in settings
-      if (!hoverEnabled) {
-        return null;
-      }
-
-      // Prevent hover inside strings or comments
-      const line = document.lineAt(position.line).text;
-      if (isInStringOrComment(line, position.character)) {
-        return null;
-      }
-
-      // 1. TEMPLATE TAGS (<% and %>)
-      // OtterScript uses ASP-style template tags for embedding code
-
-      const templateRange = document.getWordRangeAtPosition(position, /<%|%>/);
-      if (templateRange) {
-        const text = document.getText(templateRange);
-        if (text === '<%') {
-          return new vscode.Hover(
-                buildHoverMarkdown(syntaxDocs.templateOpen), templateRange);
+  const hoverProvider = vscode.languages.registerHoverProvider(
+    "otterscript",
+    {
+      provideHover(document, position) {
+        // Check if hover is enabled in settings
+        if (!hoverEnabled) {
+          return null;
         }
-        if (text === '%>') {
-          return new vscode.Hover(
-                buildHoverMarkdown(syntaxDocs.templateClose), templateRange);
-        }
-      }
 
-      // 2. EXPRESSION DELIMITERS (%(), @(), $())
-      // These delimiters start special expression types:
-      //   %( ) - Map expression (key-value pairs)
-      //   @( ) - Vector expression (arrays/lists)
-      //   $( ) - Nested evaluation (evaluate inner expression first)
+        const line = document.lineAt(position.line).text;
 
-      const exprRange = document.getWordRangeAtPosition(position, /%\(|@\(|\$\(/);
-      if (exprRange) {
-          const text = document.getText(exprRange);
-          if (text === '%(') {
-              return new vscode.Hover(
-                  buildHoverMarkdown(syntaxDocs.mapExpr), exprRange);
-          }
-          if (text === '@(') {
-              return new vscode.Hover(
-                  buildHoverMarkdown(syntaxDocs.vectorExpr),exprRange);
-          }
-          if (text === '$(') {
-              return new vscode.Hover(
-                  buildHoverMarkdown(syntaxDocs.nestedEval),exprRange);
-          }
-      }
-      // 3. KEYWORDS (if, foreach, with, set, etc.)
-      // Control flow and language keywords.
+        // Match #region / #endregion at the cursor position
+        const regionMatch = line.match(/#(end)?region\b/);
+        if (regionMatch) {
+          const start = line.indexOf(regionMatch[0]);
+          const end = start + regionMatch[0].length;
 
-      // Special-case multi-word keyword: "force normal"
-      const forceRange = document.getWordRangeAtPosition(
-        position,
-        /\bforce\s+normal\b/
-      );
-
-      const wordRange = forceRange
-        ?? document.getWordRangeAtPosition(
-            position,
-            /\b[a-zA-Z]+(?:-[a-zA-Z]+)*\b/ // single token, hyphens allowed; NEVER spaces
+          const range = new vscode.Range(
+            new vscode.Position(position.line, start),
+            new vscode.Position(position.line, end)
           );
 
-      if (wordRange) {
-        const word = document.getText(wordRange);
-
-        // Check if it's a known keyword
-        if (knownKeywords.has(word)) {
-          const doc = keywordDocs[word];
-          // Make hover
-          return new vscode.Hover(buildHoverMarkdown(doc), wordRange);
+          const doc = keywordDocs[regionMatch[0]];
+          if (doc) {
+            return new vscode.Hover(buildHoverMarkdown(doc), range);
+          }
         }
-      }
 
-      // 4. SWIM-STRING DELIMITERS (Fish Sentinels)
-      // OtterScript's unique string syntax: >>, >==8>, >--=>
-      // Any characters between two identical fish-shaped delimiters
+        // Prevent hover inside strings or comments
+        if (isInStringOrComment(line, position.character)) {
+          return null;
+        }
 
-      const swimRange = document.getWordRangeAtPosition(
+        // 1. TEMPLATE TAGS (<% and %>)
+        // OtterScript uses ASP-style template tags for embedding code
+
+        const templateRange = document.getWordRangeAtPosition(position, /<%|%>/);
+        if (templateRange) {
+          const text = document.getText(templateRange);
+          if (text === '<%') {
+            return new vscode.Hover(
+                  buildHoverMarkdown(syntaxDocs.templateOpen), templateRange);
+          }
+          if (text === '%>') {
+            return new vscode.Hover(
+                  buildHoverMarkdown(syntaxDocs.templateClose), templateRange);
+          }
+        }
+
+        // 2. EXPRESSION DELIMITERS (%(), @(), $())
+        // These delimiters start special expression types:
+        //   %( ) - Map expression (key-value pairs)
+        //   @( ) - Vector expression (arrays/lists)
+        //   $( ) - Nested evaluation (evaluate inner expression first)
+
+        const exprRange = document.getWordRangeAtPosition(position, /%\(|@\(|\$\(/);
+        if (exprRange) {
+            const text = document.getText(exprRange);
+            if (text === '%(') {
+                return new vscode.Hover(
+                    buildHoverMarkdown(syntaxDocs.mapExpr), exprRange);
+            }
+            if (text === '@(') {
+                return new vscode.Hover(
+                    buildHoverMarkdown(syntaxDocs.vectorExpr),exprRange);
+            }
+            if (text === '$(') {
+                return new vscode.Hover(
+                    buildHoverMarkdown(syntaxDocs.nestedEval),exprRange);
+            }
+        }
+        // 3. KEYWORDS (if, foreach, with, set, etc.)
+        // Control flow and language keywords.
+
+        // Special-case multi-word keyword: "force normal"
+        const forceRange = document.getWordRangeAtPosition(
+          position,
+          /\bforce\s+normal\b/
+        );
+
+        const wordRange = forceRange
+          ?? document.getWordRangeAtPosition(
+              position,
+              /\b[a-zA-Z]+(?:-[a-zA-Z]+)*\b/ // single token, hyphens allowed; NEVER spaces
+            );
+
+        if (wordRange) {
+          const word = document.getText(wordRange);
+
+          // Check if it's a known keyword
+          if (knownKeywords.has(word)) {
+            const doc = keywordDocs[word];
+            // Make hover
+            return new vscode.Hover(buildHoverMarkdown(doc), wordRange);
+          }
+        }
+
+        // 4. SWIM-STRING DELIMITERS (Fish Sentinels)
+        // OtterScript's unique string syntax: >>, >==8>, >--=>
+        // Any characters between two identical fish-shaped delimiters
+
+        const swimRange = document.getWordRangeAtPosition(
+          position,
+          />[^>]{0,5}>/
+        );
+
+        if (swimRange) {
+          return new vscode.Hover(
+            buildHoverMarkdown(syntaxDocs.swimString), swimRange);
+        }
+
+        // 5. OPERATIONS (Log-Information, Log-Warning, Log-Error, etc.)
+        // Built-in operations. Distinguished by hyphenated names.
+        const operationRange = document.getWordRangeAtPosition(
         position,
-        />[^>]{0,5}>/
-      );
+        operationRegex()
+        );
 
-      if (swimRange) {
-        return new vscode.Hover(
-          buildHoverMarkdown(syntaxDocs.swimString), swimRange);
-      }
+        if (operationRange) {
+          const opName = document.getText(operationRange);
+          const doc = operationDocs[opName];
 
-      // 5. OPERATIONS (Log-Information, Log-Warning, Log-Error, etc.)
-      // Built-in operations. Distinguished by hyphenated names.
-      const operationRange = document.getWordRangeAtPosition(
-      position,
-      operationRegex()
-      );
+          // No documentation found
+          if (!doc) return null;
 
-      if (operationRange) {
-        const opName = document.getText(operationRange);
-        const doc = operationDocs[opName];
+          // Make hover
+          return new vscode.Hover(buildHoverMarkdown(doc), operationRange);
+        }
+
+        // 6. SYMBOLS ($function, @vector, $variable)
+        // Most general case - matches any $ or @ prefixed identifier
+        // Checks scalar functions, vector functions, and variables
+        // Must be LAST because it matches many things
+        const symbolRange = document.getWordRangeAtPosition(
+          position,
+          /[@$][A-Za-z][A-Za-z0-9]*/  // $Name or @Name (no spaces)
+        );
+        if (!symbolRange) return null;
+
+        const text = document.getText(symbolRange);
+        const prefix = text[0];         // '$' or '@'
+        const name = text.substring(1); // The identifier without prefix
+
+        // Look up documentation based on prefix type
+        let doc;
+        if (prefix === "$") {
+          // $ can be either a scalar function OR a variable
+          // Check functions first (more specific), then variables
+          doc = scalarFunctionDocs[name] || variableDocs[name];
+        } else if (prefix === "@") {
+          // @ is a vector function
+          doc = vectorFunctionDocs[name];
+        }
 
         // No documentation found
         if (!doc) return null;
 
         // Make hover
-        return new vscode.Hover(buildHoverMarkdown(doc), operationRange);
+        return new vscode.Hover(buildHoverMarkdown(doc), symbolRange);
       }
-
-      // 6. SYMBOLS ($function, @vector, $variable)
-      // Most general case - matches any $ or @ prefixed identifier
-      // Checks scalar functions, vector functions, and variables
-      // Must be LAST because it matches many things
-      const symbolRange = document.getWordRangeAtPosition(
-        position,
-        /[@$][A-Za-z][A-Za-z0-9]*/  // $Name or @Name (no spaces)
-      );
-      if (!symbolRange) return null;
-
-      const text = document.getText(symbolRange);
-      const prefix = text[0];         // '$' or '@'
-      const name = text.substring(1); // The identifier without prefix
-
-      // Look up documentation based on prefix type
-      let doc;
-      if (prefix === "$") {
-        // $ can be either a scalar function OR a variable
-        // Check functions first (more specific), then variables
-        doc = scalarFunctionDocs[name] || variableDocs[name];
-      } else if (prefix === "@") {
-        // @ is a vector function
-        doc = vectorFunctionDocs[name];
-      }
-
-      // No documentation found
-      if (!doc) return null;
-
-      // Make hover
-      return new vscode.Hover(buildHoverMarkdown(doc), symbolRange);
     }
-  });
+  );
+
+  // ============================================================
+  // QUICK FIX CODE ACTION PROVIDER
+  // ============================================================
+  // Provides lightbulb (💡) quick-fix actions for selected
+  // diagnostics emitted by this extension.
+
+  const CodeActionsProvider = vscode.languages.registerCodeActionsProvider(
+      "otterscript",
+      {
+        provideCodeActions(document, _range, codeActionContext) {
+          const actions = [];
+
+          for (const diagnostic of codeActionContext.diagnostics) {
+
+            if (diagnostic.code === "missing-dollar") {
+              actions.push(createMissingDollarFix(document, diagnostic));
+            }
+
+            if (diagnostic.code === "invalid-operator") {
+              const fix = createInvalidOperatorFix(document, diagnostic);
+              if (fix) actions.push(fix);
+            }
+          }
+
+          return actions;
+        }
+      },
+      {
+        providedCodeActionKinds: [vscode.CodeActionKind.QuickFix]
+      }
+  );
+
+  // ============================================================
+  // GO TO DEFINITION PROVIDER (Modules)
+  // ============================================================
+  // Enables Go-to-Definition (F12 / Ctrl+Click) for calls like:
+  // call MyHelper(...) by navigating to the corresponding module MyHelper
+
+  const DefinitionProvider = vscode.languages.registerDefinitionProvider(
+    "otterscript", {
+      provideDefinition(document, position) {
+
+        const wordRange = document.getWordRangeAtPosition(position);
+        if (!wordRange) return null;
+
+        const calledName = document.getText(wordRange);
+        if (!calledName) return null;
+
+        // Match: module <Name>
+        const moduleRegex = new RegExp(`^\\s*module\\s+${calledName}\\b`, "i");
+
+        for (let line = 0; line < document.lineCount; line++) {
+          const text = document.lineAt(line).text;
+
+          if (moduleRegex.test(text)) {
+            const start = text.indexOf(calledName);
+            if (start === -1) continue;
+
+            const range = new vscode.Range(
+              new vscode.Position(line, start),
+              new vscode.Position(line, start + calledName.length)
+            );
+
+            return new vscode.Location(document.uri, range);
+          }
+        }
+
+        return null;
+      }
+    }
+  );
+
+
 
   // ============================================================
   // DIAGNOSTICS (ERRORS & WARNINGS)
@@ -896,16 +1050,19 @@ function activate(context) {
         }
 
         // Report error with squiggly underline under the variable name
-        issues.push(
-          new vscode.Diagnostic(
-            new vscode.Range(
-              new vscode.Position(i, startIndex),                 // Start of variable
-              new vscode.Position(i, startIndex + varName.length) // End of variable
-            ),
-            `Missing '$' before variable: ${varName}. Use $${varName}`,
-            vscode.DiagnosticSeverity.Error   // Red squiggly (must fix)
-          )
+        const diagnostic = new vscode.Diagnostic(
+          new vscode.Range(
+            new vscode.Position(i, startIndex),                 // Start of variable
+            new vscode.Position(i, startIndex + varName.length) // End of variable
+          ),
+          `Missing '$' before variable: ${varName}. Use $${varName}`,
+          vscode.DiagnosticSeverity.Error   // Red squiggly (must fix)
         );
+
+        // Stable diagnostic identifier
+        diagnostic.code = "missing-dollar";
+
+        issues.push(diagnostic);
       }
     }
 
@@ -973,32 +1130,23 @@ function activate(context) {
         // --- Skip block comments (/* ... */) ---
         if (!inString && swimDelimiter === null &&
             ch === '/' && rawLine[col + 1] === '*') {
-          // Found the start of a block comment
-          let commentEnded = false;
 
-          // Search for '*/' across lines
-          while (lineIndex < lines.length && !commentEnded) {
+          while (lineIndex < lines.length) {
             const currentLine = lines[lineIndex];
-
-            // Find '*/' in the current line
-            const endIndex = currentLine.indexOf('*/', col);
+            const endIndex = currentLine.indexOf('*/');
 
             if (endIndex !== -1) {
-              // Found the end of the comment on this line
-              col = endIndex + 2;  // Move past '*/'
-              commentEnded = true;
-            } else {
-              // Comment continues to next line
-              lineIndex++;
-              col = 0;  // Reset column for the next line
-
-              // If we've moved past the last line, stop
-              if (lineIndex >= lines.length) {
-                break;
-              }
+              // Found the end of the block comment
+              break;
             }
+
+            // Move to next line
+            lineIndex++;
           }
-          continue;
+
+          // Stop processing this line.
+          // The outer line loop will re-read rawLine for the updated lineIndex.
+          break;
         }
 
         // --- Count braces for balance checking ---
@@ -1110,16 +1258,18 @@ function activate(context) {
               continue;
             }
 
-            issues.push(
-              new vscode.Diagnostic(
-                new vscode.Range(
-                  new vscode.Position(lineIndex, j),
-                  new vscode.Position(lineIndex, j + 1)
-                ),
-                `Invalid logical operator '${ch}'. Use '${ch}${ch}'.`,
-                vscode.DiagnosticSeverity.Warning
-              )
+            const diagnostic = new vscode.Diagnostic(
+              new vscode.Range(
+                new vscode.Position(lineIndex, j),
+                new vscode.Position(lineIndex, j + 1)
+              ),
+              `Invalid logical operator '${ch}'. Use '${ch}${ch}'.`,
+              vscode.DiagnosticSeverity.Warning
             );
+            // Stable diagnostic identifier
+            diagnostic.code = "invalid-operator";
+
+            issues.push(diagnostic);
           }
         }
       }
@@ -1174,7 +1324,9 @@ function activate(context) {
     variableCompletionProvider,
     vectorCompletionProvider,
     operationCompletionProvider,
-    hoverProvider
+    hoverProvider,
+    CodeActionsProvider,
+    DefinitionProvider
   );
 }
 

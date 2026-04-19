@@ -1,5 +1,24 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Quick‑fix code actions for selected diagnostics
+  - Insert missing $ prefix for variables.
+  - Replace invalid boolean operators
+  - These fixes are user‑initiated via the editor lightbulb and operate only on the precise diagnostic range.
+- Editor folding using `#region` / `#endregion` directives (editor-only)
+- Go‑to‑definition support for document‑local module calls.
+  - When the cursor is on a module name in call ModuleName(...), navigation (F12 / Ctrl+Click) jumps to the corresponding module ModuleName definition within the same document.
+  - This feature performs a best‑effort textual search and does not resolve cross‑file or imported modules.
+
+### Fixed
+
+- Correctly skip multi‑line block comments when counting braces, preventing:
+  - Braces inside comments from being counted as code.
+  - Code following a closing */ from being skipped during validation.
+
 ## [0.1.1] - 2026-04-16
 
 ### Added

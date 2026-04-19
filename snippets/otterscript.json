@@ -163,5 +163,14 @@
     "prefix": "foreachapikey",
     "body": ["foreach $${1:apiKey} in @ApiKeys {", "    $2", "}"],
     "description": "Iterate over API keys"
+  },
+  "Region Block": {
+    "prefix": "region",
+    "body": [
+      "#region ${1:Section Name}",
+      "    $0",
+      "#endregion"
+    ],
+    "description": "Collapsible region block"
   }
 }

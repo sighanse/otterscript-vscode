@@ -17,6 +17,7 @@ This extension started as a learning project while implementing [custom webhook 
 - Auto-completion for variables and functions
 - Code snippets for common patterns
 - Hover information with documentation
+- Quick‑fix code actions for selected diagnostics (e.g. missing `$`, invalid operators)
 
 ## Status
 
@@ -37,7 +38,7 @@ See [CHANGELOG.md](https://github.com/sighanse/otterscript-vscode/blob/main/CHAN
 
 - It does not validate or execute OtterScript
 - It does not connect to Otter, ProGet, or other Inedo services
-- It does not provide a formatter or auto‑fix code actions
+- It does not provide a formatter or automatic code fixes (only explicit quick‑fix actions for selected errors)
 - It does not attempt full semantic analysis
 
 ## Installation
