@@ -1,5 +1,20 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Quick‑fix code actions for selected diagnostics
+  - Insert missing $ prefix for variables.
+  - Replace invalid boolean operators
+  - These fixes are user‑initiated via the editor lightbulb and operate only on the precise diagnostic range.
+
+### Fixed
+
+- Correctly skip multi‑line block comments when counting braces, preventing:
+  - Braces inside comments from being counted as code.
+  - Code following a closing */ from being skipped during validation.
+
 ## [0.1.1] - 2026-04-16
 
 ### Added
