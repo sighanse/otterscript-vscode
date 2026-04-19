@@ -12,6 +12,7 @@
 - Go‑to‑definition support for document‑local module calls.
   - When the cursor is on a module name in call ModuleName(...), navigation (F12 / Ctrl+Click) jumps to the corresponding module ModuleName definition within the same document.
   - This feature performs a best‑effort textual search and does not resolve cross‑file or imported modules.
+- Completion trigger and hover documentation for map expressions using the `%` sigil.
 
 ### Fixed
 
