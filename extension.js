@@ -955,6 +955,48 @@ function activate(context) {
   );
 
   // ============================================================
+  // GO TO DEFINITION PROVIDER (Modules)
+  // ============================================================
+  // Enables Go-to-Definition (F12 / Ctrl+Click) for calls like:
+  // call MyHelper(...) by navigating to the corresponding module MyHelper
+
+  const DefinitionProvider = vscode.languages.registerDefinitionProvider(
+    "otterscript", {
+      provideDefinition(document, position) {
+
+        const wordRange = document.getWordRangeAtPosition(position);
+        if (!wordRange) return null;
+
+        const calledName = document.getText(wordRange);
+        if (!calledName) return null;
+
+        // Match: module <Name>
+        const moduleRegex = new RegExp(`^\\s*module\\s+${calledName}\\b`, "i");
+
+        for (let line = 0; line < document.lineCount; line++) {
+          const text = document.lineAt(line).text;
+
+          if (moduleRegex.test(text)) {
+            const start = text.indexOf(calledName);
+            if (start === -1) continue;
+
+            const range = new vscode.Range(
+              new vscode.Position(line, start),
+              new vscode.Position(line, start + calledName.length)
+            );
+
+            return new vscode.Location(document.uri, range);
+          }
+        }
+
+        return null;
+      }
+    }
+  );
+
+
+
+  // ============================================================
   // DIAGNOSTICS (ERRORS & WARNINGS)
   // ============================================================
   // Provides real-time syntax checking and problem detection.
@@ -1288,7 +1330,8 @@ function activate(context) {
     vectorCompletionProvider,
     operationCompletionProvider,
     hoverProvider,
-    CodeActionsProvider
+    CodeActionsProvider,
+    DefinitionProvider
   );
 }
 
