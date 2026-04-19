@@ -700,147 +700,150 @@ function activate(context) {
   //   5. Operations (Log-Information, Log-Error, etc.) - Built-in actions
   //   6. Symbols ($function, @vector, $variable) - Most general, check last
 
-  const hoverProvider = vscode.languages.registerHoverProvider("otterscript", {
-    provideHover(document, position) {
-      // Check if hover is enabled in settings
-      if (!hoverEnabled) {
-        return null;
-      }
-
-      // Prevent hover inside strings or comments
-      const line = document.lineAt(position.line).text;
-      if (isInStringOrComment(line, position.character)) {
-        return null;
-      }
-
-      // 1. TEMPLATE TAGS (<% and %>)
-      // OtterScript uses ASP-style template tags for embedding code
-
-      const templateRange = document.getWordRangeAtPosition(position, /<%|%>/);
-      if (templateRange) {
-        const text = document.getText(templateRange);
-        if (text === '<%') {
-          return new vscode.Hover(
-                buildHoverMarkdown(syntaxDocs.templateOpen), templateRange);
+  const hoverProvider = vscode.languages.registerHoverProvider(
+    "otterscript",
+    {
+      provideHover(document, position) {
+        // Check if hover is enabled in settings
+        if (!hoverEnabled) {
+          return null;
         }
-        if (text === '%>') {
-          return new vscode.Hover(
-                buildHoverMarkdown(syntaxDocs.templateClose), templateRange);
+
+        // Prevent hover inside strings or comments
+        const line = document.lineAt(position.line).text;
+        if (isInStringOrComment(line, position.character)) {
+          return null;
         }
-      }
 
-      // 2. EXPRESSION DELIMITERS (%(), @(), $())
-      // These delimiters start special expression types:
-      //   %( ) - Map expression (key-value pairs)
-      //   @( ) - Vector expression (arrays/lists)
-      //   $( ) - Nested evaluation (evaluate inner expression first)
+        // 1. TEMPLATE TAGS (<% and %>)
+        // OtterScript uses ASP-style template tags for embedding code
 
-      const exprRange = document.getWordRangeAtPosition(position, /%\(|@\(|\$\(/);
-      if (exprRange) {
-          const text = document.getText(exprRange);
-          if (text === '%(') {
-              return new vscode.Hover(
-                  buildHoverMarkdown(syntaxDocs.mapExpr), exprRange);
+        const templateRange = document.getWordRangeAtPosition(position, /<%|%>/);
+        if (templateRange) {
+          const text = document.getText(templateRange);
+          if (text === '<%') {
+            return new vscode.Hover(
+                  buildHoverMarkdown(syntaxDocs.templateOpen), templateRange);
           }
-          if (text === '@(') {
-              return new vscode.Hover(
-                  buildHoverMarkdown(syntaxDocs.vectorExpr),exprRange);
+          if (text === '%>') {
+            return new vscode.Hover(
+                  buildHoverMarkdown(syntaxDocs.templateClose), templateRange);
           }
-          if (text === '$(') {
-              return new vscode.Hover(
-                  buildHoverMarkdown(syntaxDocs.nestedEval),exprRange);
-          }
-      }
-      // 3. KEYWORDS (if, foreach, with, set, etc.)
-      // Control flow and language keywords.
+        }
 
-      // Special-case multi-word keyword: "force normal"
-      const forceRange = document.getWordRangeAtPosition(
+        // 2. EXPRESSION DELIMITERS (%(), @(), $())
+        // These delimiters start special expression types:
+        //   %( ) - Map expression (key-value pairs)
+        //   @( ) - Vector expression (arrays/lists)
+        //   $( ) - Nested evaluation (evaluate inner expression first)
+
+        const exprRange = document.getWordRangeAtPosition(position, /%\(|@\(|\$\(/);
+        if (exprRange) {
+            const text = document.getText(exprRange);
+            if (text === '%(') {
+                return new vscode.Hover(
+                    buildHoverMarkdown(syntaxDocs.mapExpr), exprRange);
+            }
+            if (text === '@(') {
+                return new vscode.Hover(
+                    buildHoverMarkdown(syntaxDocs.vectorExpr),exprRange);
+            }
+            if (text === '$(') {
+                return new vscode.Hover(
+                    buildHoverMarkdown(syntaxDocs.nestedEval),exprRange);
+            }
+        }
+        // 3. KEYWORDS (if, foreach, with, set, etc.)
+        // Control flow and language keywords.
+
+        // Special-case multi-word keyword: "force normal"
+        const forceRange = document.getWordRangeAtPosition(
+          position,
+          /\bforce\s+normal\b/
+        );
+
+        const wordRange = forceRange
+          ?? document.getWordRangeAtPosition(
+              position,
+              /\b[a-zA-Z]+(?:-[a-zA-Z]+)*\b/ // single token, hyphens allowed; NEVER spaces
+            );
+
+        if (wordRange) {
+          const word = document.getText(wordRange);
+
+          // Check if it's a known keyword
+          if (knownKeywords.has(word)) {
+            const doc = keywordDocs[word];
+            // Make hover
+            return new vscode.Hover(buildHoverMarkdown(doc), wordRange);
+          }
+        }
+
+        // 4. SWIM-STRING DELIMITERS (Fish Sentinels)
+        // OtterScript's unique string syntax: >>, >==8>, >--=>
+        // Any characters between two identical fish-shaped delimiters
+
+        const swimRange = document.getWordRangeAtPosition(
+          position,
+          />[^>]{0,5}>/
+        );
+
+        if (swimRange) {
+          return new vscode.Hover(
+            buildHoverMarkdown(syntaxDocs.swimString), swimRange);
+        }
+
+        // 5. OPERATIONS (Log-Information, Log-Warning, Log-Error, etc.)
+        // Built-in operations. Distinguished by hyphenated names.
+        const operationRange = document.getWordRangeAtPosition(
         position,
-        /\bforce\s+normal\b/
-      );
+        operationRegex()
+        );
 
-      const wordRange = forceRange
-        ?? document.getWordRangeAtPosition(
-            position,
-            /\b[a-zA-Z]+(?:-[a-zA-Z]+)*\b/ // single token, hyphens allowed; NEVER spaces
-          );
+        if (operationRange) {
+          const opName = document.getText(operationRange);
+          const doc = operationDocs[opName];
 
-      if (wordRange) {
-        const word = document.getText(wordRange);
+          // No documentation found
+          if (!doc) return null;
 
-        // Check if it's a known keyword
-        if (knownKeywords.has(word)) {
-          const doc = keywordDocs[word];
           // Make hover
-          return new vscode.Hover(buildHoverMarkdown(doc), wordRange);
+          return new vscode.Hover(buildHoverMarkdown(doc), operationRange);
         }
-      }
 
-      // 4. SWIM-STRING DELIMITERS (Fish Sentinels)
-      // OtterScript's unique string syntax: >>, >==8>, >--=>
-      // Any characters between two identical fish-shaped delimiters
+        // 6. SYMBOLS ($function, @vector, $variable)
+        // Most general case - matches any $ or @ prefixed identifier
+        // Checks scalar functions, vector functions, and variables
+        // Must be LAST because it matches many things
+        const symbolRange = document.getWordRangeAtPosition(
+          position,
+          /[@$][A-Za-z][A-Za-z0-9]*/  // $Name or @Name (no spaces)
+        );
+        if (!symbolRange) return null;
 
-      const swimRange = document.getWordRangeAtPosition(
-        position,
-        />[^>]{0,5}>/
-      );
+        const text = document.getText(symbolRange);
+        const prefix = text[0];         // '$' or '@'
+        const name = text.substring(1); // The identifier without prefix
 
-      if (swimRange) {
-        return new vscode.Hover(
-          buildHoverMarkdown(syntaxDocs.swimString), swimRange);
-      }
-
-      // 5. OPERATIONS (Log-Information, Log-Warning, Log-Error, etc.)
-      // Built-in operations. Distinguished by hyphenated names.
-      const operationRange = document.getWordRangeAtPosition(
-      position,
-      operationRegex()
-      );
-
-      if (operationRange) {
-        const opName = document.getText(operationRange);
-        const doc = operationDocs[opName];
+        // Look up documentation based on prefix type
+        let doc;
+        if (prefix === "$") {
+          // $ can be either a scalar function OR a variable
+          // Check functions first (more specific), then variables
+          doc = scalarFunctionDocs[name] || variableDocs[name];
+        } else if (prefix === "@") {
+          // @ is a vector function
+          doc = vectorFunctionDocs[name];
+        }
 
         // No documentation found
         if (!doc) return null;
 
         // Make hover
-        return new vscode.Hover(buildHoverMarkdown(doc), operationRange);
+        return new vscode.Hover(buildHoverMarkdown(doc), symbolRange);
       }
-
-      // 6. SYMBOLS ($function, @vector, $variable)
-      // Most general case - matches any $ or @ prefixed identifier
-      // Checks scalar functions, vector functions, and variables
-      // Must be LAST because it matches many things
-      const symbolRange = document.getWordRangeAtPosition(
-        position,
-        /[@$][A-Za-z][A-Za-z0-9]*/  // $Name or @Name (no spaces)
-      );
-      if (!symbolRange) return null;
-
-      const text = document.getText(symbolRange);
-      const prefix = text[0];         // '$' or '@'
-      const name = text.substring(1); // The identifier without prefix
-
-      // Look up documentation based on prefix type
-      let doc;
-      if (prefix === "$") {
-        // $ can be either a scalar function OR a variable
-        // Check functions first (more specific), then variables
-        doc = scalarFunctionDocs[name] || variableDocs[name];
-      } else if (prefix === "@") {
-        // @ is a vector function
-        doc = vectorFunctionDocs[name];
-      }
-
-      // No documentation found
-      if (!doc) return null;
-
-      // Make hover
-      return new vscode.Hover(buildHoverMarkdown(doc), symbolRange);
     }
-  });
+  );
 
   // ============================================================
   // DIAGNOSTICS (ERRORS & WARNINGS)
