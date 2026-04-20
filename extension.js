@@ -423,32 +423,15 @@ function activate(context) {
           let fn = null;
           let args = null;
 
-          // 1. Check scalar functions ($Func)
-          const scalarMatch = textBeforeCursor.match(scalarSignatureRegex());
-          if (scalarMatch) {
-            match = scalarMatch;
-            fn = scalarFunctionDocs[match[1]];
-            args = match[2];
-          }
+          const candidates = [
+            { regex: scalarSignatureRegex,    table: scalarFunctionDocs }, // ($Func)
+            { regex: vectorSignatureRegex,    table: vectorFunctionDocs }, // (@Func)
+            { regex: operationSignatureRegex, table: operationDocs },      // (Log-Information etc...)
+          ];
 
-          // 2. Check vector functions (@Func)
-          if (!fn) {
-            const vectorMatch = textBeforeCursor.match(vectorSignatureRegex());
-            if (vectorMatch) {
-              match = vectorMatch;
-              fn = vectorFunctionDocs[match[1]];
-              args = match[2];
-            }
-          }
-
-          // 3. Check operations (Post-Http, Log-Information, etc.)
-          if (!fn) {
-            const opMatch = textBeforeCursor.match(operationSignatureRegex());
-            if (opMatch) {
-              match = opMatch;
-              fn = operationDocs[match[1]];
-              args = match[2];
-            }
+          for (const { regex, table } of candidates) {
+            const m = textBeforeCursor.match(regex());
+            if (m && table[m[1]]) { match = m; fn = table[m[1]]; args = m[2]; break; }
           }
 
           // Validate we have everything needed
