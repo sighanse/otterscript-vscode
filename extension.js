@@ -158,6 +158,219 @@ function stripStrings(line) {
     .replace(/'([^'\\]|\\.)*'/g, "''");
 }
 
+/**
+ * Creates a quick-fix that inserts a missing '$' at the diagnostic position.
+ *
+ * This code action appears in the lightbulb menu (💡) when a variable
+ * is used without a '$' prefix in an if condition.
+ *
+ * @param {vscode.TextDocument} document - The document containing the diagnostic
+ * @param {vscode.Diagnostic} diagnostic - The diagnostic with the missing '$' error
+ * @returns {vscode.CodeAction} A code action that inserts '$' at the diagnostic position
+ *
+ * @example
+ * // For diagnostic on "if x > 5"
+ * // The action inserts "$" before "x" -> "if $x > 5"
+ */
+function createMissingDollarFix(document, diagnostic) {
+  const action = new vscode.CodeAction(
+    "Insert missing '$'",
+    vscode.CodeActionKind.QuickFix
+  );
+
+  action.diagnostics = [diagnostic];
+  action.isPreferred = true;
+
+  const edit = new vscode.WorkspaceEdit();
+  edit.insert(
+    document.uri,
+    diagnostic.range.start,
+    "$"
+  );
+
+  action.edit = edit;
+  return action;
+}
+
+/**
+ * Creates a quick-fix that replaces invalid boolean operators.
+ *
+ * This code action appears in the lightbulb menu (💡) when a single
+ * '&' or '|' is used instead of '&&' or '||'.
+ *
+ * @param {vscode.TextDocument} document - The document containing the diagnostic
+ * @param {vscode.Diagnostic} diagnostic - The diagnostic with the invalid operator
+ * @returns {vscode.CodeAction | null} - Code action or null if replacement unknown
+ *
+ * @example
+ * // For diagnostic on "&" -> creates action to replace with "&&"
+ */
+function createInvalidOperatorFix(document, diagnostic) {
+  const text = document.getText(diagnostic.range);
+
+  let replacement = null;
+  if (text === "&") replacement = "&&";
+  if (text === "|") replacement = "||";
+
+  if (!replacement) return null;
+
+  const action = new vscode.CodeAction(
+    `Replace '${text}' with '${replacement}'`,
+    vscode.CodeActionKind.QuickFix
+  );
+
+  action.diagnostics = [diagnostic];
+  action.isPreferred = true;
+
+  const edit = new vscode.WorkspaceEdit();
+  edit.replace(
+    document.uri,
+    diagnostic.range,
+    replacement
+  );
+
+  action.edit = edit;
+  return action;
+}
+
+/**
+ * Builds a standardised hover MarkdownString from a documentation entry.
+ *
+ * This creates the formatted tooltip content shown when hovering over
+ * symbols, keywords, operations, and syntax elements.
+ *
+ * @param {Readonly<{ name: string, signature?: string, description?: string, documentation?: string }>} doc
+ *   - name: Required - Display name (e.g., "$ToJson")
+ *   - signature: Optional - Function signature (monospace formatted)
+ *   - description: Optional - Short description
+ *   - documentation: Optional - Extended Markdown documentation
+ * @returns {vscode.MarkdownString} - Formatted hover content
+ *
+ * @example
+ * const doc = { name: "$ToJson", signature: "$ToJson(data)", description: "Converts to JSON" };
+ * const hover = buildHoverMarkdown(doc);
+ * // Returns MarkdownString with:
+ * // ### $ToJson
+ * // **Signature:** `$ToJson(data)`
+ * // Converts to JSON
+ */
+function buildHoverMarkdown(doc, isTrusted = false) {
+  const md = new vscode.MarkdownString();
+
+  // Heading (### is h3 in Markdown, renders bold in VS Code)
+  md.appendMarkdown(`### ${doc.name}\n\n`);
+
+  // Signature (monospace for code clarity)
+  if (doc.signature) {
+    md.appendMarkdown(`**Signature:** \`${doc.signature}\`\n\n`);
+  }
+
+  // Short description
+  if (doc.description) {
+    md.appendMarkdown(`${doc.description}\n\n`);
+  }
+
+  // Extended documentation (supports Markdown)
+  if (typeof doc.documentation === "string") {
+    md.appendMarkdown(doc.documentation);
+  }
+
+  // true would allow richer formatting, but we set the default to false
+  md.isTrusted = isTrusted;
+
+  return md;
+}
+
+// COMPLETION ITEM BUILDING
+
+/**
+ * @typedef {Object} DocEntry
+ * @property {string} name - Human-readable name shown in completion and hover
+ * @property {string} description - Short summary shown in IntelliSense
+ * @property {string=} signature - Usage syntax
+ * @property {string=} snippet - VS Code snippet insertion text
+ * @property {string=} documentation - Extended Markdown documentation
+ */
+
+/**
+ * Builds a completion item with consistent formatting.
+ *
+ * This centralizes completion item creation to ensure all providers
+ * produce consistent UI elements (labels, details, documentation, sorting).
+ *
+ * @param {DocEntry} doc - Documentation object
+ * @param {vscode.CompletionItemKind} kind - Item kind (Function, Variable, Keyword, etc.)
+ * @param {string} sortPrefix - Sort order prefix (e.g., "0_" for operations, "1_" for functions)
+ * @param {string | vscode.SnippetString} insertText - Text to insert when selected
+ * @param {boolean} [triggerSignatureHelp=false] - Whether to trigger signature help after insertion
+ * @returns {vscode.CompletionItem} - Formatted completion item
+ *
+ * @example
+ * // For a scalar function
+ * buildCompletionItem(doc, vscode.CompletionItemKind.Function, '1_', snippet, true);
+ *
+ * // For a variable (no signature help)
+ * buildCompletionItem(doc, vscode.CompletionItemKind.Variable, '2_', snippet, false);
+ */
+function buildCompletionItem(doc, kind, sortPrefix, insertText, triggerSignatureHelp = false) {
+  const item = new vscode.CompletionItem(
+    { label: doc.name, description: doc.description },
+    kind
+  );
+
+  item.insertText = insertText;
+  item.detail = doc.signature ?? doc.description;
+  item.documentation = doc.documentation
+    ? new vscode.MarkdownString(doc.documentation)
+    : undefined;
+  item.sortText = `${sortPrefix}${doc.name}`;
+
+  // Trigger signature help after insertion (for functions with parameters)
+  if (triggerSignatureHelp) {
+    item.command = {
+      command: 'editor.action.triggerParameterHints',
+      title: ''  // Title required but not shown for built-in commands
+    };
+  }
+
+  return item;
+}
+
+/**
+ * Returns true if the given position is inside a quoted string
+ * or a line comment.
+ *
+ * This uses a fast, best-effort heuristic and does not attempt
+ * full parsing.
+ *
+ * @param {string} line - The full line of text
+ * @param {number} position - Character position within the line (0-indexed)
+ * @returns {boolean} - true if position is inside string/comment, false otherwise
+ *
+ * @example
+ * isInStringOrComment('if $x == 5', 5);        // false (code)
+ * isInStringOrComment('# comment', 2);        // true (comment)
+ * isInStringOrComment('"hello"', 3);          // true (inside string)
+ */
+function isInStringOrComment(line, position) {
+  // Get text from line start up to cursor position
+  const prefix = line.slice(0, position);
+
+  // Check if the line starts with a comment marker (# or //)
+  // Note: Only catches comments at START of line, not inline comments
+  if (/^\s*(#|\/\/)/.test(prefix)) {
+    return true;
+  }
+
+  // Inside quoted string (simple, fast heuristic)
+  // Odd count of quotes means we're inside an unclosed string
+  const doubleQuotes = (prefix.match(/"/g) || []).length;
+  const singleQuotes = (prefix.match(/'/g) || []).length;
+
+  // Return true if either quote type has an odd count (unclosed string)
+  return doubleQuotes % 2 === 1 || singleQuotes % 2 === 1;
+}
+
 // ============================================================
 // ACTIVATION
 // ============================================================
@@ -218,66 +431,6 @@ function activate(context) {
     vectorFunctionDocs
   } = docs;
 
-  /**
-   * Creates a quick-fix that inserts a missing '$' at the diagnostic position.
-   * @param {vscode.TextDocument} document
-   * @param {vscode.Diagnostic} diagnostic
-   * @returns {vscode.CodeAction}
-   */
-  function createMissingDollarFix(document, diagnostic) {
-    const action = new vscode.CodeAction(
-      "Insert missing '$'",
-      vscode.CodeActionKind.QuickFix
-    );
-
-    action.diagnostics = [diagnostic];
-    action.isPreferred = true;
-
-    const edit = new vscode.WorkspaceEdit();
-    edit.insert(
-      document.uri,
-      diagnostic.range.start,
-      "$"
-    );
-
-    action.edit = edit;
-    return action;
-  }
-
-  /**
-   * Creates a quick-fix that replaces invalid boolean operators.
-   * @param {vscode.TextDocument} document
-   * @param {vscode.Diagnostic} diagnostic
-   * @returns {vscode.CodeAction | null}
-   */
-  function createInvalidOperatorFix(document, diagnostic) {
-    const text = document.getText(diagnostic.range);
-
-    let replacement = null;
-    if (text === "&") replacement = "&&";
-    if (text === "|") replacement = "||";
-
-    if (!replacement) return null;
-
-    const action = new vscode.CodeAction(
-      `Replace '${text}' with '${replacement}'`,
-      vscode.CodeActionKind.QuickFix
-    );
-
-    action.diagnostics = [diagnostic];
-    action.isPreferred = true;
-
-    const edit = new vscode.WorkspaceEdit();
-    edit.replace(
-      document.uri,
-      diagnostic.range,
-      replacement
-    );
-
-    action.edit = edit;
-    return action;
-  }
-
   // NON-VARIABLE IDENTIFIERS (Skip $ Validation)
   /**
    * Set of identifier names that are valid without a '$' prefix in conditions.
@@ -290,93 +443,6 @@ function activate(context) {
     "false",  // Boolean literal
     "null"    // Null literal
   ]);
-
-  /**
-   * Returns true if the given position is inside a quoted string
-   * or a line comment.
-   *
-   * This uses a fast, best-effort heuristic and does not attempt
-   * full parsing.
-   *
-   * @param {string} line - The full line of text
-   * @param {number} position - Character position within the line (0-indexed)
-   * @returns {boolean} true if position is inside string/comment, false otherwise
-   */
-  function isInStringOrComment(line, position) {
-    // Get text from line start up to cursor position
-    const prefix = line.slice(0, position);
-
-    // Check if the line starts with a comment marker (# or //)
-    if (/^\s*(#|\/\/)/.test(prefix)) {
-      return true;
-    }
-
-    // Inside quoted string (simple, fast heuristic)
-    const doubleQuotes = (prefix.match(/"/g) || []).length;
-    const singleQuotes = (prefix.match(/'/g) || []).length;
-
-    // Return true if either quote type has an odd count (unclosed string)
-    return doubleQuotes % 2 === 1 || singleQuotes % 2 === 1;
-  }
-
-  /**
-   * Builds a standardised hover MarkdownString from a documentation entry.
-   * @param {Readonly<{ name: string, signature?: string, description?: string, documentation?: string }>} doc
-   * @returns {vscode.MarkdownString}
-   */
-  function buildHoverMarkdown(doc) {
-    const md = new vscode.MarkdownString();
-    md.appendMarkdown(`### ${doc.name}\n\n`);
-    if (doc.signature) {
-      md.appendMarkdown(`**Signature:** \`${doc.signature}\`\n\n`);
-    }
-    if (doc.description) {
-      md.appendMarkdown(`${doc.description}\n\n`);
-    }
-    if (typeof doc.documentation === "string") {
-      md.appendMarkdown(doc.documentation);
-    }
-    md.isTrusted = false;  // Default is false. true enables richer formatting, but we don't need that for now.
-    return md;
-  }
-
-  /**
-   * @typedef {Object} DocEntry
-   * @property {string} name Human-readable name shown in completion and hover
-   * @property {string} description Short summary shown in IntelliSense
-   * @property {string=} signature Usage syntax
-   * @property {string=} snippet VS Code snippet insertion text
-   * @property {string=} documentation Extended Markdown documentation
-   */
-  /**
-   * Builds a completion item with consistent formatting.
-   * @param {DocEntry} doc - Documentation object
-   * @param {vscode.CompletionItemKind} kind - Item kind (Function, Variable, etc.)
-   * @param {string} sortPrefix - Sort order prefix (e.g., "0_", "1_")
-   * @param {string | vscode.SnippetString} insertText - Text to insert
-   * @param {boolean} [triggerSignatureHelp=false] - Whether to trigger signature help after insertion
-   * @returns {vscode.CompletionItem}
-   */
-  function buildCompletionItem(doc, kind, sortPrefix, insertText, triggerSignatureHelp = false) {
-    const item = new vscode.CompletionItem(
-      { label: doc.name, description: doc.description },
-      kind
-    );
-    item.insertText = insertText;
-    item.detail = doc.signature ?? doc.description;
-    item.documentation = doc.documentation
-      ? new vscode.MarkdownString(doc.documentation)
-      : undefined;
-    item.sortText = `${sortPrefix}${doc.name}`;
-
-    if (triggerSignatureHelp) {
-      item.command = {
-        command: 'editor.action.triggerParameterHints',
-        title: ''
-      };
-    }
-    return item;
-  }
 
   /**
    * Checks if the cursor is in a valid position for showing completions.
