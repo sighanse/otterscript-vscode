@@ -935,8 +935,8 @@ const variableDocs = {
 const scalarFunctionDocs = {
   ToJson: {
     name: "$ToJson",
-    snippet: '\\$ToJson(${1:data})${0}',
     signature: "$ToJson(data)",
+    snippet: '\\$ToJson(${1:data})${0}',
     description: "Converts an OtterScript value to JSON.",
     documentation: `
 **Parameters:**
