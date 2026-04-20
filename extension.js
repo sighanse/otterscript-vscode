@@ -1008,6 +1008,15 @@ function activate(context) {
         const calledName = document.getText(wordRange);
         if (!calledName) return null;
 
+        // Verify this is actually a 'call' statement
+        const lineText = document.lineAt(position.line).text;
+        const textBeforeWord = lineText.slice(0, wordRange.start.character);
+
+        // Check if 'call' appears immediately before the word (with whitespace)
+        if (!/\bcall\s+$/i.test(textBeforeWord)) {
+          return null;  // Not a 'call' statement - ignore
+        }
+
         // Match: module <Name>
         const moduleRegex = new RegExp(`^\\s*module\\s+${calledName}\\b`, "i");
 
