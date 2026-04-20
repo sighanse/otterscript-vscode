@@ -154,7 +154,7 @@ function activate(context) {
     if (!replacement) return null;
 
     const action = new vscode.CodeAction(
-      "Replace with valid boolean operator",
+      `Replace '${text}' with '${replacement}'`,
       vscode.CodeActionKind.QuickFix
     );
 
