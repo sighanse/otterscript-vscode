@@ -109,6 +109,27 @@ function validateDocs(label, docsTable) {
   return { errors, warnings };
 }
 
+/**
+ * Builds a word-boundary RegExp that matches any of the given names.
+ * Used for creating efficient lookup regexes from Sets of known identifiers.
+ *
+ * @param {Iterable<string>} names - Collection of strings to match
+ * @returns {RegExp} - Regular expression with word boundaries
+ *
+ * @example
+ * const regex = buildWordRegex(['Log-Information', 'Log-Error']);
+ * // Returns: /\b(Log-Information|Log-Error)\b/
+ */
+function buildWordRegex(names) {
+  return new RegExp(
+    `\\b(${[...names]
+      .map(name =>
+        name.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")
+      )
+      .join("|")})\\b`
+  );
+}
+
 // ============================================================
 // ACTIVATION
 // ============================================================
@@ -227,22 +248,6 @@ function activate(context) {
 
     action.edit = edit;
     return action;
-  }
-
-  /**
-   * Builds a word-boundary RegExp that matches any of the given names.
-   *
-   * @param {Iterable<string>} names
-   * @returns {RegExp}
-   */
-  function buildWordRegex(names) {
-    return new RegExp(
-      `\\b(${[...names]
-        .map(name =>
-          name.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")
-        )
-        .join("|")})\\b`
-    );
   }
 
   // NON-VARIABLE IDENTIFIERS (Skip $ Validation)
