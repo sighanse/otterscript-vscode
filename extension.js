@@ -1018,14 +1018,16 @@ function activate(context) {
         }
 
         // Match: module <Name>
-        const moduleRegex = new RegExp(`^\\s*module\\s+${calledName}\\b`, "i");
+        const moduleRegex = new RegExp(`^\\s*module\\s+(${calledName})\\b`, "i");
 
         for (let line = 0; line < document.lineCount; line++) {
           const text = document.lineAt(line).text;
 
-          if (moduleRegex.test(text)) {
-            const start = text.indexOf(calledName);
-            if (start === -1) continue;
+          const match = moduleRegex.exec(text);
+          if (match) {
+            // Calculate start position from regex match
+            const nameStartInMatch = match[0].indexOf(match[1]);
+            const start = match.index + nameStartInMatch;
 
             const range = new vscode.Range(
               new vscode.Position(line, start),
@@ -1040,8 +1042,6 @@ function activate(context) {
       }
     }
   );
-
-
 
   // ============================================================
   // DIAGNOSTICS (ERRORS & WARNINGS)
