@@ -52,6 +52,63 @@ function loadConfig() {
   };
 }
 
+/**
+ * Performs best-effort validation of documentation tables.
+ *
+ * @param {string} label - Human-readable category label (e.g. "keywordDocs")
+ * @param {Record<string, unknown>} docsTable - Documentation table to validate
+ * @returns {{ errors: string[], warnings: string[] }}
+ */
+function validateDocs(label, docsTable) {
+  const errors = [];
+  const warnings = [];
+
+  for (const [key, rawDoc] of Object.entries(docsTable)) {
+    /** @type {any} */
+    const doc = rawDoc;
+
+    if (!doc || typeof doc !== "object") {
+      errors.push(`${label}.${key} is not an object`);
+      continue;
+    }
+
+    // Required Field: 'name'
+    if (!doc.name || typeof doc.name !== "string" || doc.name.trim() === "") {
+      errors.push(`${label}.${key} is missing required 'name'`);
+    }
+
+    // Required Field: 'description'
+    if (!doc.description || typeof doc.description !== "string") {
+      errors.push(`${label}.${key} is missing required 'description'`);
+    }
+
+    // Optional Field: 'snippet'
+    if (doc.snippet && typeof doc.snippet !== "string") {
+      warnings.push(`${label}.${key} 'snippet' must be a string`);
+    }
+
+    // Optional Field: 'signature'
+    if (doc.signature && typeof doc.signature !== "string") {
+      warnings.push(`${label}.${key} 'signature' must be a string`);
+    }
+
+    // Optional Field: 'documentation'
+    if (doc.documentation && typeof doc.documentation !== "string") {
+      warnings.push(`${label}.${key} 'documentation' must be a string`);
+    }
+  }
+
+  // Log to console as before (optional, but helpful for debugging)
+  if (errors.length) {
+    console.error(`[docs] ${label} errors:`, errors);
+  }
+  if (warnings.length) {
+    console.warn(`[docs] ${label} warnings:`, warnings);
+  }
+
+  return { errors, warnings };
+}
+
 // ============================================================
 // ACTIVATION
 // ============================================================
@@ -244,57 +301,6 @@ function activate(context) {
   }
 
   /**
-   * Performs best-effort validation of documentation tables.
-   *
-   * This function intentionally validates unknown input and
-   * reports warnings instead of throwing, even if critical
-   * fields (name/description) are missing.
-   *
-   * @param {string} label Human-readable category label (e.g. "keywordDocs")
-   * @param {Record<string, unknown>} docsTable Documentation table to validate
-   */
-  function validateDocs(label, docsTable) {
-    // Iterate through each documentation entry (e.g., "ToJson", "Split", etc.)
-    for (const [key, rawDoc] of Object.entries(docsTable)) {
-      /** @type {any} */
-      const doc = rawDoc;
-
-      // Verify the entry is a valid object (not null, not a primitive)
-      if (!doc || typeof doc !== "object") {
-        console.warn(`[docs] ${label}.${key} is not an object`);
-        continue;
-      }
-
-      // ---------- Required Field: 'name' ----------
-      if (!doc.name || typeof doc.name !== "string" || doc.name.trim() === "") {
-        console.warn(`[docs] ${label}.${key} is missing required 'name'`);
-      }
-
-      // ---------- Required Field: 'description' ----------
-      if (!doc.description || typeof doc.description !== "string") {
-        console.warn(`[docs] ${label}.${key} is missing required 'description'`);
-      }
-
-      // ---------- Optional Field: 'snippet' ----------
-      if (doc.snippet && typeof doc.snippet !== "string") {
-        console.warn(`[docs] ${label}.${key} 'snippet' must be a string`);
-      }
-
-      // ---------- Optional Field: 'signature' ----------
-      if (doc.signature && typeof doc.signature !== "string") {
-        console.warn(`[docs] ${label}.${key} 'signature' must be a string`);
-      }
-
-      // ---------- Optional Field: 'documentation' ----------
-      // Extended documentation shown in hover tooltips
-      // Supports Markdown formatting
-      if (doc.documentation && typeof doc.documentation !== "string") {
-        console.warn(`[docs] ${label}.${key} 'documentation' must be a string`);
-      }
-    }
-  }
-
-  /**
    * Builds a standardised hover MarkdownString from a documentation entry.
    * @param {Readonly<{ name: string, signature?: string, description?: string, documentation?: string }>} doc
    * @returns {vscode.MarkdownString}
@@ -371,13 +377,13 @@ function activate(context) {
     return !isInStringOrComment(line, cursor);
   }
 
-  // RUN VALIDATION ON ALL DOCUMENTATION SOURCES
-  validateDocs("scalarFunctionDocs", scalarFunctionDocs); // $ToJson, $Base64Encode, etc.
-  validateDocs("operationDocs", operationDocs);           // Log-Information, Log-Warning, Log-Error, etc.
-  validateDocs("vectorFunctionDocs", vectorFunctionDocs); // @Split, @Join, etc.
-  validateDocs("variableDocs", variableDocs);             // $BuildId, $FeedName, etc.
-  validateDocs("syntaxDocs", syntaxDocs);                 // Template tags, swim strings, expression delimiters, etc.
-  validateDocs("keywordDocs", keywordDocs);               // if, foreach, with, set, etc.
+  // Validate all documentation sources - (intentionally ignore return value)
+  void validateDocs("scalarFunctionDocs", scalarFunctionDocs); // $ToJson, $Base64Encode, etc.
+  void validateDocs("operationDocs", operationDocs);           // Log-Information, Log-Warning, Log-Error, etc.
+  void validateDocs("vectorFunctionDocs", vectorFunctionDocs); // @Split, @Join, etc.
+  void validateDocs("variableDocs", variableDocs);             // $BuildId, $FeedName, etc.
+  void validateDocs("syntaxDocs", syntaxDocs);                 // Template tags, swim strings, expression delimiters, etc.
+  void validateDocs("keywordDocs", keywordDocs);               // if, foreach, with, set, etc.
 
   // KNOWLEDGE BASES (Fast Lookup Sets)
   const knownKeywords = new Set(Object.keys(keywordDocs));
