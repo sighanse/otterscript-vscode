@@ -130,6 +130,34 @@ function buildWordRegex(names) {
   );
 }
 
+/**
+ * Replaces quoted string literals in a line with empty placeholders.
+ *
+ * This is used by diagnostics to avoid flagging symbols inside strings.
+ * For example: $var = "Unknown $Function" -> $var = "" (no false positive)
+ *
+ * Handles:
+ *   - Double-quoted strings with escaped characters: "hello \"world\""
+ *   - Single-quoted strings with escaped characters: 'hello \'world\''
+ *   - Empty strings: "" or ''
+ *
+ * @param {string} line - The line of code to process
+ * @returns {string} The line with string contents removed (quotes preserved)
+ *
+ * @example
+ * stripStrings('$var = "Hello $name"');  // Returns: '$var = ""'
+ * stripStrings("$var = 'Hello $name'");  // Returns: '$var = \'\''
+ */
+function stripStrings(line) {
+  return line
+    // Double-quoted strings: "anything here" becomes ""
+    // Handles escaped quotes: \", and escaped backslashes: \\
+    .replace(/"([^"\\]|\\.)*"/g, '""')
+    // Single-quoted strings: 'anything here' becomes ''
+    // Handles escaped quotes: \', and escaped backslashes: \\
+    .replace(/'([^'\\]|\\.)*'/g, "''");
+}
+
 // ============================================================
 // ACTIVATION
 // ============================================================
@@ -289,20 +317,6 @@ function activate(context) {
 
     // Return true if either quote type has an odd count (unclosed string)
     return doubleQuotes % 2 === 1 || singleQuotes % 2 === 1;
-  }
-
-  /**
-   * Replaces quoted string literals in a line with empty placeholders.
-   *
-   * @param {string} line - The line of code to process
-   * @returns {string} The line with string contents removed
-   */
-  function stripStrings(line) {
-    return line
-      // Double-quoted strings: "anything here" becomes ""
-      .replace(/"([^"\\]|\\.)*"/g, '""')
-      // Single-quoted strings: 'anything here' becomes ''
-      .replace(/'([^'\\]|\\.)*'/g, "''");
   }
 
   /**
