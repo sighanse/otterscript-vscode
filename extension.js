@@ -201,7 +201,6 @@ function activate(context) {
     "null"    // Null literal
   ]);
 
-
   /**
    * Returns true if the given position is inside a quoted string
    * or a line comment.
@@ -721,7 +720,6 @@ function activate(context) {
     },
     "%"
   );
-
 
   // ------------------------------------------------------------
   // OPERATION COMPLETION (Log-Information, etc.)
