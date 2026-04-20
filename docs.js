@@ -165,6 +165,25 @@ Post-Http(
 );
 \`\`\`
 `
+  },
+  'Sleep': {
+    name: "Sleep",
+    signature: "Sleep <integer>;",
+    snippet: "Sleep ${1:seconds};$0",
+    description: "Pauses script execution for a specified number of seconds.",
+    documentation: `
+**Arguments:**
+- \`Seconds\` (required) - The number of seconds to pause execution.
+
+**Usage:**
+\`\`\`otterscript
+Sleep 5;
+\`\`\`
+
+**Notes:**
+- The argument is an integer representing seconds.
+- Useful for adding delays between operations, such as waiting for a service to start or avoiding rate limits.
+`
   }
 };
 
