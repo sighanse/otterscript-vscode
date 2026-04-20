@@ -24,53 +24,53 @@
 
 const vscode = require("vscode");
 
+// ============================================================
+// HELPER FUNCTIONS
+// ============================================================
+
+/**
+ * Loads OtterScript configuration from VS Code workspace settings.
+ *
+ * Settings are stored in .vscode/settings.json or user preferences.
+ * Schema defined in package.json under "contributes.configuration".
+ *
+ * @example
+ * // .vscode/settings.json
+ * {
+ *   "otterscript.completion.enable": false,
+ *   "otterscript.hover.enable": true
+ * }
+ */
+function loadConfig() {
+  const config = vscode.workspace.getConfiguration("otterscript");
+
+  // Read each setting with fallback default of 'true'
+  return {
+    completionEnabled: config.get("completion.enable", true),
+    hoverEnabled: config.get("hover.enable", true),
+    signatureHelpEnabled: config.get("signatureHelp.enable", true)
+  };
+}
+
+// ============================================================
+// ACTIVATION
+// ============================================================
+
 /**
  * @param {vscode.ExtensionContext} context
  */
 function activate(context) {
   console.log("OtterScript extension active");
 
-  // ------------------------------------------------------------
-  // Configuration (user‑controlled feature toggles)
-  // These flags are read from workspace settings and determine
-  // whether individual language features are active at runtime.
-  // ------------------------------------------------------------
-
-  // Default values (will be overridden by user settings if present)
-  let completionEnabled = true;     // Auto-completion suggestions
-  let hoverEnabled = true;          // Documentation on mouse hover
-  let signatureHelpEnabled = true;  // Parameter hints for functions
-
-  /**
-   * Loads OtterScript configuration from VS Code workspace settings.
-   *
-   * Settings are stored in .vscode/settings.json or user preferences.
-   * Schema defined in package.json under "contributes.configuration".
-   *
-   * @example
-   * // .vscode/settings.json
-   * {
-   *   "otterscript.completion.enable": false,
-   *   "otterscript.hover.enable": true
-   * }
-   */
-  function loadConfig() {
-    const config = vscode.workspace.getConfiguration("otterscript");
-
-    // Read each setting with fallback default of 'true'
-    completionEnabled = config.get("completion.enable", true);
-    hoverEnabled = config.get("hover.enable", true);
-    signatureHelpEnabled = config.get("signatureHelp.enable", true);
-  }
-  // Load settings immediately (extension just activated)
-  loadConfig();
+  // Load initial configuration
+  let { completionEnabled, hoverEnabled, signatureHelpEnabled } = loadConfig();
 
   // Watch for settings changes while extension is running
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
       // Only reload if OtterScript settings changed
       if (e.affectsConfiguration("otterscript")) {
-        loadConfig();
+        ({ completionEnabled, hoverEnabled, signatureHelpEnabled } = loadConfig());
       }
     })
   );
