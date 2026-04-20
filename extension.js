@@ -964,7 +964,7 @@ function activate(context) {
   // Provides lightbulb (💡) quick-fix actions for selected
   // diagnostics emitted by this extension.
 
-  const CodeActionsProvider = vscode.languages.registerCodeActionsProvider(
+  const codeActionsProvider = vscode.languages.registerCodeActionsProvider(
       "otterscript",
       {
         provideCodeActions(document, _range, codeActionContext) {
@@ -996,7 +996,7 @@ function activate(context) {
   // Enables Go-to-Definition (F12 / Ctrl+Click) for calls like:
   // call MyHelper(...) by navigating to the corresponding module MyHelper
 
-  const DefinitionProvider = vscode.languages.registerDefinitionProvider(
+  const definitionProvider = vscode.languages.registerDefinitionProvider(
     "otterscript", {
       provideDefinition(document, position) {
 
@@ -1371,8 +1371,8 @@ function activate(context) {
     mapCompletionProvider,
     operationCompletionProvider,
     hoverProvider,
-    CodeActionsProvider,
-    DefinitionProvider
+    codeActionsProvider,
+    definitionProvider
   );
 }
 
