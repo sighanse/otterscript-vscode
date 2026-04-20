@@ -147,6 +147,10 @@
         {
           "name": "constant.language.otterscript",
           "match": "\\b(true|false)\\b"
+        },
+        {
+          "name": "keyword.other.operation.otterscript",
+          "match": "\\b(Log-Debug|Log-Information|Log-Warning|Log-Error|Post-Http|Sleep|Apply-Template)\\b"
         }
       ]
     },
@@ -260,7 +264,7 @@
               "name": "entity.name.type.module.otterscript",
               "match": "[a-zA-Z][a-zA-Z0-9_-]*"
             },
-            { "include": "#module-parameters" },    
+            { "include": "#module-parameters" },
             { "include": "#comments" },
             { "include": "#with-block" },
             { "include": "#if-block" },
