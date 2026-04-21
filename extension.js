@@ -136,8 +136,7 @@ function loadConfig() {
   return {
     completionEnabled: config.get("completion.enable", true),
     hoverEnabled: config.get("hover.enable", true),
-    signatureHelpEnabled: config.get("signatureHelp.enable", true),
-    debugEnabled: config.get("debug.enable", false)
+    signatureHelpEnabled: config.get("signatureHelp.enable", true)
   };
 }
 
