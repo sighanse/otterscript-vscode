@@ -88,6 +88,8 @@ const log = {
   /** @param {...any} args - @example log.debug('Processing', lineIndex) */
   debug: (...args) => {
     const now = timestamp();
+    // Debug logs go to console only - intentionally excluded from Output Channel
+    // to avoid flooding the user-visible log with internal diagnostics.
     console.debug(LOGPREFIX, `[${now}]`, '[DEBUG]', ...args);
   }
 };
