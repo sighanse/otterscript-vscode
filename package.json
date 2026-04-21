@@ -14,7 +14,7 @@
   },
   "homepage": "https://github.com/sighanse/otterscript-vscode",
   "license": "MIT",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "icon": "images/logo.png",
   "engines": {
     "vscode": "^1.85.0"
