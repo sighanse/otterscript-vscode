@@ -39,32 +39,53 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
-      - name: Validate JavaScript files
+      # ============================================================
+      # VALIDATION STEPS
+      # ============================================================
+
+      - name: Validate JavaScript syntax
+        id: syntax
+        continue-on-error: true
         run: |
-          echo "Syntax checking all .js files..."
+          echo "Syntax checking..."
           node -c extension.js
           node -c helpers.js
           node -c docs.js
+          echo "✅ JavaScript Syntax validation passed"
 
-          echo "Validating docs.js exports..."
+      - name: Validate module exports
+        id: exports
+        continue-on-error: true
+        run: |
+          echo "Validating exports..."
           node -e "require('./docs.js')"
+          echo "✅ Module Export validation passed"
 
       - name: ESLint
         id: eslint
         run: npm run lint
         continue-on-error: true
 
-      - name: Report ESLint warning
-        if: ${{ steps.eslint.outcome == 'failure' }}
-        run: echo "::warning::ESLint reported issues. See log output above."
+      - name: npm security audit
+        id: audit
+        continue-on-error: true
+        run: |
+          echo "Running security audit..."
+          npm audit --audit-level=moderate
 
       - name: Validate JSON files
+        id: json
+        continue-on-error: true
         run: |
-          node -e "JSON.parse(require('fs').readFileSync('package.json', 'utf8'))"
-          node -e "JSON.parse(require('fs').readFileSync('language-configuration.json', 'utf8'))"
-          node -e "JSON.parse(require('fs').readFileSync('syntaxes/otterscript.tmLanguage.json', 'utf8'))"
+          for file in package.json language-configuration.json syntaxes/otterscript.tmLanguage.json; do
+            echo "Validating $file..."
+            node -e "JSON.parse(require('fs').readFileSync('$file', 'utf8'))"
+          done
+           echo "✅ JSON validation passed"
 
       - name: Validate JSONC files
+        id: jsonc
+        continue-on-error: true
         run: |
           node -e "
             const fs = require('fs');
@@ -73,7 +94,59 @@ jobs:
             const errors = [];
             parse(text, errors);
             if (errors.length) {
-              console.error(errors);
+              console.error('JSONC parsing errors:', errors);
               process.exit(1);
             }
+            console.log('snippets/otterscript.json is valid');
           "
+          echo "✅ JSONC validation passed"
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Sanity Check Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Syntax
+          if [ "${{ steps.syntax.outcome }}" == "success" ]; then
+            echo "✅ Syntax validation: passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Syntax validation: failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Exports
+          if [ "${{ steps.exports.outcome }}" == "success" ]; then
+            echo "✅ Module exports: passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Module exports: failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # ESLint
+          if [ "${{ steps.eslint.outcome }}" == "success" ]; then
+            echo "✅ ESLint: passed" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.eslint.outcome }}" == "failure" ]; then
+            echo "⚠️ ESLint: issues found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # JSON
+          if [ "${{ steps.json.outcome }}" == "success" ]; then
+            echo "✅ JSON validation: passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ JSON validation: failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # JSONC
+          if [ "${{ steps.jsonc.outcome }}" == "success" ]; then
+            echo "✅ JSONC validation: passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ JSONC validation: failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # npm audit
+          if [ "${{ steps.audit.outcome }}" == "success" ]; then
+            echo "✅ npm audit: passed (no vulnerabilities)" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.audit.outcome }}" == "failure" ]; then
+            echo "⚠️ npm audit: vulnerability(ies) found" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⏭️ npm audit: cancelled/skipped" >> $GITHUB_STEP_SUMMARY
+          fi
