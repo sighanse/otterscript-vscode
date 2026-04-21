@@ -120,8 +120,8 @@ Log-Error "Failed to connect to server";
   'Post-Http': {
     name: 'Post-Http',
     signature: 'Post-Http(Url: string, [options...])',
-    description: 'Executes an HTTP POST/PUT/PATCH request to a URL, typically used for RESTful operations.',
     snippet: 'Post-Http(\n    Url: "${1:https://example.com}",\n    ${2:ContentType: "application/json",}\n    ${3:TextData: "${4:request body}"},\n    ${5:FormData: %(\n        ${6:key}: "${7:value}"\n    )},\n    ${8:LogResponseBody: true}\n);',
+    description: 'Executes an HTTP POST/PUT/PATCH request to a URL, typically used for RESTful operations.',
     documentation: `
 **Required Argument:**
 - \`Url\` - The target URL (text)
