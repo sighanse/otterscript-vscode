@@ -120,8 +120,8 @@ Log-Error "Failed to connect to server";
   'Post-Http': {
     name: 'Post-Http',
     signature: 'Post-Http(Url: string, [options...])',
-    description: 'Executes an HTTP POST/PUT/PATCH request to a URL, typically used for RESTful operations.',
     snippet: 'Post-Http(\n    Url: "${1:https://example.com}",\n    ${2:ContentType: "application/json",}\n    ${3:TextData: "${4:request body}"},\n    ${5:FormData: %(\n        ${6:key}: "${7:value}"\n    )},\n    ${8:LogResponseBody: true}\n);',
+    description: 'Executes an HTTP POST/PUT/PATCH request to a URL, typically used for RESTful operations.',
     documentation: `
 **Required Argument:**
 - \`Url\` - The target URL (text)
@@ -164,6 +164,25 @@ Post-Http(
     LogResponseBody: true
 );
 \`\`\`
+`
+  },
+  'Sleep': {
+    name: "Sleep",
+    signature: "Sleep <integer>;",
+    snippet: "Sleep ${1:seconds};$0",
+    description: "Pauses script execution for a specified number of seconds.",
+    documentation: `
+**Arguments:**
+- \`Seconds\` (required) - The number of seconds to pause execution.
+
+**Usage:**
+\`\`\`otterscript
+Sleep 5;
+\`\`\`
+
+**Notes:**
+- The argument is an integer representing seconds.
+- Useful for adding delays between operations, such as waiting for a service to start or avoiding rate limits.
 `
   }
 };
@@ -221,6 +240,7 @@ Used to embed OtterScript code inside text templates.
   mapExpr: {
     name: "Map Expression",
     signature: "%(key: value, key2: value2)",
+    snippet: "(\n    ${1:key}: ${2:value}\n)",
     description: "User-defined map literal",
     documentation: `
 Map expressions use the \`%(...)\` syntax to define key/value pairs.
@@ -916,8 +936,8 @@ const variableDocs = {
 const scalarFunctionDocs = {
   ToJson: {
     name: "$ToJson",
-    snippet: '\\$ToJson(${1:data})${0}',
     signature: "$ToJson(data)",
+    snippet: '\\$ToJson(${1:data})${0}',
     description: "Converts an OtterScript value to JSON.",
     documentation: `
 **Parameters:**

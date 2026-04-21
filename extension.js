@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * OtterScript Language Extension entry point.
+ * @fileoverview OtterScript Language Extension entry point.
  *
  * RESPONSIBILITIES
  * 1. Register language features (completion, hover, signature help)
@@ -16,61 +16,51 @@
  * @author Sigurd Hansen <sigurd.hansen@gmail.com>
  * @license MIT
  * @see docs.js - Plain data documentation module
+ * @see helpers.js - Helpers, functions, constants
  * @see package.json - Extension manifest and configuration schema
  * @see syntaxes/otterscript.tmLanguage.json - TextMate grammar (syntax highlighting)
  * @see snippets/otterscript.json - Snippets for structural templates only
  * @see {@link https://github.com/sighanse/otterscript-vscode} - Github repository
  */
 
+// VS Code Extension API
 const vscode = require("vscode");
+const {
+  NON_VARIABLE_IDENTIFIERS,
+  log,
+  buildCompletionItem,
+  buildHoverMarkdown,
+  //buildWordRegex,
+  checkMissingDollar,
+  createInvalidOperatorFix,
+  createMissingDollarFix,
+  getOutputChannel,
+  isInStringOrComment,
+  loadConfig,
+  stripStrings,
+  validateDocs,
+  createRegexPatterns
+} = require('./helpers');
+
+// ============================================================
+// ACTIVATION
+// ============================================================
 
 /**
  * @param {vscode.ExtensionContext} context
  */
 function activate(context) {
-  console.log("OtterScript extension active");
+  log.info("OtterScript extension active");
 
-  // ------------------------------------------------------------
-  // Configuration (user‑controlled feature toggles)
-  // These flags are read from workspace settings and determine
-  // whether individual language features are active at runtime.
-  // ------------------------------------------------------------
-
-  // Default values (will be overridden by user settings if present)
-  let completionEnabled = true;     // Auto-completion suggestions
-  let hoverEnabled = true;          // Documentation on mouse hover
-  let signatureHelpEnabled = true;  // Parameter hints for functions
-
-  /**
-   * Loads OtterScript configuration from VS Code workspace settings.
-   *
-   * Settings are stored in .vscode/settings.json or user preferences.
-   * Schema defined in package.json under "contributes.configuration".
-   *
-   * @example
-   * // .vscode/settings.json
-   * {
-   *   "otterscript.completion.enable": false,
-   *   "otterscript.hover.enable": true
-   * }
-   */
-  function loadConfig() {
-    const config = vscode.workspace.getConfiguration("otterscript");
-
-    // Read each setting with fallback default of 'true'
-    completionEnabled = config.get("completion.enable", true);
-    hoverEnabled = config.get("hover.enable", true);
-    signatureHelpEnabled = config.get("signatureHelp.enable", true);
-  }
-  // Load settings immediately (extension just activated)
-  loadConfig();
+  // Load initial configuration
+  let { completionEnabled, hoverEnabled, signatureHelpEnabled } = loadConfig();
 
   // Watch for settings changes while extension is running
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
       // Only reload if OtterScript settings changed
       if (e.affectsConfiguration("otterscript")) {
-        loadConfig();
+        ({ completionEnabled, hoverEnabled, signatureHelpEnabled } = loadConfig());
       }
     })
   );
@@ -89,8 +79,8 @@ function activate(context) {
       throw new Error("docs.js did not export an object");
     }
   } catch (err) {
-    // Log to console for developers (visible in VS Code Developer Tools)
-    console.error("Failed to load docs.js", err);
+    // Log errors
+    log.error("Failed to load docs.js", err);
 
     // Show user-friendly error message
     vscode.window.showErrorMessage(
@@ -113,248 +103,6 @@ function activate(context) {
   } = docs;
 
   /**
-   * Creates a quick-fix that inserts a missing '$' at the diagnostic position.
-   * @param {vscode.TextDocument} document
-   * @param {vscode.Diagnostic} diagnostic
-   * @returns {vscode.CodeAction}
-   */
-  function createMissingDollarFix(document, diagnostic) {
-    const action = new vscode.CodeAction(
-      "Insert missing '$'",
-      vscode.CodeActionKind.QuickFix
-    );
-
-    action.diagnostics = [diagnostic];
-    action.isPreferred = true;
-
-    const edit = new vscode.WorkspaceEdit();
-    edit.insert(
-      document.uri,
-      diagnostic.range.start,
-      "$"
-    );
-
-    action.edit = edit;
-    return action;
-  }
-
-  /**
-   * Creates a quick-fix that replaces invalid boolean operators.
-   * @param {vscode.TextDocument} document
-   * @param {vscode.Diagnostic} diagnostic
-   * @returns {vscode.CodeAction | null}
-   */
-  function createInvalidOperatorFix(document, diagnostic) {
-    const text = document.getText(diagnostic.range);
-
-    let replacement = null;
-    if (text === "&") replacement = "&&";
-    if (text === "|") replacement = "||";
-
-    if (!replacement) return null;
-
-    const action = new vscode.CodeAction(
-      "Replace with valid boolean operator",
-      vscode.CodeActionKind.QuickFix
-    );
-
-    action.diagnostics = [diagnostic];
-    action.isPreferred = true;
-
-    const edit = new vscode.WorkspaceEdit();
-    edit.replace(
-      document.uri,
-      diagnostic.range,
-      replacement
-    );
-
-    action.edit = edit;
-    return action;
-  }
-
-  /**
-   * Builds a word-boundary RegExp that matches any of the given names.
-   *
-   * @param {Iterable<string>} names
-   * @returns {RegExp}
-   */
-  function buildWordRegex(names) {
-    return new RegExp(
-      `\\b(${[...names]
-        .map(name =>
-          name.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")
-        )
-        .join("|")})\\b`
-    );
-  }
-
-  // NON-VARIABLE IDENTIFIERS (Skip $ Validation)
-  /**
-   * Set of identifier names that are valid without a '$' prefix in conditions.
-   * These are language literals, not user-defined variables.
-   *
-   * @type {Set<string>}
-   */
-  const nonVariableIdentifiers = new Set([
-    "true",   // Boolean literal
-    "false",  // Boolean literal
-    "null"    // Null literal
-  ]);
-
-
-  /**
-   * Returns true if the given position is inside a quoted string
-   * or a line comment.
-   *
-   * This uses a fast, best-effort heuristic and does not attempt
-   * full parsing.
-   *
-   * @param {string} line - The full line of text
-   * @param {number} position - Character position within the line (0-indexed)
-   * @returns {boolean} true if position is inside string/comment, false otherwise
-   */
-  function isInStringOrComment(line, position) {
-    // Get text from line start up to cursor position
-    const prefix = line.slice(0, position);
-
-    // Check if the line starts with a comment marker (# or //)
-    if (/^\s*(#|\/\/)/.test(prefix)) {
-      return true;
-    }
-
-    // Inside quoted string (simple, fast heuristic)
-    const doubleQuotes = (prefix.match(/"/g) || []).length;
-    const singleQuotes = (prefix.match(/'/g) || []).length;
-
-    // Return true if either quote type has an odd count (unclosed string)
-    return doubleQuotes % 2 === 1 || singleQuotes % 2 === 1;
-  }
-
-  /**
-   * Replaces quoted string literals in a line with empty placeholders.
-   *
-   * @param {string} line - The line of code to process
-   * @returns {string} The line with string contents removed
-   */
-  function stripStrings(line) {
-    return line
-      // Double-quoted strings: "anything here" becomes ""
-      .replace(/"([^"\\]|\\.)*"/g, '""')
-      // Single-quoted strings: 'anything here' becomes ''
-      .replace(/'([^'\\]|\\.)*'/g, "''");
-  }
-
-  /**
-   * Performs best-effort validation of documentation tables.
-   *
-   * This function intentionally validates unknown input and
-   * reports warnings instead of throwing, even if critical
-   * fields (name/description) are missing.
-   *
-   * @param {string} label Human-readable category label (e.g. "keywordDocs")
-   * @param {Record<string, unknown>} docsTable Documentation table to validate
-   */
-  function validateDocs(label, docsTable) {
-    // Iterate through each documentation entry (e.g., "ToJson", "Split", etc.)
-    for (const [key, rawDoc] of Object.entries(docsTable)) {
-      /** @type {any} */
-      const doc = rawDoc;
-
-      // Verify the entry is a valid object (not null, not a primitive)
-      if (!doc || typeof doc !== "object") {
-        console.warn(`[docs] ${label}.${key} is not an object`);
-        continue;
-      }
-
-      // ---------- Required Field: 'name' ----------
-      if (!doc.name || typeof doc.name !== "string" || doc.name.trim() === "") {
-        console.warn(`[docs] ${label}.${key} is missing required 'name'`);
-      }
-
-      // ---------- Required Field: 'description' ----------
-      if (!doc.description || typeof doc.description !== "string") {
-        console.warn(`[docs] ${label}.${key} is missing required 'description'`);
-      }
-
-      // ---------- Optional Field: 'snippet' ----------
-      if (doc.snippet && typeof doc.snippet !== "string") {
-        console.warn(`[docs] ${label}.${key} 'snippet' must be a string`);
-      }
-
-      // ---------- Optional Field: 'signature' ----------
-      if (doc.signature && typeof doc.signature !== "string") {
-        console.warn(`[docs] ${label}.${key} 'signature' must be a string`);
-      }
-
-      // ---------- Optional Field: 'documentation' ----------
-      // Extended documentation shown in hover tooltips
-      // Supports Markdown formatting
-      if (doc.documentation && typeof doc.documentation !== "string") {
-        console.warn(`[docs] ${label}.${key} 'documentation' must be a string`);
-      }
-    }
-  }
-
-  /**
-   * Builds a standardised hover MarkdownString from a documentation entry.
-   * @param {Readonly<{ name: string, signature?: string, description?: string, documentation?: string }>} doc
-   * @returns {vscode.MarkdownString}
-   */
-  function buildHoverMarkdown(doc) {
-    const md = new vscode.MarkdownString();
-    md.appendMarkdown(`### ${doc.name}\n\n`);
-    if (doc.signature) {
-      md.appendMarkdown(`**Signature:** \`${doc.signature}\`\n\n`);
-    }
-    if (doc.description) {
-      md.appendMarkdown(`${doc.description}\n\n`);
-    }
-    if (typeof doc.documentation === "string") {
-      md.appendMarkdown(doc.documentation);
-    }
-    md.isTrusted = false;  // Default is false. true enables richer formatting, but we don't need that for now.
-    return md;
-  }
-
-  /**
-   * @typedef {Object} DocEntry
-   * @property {string} name Human-readable name shown in completion and hover
-   * @property {string} description Short summary shown in IntelliSense
-   * @property {string=} signature Usage syntax
-   * @property {string=} snippet VS Code snippet insertion text
-   * @property {string=} documentation Extended Markdown documentation
-   */
-  /**
-   * Builds a completion item with consistent formatting.
-   * @param {DocEntry} doc - Documentation object
-   * @param {vscode.CompletionItemKind} kind - Item kind (Function, Variable, etc.)
-   * @param {string} sortPrefix - Sort order prefix (e.g., "0_", "1_")
-   * @param {string | vscode.SnippetString} insertText - Text to insert
-   * @param {boolean} [triggerSignatureHelp=false] - Whether to trigger signature help after insertion
-   * @returns {vscode.CompletionItem}
-   */
-  function buildCompletionItem(doc, kind, sortPrefix, insertText, triggerSignatureHelp = false) {
-    const item = new vscode.CompletionItem(
-      { label: doc.name, description: doc.description },
-      kind
-    );
-    item.insertText = insertText;
-    item.detail = doc.signature ?? doc.description;
-    item.documentation = doc.documentation
-      ? new vscode.MarkdownString(doc.documentation)
-      : undefined;
-    item.sortText = `${sortPrefix}${doc.name}`;
-
-    if (triggerSignatureHelp) {
-      item.command = {
-        command: 'editor.action.triggerParameterHints',
-        title: ''
-      };
-    }
-    return item;
-  }
-
-  /**
    * Checks if the cursor is in a valid position for showing completions.
    * Completions are disabled when:
    * - The user has disabled them via settings
@@ -372,13 +120,13 @@ function activate(context) {
     return !isInStringOrComment(line, cursor);
   }
 
-  // RUN VALIDATION ON ALL DOCUMENTATION SOURCES
-  validateDocs("scalarFunctionDocs", scalarFunctionDocs); // $ToJson, $Base64Encode, etc.
-  validateDocs("operationDocs", operationDocs);           // Log-Information, Log-Warning, Log-Error, etc.
-  validateDocs("vectorFunctionDocs", vectorFunctionDocs); // @Split, @Join, etc.
-  validateDocs("variableDocs", variableDocs);             // $BuildId, $FeedName, etc.
-  validateDocs("syntaxDocs", syntaxDocs);                 // Template tags, swim strings, expression delimiters, etc.
-  validateDocs("keywordDocs", keywordDocs);               // if, foreach, with, set, etc.
+  // Validate all documentation sources - (intentionally ignore return value)
+  void validateDocs("scalarFunctionDocs", scalarFunctionDocs); // $ToJson, $Base64Encode, etc.
+  void validateDocs("operationDocs", operationDocs);           // Log-Information, Log-Warning, Log-Error, etc.
+  void validateDocs("vectorFunctionDocs", vectorFunctionDocs); // @Split, @Join, etc.
+  void validateDocs("variableDocs", variableDocs);             // $BuildId, $FeedName, etc.
+  void validateDocs("syntaxDocs", syntaxDocs);                 // Template tags, swim strings, expression delimiters, etc.
+  void validateDocs("keywordDocs", keywordDocs);               // if, foreach, with, set, etc.
 
   // KNOWLEDGE BASES (Fast Lookup Sets)
   const knownKeywords = new Set(Object.keys(keywordDocs));
@@ -387,15 +135,15 @@ function activate(context) {
   const knownOperations = new Set(Object.keys(operationDocs));
 
   // REGEX PATTERNS FOR SYMBOL DETECTION
-  const operationRegex = () => buildWordRegex(knownOperations);
-  const scalarCallRegex = () => /\$([A-Za-z][A-Za-z0-9_]*)\s*\(/g;
-  const vectorCallRegex = () => /@([A-Za-z][A-Za-z0-9_]*)\s*\(/g;
-  const operationCallRegex = () => /\b([A-Za-z][A-Za-z-]*)\b/g;
-
-  // REGEX PATTERNS FOR SIGNATURE HELP
-  const scalarSignatureRegex = () => /\$([A-Za-z][A-Za-z0-9_]*)\s*\(([^()]*)$/;
-  const vectorSignatureRegex = () => /@([A-Za-z][A-Za-z0-9_]*)\s*\(([^()]*)$/;
-  const operationSignatureRegex = () => /(?:^|\s)([A-Za-z][A-Za-z-]*)\s*\(([^()]*)$/;
+  const {
+    scalarCallRegex,
+    vectorCallRegex,
+    operationCallRegex,
+    scalarSignatureRegex,
+    vectorSignatureRegex,
+    operationSignatureRegex,
+    operationRegex,
+  } = createRegexPatterns(knownOperations);
 
   // ============================================================
   // SIGNATURE HELP PROVIDER
@@ -424,32 +172,15 @@ function activate(context) {
           let fn = null;
           let args = null;
 
-          // 1. Check scalar functions ($Func)
-          const scalarMatch = textBeforeCursor.match(scalarSignatureRegex());
-          if (scalarMatch) {
-            match = scalarMatch;
-            fn = scalarFunctionDocs[match[1]];
-            args = match[2];
-          }
+          const candidates = [
+            { regex: scalarSignatureRegex,    table: scalarFunctionDocs }, // ($Func)
+            { regex: vectorSignatureRegex,    table: vectorFunctionDocs }, // (@Func)
+            { regex: operationSignatureRegex, table: operationDocs },      // (Log-Information etc...)
+          ];
 
-          // 2. Check vector functions (@Func)
-          if (!fn) {
-            const vectorMatch = textBeforeCursor.match(vectorSignatureRegex());
-            if (vectorMatch) {
-              match = vectorMatch;
-              fn = vectorFunctionDocs[match[1]];
-              args = match[2];
-            }
-          }
-
-          // 3. Check operations (Post-Http, Log-Information, etc.)
-          if (!fn) {
-            const opMatch = textBeforeCursor.match(operationSignatureRegex());
-            if (opMatch) {
-              match = opMatch;
-              fn = operationDocs[match[1]];
-              args = match[2];
-            }
+          for (const { regex, table } of candidates) {
+            const m = textBeforeCursor.match(regex());
+            if (m && table[m[1]]) { match = m; fn = table[m[1]]; args = m[2]; break; }
           }
 
           // Validate we have everything needed
@@ -630,7 +361,7 @@ function activate(context) {
                   // Remove leading $ for insertion (user already typed it)
                   const snippet = doc.snippet
                     ? new vscode.SnippetString(doc.snippet?.replace(/^\$/, ""))
-                    : new vscode.SnippetString(doc.name?.replace(/^\$/, ""))
+                    : new vscode.SnippetString(doc.name?.replace(/^\$/, ""));
                   return buildCompletionItem(doc, vscode.CompletionItemKind.Variable, '2_', snippet, false);
           });
         }
@@ -688,8 +419,7 @@ function activate(context) {
   // ------------------------------------------------------------
   // MAP EXPRESSION COMPLETION PROVIDER (%)
   // ------------------------------------------------------------
-  // Map variables are user-defined and cannot be enumerated,
-  // so this provider intentionally returns no completion items.
+  // Map variables are user-defined and cannot be enumerated
 
   const mapCompletionProvider =
   vscode.languages.registerCompletionItemProvider(
@@ -701,27 +431,21 @@ function activate(context) {
 
         // Ensure syntaxDocs and mapExpr exist
         if (!syntaxDocs?.mapExpr) {
-          console.warn('[completion] syntaxDocs.mapExpr is missing, cannot provide % completion');
+          log.warn('[completion] syntaxDocs.mapExpr is missing, cannot provide % completion');
           return [];
         }
-        const item = new vscode.CompletionItem(
-          syntaxDocs.mapExpr.name,
-          vscode.CompletionItemKind.Text
-        );
 
-        item.detail = syntaxDocs.mapExpr.description;
-        item.documentation = new vscode.MarkdownString(syntaxDocs.mapExpr.documentation);
+        const snippet = syntaxDocs.mapExpr.snippet
+          ? new vscode.SnippetString(syntaxDocs.mapExpr.snippet)
+          : new vscode.SnippetString(`${syntaxDocs.mapExpr.name} "(\${0})"`);
+        const kind = vscode.CompletionItemKind.Snippet;
+        const sortPrefix = "~";
 
-        // Explain only; do not insert text
-        item.insertText = "";
-        item.sortText = "~";
-
-        return [item];
+        return [buildCompletionItem(syntaxDocs.mapExpr, kind, sortPrefix, snippet, false)];
       }
     },
     "%"
   );
-
 
   // ------------------------------------------------------------
   // OPERATION COMPLETION (Log-Information, etc.)
@@ -838,11 +562,11 @@ function activate(context) {
           const text = document.getText(templateRange);
           if (text === '<%') {
             return new vscode.Hover(
-                  buildHoverMarkdown(syntaxDocs.templateOpen), templateRange);
+              buildHoverMarkdown(syntaxDocs.templateOpen), templateRange);
           }
           if (text === '%>') {
             return new vscode.Hover(
-                  buildHoverMarkdown(syntaxDocs.templateClose), templateRange);
+              buildHoverMarkdown(syntaxDocs.templateClose), templateRange);
           }
         }
 
@@ -966,10 +690,11 @@ function activate(context) {
   // Provides lightbulb (💡) quick-fix actions for selected
   // diagnostics emitted by this extension.
 
-  const CodeActionsProvider = vscode.languages.registerCodeActionsProvider(
+  const codeActionsProvider = vscode.languages.registerCodeActionsProvider(
       "otterscript",
       {
         provideCodeActions(document, _range, codeActionContext) {
+          /** @type {vscode.CodeAction[]} */
           const actions = [];
 
           for (const diagnostic of codeActionContext.diagnostics) {
@@ -998,7 +723,7 @@ function activate(context) {
   // Enables Go-to-Definition (F12 / Ctrl+Click) for calls like:
   // call MyHelper(...) by navigating to the corresponding module MyHelper
 
-  const DefinitionProvider = vscode.languages.registerDefinitionProvider(
+  const definitionProvider = vscode.languages.registerDefinitionProvider(
     "otterscript", {
       provideDefinition(document, position) {
 
@@ -1008,15 +733,27 @@ function activate(context) {
         const calledName = document.getText(wordRange);
         if (!calledName) return null;
 
+        // Verify this is actually a 'call' statement
+        const lineText = document.lineAt(position.line).text;
+        const textBeforeWord = lineText.slice(0, wordRange.start.character);
+
+        // Check if 'call' appears immediately before the word (with whitespace)
+        if (!/\bcall\s+$/i.test(textBeforeWord)) {
+          return null;  // Not a 'call' statement - ignore
+        }
+
         // Match: module <Name>
-        const moduleRegex = new RegExp(`^\\s*module\\s+${calledName}\\b`, "i");
+        const escaped = calledName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const moduleRegex = new RegExp(`^\\s*module\\s+(${escaped})\\b`);
 
         for (let line = 0; line < document.lineCount; line++) {
           const text = document.lineAt(line).text;
 
-          if (moduleRegex.test(text)) {
-            const start = text.indexOf(calledName);
-            if (start === -1) continue;
+          const match = moduleRegex.exec(text);
+          if (match) {
+            // Calculate start position from regex match
+            const nameStartInMatch = match[0].indexOf(match[1]);
+            const start = match.index + nameStartInMatch;
 
             const range = new vscode.Range(
               new vscode.Position(line, start),
@@ -1031,8 +768,6 @@ function activate(context) {
       }
     }
   );
-
-
 
   // ============================================================
   // DIAGNOSTICS (ERRORS & WARNINGS)
@@ -1061,9 +796,14 @@ function activate(context) {
     const text = document.getText();
 
     // Parser state variables (track position and context)
-    let braces = 0;           // Current brace depth (0 = balanced)
-    let lastPos = 0;          // Position of last unmatched brace (for error reporting)
+    let braces = 0;           // { } balance
+    let parens = 0;           // ( ) balance
+    let brackets = 0;         // [ ] balance
+    let lastBracePos = 0;     // Position of last unmatched parens
+    let lastParenPos = 0;     // Position of last unmatched bracket
+    let lastBracketPos = 0;   // Position of last unmatched brace
     let inString = false;     // Currently inside a quoted string?
+    let inBlockComment = false; // Currently inside a block comment?
     let swimDelimiter = null; // Active swim-string delimiter (e.g., ">==8>")
     let stringChar = '';      // Current quote character (' or ")
     const issues = [];        // Collection of diagnostics to report
@@ -1071,50 +811,43 @@ function activate(context) {
     // Split into lines for line-by-line processing
     const lines = text.split('\n');
 
-    // ------------------------------------------------------------
-    // PASS 1: MISSING '$' IN IF CONDITIONS
-    // ------------------------------------------------------------
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      // Match: if variableName followed by comparison operator (=, ==, !=, <, >, <=, >=)
-      const missingDollarMatch = line.match(/^\s*if\s+([a-zA-Z][a-zA-Z0-9_]*)\s*(=|==|!=|<=|>=|<|>)/);
-      if (missingDollarMatch) {
-        const varName = missingDollarMatch[1];
-        const startIndex = line.indexOf(varName);
-
-        // Skip known literals that don't need '$'
-        if (nonVariableIdentifiers.has(varName)) {
-          continue;
-        }
-
-        // Report error with squiggly underline under the variable name
-        const diagnostic = new vscode.Diagnostic(
-          new vscode.Range(
-            new vscode.Position(i, startIndex),                 // Start of variable
-            new vscode.Position(i, startIndex + varName.length) // End of variable
-          ),
-          `Missing '$' before variable: ${varName}. Use $${varName}`,
-          vscode.DiagnosticSeverity.Error   // Red squiggly (must fix)
-        );
-
-        // Stable diagnostic identifier
-        diagnostic.code = "missing-dollar";
-
-        issues.push(diagnostic);
-      }
-    }
-
-    // ------------------------------------------------------------
-    // PASS 2: FULL LINE-BY-LINE PARSING
-    // ------------------------------------------------------------
-
+    // SINGLE PASS: Process all lines
     for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
       const rawLine = lines[lineIndex];
 
-      // CHARACTER-BY-CHARACTER STATE TRACKING
-      // Maintains parser state across characters and lines
+      // ============================================================
+      // PASS 1: MISSING '$' IN IF CONDITIONS (Line-based)
+      // ============================================================
+      if (!inBlockComment) {
+        const diagnostic = checkMissingDollar(rawLine, lineIndex, NON_VARIABLE_IDENTIFIERS);
+        if (diagnostic) {
+          issues.push(diagnostic);
+        }
+      }
+
+      // ============================================================
+      // PASS 2: CHARACTER-BY-CHARACTER PARSING
+      // ============================================================
       for (let col = 0; col < rawLine.length; col++) {
         const ch = rawLine[col];
+
+        // --- BLOCK COMMENT HANDLING (Highest priority) ---
+        if (inBlockComment) {
+          // Check for closing */
+          if (ch === '*' && rawLine[col + 1] === '/') {
+            inBlockComment = false;
+            col++;  // Skip the '/'
+          }
+          continue;  // Skip everything else while in block comment
+        }
+
+        // Check for opening /*
+        if (!inString && swimDelimiter === null &&
+            ch === '/' && rawLine[col + 1] === '*') {
+          inBlockComment = true;
+          col++;  // Skip the '*'
+          continue;
+        }
 
         // --- Handle regular strings (single/double quoted) ---
         if (swimDelimiter === null && (ch === '"' || ch === "'")) {
@@ -1129,7 +862,6 @@ function activate(context) {
               backslashCount++;
               pos--;
             }
-            // If odd number of backslashes, quote is escaped (don't exit string)
             if (backslashCount % 2 === 0) {
               inString = false;
             }
@@ -1138,13 +870,11 @@ function activate(context) {
         }
 
         // --- Handle swim-strings (fish sentinels) ---
-        // Enter swim-string when finding '>' followed by 0-5 non-'>' chars and another '>'
-        // Example: ">>", ">==8>", ">--=>"
         if (!inString && swimDelimiter === null && ch === '>') {
           const m = rawLine.slice(col).match(/^>[^>]{0,5}>/);
           if (m) {
             swimDelimiter = m[0];
-            col += swimDelimiter.length - 1;  // Skip ahead past delimiter
+            col += swimDelimiter.length - 1;
             continue;
           }
         }
@@ -1159,177 +889,183 @@ function activate(context) {
         }
 
         // --- Skip line comments (# or //) ---
-        // Once a comment starts, ignore the rest of the line
         if (!inString && swimDelimiter === null &&
             (ch === '#' || (ch === '/' && rawLine[col + 1] === '/'))) {
-          break;
-        }
-
-        // --- Skip block comments (/* ... */) ---
-        if (!inString && swimDelimiter === null &&
-            ch === '/' && rawLine[col + 1] === '*') {
-
-          while (lineIndex < lines.length) {
-            const currentLine = lines[lineIndex];
-            const endIndex = currentLine.indexOf('*/');
-
-            if (endIndex !== -1) {
-              // Found the end of the block comment
-              break;
-            }
-
-            // Move to next line
-            lineIndex++;
-          }
-
-          // Stop processing this line.
-          // The outer line loop will re-read rawLine for the updated lineIndex.
-          break;
+          break;  // Skip rest of line
         }
 
         // --- Count braces for balance checking ---
-        // Tracks { and } to detect unmatched braces
         if (!inString && swimDelimiter === null) {
+
+          // Braces { }
           if (ch === '{') {
             braces++;
-            lastPos = document.offsetAt(
-              new vscode.Position(lineIndex, col)
-            );
-          }
-          if (ch === '}') {
+            lastBracePos = document.offsetAt(new vscode.Position(lineIndex, col));
+          } else if (ch === '}') {
             braces--;
-            if (braces < 0) {
-              lastPos = document.offsetAt(new vscode.Position(lineIndex, col));
-            }
+            if (braces < 0) lastBracePos = document.offsetAt(new vscode.Position(lineIndex, col));
+          }
+
+          // Parentheses ( )
+          else if (ch === '(') {
+            parens++;
+            lastParenPos = document.offsetAt(new vscode.Position(lineIndex, col));
+          } else if (ch === ')') {
+            parens--;
+            if (parens < 0) lastParenPos = document.offsetAt(new vscode.Position(lineIndex, col));
+          }
+
+          // Brackets [ ]
+          else if (ch === '[') {
+            brackets++;
+            lastBracketPos = document.offsetAt(new vscode.Position(lineIndex, col));
+          } else if (ch === ']') {
+            brackets--;
+            if (brackets < 0) lastBracketPos = document.offsetAt(new vscode.Position(lineIndex, col));
           }
         }
       }
 
-      // SKIP COMMENT-ONLY LINES
-      if (/^\s*#/.test(rawLine) || /^\s*\/\//.test(rawLine)) {
-        continue;
-      }
+      // ============================================================
+      // SYMBOL DETECTION
+      // ============================================================
+      if (!inBlockComment) {
+        // Skip comment-only lines
+        if (!/^\s*#/.test(rawLine) && !/^\s*\/\//.test(rawLine)) {
+          // STRIP STRINGS FOR SYMBOL DETECTION
+          const line = stripStrings(rawLine);
 
-      // STRIP STRINGS FOR SYMBOL DETECTION
-      // Remove string contents to avoid false positives inside strings
-      // Example: In $var = "Unknown $Function" - don't flag $Function
-      const line = stripStrings(rawLine);
-
-      // --- Detect unknown scalar functions $Func(...) ---
-      for (const match of line.matchAll(scalarCallRegex())) {
-        const name = match[1];
-        if (!knownScalarFunctions.has(name)) {
-          const start = match.index + 1; // skip $
-          issues.push(
-            new vscode.Diagnostic(
-              new vscode.Range(
-                new vscode.Position(lineIndex, start),
-                new vscode.Position(lineIndex, start + name.length)
-              ),
-              `Unknown scalar function '$${name}'`,
-              vscode.DiagnosticSeverity.Warning
-            )
-          );
-        }
-      }
-
-      // --- Detect unknown vector functions @Func(...) ---
-      for (const match of line.matchAll(vectorCallRegex())) {
-        const name = match[1];
-        if (!knownVectorFunctions.has(name)) {
-          const start = match.index + 1; // skip @
-          issues.push(
-            new vscode.Diagnostic(
-              new vscode.Range(
-                new vscode.Position(lineIndex, start),
-                new vscode.Position(lineIndex, start + name.length)
-              ),
-              `Unknown vector function '@${name}'`,
-              vscode.DiagnosticSeverity.Warning
-            )
-          );
-        }
-      }
-
-      // --- Detect unknown operations (Log-Information, etc.) ---
-      // Only flags hyphenated names that aren't known operations/keywords
-      for (const match of line.matchAll(operationCallRegex())) {
-        const name = match[1];
-
-        // Filter: hyphenated names only, not $/@ prefixed, not known
-        if (
-          name.includes("-") &&
-          !name.startsWith("$") &&
-          !name.startsWith("@") &&
-          !knownKeywords.has(name) &&
-          !knownOperations.has(name) &&
-          !knownScalarFunctions.has(name) &&
-          !knownVectorFunctions.has(name)
-        ) {
-          const start = match.index;
-          issues.push(
-            new vscode.Diagnostic(
-              new vscode.Range(
-                new vscode.Position(lineIndex, start),
-                new vscode.Position(lineIndex, start + name.length)
-              ),
-              `Unknown operation '${name}'`,
-              vscode.DiagnosticSeverity.Warning
-            )
-          );
-        }
-      }
-      // --- Detect invalid logical operators ---
-      // Catches '&' or '|' when '&&' or '||' was intended
-      // Only checks inside if statements to reduce false positives
-      if (/^\s*if\b/.test(line)) {
-        for (let j = 0; j < line.length; j++) {
-          const ch = line[j];
-
-          if (ch === "&" || ch === "|") {
-            const prev = line[j - 1];
-            const next = line[j + 1];
-
-            // Valid operators are '&&' and '||' (double characters)
-            // Single '&' or '|' is likely a typo
-            if (prev === ch || next === ch) {
-              continue;
+          // --- Detect unknown scalar functions ---
+          for (const match of line.matchAll(scalarCallRegex())) {
+            const name = match[1];
+            if (!knownScalarFunctions.has(name)) {
+              const start = match.index + 1;
+              issues.push(
+                new vscode.Diagnostic(
+                  new vscode.Range(
+                    new vscode.Position(lineIndex, start),
+                    new vscode.Position(lineIndex, start + name.length)
+                  ),
+                  `Unknown scalar function '$${name}'`,
+                  vscode.DiagnosticSeverity.Warning
+                )
+              );
             }
+          }
 
-            const diagnostic = new vscode.Diagnostic(
-              new vscode.Range(
-                new vscode.Position(lineIndex, j),
-                new vscode.Position(lineIndex, j + 1)
-              ),
-              `Invalid logical operator '${ch}'. Use '${ch}${ch}'.`,
-              vscode.DiagnosticSeverity.Warning
-            );
-            // Stable diagnostic identifier
-            diagnostic.code = "invalid-operator";
+          // --- Detect unknown vector functions ---
+          for (const match of line.matchAll(vectorCallRegex())) {
+            const name = match[1];
+            if (!knownVectorFunctions.has(name)) {
+              const start = match.index + 1;
+              issues.push(
+                new vscode.Diagnostic(
+                  new vscode.Range(
+                    new vscode.Position(lineIndex, start),
+                    new vscode.Position(lineIndex, start + name.length)
+                  ),
+                  `Unknown vector function '@${name}'`,
+                  vscode.DiagnosticSeverity.Warning
+                )
+              );
+            }
+          }
 
-            issues.push(diagnostic);
+          // --- Detect unknown operations ---
+          for (const match of line.matchAll(operationCallRegex())) {
+            const name = match[1];
+            if (
+              name.includes("-") &&
+              !name.startsWith("$") &&
+              !name.startsWith("@") &&
+              !knownKeywords.has(name) &&
+              !knownOperations.has(name) &&
+              !knownScalarFunctions.has(name) &&
+              !knownVectorFunctions.has(name)
+            ) {
+              const start = match.index;
+              issues.push(
+                new vscode.Diagnostic(
+                  new vscode.Range(
+                    new vscode.Position(lineIndex, start),
+                    new vscode.Position(lineIndex, start + name.length)
+                  ),
+                  `Unknown operation '${name}'`,
+                  vscode.DiagnosticSeverity.Warning
+                )
+              );
+            }
+          }
+
+          // --- Detect invalid logical operators ---
+          if (/^\s*if\b/.test(line)) {
+            for (let j = 0; j < line.length; j++) {
+              const ch = line[j];
+              if (ch === "&" || ch === "|") {
+                const prev = line[j - 1];
+                const next = line[j + 1];
+                if (prev !== ch && next !== ch) {
+                  const diagnostic = new vscode.Diagnostic(
+                    new vscode.Range(
+                      new vscode.Position(lineIndex, j),
+                      new vscode.Position(lineIndex, j + 1)
+                    ),
+                    `Invalid logical operator '${ch}'. Use '${ch}${ch}'.`,
+                    vscode.DiagnosticSeverity.Warning
+                  );
+                  diagnostic.code = "invalid-operator";
+                  issues.push(diagnostic);
+                }
+              }
+            }
           }
         }
       }
     }
 
-    // ============================================================
-    // FINAL CHECK: UNBALANCED BRACES
-    // ============================================================
-    // After scanning the entire file, report if braces don't match
+    // FINAL CHECK: UNBALANCED BRACES AND PARENTHESES
+
     if (braces !== 0) {
-      issues.push(
-        new vscode.Diagnostic(
-          new vscode.Range(
-            document.positionAt(lastPos),
-            document.positionAt(lastPos + 1)
-          ),
-          braces > 0 ? "Unclosed brace(s)" : "Unexpected closing brace",
-          vscode.DiagnosticSeverity.Error   // Red squiggly - must fix
-        )
-      );
+      const pos = document.positionAt(lastBracePos);
+      const lineNum = pos.line + 1;
+      const colNum = pos.character + 1;
+      const message = braces > 0
+        ? `Unclosed brace(s): ${braces} '{' not closed (first at line ${lineNum}, col ${colNum})`
+        : `Unexpected closing brace(s): ${Math.abs(braces)} extra '}' (first at line ${lineNum}, col ${colNum})`;
+      issues.push(new vscode.Diagnostic(
+        new vscode.Range(pos, document.positionAt(lastBracePos + 1)),
+        message,
+        vscode.DiagnosticSeverity.Error
+      ));
     }
-    // Update VS Code's diagnostic panel with all found issues
+
+    if (parens !== 0) {
+      const pos = document.positionAt(lastParenPos);
+      const lineNum = pos.line + 1;
+      const colNum = pos.character + 1;
+      const message = parens > 0
+        ? `Unclosed parenthesis: ${parens} '(' not closed (first at line ${lineNum}, col ${colNum})`
+        : `Unexpected closing parenthesis: ${Math.abs(parens)} extra ')' (first at line ${lineNum}, col ${colNum})`;
+      issues.push(new vscode.Diagnostic(
+        new vscode.Range(pos, document.positionAt(lastParenPos + 1)),
+        message,
+        vscode.DiagnosticSeverity.Error
+      ));
+    }
+
+    if (brackets !== 0) {
+      const pos = document.positionAt(lastBracketPos);
+      const lineNum = pos.line + 1;
+      const colNum = pos.character + 1;
+      const message = brackets > 0
+        ? `Unclosed bracket(s): ${brackets} '[' not closed (first at line ${lineNum}, col ${colNum})`
+        : `Unexpected closing bracket(s): ${Math.abs(brackets)} extra ']' (first at line ${lineNum}, col ${colNum})`;
+      issues.push(new vscode.Diagnostic(
+        new vscode.Range(pos, document.positionAt(lastBracketPos + 1)),
+        message,
+        vscode.DiagnosticSeverity.Error
+      ));
+    }
     diagnostics.set(document.uri, issues);
   }
 
@@ -1345,6 +1081,10 @@ function activate(context) {
   // Register all extension subscriptions in a single batch
   // VS Code automatically disposes these when the extension deactivates
   context.subscriptions.push(
+
+    // Output channel used for logging
+    getOutputChannel(),
+
     // ---------- Diagnostics Subscriptions ----------
     // Re-run diagnostics whenever text changes (every keystroke)
     vscode.workspace.onDidChangeTextDocument(e => updateDiagnostics(e.document)),
@@ -1364,8 +1104,8 @@ function activate(context) {
     mapCompletionProvider,
     operationCompletionProvider,
     hoverProvider,
-    CodeActionsProvider,
-    DefinitionProvider
+    codeActionsProvider,
+    definitionProvider
   );
 }
 

@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.0] - 2026-04-21
 
 ### Added
 
@@ -13,12 +13,18 @@
   - When the cursor is on a module name in call ModuleName(...), navigation (F12 / Ctrl+Click) jumps to the corresponding module ModuleName definition within the same document.
   - This feature performs a best‑effort textual search and does not resolve cross‑file or imported modules.
 - Completion trigger and hover documentation for map expressions using the `%` sigil.
+- Syntax highlighting for built-in operations
+- Centralized logger with consistent prefix
 
 ### Fixed
 
 - Correctly skip multi‑line block comments when counting braces, preventing:
   - Braces inside comments from being counted as code.
   - Code following a closing */ from being skipped during validation.
+
+### Changed
+
+- Reorganized code: extracted helper functions, logger, constants, and regex patterns to dedicated `helpers.js` module for improved maintainability
 
 ## [0.1.1] - 2026-04-16
 

@@ -149,11 +149,6 @@
     "body": ["throw \"${1:error message}\";"],
     "description": "Throw an error (can be caught by try-catch)"
   },
-  "Sleep": {
-    "prefix": "sleep",
-    "body": ["Sleep ${1:10};"],
-    "description": "Pause execution for specified seconds"
-  },
   "For Each Affected Package": {
     "prefix": "foreachaffected",
     "body": ["foreach $${1:package} in @AffectedPackages {", "    $2", "}"],
