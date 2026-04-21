@@ -22,7 +22,27 @@
  * @see {@link https://github.com/sighanse/otterscript-vscode} - Github repository
  */
 
+// VS Code Extension API
 const vscode = require("vscode");
+
+// ============================================================
+// CONSTANTS
+// ============================================================
+
+/**
+ * Set of identifier names that are valid without a '$' prefix in conditions.
+ * These are language literals, not user-defined variables.
+ *
+ * Used by diagnostics to avoid false "missing $" errors on literals.
+ *
+ * @type {Set<string>}
+ */
+const nonVariableIdentifiers = new Set([
+  "true",   // Boolean literal
+  "false",  // Boolean literal
+  "null"    // Null literal
+]);
+
 
 // ============================================================
 // HELPER FUNCTIONS
@@ -432,19 +452,6 @@ function activate(context) {
     scalarFunctionDocs,
     vectorFunctionDocs
   } = docs;
-
-  // NON-VARIABLE IDENTIFIERS (Skip $ Validation)
-  /**
-   * Set of identifier names that are valid without a '$' prefix in conditions.
-   * These are language literals, not user-defined variables.
-   *
-   * @type {Set<string>}
-   */
-  const nonVariableIdentifiers = new Set([
-    "true",   // Boolean literal
-    "false",  // Boolean literal
-    "null"    // Null literal
-  ]);
 
   /**
    * Checks if the cursor is in a valid position for showing completions.
