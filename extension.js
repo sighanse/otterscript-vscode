@@ -1517,8 +1517,10 @@ function activate(context) {
   // Register all extension subscriptions in a single batch
   // VS Code automatically disposes these when the extension deactivates
   context.subscriptions.push(
-    // Ooutput channel for logger
-    getOutputChannel(),
+
+    // Output channel disposal (created lazily during validation)
+    { dispose: () => outputChannel?.dispose() },
+
     // ---------- Diagnostics Subscriptions ----------
     // Re-run diagnostics whenever text changes (every keystroke)
     vscode.workspace.onDidChangeTextDocument(e => updateDiagnostics(e.document)),
