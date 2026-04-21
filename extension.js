@@ -981,11 +981,11 @@ function activate(context) {
           const text = document.getText(templateRange);
           if (text === '<%') {
             return new vscode.Hover(
-                  buildHoverMarkdown(syntaxDocs.templateOpen), templateRange);
+              buildHoverMarkdown(syntaxDocs.templateOpen), templateRange);
           }
           if (text === '%>') {
             return new vscode.Hover(
-                  buildHoverMarkdown(syntaxDocs.templateClose), templateRange);
+              buildHoverMarkdown(syntaxDocs.templateClose), templateRange);
           }
         }
 
