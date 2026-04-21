@@ -1495,11 +1495,11 @@ function activate(context) {
       const pos = document.positionAt(lastBracketPos);
       const lineNum = pos.line + 1;
       const colNum = pos.character + 1;
-      const message = parens > 0
-        ? `Unclosed parenthesis: ${parens} '(' not closed (first at line ${lineNum}, col ${colNum})`
-        : `Unexpected closing parenthesis: ${Math.abs(brackets)} extra ')' (first at line ${lineNum}, col ${colNum})`;
+      const message = brackets > 0
+        ? `Unclosed bracket(s): ${brackets} '[' not closed (first at line ${lineNum}, col ${colNum})`
+        : `Unexpected closing bracket(s): ${Math.abs(brackets)} extra ']' (first at line ${lineNum}, col ${colNum})`;
       issues.push(new vscode.Diagnostic(
-        new vscode.Range(pos, document.positionAt(lastParenPos + 1)),
+        new vscode.Range(pos, document.positionAt(lastBracketPos + 1)),
         message,
         vscode.DiagnosticSeverity.Error
       ));
