@@ -104,49 +104,49 @@ jobs:
       - name: Summary
         if: always()
         run: |
-          echo "## Sanity Check Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Sanity Check Results" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
 
           # Syntax
           if [ "${{ steps.syntax.outcome }}" == "success" ]; then
-            echo "✅ Syntax validation: passed" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Syntax validation: passed" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "❌ Syntax validation: failed" >> $GITHUB_STEP_SUMMARY
+            echo "❌ Syntax validation: failed" >> "$GITHUB_STEP_SUMMARY"
           fi
 
           # Exports
           if [ "${{ steps.exports.outcome }}" == "success" ]; then
-            echo "✅ Module exports: passed" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Module exports: passed" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "❌ Module exports: failed" >> $GITHUB_STEP_SUMMARY
+            echo "❌ Module exports: failed" >> "$GITHUB_STEP_SUMMARY"
           fi
 
           # ESLint
           if [ "${{ steps.eslint.outcome }}" == "success" ]; then
-            echo "✅ ESLint: passed" >> $GITHUB_STEP_SUMMARY
+            echo "✅ ESLint: passed" >> "$GITHUB_STEP_SUMMARY"
           elif [ "${{ steps.eslint.outcome }}" == "failure" ]; then
-            echo "⚠️ ESLint: issues found" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ ESLint: issues found" >> "$GITHUB_STEP_SUMMARY"
           fi
 
           # JSON
           if [ "${{ steps.json.outcome }}" == "success" ]; then
-            echo "✅ JSON validation: passed" >> $GITHUB_STEP_SUMMARY
+            echo "✅ JSON validation: passed" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "❌ JSON validation: failed" >> $GITHUB_STEP_SUMMARY
+            echo "❌ JSON validation: failed" >> "$GITHUB_STEP_SUMMARY"
           fi
 
           # JSONC
           if [ "${{ steps.jsonc.outcome }}" == "success" ]; then
-            echo "✅ JSONC validation: passed" >> $GITHUB_STEP_SUMMARY
+            echo "✅ JSONC validation: passed" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "❌ JSONC validation: failed" >> $GITHUB_STEP_SUMMARY
+            echo "❌ JSONC validation: failed" >> "$GITHUB_STEP_SUMMARY"
           fi
 
           # npm audit
           if [ "${{ steps.audit.outcome }}" == "success" ]; then
-            echo "✅ npm audit: passed (no vulnerabilities)" >> $GITHUB_STEP_SUMMARY
+            echo "✅ npm audit: passed (no vulnerabilities)" >> "$GITHUB_STEP_SUMMARY"
           elif [ "${{ steps.audit.outcome }}" == "failure" ]; then
-            echo "⚠️ npm audit: vulnerability(ies) found" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ npm audit: vulnerability(ies) found" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "⏭️ npm audit: cancelled/skipped" >> $GITHUB_STEP_SUMMARY
+            echo "⏭️ npm audit: cancelled/skipped" >> "$GITHUB_STEP_SUMMARY"
           fi
