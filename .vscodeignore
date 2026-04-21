@@ -15,3 +15,8 @@ eslint.config.cjs
 SECURITY.md
 package-lock.json
 .markdownlint.jsonc
+# Exclude source maps etc.
+!src/
+!src/**/*.js
+!syntaxes/
+!snippets/

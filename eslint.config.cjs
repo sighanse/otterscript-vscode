@@ -49,7 +49,7 @@ module.exports = [
     }
   },
   {
-    files: ["docs.js"],
+    files: ["src/language-data.js"],
     rules: {
       "no-useless-escape": "off",
     }

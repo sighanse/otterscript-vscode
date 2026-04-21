@@ -10,7 +10,8 @@
 - [ ] Hover / docs
 - [ ] Snippets
 - [ ] Diagnostics
-- [ ] Documentation updated
+- [ ] Language Data (src/language-data.js)
+- [ ] Documentation
 - [ ] Other
 
 ## Related Issue

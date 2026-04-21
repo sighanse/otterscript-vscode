@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Move source code to src/
+- Rename docs.js to language-data.js
+
 ## [0.2.0] - 2026-04-21
 
 ### Added

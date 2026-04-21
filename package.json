@@ -41,7 +41,7 @@
     "devops",
     "configuration-management"
   ],
-  "main": "./extension.js",
+  "main": "./src/extension.js",
   "activationEvents": [
     "onLanguage:otterscript"
   ],

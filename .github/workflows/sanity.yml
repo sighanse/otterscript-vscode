@@ -48,9 +48,9 @@ jobs:
         continue-on-error: true
         run: |
           echo "Syntax checking..."
-          node -c extension.js
-          node -c helpers.js
-          node -c docs.js
+          node -c src/extension.js
+          node -c src/helpers.js
+          node -c src/language-data.js
           echo "✅ JavaScript Syntax validation passed"
 
       - name: Validate module exports
@@ -58,7 +58,7 @@ jobs:
         continue-on-error: true
         run: |
           echo "Validating exports..."
-          node -e "require('./docs.js')"
+          node -e "require('./src/language-data.js')"
           echo "✅ Module Export validation passed"
 
       - name: ESLint

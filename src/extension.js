@@ -4,20 +4,20 @@
  *
  * RESPONSIBILITIES
  * 1. Register language features (completion, hover, signature help)
- * 2. Bridge plain docs (docs.js) into VS Code UI objects
+ * 2. Bridge plain languageData (language-data.js) into VS Code UI objects
  * 3. Provide lightweight diagnostics (syntax sanity checks)
  *
  * DESIGN PRINCIPLES
- * - docs.js contains ONLY plain data (no vscode imports)
+ * - language-data.js contains ONLY plain data (no vscode imports)
  * - extension.js is the only place that creates VS Code objects
  * - Snippets own insertion text; providers never guess prefixes
  *
  * DOCUMENTATION
  * @author Sigurd Hansen <sigurd.hansen@gmail.com>
  * @license MIT
- * @see docs.js - Plain data documentation module
- * @see helpers.js - Helpers, functions, constants
- * @see package.json - Extension manifest and configuration schema
+ * @see src/language-data.js - Plain data documentation module
+ * @see src/helpers.js - Helpers, functions, constants
+ * @see src/package.json - Extension manifest and configuration schema
  * @see syntaxes/otterscript.tmLanguage.json - TextMate grammar (syntax highlighting)
  * @see snippets/otterscript.json - Snippets for structural templates only
  * @see {@link https://github.com/sighanse/otterscript-vscode} - Github repository
@@ -66,21 +66,21 @@ function activate(context) {
   );
 
   // DOCUMENTATION DATA LOADING
-  // Loads language documentation from docs.js (plain data module).
+  // Loads language documentation from language-data.js (plain data module).
   // Objects contain plain strings only.
   // Any conversion to MarkdownString happens in this file.
-  let docs;
+  let languageData;
   // Attempt to load the documentation module with error handling
   try {
-    docs = require("./docs.js");
+    languageData = require("./language-data.js");
 
-    // Quick validation to ensure docs loaded correctly
-    if (!docs || typeof docs !== "object") {
-      throw new Error("docs.js did not export an object");
+    // Quick validation to ensure languageData loaded correctly
+    if (!languageData || typeof languageData !== "object") {
+      throw new Error("language-data.js did not export an object");
     }
   } catch (err) {
     // Log errors
-    log.error("Failed to load docs.js", err);
+    log.error("Failed to load language-data.js", err);
 
     // Show user-friendly error message
     vscode.window.showErrorMessage(
@@ -89,7 +89,7 @@ function activate(context) {
     );
 
     // Abort activation cleanly - don't register any providers
-    // Without docs, completions/hover/signature help would show nothing
+    // Without languageData, completions/hover/signature help would show nothing
     return;
   }
   // Extract each documentation category into its own variable.
@@ -100,7 +100,7 @@ function activate(context) {
     variableDocs,
     scalarFunctionDocs,
     vectorFunctionDocs
-  } = docs;
+  } = languageData;
 
   /**
    * Checks if the cursor is in a valid position for showing completions.
@@ -393,7 +393,7 @@ function activate(context) {
 
           const typed = match[1];
 
-          // Filter vector docs by what user typed
+          // Filter vector languageData by what user typed
           return Object.entries(vectorFunctionDocs)
               .filter(([key]) => key.toLowerCase().startsWith(typed.toLowerCase()))
               .map(([_key, doc]) => {
