@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.0] - 2026-04-21
 
 ### Added
 
@@ -21,6 +21,10 @@
 - Correctly skip multi‑line block comments when counting braces, preventing:
   - Braces inside comments from being counted as code.
   - Code following a closing */ from being skipped during validation.
+
+### Changed
+
+- Reorganized code: extracted helper functions, logger, constants, and regex patterns to dedicated `helpers.js` module for improved maintainability
 
 ## [0.1.1] - 2026-04-16
 

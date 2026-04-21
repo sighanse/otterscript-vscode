@@ -39,11 +39,15 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
-      - name: Validate extension.js
-        run: node -c extension.js
+      - name: Validate JavaScript files
+        run: |
+          echo "Syntax checking all .js files..."
+          node -c extension.js
+          node -c helpers.js
+          node -c docs.js
 
-      - name: Validate docs.js
-        run: node -e "require('./docs.js')"
+          echo "Validating docs.js exports..."
+          node -e "require('./docs.js')"
 
       - name: ESLint
         id: eslint
