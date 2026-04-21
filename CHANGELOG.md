@@ -14,6 +14,7 @@
   - This feature performs a best‑effort textual search and does not resolve cross‑file or imported modules.
 - Completion trigger and hover documentation for map expressions using the `%` sigil.
 - Syntax highlighting for built-in operations
+- Centralized logger with consistent prefix
 
 ### Fixed
 

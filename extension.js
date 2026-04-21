@@ -26,6 +26,73 @@
 const vscode = require("vscode");
 
 // ============================================================
+// LOGGER
+// ============================================================
+
+const LOGPREFIX = '[OtterScript] ';
+/** @type {import('vscode').OutputChannel | null} */
+let outputChannel = null;
+
+/**
+ * Gets or creates the OtterScript output channel.
+ * The channel appears in VS Code under View → Output → OtterScript.
+ *
+ * @returns {import('vscode').OutputChannel}
+ */
+function getOutputChannel() {
+  if (!outputChannel) {
+    outputChannel = vscode.window.createOutputChannel('OtterScript');
+  }
+  return outputChannel;
+}
+
+/**
+ * Returns current time formatted as HH:MM:SS.
+ * @returns {string}
+ */
+function timestamp() {
+  return new Date().toLocaleTimeString([], { hour12: false });
+}
+
+/**
+ * Centralized logger for OtterScript Language extension.
+ *
+ * @example
+ * log.info('Extension activated');
+ * log.warn('Missing documentation field');
+ * log.error('Failed to load docs', err);
+ * log.debug('Processing line', lineIndex);
+ */
+const log = {
+  /** @param {...any} args - @example log.info('Extension activated') */
+  info: (...args) => {
+    const now = timestamp();
+    console.log(LOGPREFIX, `[${now}]`, ...args);
+    getOutputChannel().appendLine(`[${now}] ${args.join(' ')}`);
+  },
+
+  /** @param {...any} args - @example log.warn('Missing field') */
+  warn: (...args) => {
+    const now = timestamp();
+    console.warn(LOGPREFIX, `[${now}]`, ...args);
+    getOutputChannel().appendLine(`⚠️ [${now}] ${args.join(' ')}`);
+  },
+
+  /** @param {...any} args - @example log.error('Failed', err) */
+  error: (...args) => {
+    const now = timestamp();
+    console.error(LOGPREFIX, `[${now}]`, ...args);
+    getOutputChannel().appendLine(`❌ [${now}] ${args.join(' ')}`);
+  },
+
+  /** @param {...any} args - @example log.debug('Processing', lineIndex) */
+  debug: (...args) => {
+    const now = timestamp();
+    console.debug(LOGPREFIX, `[${now}]`, '[DEBUG]', ...args);
+  }
+};
+
+// ============================================================
 // CONSTANTS
 // ============================================================
 
@@ -42,7 +109,6 @@ const nonVariableIdentifiers = new Set([
   "false",  // Boolean literal
   "null"    // Null literal
 ]);
-
 
 // ============================================================
 // HELPER FUNCTIONS
@@ -68,7 +134,8 @@ function loadConfig() {
   return {
     completionEnabled: config.get("completion.enable", true),
     hoverEnabled: config.get("hover.enable", true),
-    signatureHelpEnabled: config.get("signatureHelp.enable", true)
+    signatureHelpEnabled: config.get("signatureHelp.enable", true),
+    debugEnabled: config.get("debug.enable", false)
   };
 }
 
@@ -118,12 +185,13 @@ function validateDocs(label, docsTable) {
     }
   }
 
-  // Log to console as before (optional, but helpful for debugging)
+  // Log errors
   if (errors.length) {
-    console.error(`[docs] ${label} errors:`, errors);
+    log.error(`[docs] ${label} errors:`, errors);
   }
+  // Log warnings
   if (warnings.length) {
-    console.warn(`[docs] ${label} warnings:`, warnings);
+    log.warn(`[docs] ${label} warnings:`, warnings);
   }
 
   return { errors, warnings };
@@ -401,7 +469,7 @@ function isInStringOrComment(line, position) {
  * @param {vscode.ExtensionContext} context
  */
 function activate(context) {
-  console.log("OtterScript extension active");
+  log.info("OtterScript extension active");
 
   // Load initial configuration
   let { completionEnabled, hoverEnabled, signatureHelpEnabled } = loadConfig();
@@ -430,8 +498,8 @@ function activate(context) {
       throw new Error("docs.js did not export an object");
     }
   } catch (err) {
-    // Log to console for developers (visible in VS Code Developer Tools)
-    console.error("Failed to load docs.js", err);
+    // Log errors
+    log.error("Failed to load docs.js", err);
 
     // Show user-friendly error message
     vscode.window.showErrorMessage(
@@ -782,7 +850,7 @@ function activate(context) {
 
         // Ensure syntaxDocs and mapExpr exist
         if (!syntaxDocs?.mapExpr) {
-          console.warn('[completion] syntaxDocs.mapExpr is missing, cannot provide % completion');
+          log.warn('[completion] syntaxDocs.mapExpr is missing, cannot provide % completion');
           return [];
         }
 
@@ -1430,6 +1498,8 @@ function activate(context) {
   // Register all extension subscriptions in a single batch
   // VS Code automatically disposes these when the extension deactivates
   context.subscriptions.push(
+    // Ooutput channel for logger
+    getOutputChannel(),
     // ---------- Diagnostics Subscriptions ----------
     // Re-run diagnostics whenever text changes (every keystroke)
     vscode.workspace.onDidChangeTextDocument(e => updateDiagnostics(e.document)),
