@@ -1090,7 +1090,8 @@ function activate(context) {
         }
 
         // Match: module <Name>
-        const moduleRegex = new RegExp(`^\\s*module\\s+(${calledName})\\b`, "i");
+        const escaped = calledName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const moduleRegex = new RegExp(`^\\s*module\\s+(${escaped})\\b`);
 
         for (let line = 0; line < document.lineCount; line++) {
           const text = document.lineAt(line).text;
