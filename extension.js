@@ -770,8 +770,7 @@ function activate(context) {
   // ------------------------------------------------------------
   // MAP EXPRESSION COMPLETION PROVIDER (%)
   // ------------------------------------------------------------
-  // Map variables are user-defined and cannot be enumerated,
-  // so this provider intentionally returns no completion items.
+  // Map variables are user-defined and cannot be enumerated
 
   const mapCompletionProvider =
   vscode.languages.registerCompletionItemProvider(
@@ -786,19 +785,14 @@ function activate(context) {
           console.warn('[completion] syntaxDocs.mapExpr is missing, cannot provide % completion');
           return [];
         }
-        const item = new vscode.CompletionItem(
-          syntaxDocs.mapExpr.name,
-          vscode.CompletionItemKind.Text
-        );
 
-        item.detail = syntaxDocs.mapExpr.description;
-        item.documentation = new vscode.MarkdownString(syntaxDocs.mapExpr.documentation);
+        const snippet = syntaxDocs.mapExpr.snippet
+          ? new vscode.SnippetString(syntaxDocs.mapExpr.snippet)
+          : new vscode.SnippetString(`${syntaxDocs.mapExpr.name} "(\${0})"`);
+        const kind = vscode.CompletionItemKind.Snippet;
+        const sortPrefix = "~";
 
-        // Explain only; do not insert text
-        item.insertText = "";
-        item.sortText = "~";
-
-        return [item];
+        return [buildCompletionItem(syntaxDocs.mapExpr, kind, sortPrefix, snippet, false)];
       }
     },
     "%"
