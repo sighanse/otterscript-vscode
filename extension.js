@@ -462,6 +462,39 @@ function isInStringOrComment(line, position) {
   return doubleQuotes % 2 === 1 || singleQuotes % 2 === 1;
 }
 
+/**
+ * Checks for missing '$' before variable names in if conditions.
+ *
+ * @param {string} line - The raw line of code
+ * @param {number} lineIndex - The line number (0-indexed)
+ * @param {Set<string>} nonVariableIdentifiers - Set of literals (true, false, null)
+ * @returns {vscode.Diagnostic | null} - Diagnostic if missing '$' found, null otherwise
+ */
+function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
+  const match = line.match(/^\s*if\s+([a-zA-Z][a-zA-Z0-9_]*)\s*(=|==|!=|<=|>=|<|>)/);
+  if (!match) return null;
+
+  const varName = match[1];
+
+  // Skip known literals that don't need '$'
+  if (nonVariableIdentifiers.has(varName)) {
+    return null;
+  }
+
+  const startIndex = line.indexOf(varName);
+  const diagnostic = new vscode.Diagnostic(
+    new vscode.Range(
+      new vscode.Position(lineIndex, startIndex),
+      new vscode.Position(lineIndex, startIndex + varName.length)
+    ),
+    `Missing '$' before variable: ${varName}. Use $${varName}`,
+    vscode.DiagnosticSeverity.Error
+  );
+  diagnostic.code = "missing-dollar";
+
+  return diagnostic;
+}
+
 // ============================================================
 // ACTIVATION
 // ============================================================
@@ -1237,28 +1270,10 @@ function activate(context) {
       // ============================================================
       // PASS 1: MISSING '$' IN IF CONDITIONS (Line-based)
       // ============================================================
-      // Only check if NOT in block comment (simple line check)
       if (!inBlockComment) {
-        const missingDollarMatch = rawLine.match(/^\s*if\s+([a-zA-Z][a-zA-Z0-9_]*)\s*(=|==|!=|<=|>=|<|>)/);
-        if (missingDollarMatch) {
-          const varName = missingDollarMatch[1];
-          const startIndex = rawLine.indexOf(varName);
-
-          // Skip known literals that don't need '$'
-          if (nonVariableIdentifiers.has(varName)) {
-            // continue; // Can't continue here - need to continue the loop differently
-          } else {
-            const diagnostic = new vscode.Diagnostic(
-              new vscode.Range(
-                new vscode.Position(lineIndex, startIndex),
-                new vscode.Position(lineIndex, startIndex + varName.length)
-              ),
-              `Missing '$' before variable: ${varName}. Use $${varName}`,
-              vscode.DiagnosticSeverity.Error
-            );
-            diagnostic.code = "missing-dollar";
-            issues.push(diagnostic);
-          }
+        const diagnostic = checkMissingDollar(rawLine, lineIndex, nonVariableIdentifiers);
+        if (diagnostic) {
+          issues.push(diagnostic);
         }
       }
 
