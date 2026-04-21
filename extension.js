@@ -1214,9 +1214,14 @@ function activate(context) {
     const text = document.getText();
 
     // Parser state variables (track position and context)
-    let braces = 0;           // Current brace depth (0 = balanced)
-    let lastPos = 0;          // Position of last unmatched brace (for error reporting)
+    let braces = 0;           // { } balance
+    let parens = 0;           // ( ) balance
+    let brackets = 0;         // [ ] balance
+    let lastBracePos = 0;     // Position of last unmatched parens
+    let lastParenPos = 0;     // Position of last unmatched bracket
+    let lastBracketPos = 0;   // Position of last unmatched brace
     let inString = false;     // Currently inside a quoted string?
+    let inBlockComment = false; // Currently inside a block comment?
     let swimDelimiter = null; // Active swim-string delimiter (e.g., ">==8>")
     let stringChar = '';      // Current quote character (' or ")
     const issues = [];        // Collection of diagnostics to report
@@ -1224,50 +1229,61 @@ function activate(context) {
     // Split into lines for line-by-line processing
     const lines = text.split('\n');
 
-    // ------------------------------------------------------------
-    // PASS 1: MISSING '$' IN IF CONDITIONS
-    // ------------------------------------------------------------
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      // Match: if variableName followed by comparison operator (=, ==, !=, <, >, <=, >=)
-      const missingDollarMatch = line.match(/^\s*if\s+([a-zA-Z][a-zA-Z0-9_]*)\s*(=|==|!=|<=|>=|<|>)/);
-      if (missingDollarMatch) {
-        const varName = missingDollarMatch[1];
-        const startIndex = line.indexOf(varName);
-
-        // Skip known literals that don't need '$'
-        if (nonVariableIdentifiers.has(varName)) {
-          continue;
-        }
-
-        // Report error with squiggly underline under the variable name
-        const diagnostic = new vscode.Diagnostic(
-          new vscode.Range(
-            new vscode.Position(i, startIndex),                 // Start of variable
-            new vscode.Position(i, startIndex + varName.length) // End of variable
-          ),
-          `Missing '$' before variable: ${varName}. Use $${varName}`,
-          vscode.DiagnosticSeverity.Error   // Red squiggly (must fix)
-        );
-
-        // Stable diagnostic identifier
-        diagnostic.code = "missing-dollar";
-
-        issues.push(diagnostic);
-      }
-    }
-
-    // ------------------------------------------------------------
-    // PASS 2: FULL LINE-BY-LINE PARSING
-    // ------------------------------------------------------------
-
+    // SINGLE PASS: Process all lines
     for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
       const rawLine = lines[lineIndex];
 
-      // CHARACTER-BY-CHARACTER STATE TRACKING
-      // Maintains parser state across characters and lines
+      // ============================================================
+      // PASS 1: MISSING '$' IN IF CONDITIONS (Line-based)
+      // ============================================================
+      // Only check if NOT in block comment (simple line check)
+      if (!inBlockComment) {
+        const missingDollarMatch = rawLine.match(/^\s*if\s+([a-zA-Z][a-zA-Z0-9_]*)\s*(=|==|!=|<=|>=|<|>)/);
+        if (missingDollarMatch) {
+          const varName = missingDollarMatch[1];
+          const startIndex = rawLine.indexOf(varName);
+
+          // Skip known literals that don't need '$'
+          if (nonVariableIdentifiers.has(varName)) {
+            // continue; // Can't continue here - need to continue the loop differently
+          } else {
+            const diagnostic = new vscode.Diagnostic(
+              new vscode.Range(
+                new vscode.Position(lineIndex, startIndex),
+                new vscode.Position(lineIndex, startIndex + varName.length)
+              ),
+              `Missing '$' before variable: ${varName}. Use $${varName}`,
+              vscode.DiagnosticSeverity.Error
+            );
+            diagnostic.code = "missing-dollar";
+            issues.push(diagnostic);
+          }
+        }
+      }
+
+      // ============================================================
+      // PASS 2: CHARACTER-BY-CHARACTER PARSING
+      // ============================================================
       for (let col = 0; col < rawLine.length; col++) {
         const ch = rawLine[col];
+
+        // --- BLOCK COMMENT HANDLING (Highest priority) ---
+        if (inBlockComment) {
+          // Check for closing */
+          if (ch === '*' && rawLine[col + 1] === '/') {
+            inBlockComment = false;
+            col++;  // Skip the '/'
+          }
+          continue;  // Skip everything else while in block comment
+        }
+
+        // Check for opening /*
+        if (!inString && swimDelimiter === null &&
+            ch === '/' && rawLine[col + 1] === '*') {
+          inBlockComment = true;
+          col++;  // Skip the '*'
+          continue;
+        }
 
         // --- Handle regular strings (single/double quoted) ---
         if (swimDelimiter === null && (ch === '"' || ch === "'")) {
@@ -1282,7 +1298,6 @@ function activate(context) {
               backslashCount++;
               pos--;
             }
-            // If odd number of backslashes, quote is escaped (don't exit string)
             if (backslashCount % 2 === 0) {
               inString = false;
             }
@@ -1291,13 +1306,11 @@ function activate(context) {
         }
 
         // --- Handle swim-strings (fish sentinels) ---
-        // Enter swim-string when finding '>' followed by 0-5 non-'>' chars and another '>'
-        // Example: ">>", ">==8>", ">--=>"
         if (!inString && swimDelimiter === null && ch === '>') {
           const m = rawLine.slice(col).match(/^>[^>]{0,5}>/);
           if (m) {
             swimDelimiter = m[0];
-            col += swimDelimiter.length - 1;  // Skip ahead past delimiter
+            col += swimDelimiter.length - 1;
             continue;
           }
         }
@@ -1312,177 +1325,183 @@ function activate(context) {
         }
 
         // --- Skip line comments (# or //) ---
-        // Once a comment starts, ignore the rest of the line
         if (!inString && swimDelimiter === null &&
             (ch === '#' || (ch === '/' && rawLine[col + 1] === '/'))) {
-          break;
-        }
-
-        // --- Skip block comments (/* ... */) ---
-        if (!inString && swimDelimiter === null &&
-            ch === '/' && rawLine[col + 1] === '*') {
-
-          while (lineIndex < lines.length) {
-            const currentLine = lines[lineIndex];
-            const endIndex = currentLine.indexOf('*/');
-
-            if (endIndex !== -1) {
-              // Found the end of the block comment
-              break;
-            }
-
-            // Move to next line
-            lineIndex++;
-          }
-
-          // Stop processing this line.
-          // The outer line loop will re-read rawLine for the updated lineIndex.
-          break;
+          break;  // Skip rest of line
         }
 
         // --- Count braces for balance checking ---
-        // Tracks { and } to detect unmatched braces
         if (!inString && swimDelimiter === null) {
+
+          // Braces { }
           if (ch === '{') {
             braces++;
-            lastPos = document.offsetAt(
-              new vscode.Position(lineIndex, col)
-            );
-          }
-          if (ch === '}') {
+            lastBracePos = document.offsetAt(new vscode.Position(lineIndex, col));
+          } else if (ch === '}') {
             braces--;
-            if (braces < 0) {
-              lastPos = document.offsetAt(new vscode.Position(lineIndex, col));
-            }
+            if (braces < 0) lastBracePos = document.offsetAt(new vscode.Position(lineIndex, col));
+          }
+
+          // Parentheses ( )
+          else if (ch === '(') {
+            parens++;
+            lastParenPos = document.offsetAt(new vscode.Position(lineIndex, col));
+          } else if (ch === ')') {
+            parens--;
+            if (parens < 0) lastParenPos = document.offsetAt(new vscode.Position(lineIndex, col));
+          }
+
+          // Brackets [ ]
+          else if (ch === '[') {
+            brackets++;
+            lastBracketPos = document.offsetAt(new vscode.Position(lineIndex, col));
+          } else if (ch === ']') {
+            brackets--;
+            if (brackets < 0) lastBracketPos = document.offsetAt(new vscode.Position(lineIndex, col));
           }
         }
       }
 
-      // SKIP COMMENT-ONLY LINES
-      if (/^\s*#/.test(rawLine) || /^\s*\/\//.test(rawLine)) {
-        continue;
-      }
+      // ============================================================
+      // SYMBOL DETECTION
+      // ============================================================
+      if (!inBlockComment) {
+        // Skip comment-only lines
+        if (!/^\s*#/.test(rawLine) && !/^\s*\/\//.test(rawLine)) {
+          // STRIP STRINGS FOR SYMBOL DETECTION
+          const line = stripStrings(rawLine);
 
-      // STRIP STRINGS FOR SYMBOL DETECTION
-      // Remove string contents to avoid false positives inside strings
-      // Example: In $var = "Unknown $Function" - don't flag $Function
-      const line = stripStrings(rawLine);
-
-      // --- Detect unknown scalar functions $Func(...) ---
-      for (const match of line.matchAll(scalarCallRegex())) {
-        const name = match[1];
-        if (!knownScalarFunctions.has(name)) {
-          const start = match.index + 1; // skip $
-          issues.push(
-            new vscode.Diagnostic(
-              new vscode.Range(
-                new vscode.Position(lineIndex, start),
-                new vscode.Position(lineIndex, start + name.length)
-              ),
-              `Unknown scalar function '$${name}'`,
-              vscode.DiagnosticSeverity.Warning
-            )
-          );
-        }
-      }
-
-      // --- Detect unknown vector functions @Func(...) ---
-      for (const match of line.matchAll(vectorCallRegex())) {
-        const name = match[1];
-        if (!knownVectorFunctions.has(name)) {
-          const start = match.index + 1; // skip @
-          issues.push(
-            new vscode.Diagnostic(
-              new vscode.Range(
-                new vscode.Position(lineIndex, start),
-                new vscode.Position(lineIndex, start + name.length)
-              ),
-              `Unknown vector function '@${name}'`,
-              vscode.DiagnosticSeverity.Warning
-            )
-          );
-        }
-      }
-
-      // --- Detect unknown operations (Log-Information, etc.) ---
-      // Only flags hyphenated names that aren't known operations/keywords
-      for (const match of line.matchAll(operationCallRegex())) {
-        const name = match[1];
-
-        // Filter: hyphenated names only, not $/@ prefixed, not known
-        if (
-          name.includes("-") &&
-          !name.startsWith("$") &&
-          !name.startsWith("@") &&
-          !knownKeywords.has(name) &&
-          !knownOperations.has(name) &&
-          !knownScalarFunctions.has(name) &&
-          !knownVectorFunctions.has(name)
-        ) {
-          const start = match.index;
-          issues.push(
-            new vscode.Diagnostic(
-              new vscode.Range(
-                new vscode.Position(lineIndex, start),
-                new vscode.Position(lineIndex, start + name.length)
-              ),
-              `Unknown operation '${name}'`,
-              vscode.DiagnosticSeverity.Warning
-            )
-          );
-        }
-      }
-      // --- Detect invalid logical operators ---
-      // Catches '&' or '|' when '&&' or '||' was intended
-      // Only checks inside if statements to reduce false positives
-      if (/^\s*if\b/.test(line)) {
-        for (let j = 0; j < line.length; j++) {
-          const ch = line[j];
-
-          if (ch === "&" || ch === "|") {
-            const prev = line[j - 1];
-            const next = line[j + 1];
-
-            // Valid operators are '&&' and '||' (double characters)
-            // Single '&' or '|' is likely a typo
-            if (prev === ch || next === ch) {
-              continue;
+          // --- Detect unknown scalar functions ---
+          for (const match of line.matchAll(scalarCallRegex())) {
+            const name = match[1];
+            if (!knownScalarFunctions.has(name)) {
+              const start = match.index + 1;
+              issues.push(
+                new vscode.Diagnostic(
+                  new vscode.Range(
+                    new vscode.Position(lineIndex, start),
+                    new vscode.Position(lineIndex, start + name.length)
+                  ),
+                  `Unknown scalar function '$${name}'`,
+                  vscode.DiagnosticSeverity.Warning
+                )
+              );
             }
+          }
 
-            const diagnostic = new vscode.Diagnostic(
-              new vscode.Range(
-                new vscode.Position(lineIndex, j),
-                new vscode.Position(lineIndex, j + 1)
-              ),
-              `Invalid logical operator '${ch}'. Use '${ch}${ch}'.`,
-              vscode.DiagnosticSeverity.Warning
-            );
-            // Stable diagnostic identifier
-            diagnostic.code = "invalid-operator";
+          // --- Detect unknown vector functions ---
+          for (const match of line.matchAll(vectorCallRegex())) {
+            const name = match[1];
+            if (!knownVectorFunctions.has(name)) {
+              const start = match.index + 1;
+              issues.push(
+                new vscode.Diagnostic(
+                  new vscode.Range(
+                    new vscode.Position(lineIndex, start),
+                    new vscode.Position(lineIndex, start + name.length)
+                  ),
+                  `Unknown vector function '@${name}'`,
+                  vscode.DiagnosticSeverity.Warning
+                )
+              );
+            }
+          }
 
-            issues.push(diagnostic);
+          // --- Detect unknown operations ---
+          for (const match of line.matchAll(operationCallRegex())) {
+            const name = match[1];
+            if (
+              name.includes("-") &&
+              !name.startsWith("$") &&
+              !name.startsWith("@") &&
+              !knownKeywords.has(name) &&
+              !knownOperations.has(name) &&
+              !knownScalarFunctions.has(name) &&
+              !knownVectorFunctions.has(name)
+            ) {
+              const start = match.index;
+              issues.push(
+                new vscode.Diagnostic(
+                  new vscode.Range(
+                    new vscode.Position(lineIndex, start),
+                    new vscode.Position(lineIndex, start + name.length)
+                  ),
+                  `Unknown operation '${name}'`,
+                  vscode.DiagnosticSeverity.Warning
+                )
+              );
+            }
+          }
+
+          // --- Detect invalid logical operators ---
+          if (/^\s*if\b/.test(line)) {
+            for (let j = 0; j < line.length; j++) {
+              const ch = line[j];
+              if (ch === "&" || ch === "|") {
+                const prev = line[j - 1];
+                const next = line[j + 1];
+                if (prev !== ch && next !== ch) {
+                  const diagnostic = new vscode.Diagnostic(
+                    new vscode.Range(
+                      new vscode.Position(lineIndex, j),
+                      new vscode.Position(lineIndex, j + 1)
+                    ),
+                    `Invalid logical operator '${ch}'. Use '${ch}${ch}'.`,
+                    vscode.DiagnosticSeverity.Warning
+                  );
+                  diagnostic.code = "invalid-operator";
+                  issues.push(diagnostic);
+                }
+              }
+            }
           }
         }
       }
     }
 
-    // ============================================================
-    // FINAL CHECK: UNBALANCED BRACES
-    // ============================================================
-    // After scanning the entire file, report if braces don't match
+    // FINAL CHECK: UNBALANCED BRACES AND PARENTHESES
+
     if (braces !== 0) {
-      issues.push(
-        new vscode.Diagnostic(
-          new vscode.Range(
-            document.positionAt(lastPos),
-            document.positionAt(lastPos + 1)
-          ),
-          braces > 0 ? "Unclosed brace(s)" : "Unexpected closing brace",
-          vscode.DiagnosticSeverity.Error   // Red squiggly - must fix
-        )
-      );
+      const pos = document.positionAt(lastBracePos);
+      const lineNum = pos.line + 1;
+      const colNum = pos.character + 1;
+      const message = braces > 0
+        ? `Unclosed brace(s): ${braces} '{' not closed (first at line ${lineNum}, col ${colNum})`
+        : `Unexpected closing brace(s): ${Math.abs(braces)} extra '}' (first at line ${lineNum}, col ${colNum})`;
+      issues.push(new vscode.Diagnostic(
+        new vscode.Range(pos, document.positionAt(lastBracePos + 1)),
+        message,
+        vscode.DiagnosticSeverity.Error
+      ));
     }
-    // Update VS Code's diagnostic panel with all found issues
+
+    if (parens !== 0) {
+      const pos = document.positionAt(lastParenPos);
+      const lineNum = pos.line + 1;
+      const colNum = pos.character + 1;
+      const message = parens > 0
+        ? `Unclosed parenthesis: ${parens} '(' not closed (first at line ${lineNum}, col ${colNum})`
+        : `Unexpected closing parenthesis: ${Math.abs(parens)} extra ')' (first at line ${lineNum}, col ${colNum})`;
+      issues.push(new vscode.Diagnostic(
+        new vscode.Range(pos, document.positionAt(lastParenPos + 1)),
+        message,
+        vscode.DiagnosticSeverity.Error
+      ));
+    }
+
+    if (brackets !== 0) {
+      const pos = document.positionAt(lastBracketPos);
+      const lineNum = pos.line + 1;
+      const colNum = pos.character + 1;
+      const message = parens > 0
+        ? `Unclosed parenthesis: ${parens} '(' not closed (first at line ${lineNum}, col ${colNum})`
+        : `Unexpected closing parenthesis: ${Math.abs(brackets)} extra ')' (first at line ${lineNum}, col ${colNum})`;
+      issues.push(new vscode.Diagnostic(
+        new vscode.Range(pos, document.positionAt(lastParenPos + 1)),
+        message,
+        vscode.DiagnosticSeverity.Error
+      ));
+    }
     diagnostics.set(document.uri, issues);
   }
 
