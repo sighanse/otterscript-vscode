@@ -244,6 +244,8 @@ function createInvalidOperatorFix(document, diagnostic) {
  *   - signature: Optional - Function signature (monospace formatted)
  *   - description: Optional - Short description
  *   - documentation: Optional - Extended Markdown documentation
+ * @param {boolean} [isTrusted=false] - Set true to allow command URIs in Markdown.
+ * Currently unused; reserved for future use.
  * @returns {vscode.MarkdownString} - Formatted hover content
  *
  * @example
