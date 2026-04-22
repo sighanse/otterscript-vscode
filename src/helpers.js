@@ -427,20 +427,23 @@ function buildCompletionItem(doc, kind, sortPrefix, insertText, triggerSignature
  */
 function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
   const match = line.match(/^\s*if\s+([a-zA-Z][a-zA-Z0-9_]*)\s*(=|==|!=|<=|>=|<|>)/);
-  if (!match) return null;
+
+  // -- Guard: ensure regex matched and we have a valid index position
+  if (!match || typeof match.index !== 'number') return null;
 
   const varName = match[1];
 
-  // Skip known literals that don't need '$'
+  // -- Skip known literals that don't need '$' (true, false, null)
   if (nonVariableIdentifiers.has(varName)) {
     return null;
   }
 
-  const startIndex = line.indexOf(varName);
+  // -- Calculate exact position of variable name within the line
+  const varNameIndex = match.index + match[0].indexOf(varName);
   const diagnostic = new vscode.Diagnostic(
     new vscode.Range(
-      new vscode.Position(lineIndex, startIndex),
-      new vscode.Position(lineIndex, startIndex + varName.length)
+      new vscode.Position(lineIndex, varNameIndex),
+      new vscode.Position(lineIndex, varNameIndex + varName.length)
     ),
     `Missing '$' before variable: ${varName}. Use $${varName}`,
     vscode.DiagnosticSeverity.Error
