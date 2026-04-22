@@ -35,6 +35,7 @@ const {
   checkMissingDollar,
   createInvalidOperatorFix,
   createMissingDollarFix,
+  createUnbalancedDiagnostic,
   getOutputChannel,
   isInStringOrComment,
   loadConfig,
@@ -1021,47 +1022,20 @@ function activate(context) {
 
     // -- Unbalanced braces
     if (braces !== 0) {
-      const pos = document.positionAt(lastBracePos);
-      const lineNum = pos.line + 1;
-      const colNum = pos.character + 1;
-      const message = braces > 0
-        ? `Unclosed brace(s): ${braces} '{' not closed (first at line ${lineNum}, col ${colNum})`
-        : `Unexpected closing brace(s): ${Math.abs(braces)} extra '}' (first at line ${lineNum}, col ${colNum})`;
-      issues.push(new vscode.Diagnostic(
-        new vscode.Range(pos, document.positionAt(lastBracePos + 1)),
-        message,
-        vscode.DiagnosticSeverity.Error
-      ));
+      const braceDiag = createUnbalancedDiagnostic(braces, lastBracePos, '{', '}', 'brace', document);
+      if (braceDiag) issues.push(braceDiag);
     }
 
     // -- Unbalanced parentheses
     if (parens !== 0) {
-      const pos = document.positionAt(lastParenPos);
-      const lineNum = pos.line + 1;
-      const colNum = pos.character + 1;
-      const message = parens > 0
-        ? `Unclosed parenthesis: ${parens} '(' not closed (first at line ${lineNum}, col ${colNum})`
-        : `Unexpected closing parenthesis: ${Math.abs(parens)} extra ')' (first at line ${lineNum}, col ${colNum})`;
-      issues.push(new vscode.Diagnostic(
-        new vscode.Range(pos, document.positionAt(lastParenPos + 1)),
-        message,
-        vscode.DiagnosticSeverity.Error
-      ));
+      const parenDiag = createUnbalancedDiagnostic(parens, lastParenPos, '(', ')', 'parenthesis', document);
+      if (parenDiag) issues.push(parenDiag);
     }
 
     // -- Unbalanced brackets
     if (brackets !== 0) {
-      const pos = document.positionAt(lastBracketPos);
-      const lineNum = pos.line + 1;
-      const colNum = pos.character + 1;
-      const message = brackets > 0
-        ? `Unclosed bracket(s): ${brackets} '[' not closed (first at line ${lineNum}, col ${colNum})`
-        : `Unexpected closing bracket(s): ${Math.abs(brackets)} extra ']' (first at line ${lineNum}, col ${colNum})`;
-      issues.push(new vscode.Diagnostic(
-        new vscode.Range(pos, document.positionAt(lastBracketPos + 1)),
-        message,
-        vscode.DiagnosticSeverity.Error
-      ));
+      const bracketDiag = createUnbalancedDiagnostic(brackets, lastBracketPos, '[', ']', 'bracket', document);
+      if (bracketDiag) issues.push(bracketDiag);
     }
     diagnostics.set(document.uri, issues);
   }

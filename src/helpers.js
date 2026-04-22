@@ -536,6 +536,33 @@ function createInvalidOperatorFix(document, diagnostic) {
   });
 }
 
+/**
+ * Creates a diagnostic for unbalanced symbols.
+ * @param {number} count - Current count (positive = unclosed, negative = extra closing)
+ * @param {number} lastPos - Position of last unmatched symbol
+ * @param {string} openChar - Opening character ('{', '(', '[')
+ * @param {string} closeChar - Closing character ('}', ')', ']')
+ * @param {string} name - Display name ('brace', 'parenthesis', 'bracket')
+ * @param {vscode.TextDocument} document The document
+ * @returns {vscode.Diagnostic | null}
+ */
+function createUnbalancedDiagnostic(count, lastPos, openChar, closeChar, name, document) {
+  if (count === 0) return null;
+
+  const pos = document.positionAt(lastPos);
+  const lineNum = pos.line + 1;
+  const colNum = pos.character + 1;
+  const message = count > 0
+    ? `Unclosed ${name}(s): ${count} '${openChar}' not closed (first at line ${lineNum}, col ${colNum})`
+    : `Unexpected closing ${name}(s): ${Math.abs(count)} extra '${closeChar}' (first at line ${lineNum}, col ${colNum})`;
+
+  return new vscode.Diagnostic(
+    new vscode.Range(pos, document.positionAt(lastPos + 1)),
+    message,
+    vscode.DiagnosticSeverity.Error
+  );
+}
+
 // ============================================================
 // EXPORTS
 // ============================================================
@@ -557,6 +584,7 @@ module.exports = {
   stripStrings,
   checkMissingDollar,
   validateDocs,
+  createUnbalancedDiagnostic,
 
   // -- Builders
   buildHoverMarkdown,
