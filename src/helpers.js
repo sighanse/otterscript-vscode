@@ -537,6 +537,19 @@ function createInvalidOperatorFix(document, diagnostic) {
 }
 
 /**
+ * Creates a quick-fix that replaces incorrect 'for' loop usage with 'foreach'.
+ *
+ * @param {vscode.TextDocument} document - The document containing the diagnostic
+ * @param {vscode.Diagnostic} diagnostic - The diagnostic with the incorrect 'for' usage
+ * @returns {vscode.CodeAction | null} Code action or null if replacement unknown
+ */
+function createForToForeachFix(document, diagnostic) {
+  return createCodeAction("Replace 'for' with 'foreach'", diagnostic, (edit) => {
+    edit.replace(document.uri, diagnostic.range, 'foreach');
+  });
+}
+
+/**
  * Creates a diagnostic for unbalanced symbols.
  * @param {number} count - Current count (positive = unclosed, negative = extra closing)
  * @param {number} lastPos - Position of last unmatched symbol
@@ -593,6 +606,7 @@ module.exports = {
   // -- Code Actions
   createMissingDollarFix,
   createInvalidOperatorFix,
+  createForToForeachFix,
 
   // -- Regex
   createRegexPatterns

@@ -33,6 +33,7 @@ const {
   buildCompletionItem,
   buildHoverMarkdown,
   checkMissingDollar,
+  createForToForeachFix,
   createInvalidOperatorFix,
   createMissingDollarFix,
   createUnbalancedDiagnostic,
@@ -479,7 +480,6 @@ function activate(context) {
           if (typed.length < 3) {
             return [];
           }
-
           const items = [];
 
           // -- Operations (priority 0_)
@@ -492,7 +492,6 @@ function activate(context) {
                   items.push(item);
               }
           }
-
           // -- Keywords (priority 1_)
           for (const [name, doc] of Object.entries(keywordDocs)) {
               if (name.toLowerCase().startsWith(typed.toLowerCase())) {
@@ -702,6 +701,11 @@ function activate(context) {
 
             if (diagnostic.code === "invalid-operator") {
               const fix = createInvalidOperatorFix(document, diagnostic);
+              if (fix) actions.push(fix);
+            }
+
+            if (diagnostic.code === "incorrect-for-usage") {
+              const fix = createForToForeachFix(document, diagnostic);
               if (fix) actions.push(fix);
             }
           }
@@ -1015,6 +1019,22 @@ function activate(context) {
                 }
               }
             }
+          }
+          // -- Detect incorrect 'for' usage as a loop
+          // Matches: for i = 1 to 10, for $item in @list, for item in list
+          const forLoopLikePattern = /^\s*for\s+(\$?\w+)\s+(=|in)\s+/i;
+          if (forLoopLikePattern.test(line)) {
+            const startIndex = line.indexOf('for');
+            const diagnostic = new vscode.Diagnostic(
+              new vscode.Range(
+                new vscode.Position(lineIndex, startIndex),
+                new vscode.Position(lineIndex, startIndex + 3)
+              ),
+              "'for' in OtterScript does not perform iteration. Use 'foreach' for loops, or 'for server/role/directory' for context binding.",
+              vscode.DiagnosticSeverity.Warning
+            );
+            diagnostic.code = "incorrect-for-usage";
+            issues.push(diagnostic);
           }
         }
       }
