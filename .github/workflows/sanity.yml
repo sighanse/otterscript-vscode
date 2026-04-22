@@ -101,6 +101,26 @@ jobs:
           "
           echo "✅ JSONC validation passed"
 
+      - name: Verify LF line endings
+        id: lineEndings
+        continue-on-error: true
+        run: |
+          echo "## Line Ending Verification"
+          echo ""
+
+          # Check src/ files
+          CRLF_FILES=$(grep -rlI $'\r' src/ 2>/dev/null || true)
+
+          if [ -n "$CRLF_FILES" ]; then
+            echo "❌ Files with CRLF line endings:"
+            echo '```'
+            echo "$CRLF_FILES"
+            echo '```'
+            exit 1
+          fi
+
+          echo "✅ All source files have LF line endings"
+
       - name: Summary
         if: always()
         run: |
@@ -149,4 +169,11 @@ jobs:
             echo "⚠️ npm audit: vulnerability(ies) found" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "⏭️ npm audit: cancelled/skipped" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # Line Endings
+          if [ "${{ steps.lineEndings.outcome }}" == "success" ]; then
+            echo "✅ Line endings: LF" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ Line endings: CRLF detected" >> "$GITHUB_STEP_SUMMARY"
           fi
