@@ -795,9 +795,9 @@ function activate(context) {
     let braces = 0;           // { } balance
     let parens = 0;           // ( ) balance
     let brackets = 0;         // [ ] balance
-    let lastBracePos = 0;     // Position of last unmatched parens
-    let lastParenPos = 0;     // Position of last unmatched bracket
-    let lastBracketPos = 0;   // Position of last unmatched brace
+    let lastBracePos = 0;     // Position of last unmatched brace
+    let lastParenPos = 0;     // Position of last unmatched parens
+    let lastBracketPos = 0;   // Position of last unmatched bracket
     let inString = false;     // Currently inside a quoted string?
     let inBlockComment = false; // Currently inside a block comment?
     let swimDelimiter = null; // Active swim-string delimiter (e.g., ">==8>")
