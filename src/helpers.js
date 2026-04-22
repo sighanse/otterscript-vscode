@@ -1,10 +1,9 @@
 // @ts-check
 /**
- * @fileoverview Pure helper functions for OtterScript extension.
+ * @fileoverview Pure helper functions for OtterScript language extension.
  *
- * This module contains only pure functions and constants with no
- * dependencies on `activate()` scope. All functions are testable
- * and reusable.
+ * Dependencies:
+ * - vscode (required for OutputChannel, CompletionItem, etc.)
  *
  * @module helpers
  */
@@ -53,7 +52,7 @@ function loadConfig() {
  * These are language literals, not user-defined variables.
  *
  * Used by diagnostics to avoid false "missing $" errors on literals.
- *
+ * @readonly
  * @type {Set<string>}
  */
 const NON_VARIABLE_IDENTIFIERS = new Set([
@@ -537,26 +536,31 @@ function createInvalidOperatorFix(document, diagnostic) {
 // ============================================================
 
 module.exports = {
-  // Configuration
+  // -- Configuration
   loadConfig,
 
-  // Constants
+  // -- Constants
   NON_VARIABLE_IDENTIFIERS,
 
-  // Logger
+  // -- Logger
   log,
   getOutputChannel,
   timestamp,
 
-  // Helpers
+  // -- Helpers
   isInStringOrComment,
   stripStrings,
-  //buildWordRegex, // buildWordRegex is intentionally not exported — used only internally by createRegexPatterns.
   checkMissingDollar,
   validateDocs,
+
+  // -- Builders
   buildHoverMarkdown,
   buildCompletionItem,
+
+  // -- Code Actions
   createMissingDollarFix,
   createInvalidOperatorFix,
+
+  // -- Regex
   createRegexPatterns
 };
