@@ -1034,7 +1034,7 @@ function activate(context) {
       ));
     }
 
-    // -- Unbalanced parantheses
+    // -- Unbalanced parentheses
     if (parens !== 0) {
       const pos = document.positionAt(lastParenPos);
       const lineNum = pos.line + 1;
