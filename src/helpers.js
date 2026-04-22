@@ -547,7 +547,7 @@ module.exports = {
   // Helpers
   isInStringOrComment,
   stripStrings,
-  //buildWordRegex,
+  //buildWordRegex, // buildWordRegex is intentionally not exported — used only internally by createRegexPatterns.
   checkMissingDollar,
   validateDocs,
   buildHoverMarkdown,
