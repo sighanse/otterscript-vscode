@@ -23,14 +23,15 @@
  * @see {@link https://github.com/sighanse/otterscript-vscode} - Github repository
  */
 
-// VS Code Extension API
+// -- VS Code Extension API
 const vscode = require("vscode");
+
+// -- Import helpers
 const {
   NON_VARIABLE_IDENTIFIERS,
   log,
   buildCompletionItem,
   buildHoverMarkdown,
-  //buildWordRegex,
   checkMissingDollar,
   createInvalidOperatorFix,
   createMissingDollarFix,
@@ -52,47 +53,47 @@ const {
 function activate(context) {
   log.info("OtterScript extension active");
 
-  // Load initial configuration
+  // -- Load initial configuration
   let { completionEnabled, hoverEnabled, signatureHelpEnabled } = loadConfig();
 
-  // Watch for settings changes while extension is running
+  // -- Watch for settings changes while extension is running
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
-      // Only reload if OtterScript settings changed
+      // -- Only reload if OtterScript settings changed
       if (e.affectsConfiguration("otterscript")) {
         ({ completionEnabled, hoverEnabled, signatureHelpEnabled } = loadConfig());
       }
     })
   );
 
-  // DOCUMENTATION DATA LOADING
+  // -- Language documentation data loading
   // Loads language documentation from language-data.js (plain data module).
   // Objects contain plain strings only.
   // Any conversion to MarkdownString happens in this file.
   let languageData;
-  // Attempt to load the documentation module with error handling
+  // -- Attempt to load the documentation module with error handling
   try {
     languageData = require("./language-data.js");
 
-    // Quick validation to ensure languageData loaded correctly
+    // -- Quick validation to ensure languageData loaded correctly
     if (!languageData || typeof languageData !== "object") {
       throw new Error("language-data.js did not export an object");
     }
   } catch (err) {
-    // Log errors
+    // -- Log errors
     log.error("Failed to load language-data.js", err);
 
-    // Show user-friendly error message
+    // -- Show user-friendly error message
     vscode.window.showErrorMessage(
       "OtterScript Language Extension failed to load documentation data. " +
       "The extension could not be activated. Check the developer console for details."
     );
 
-    // Abort activation cleanly - don't register any providers
+    // -- Abort activation cleanly - don't register any providers
     // Without languageData, completions/hover/signature help would show nothing
     return;
   }
-  // Extract each documentation category into its own variable.
+  // -- Extract each documentation category into its own variable.
   const {
     operationDocs,
     syntaxDocs,
@@ -120,7 +121,7 @@ function activate(context) {
     return !isInStringOrComment(line, cursor);
   }
 
-  // Validate all documentation sources - (intentionally ignore return value)
+  // -- Validate all documentation sources (intentionally ignore return value)
   void validateDocs("scalarFunctionDocs", scalarFunctionDocs); // $ToJson, $Base64Encode, etc.
   void validateDocs("operationDocs", operationDocs);           // Log-Information, Log-Warning, Log-Error, etc.
   void validateDocs("vectorFunctionDocs", vectorFunctionDocs); // @Split, @Join, etc.
@@ -128,13 +129,13 @@ function activate(context) {
   void validateDocs("syntaxDocs", syntaxDocs);                 // Template tags, swim strings, expression delimiters, etc.
   void validateDocs("keywordDocs", keywordDocs);               // if, foreach, with, set, etc.
 
-  // KNOWLEDGE BASES (Fast Lookup Sets)
+  // -- Knowledge bases (Fast Lookup Sets)
   const knownKeywords = new Set(Object.keys(keywordDocs));
   const knownScalarFunctions = new Set(Object.keys(scalarFunctionDocs));
   const knownVectorFunctions = new Set(Object.keys(vectorFunctionDocs));
   const knownOperations = new Set(Object.keys(operationDocs));
 
-  // REGEX PATTERNS FOR SYMBOL DETECTION
+  // -- Regex pattern for symbol detection
   const {
     scalarCallRegex,
     vectorCallRegex,
@@ -158,16 +159,16 @@ function activate(context) {
       "otterscript",
       {
         provideSignatureHelp(document, position) {
-          // Check if the signature help provider is enabled in settings
+          // -- Check if the signature help provider is enabled in settings
           if (!signatureHelpEnabled) return null;
 
-          // Get all text from document start to cursor position
+          // -- Get all text from document start to cursor position
           // This enables multi-line function call detection
           const textBeforeCursor = document.getText(new vscode.Range(
             new vscode.Position(Math.max(0, position.line - 10), 0),  // Last 10 lines max
             position
           ));
-          // Try each pattern to find the function call
+          // -- Try each pattern to find the function call
           let match = null;
           let fn = null;
           let args = null;
@@ -183,11 +184,13 @@ function activate(context) {
             if (m && table[m[1]]) { match = m; fn = table[m[1]]; args = m[2]; break; }
           }
 
-          // Validate we have everything needed
+          // -- Validate we have everything needed
           if (!fn?.signature || !match) return null;
           if (typeof args !== 'string') return null;
 
+          // ------------------------------------------------------------
           // Active parameter detection
+          // ------------------------------------------------------------
 
           let activeParam = 0;
           let inString = false;
@@ -199,7 +202,7 @@ function activate(context) {
           for (let i = 0; i < args.length; i++) {
             const ch = args[i];
 
-            // --- Handle string literals ---
+            // -- Handle string literals
             // Toggle string state when encountering unescaped quotes
             if ((ch === '"' || ch === "'") && !inString) {
               inString = true;
@@ -208,7 +211,7 @@ function activate(context) {
             }
 
             if (inString && ch === quote) {
-              // Check if quote is escaped (odd number of backslashes before it)
+              // -- Check if quote is escaped (odd number of backslashes before it)
               let backslashCount = 0;
               let j = i - 1;
               while (j >= 0 && args[j] === '\\') {
@@ -221,10 +224,10 @@ function activate(context) {
               continue;
             }
 
-            // Skip all processing inside strings
+            // -- Skip all processing inside strings
             if (inString) continue;
 
-            // --- Track nesting depth for different bracket types ---
+            // -- Track nesting depth for different bracket types
             if (ch === '(') parenDepth++;
             if (ch === ')') parenDepth--;
             if (ch === '[') braceDepth++;
@@ -232,21 +235,20 @@ function activate(context) {
             if (ch === '{') curlyDepth++;
             if (ch === '}') curlyDepth--;
 
-            // --- Count commas as parameter separators ---
-            // Only count commas at the top level (depth === 0 for all bracket types)
+            // -- Count commas as parameter separators
             if (ch === ',' && parenDepth === 0 && braceDepth === 0 && curlyDepth === 0) {
               activeParam++;
             }
           }
 
-          // ============================================================
-          // BUILD SIGNATURE HELP UI
-          // ============================================================
+          // ------------------------------------------------------------
+          // Build signature help UI
+          // ------------------------------------------------------------
+          // Parse signature to extract individual parameters
+          // Handles nested parentheses in signature (e.g., "Func(a, (b + c), d)")
 
           const sig = new vscode.SignatureInformation(fn.signature, fn.documentation);
 
-          // Parse signature to extract individual parameters
-          // Handles nested parentheses in signature (e.g., "Func(a, (b + c), d)")
           const paramMatch = fn.signature.match(/\(([\s\S]*)\)/);
           if (paramMatch) {
             const paramText = paramMatch[1];
@@ -268,12 +270,12 @@ function activate(context) {
             sig.parameters = params.map(p => new vscode.ParameterInformation(p));
           }
 
-          // Prepare the response
+          // -- Prepare the response
           const help = new vscode.SignatureHelp();
           help.signatures = [sig];
           help.activeSignature = 0;
 
-          // Only set activeParameter when parameters were extracted
+          // -- Only set activeParameter when parameters were extracted
           if (sig.parameters.length > 0) {
             help.activeParameter = Math.min(activeParam, sig.parameters.length - 1);
           }
@@ -281,13 +283,13 @@ function activate(context) {
           return help;
         }
       },
-      "(",  // Trigger on opening parenthesis
-      ","   // Trigger on comma (when moving to next parameter)
+      "(",  // -- Trigger on opening parenthesis
+      ","   // -- Trigger on comma (when moving to next parameter)
     );
 
-  // ------------------------------------------------------------
+  // ============================================================
   // SCALAR FUNCTION COMPLETION PROVIDER ($Function)
-  // ------------------------------------------------------------
+  // ============================================================
   // Shows completions for scalar functions when user types '$'.
   // Examples: $ToJson, $Base64Encode, $Trim
   //
@@ -300,14 +302,14 @@ function activate(context) {
       "otterscript",
       {
         provideCompletionItems(document, position) {
-          // Check if completion is enabled and not in a string/comment
+          // -- Check if completion is enabled and not in a string/comment
           if (!isValidCompletionPosition(document, position)) return [];
 
           const linePrefix = document
             .lineAt(position.line)
             .text.substring(0, position.character);
 
-          // Match: $ followed by optional letters (partial function name)
+          // -- Match: $ followed by optional letters (partial function name)
           const match = linePrefix.match(/\$([a-zA-Z]*)$/);
           if (!match) return [];
 
@@ -324,12 +326,12 @@ function activate(context) {
               });
         }
       },
-      "$"   // Trigger character - provider runs when user types this
+      "$"   // Trigger on dollar
     );
 
-  // ------------------------------------------------------------
+  // ============================================================
   // VARIABLE COMPLETION PROVIDER ($Variable)
-  // ------------------------------------------------------------
+  // ============================================================
   // Shows completions for predefined OtterScript variables when user types '$'.
   // Examples: $BuildId, $FeedName, $PackageVersion
   //
@@ -341,24 +343,24 @@ function activate(context) {
       "otterscript",
       {
         provideCompletionItems(document, position) {
-          // Check if completion is enabled and not in a string/comment
+          // -- Check if completion is enabled and not in a string/comment
           if (!isValidCompletionPosition(document, position)) return [];
 
           const text = document
             .lineAt(position.line)
             .text.substring(0, position.character);
 
-          // Match: $ followed by optional letters (partial variable name)
+          // -- Match: $ followed by optional letters (partial variable name)
           const match = text.match(/\$([A-Za-z]*)$/);
           if (!match) return [];
 
           const typed = match[1];
 
-          // Filter variables by what user typed and create completion items
+          // -- Filter variables by what user typed and create completion items
           return Object.entries(variableDocs)
               .filter(([key]) => key.toLowerCase().startsWith(typed.toLowerCase()))
               .map(([_key, doc]) => {
-                  // Remove leading $ for insertion (user already typed it)
+                  // -- Remove leading $ for insertion (user already typed it)
                   const snippet = doc.snippet
                     ? new vscode.SnippetString(doc.snippet?.replace(/^\$/, ""))
                     : new vscode.SnippetString(doc.name?.replace(/^\$/, ""));
@@ -369,9 +371,9 @@ function activate(context) {
       "$"   // Trigger character - same as scalar function provider
     );
 
-  // ------------------------------------------------------------
+  // ============================================================
   // VECTOR COMPLETION PROVIDER (@Function / @Variable)
-  // ------------------------------------------------------------
+  // ============================================================
   // Triggered after typing '@'.
 
   const vectorCompletionProvider =
@@ -379,27 +381,27 @@ function activate(context) {
       "otterscript",
       {
         provideCompletionItems(document, position) {
-          // Check if completion is enabled and not in a string/comment
+          // -- Check if completion is enabled and not in a string/comment
           if (!isValidCompletionPosition(document, position)) return [];
 
-          // Get text from line start to cursor
+          // -- Get text from line start to cursor
           const linePrefix = document
             .lineAt(position.line)
             .text.substring(0, position.character);
 
-          // Match: @ followed by optional letters (partial name)
+          // -- Match: @ followed by optional letters (partial name)
           const match = linePrefix.match(/@([a-zA-Z]*)$/);
           if (!match) return [];
 
           const typed = match[1];
 
-          // Filter vector languageData by what user typed
+          // -- Filter vector languageData by what user typed
           return Object.entries(vectorFunctionDocs)
               .filter(([key]) => key.toLowerCase().startsWith(typed.toLowerCase()))
               .map(([_key, doc]) => {
                   const isFunction = doc.signature?.includes("(");
                   const insertName = doc.name.replace(/^@/, "");
-                  // Prefer doc.snippet if it exists, otherwise fall back to default pattern
+                  // -- Prefer doc.snippet if it exists, otherwise fall back to default pattern
                   const insertText = isFunction
                       ? new vscode.SnippetString(
                           (doc.snippet?.replace(/^@/, "") || `${insertName}(\${0})`))
@@ -416,9 +418,9 @@ function activate(context) {
       "@"   // Trigger character - provider runs when user types this
     );
 
-  // ------------------------------------------------------------
+  // ============================================================
   // MAP EXPRESSION COMPLETION PROVIDER (%)
-  // ------------------------------------------------------------
+  // ============================================================
   // Map variables are user-defined and cannot be enumerated
 
   const mapCompletionProvider =
@@ -426,10 +428,10 @@ function activate(context) {
     "otterscript",
     {
       provideCompletionItems(document, position) {
-        // Check if completion is enabled and not in a string/comment
+        // -- Check if completion is enabled and not in a string/comment
         if (!isValidCompletionPosition(document, position)) return [];
 
-        // Ensure syntaxDocs and mapExpr exist
+        // -- Ensure syntaxDocs and mapExpr exist
         if (!syntaxDocs?.mapExpr) {
           log.warn('[completion] syntaxDocs.mapExpr is missing, cannot provide % completion');
           return [];
@@ -447,9 +449,9 @@ function activate(context) {
     "%"
   );
 
-  // ------------------------------------------------------------
-  // OPERATION COMPLETION (Log-Information, etc.)
-  // ------------------------------------------------------------
+  // ============================================================
+  // OPERATION COMPLETION PROVIDER
+  // ============================================================
   // Provides completions for OtterScript operations and keywords.
   //
   // Unlike scalar ($) and vector (@) completions, operations have NO prefix.
@@ -459,27 +461,27 @@ function activate(context) {
       "otterscript",
       {
         provideCompletionItems(document, position) {
-          // Check if completion is enabled and not in a string/comment
+          // -- Check if completion is enabled and not in a string/comment
           if (!isValidCompletionPosition(document, position)) return [];
 
           const line = document.lineAt(position.line).text;
           const cursor = position.character;
           const prefix = line.slice(0, cursor);
 
-          // Match: word at cursor position (letters + hyphens allowed)
+          // -- Match: word at cursor position (letters + hyphens allowed)
           const match = prefix.match(/\b([A-Za-z]+(?:-[A-Za-z]+)*)$/);
           if (!match) return [];
 
           const typed = match[1];
 
-          // Require at least 3 characters to avoid noise
+          // -- Require at least 3 characters to avoid noise
           if (typed.length < 3) {
             return [];
           }
 
           const items = [];
 
-          // Operations (priority 0_)
+          // -- Operations (priority 0_)
           for (const [name, doc] of Object.entries(operationDocs)) {
               if (name.toLowerCase().startsWith(typed.toLowerCase())) {
                   const snippet = doc.snippet
@@ -490,7 +492,7 @@ function activate(context) {
               }
           }
 
-          // Keywords (priority 1_)
+          // -- Keywords (priority 1_)
           for (const [name, doc] of Object.entries(keywordDocs)) {
               if (name.toLowerCase().startsWith(typed.toLowerCase())) {
                   const snippet = doc.snippet
@@ -503,7 +505,7 @@ function activate(context) {
           return items;
         }
       }
-      // Note: No trigger character specified - this provider runs on every keystroke
+      // -- Note: No trigger character specified - this provider runs on every keystroke
       // The 3-character minimum prevents excessive triggering
     );
 
@@ -513,26 +515,20 @@ function activate(context) {
   // Shows documentation when user hovers over code elements.
   // Triggered by mouse hover or Ctrl+K Ctrl+I (keyboard).
   //
-  // Hover resolution order (MOST specific FIRST):
-  //   1. Template tags (<% %>) - Easiest to identify, check first
-  //   2. Expression delimiters (%(), @(), $()) - Specific syntax markers
-  //   3. Keywords (if, foreach, with, set, etc.) - Control flow
-  //   4. Swim-string delimiters (>>, >==8>, >--=>) - Fish sentinels
-  //   5. Operations (Log-Information, Log-Error, etc.) - Built-in actions
-  //   6. Symbols ($function, @vector, $variable) - Most general, check last
+  // Hover resolution order matter (MOST specific FIRST)
 
   const hoverProvider = vscode.languages.registerHoverProvider(
     "otterscript",
     {
       provideHover(document, position) {
-        // Check if hover is enabled in settings
+        // -- Check if hover is enabled in settings
         if (!hoverEnabled) {
           return null;
         }
 
         const line = document.lineAt(position.line).text;
 
-        // Match #region / #endregion at the cursor position
+        // -- Match #region / #endregion at the cursor position
         const regionMatch = line.match(/#(end)?region\b/);
         if (regionMatch) {
           const start = line.indexOf(regionMatch[0]);
@@ -549,12 +545,12 @@ function activate(context) {
           }
         }
 
-        // Prevent hover inside strings or comments
+        // -- Prevent hover inside strings or comments
         if (isInStringOrComment(line, position.character)) {
           return null;
         }
 
-        // 1. TEMPLATE TAGS (<% and %>)
+        // -- Template tags (<% and %>)
         // OtterScript uses ASP-style template tags for embedding code
 
         const templateRange = document.getWordRangeAtPosition(position, /<%|%>/);
@@ -570,7 +566,7 @@ function activate(context) {
           }
         }
 
-        // 2. EXPRESSION DELIMITERS (%(), @(), $())
+        // -- Expression Delimiters (%(), @(), $())
         // These delimiters start special expression types:
         //   %( ) - Map expression (key-value pairs)
         //   @( ) - Vector expression (arrays/lists)
@@ -592,10 +588,10 @@ function activate(context) {
                     buildHoverMarkdown(syntaxDocs.nestedEval),exprRange);
             }
         }
-        // 3. KEYWORDS (if, foreach, with, set, etc.)
+        // -- Keywords (if, foreach, with, set, etc.)
         // Control flow and language keywords.
 
-        // Special-case multi-word keyword: "force normal"
+        // -- Special-case multi-word keyword: "force normal"
         const forceRange = document.getWordRangeAtPosition(
           position,
           /\bforce\s+normal\b/
@@ -604,21 +600,21 @@ function activate(context) {
         const wordRange = forceRange
           ?? document.getWordRangeAtPosition(
               position,
-              /\b[a-zA-Z]+(?:-[a-zA-Z]+)*\b/ // single token, hyphens allowed; NEVER spaces
+              /\b[a-zA-Z]+(?:-[a-zA-Z]+)*\b/ // Single token, hyphens allowed; NEVER spaces
             );
 
         if (wordRange) {
           const word = document.getText(wordRange);
 
-          // Check if it's a known keyword
+          // -- Check if it's a known keyword
           if (knownKeywords.has(word)) {
             const doc = keywordDocs[word];
-            // Make hover
+            // -- Make hover
             return new vscode.Hover(buildHoverMarkdown(doc), wordRange);
           }
         }
 
-        // 4. SWIM-STRING DELIMITERS (Fish Sentinels)
+        // -- Swim-string delimiters (Fish Sentinels)
         // OtterScript's unique string syntax: >>, >==8>, >--=>
         // Any characters between two identical fish-shaped delimiters
 
@@ -632,7 +628,7 @@ function activate(context) {
             buildHoverMarkdown(syntaxDocs.swimString), swimRange);
         }
 
-        // 5. OPERATIONS (Log-Information, Log-Warning, Log-Error, etc.)
+        // -- Operations (Log-Information, Log-Warning, Log-Error, etc.)
         // Built-in operations. Distinguished by hyphenated names.
         const operationRange = document.getWordRangeAtPosition(
         position,
@@ -643,14 +639,14 @@ function activate(context) {
           const opName = document.getText(operationRange);
           const doc = operationDocs[opName];
 
-          // No documentation found
+          // -- No documentation found
           if (!doc) return null;
 
-          // Make hover
+          // -- Make hover
           return new vscode.Hover(buildHoverMarkdown(doc), operationRange);
         }
 
-        // 6. SYMBOLS ($function, @vector, $variable)
+        // -- Symbols ($function, @vector, $variable)
         // Most general case - matches any $ or @ prefixed identifier
         // Checks scalar functions, vector functions, and variables
         // Must be LAST because it matches many things
@@ -664,21 +660,21 @@ function activate(context) {
         const prefix = text[0];         // '$' or '@'
         const name = text.substring(1); // The identifier without prefix
 
-        // Look up documentation based on prefix type
+        // -- Look up documentation based on prefix type
         let doc;
         if (prefix === "$") {
-          // $ can be either a scalar function OR a variable
+          // -- $ can be either a scalar function OR a variable
           // Check functions first (more specific), then variables
           doc = scalarFunctionDocs[name] || variableDocs[name];
         } else if (prefix === "@") {
-          // @ is a vector function
+          // -- @ is a vector function
           doc = vectorFunctionDocs[name];
         }
 
-        // No documentation found
+        // -- No documentation found
         if (!doc) return null;
 
-        // Make hover
+        // -- Make hover
         return new vscode.Hover(buildHoverMarkdown(doc), symbolRange);
       }
     }
@@ -733,16 +729,16 @@ function activate(context) {
         const calledName = document.getText(wordRange);
         if (!calledName) return null;
 
-        // Verify this is actually a 'call' statement
+        // -- Verify this is actually a 'call' statement
         const lineText = document.lineAt(position.line).text;
         const textBeforeWord = lineText.slice(0, wordRange.start.character);
 
-        // Check if 'call' appears immediately before the word (with whitespace)
+        // -- Check if 'call' appears immediately before the word (with whitespace)
         if (!/\bcall\s+$/i.test(textBeforeWord)) {
           return null;  // Not a 'call' statement - ignore
         }
 
-        // Match: module <Name>
+        // -- Match: module <Name>
         const escaped = calledName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const moduleRegex = new RegExp(`^\\s*module\\s+(${escaped})\\b`);
 
@@ -751,7 +747,7 @@ function activate(context) {
 
           const match = moduleRegex.exec(text);
           if (match) {
-            // Calculate start position from regex match
+            // -- Calculate start position from regex match
             const nameStartInMatch = match[0].indexOf(match[1]);
             const start = match.index + nameStartInMatch;
 
@@ -795,7 +791,7 @@ function activate(context) {
 
     const text = document.getText();
 
-    // Parser state variables (track position and context)
+    // -- Parser state variables (track position and context)
     let braces = 0;           // { } balance
     let parens = 0;           // ( ) balance
     let brackets = 0;         // [ ] balance
@@ -808,16 +804,16 @@ function activate(context) {
     let stringChar = '';      // Current quote character (' or ")
     const issues = [];        // Collection of diagnostics to report
 
-    // Split into lines for line-by-line processing
+    // -- Split into lines for line-by-line processing
     const lines = text.split('\n');
 
-    // SINGLE PASS: Process all lines
+    // -- Process all lines
     for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
       const rawLine = lines[lineIndex];
 
-      // ============================================================
-      // PASS 1: MISSING '$' IN IF CONDITIONS (Line-based)
-      // ============================================================
+      // ------------------------------------------------------------
+      // Missing '$' in if conditions
+      // ------------------------------------------------------------
       if (!inBlockComment) {
         const diagnostic = checkMissingDollar(rawLine, lineIndex, NON_VARIABLE_IDENTIFIERS);
         if (diagnostic) {
@@ -825,15 +821,15 @@ function activate(context) {
         }
       }
 
-      // ============================================================
-      // PASS 2: CHARACTER-BY-CHARACTER PARSING
-      // ============================================================
+      // ------------------------------------------------------------
+      // Character-by-character state tracking
+      // ------------------------------------------------------------
       for (let col = 0; col < rawLine.length; col++) {
         const ch = rawLine[col];
 
-        // --- BLOCK COMMENT HANDLING (Highest priority) ---
+        // -- Block Comment Handling (Highest priority)
         if (inBlockComment) {
-          // Check for closing */
+          // -- Check for closing */
           if (ch === '*' && rawLine[col + 1] === '/') {
             inBlockComment = false;
             col++;  // Skip the '/'
@@ -841,7 +837,7 @@ function activate(context) {
           continue;  // Skip everything else while in block comment
         }
 
-        // Check for opening /*
+        // -- Check for opening /*
         if (!inString && swimDelimiter === null &&
             ch === '/' && rawLine[col + 1] === '*') {
           inBlockComment = true;
@@ -849,13 +845,13 @@ function activate(context) {
           continue;
         }
 
-        // --- Handle regular strings (single/double quoted) ---
+        // -- Handle regular strings (single/double quoted)
         if (swimDelimiter === null && (ch === '"' || ch === "'")) {
           if (!inString) {
             inString = true;
             stringChar = ch;
           } else if (ch === stringChar) {
-            // Check if this quote is escaped
+            // -- Check if this quote is escaped
             let backslashCount = 0;
             let pos = col - 1;
             while (pos >= 0 && rawLine[pos] === '\\') {
@@ -869,7 +865,7 @@ function activate(context) {
           continue;
         }
 
-        // --- Handle swim-strings (fish sentinels) ---
+        // -- Handle swim-strings (fish sentinels)
         if (!inString && swimDelimiter === null && ch === '>') {
           const m = rawLine.slice(col).match(/^>[^>]{0,5}>/);
           if (m) {
@@ -879,7 +875,7 @@ function activate(context) {
           }
         }
 
-        // Exit swim-string when finding the matching delimiter
+        // -- Exit swim-string when finding the matching delimiter
         if (swimDelimiter) {
           if (rawLine.startsWith(swimDelimiter, col)) {
             col += swimDelimiter.length - 1;
@@ -888,16 +884,16 @@ function activate(context) {
           continue;
         }
 
-        // --- Skip line comments (# or //) ---
+        // -- Skip line comments (# or //)
         if (!inString && swimDelimiter === null &&
             (ch === '#' || (ch === '/' && rawLine[col + 1] === '/'))) {
           break;  // Skip rest of line
         }
 
-        // --- Count braces for balance checking ---
+        // -- Count braces for balance checking
         if (!inString && swimDelimiter === null) {
 
-          // Braces { }
+          // -- Braces { }
           if (ch === '{') {
             braces++;
             lastBracePos = document.offsetAt(new vscode.Position(lineIndex, col));
@@ -906,7 +902,7 @@ function activate(context) {
             if (braces < 0) lastBracePos = document.offsetAt(new vscode.Position(lineIndex, col));
           }
 
-          // Parentheses ( )
+          // -- Parentheses ( )
           else if (ch === '(') {
             parens++;
             lastParenPos = document.offsetAt(new vscode.Position(lineIndex, col));
@@ -915,7 +911,7 @@ function activate(context) {
             if (parens < 0) lastParenPos = document.offsetAt(new vscode.Position(lineIndex, col));
           }
 
-          // Brackets [ ]
+          // -- Brackets [ ]
           else if (ch === '[') {
             brackets++;
             lastBracketPos = document.offsetAt(new vscode.Position(lineIndex, col));
@@ -930,12 +926,12 @@ function activate(context) {
       // SYMBOL DETECTION
       // ============================================================
       if (!inBlockComment) {
-        // Skip comment-only lines
+        // -- Skip comment-only lines
         if (!/^\s*#/.test(rawLine) && !/^\s*\/\//.test(rawLine)) {
-          // STRIP STRINGS FOR SYMBOL DETECTION
+          // -- Strip strings for symbol detection
           const line = stripStrings(rawLine);
 
-          // --- Detect unknown scalar functions ---
+          // -- Detect unknown scalar functions
           for (const match of line.matchAll(scalarCallRegex())) {
             const name = match[1];
             if (!knownScalarFunctions.has(name)) {
@@ -953,7 +949,7 @@ function activate(context) {
             }
           }
 
-          // --- Detect unknown vector functions ---
+          // -- Detect unknown vector functions
           for (const match of line.matchAll(vectorCallRegex())) {
             const name = match[1];
             if (!knownVectorFunctions.has(name)) {
@@ -971,7 +967,7 @@ function activate(context) {
             }
           }
 
-          // --- Detect unknown operations ---
+          // -- Detect unknown operations
           for (const match of line.matchAll(operationCallRegex())) {
             const name = match[1];
             if (
@@ -997,7 +993,7 @@ function activate(context) {
             }
           }
 
-          // --- Detect invalid logical operators ---
+          // -- Detect invalid logical operators
           if (/^\s*if\b/.test(line)) {
             for (let j = 0; j < line.length; j++) {
               const ch = line[j];
@@ -1023,8 +1019,7 @@ function activate(context) {
       }
     }
 
-    // FINAL CHECK: UNBALANCED BRACES AND PARENTHESES
-
+    // -- Unbalanced braces
     if (braces !== 0) {
       const pos = document.positionAt(lastBracePos);
       const lineNum = pos.line + 1;
@@ -1039,6 +1034,7 @@ function activate(context) {
       ));
     }
 
+    // -- Unbalanced parantheses
     if (parens !== 0) {
       const pos = document.positionAt(lastParenPos);
       const lineNum = pos.line + 1;
@@ -1053,6 +1049,7 @@ function activate(context) {
       ));
     }
 
+    // -- Unbalanced brackets
     if (brackets !== 0) {
       const pos = document.positionAt(lastBracketPos);
       const lineNum = pos.line + 1;
@@ -1072,7 +1069,6 @@ function activate(context) {
   // ============================================================
   // INITIAL DIAGNOSTICS & SUBSCRIPTION REGISTRATION
   // ============================================================
-
   // Run initial diagnostics for already-open files
   // This handles files that were open before the extension activated
   // Without this, users would need to retype or reopen files to see errors
@@ -1082,21 +1078,19 @@ function activate(context) {
   // VS Code automatically disposes these when the extension deactivates
   context.subscriptions.push(
 
-    // Output channel used for logging
+    // -- Output channel used for logging
     getOutputChannel(),
 
-    // ---------- Diagnostics Subscriptions ----------
-    // Re-run diagnostics whenever text changes (every keystroke)
+    // -- Re-run diagnostics whenever text changes (every keystroke)
     vscode.workspace.onDidChangeTextDocument(e => updateDiagnostics(e.document)),
 
-    // Run diagnostics when a new file is opened (handles files opened after activation)
+    // -- Run diagnostics when a new file is opened (handles files opened after activation)
     vscode.workspace.onDidOpenTextDocument(updateDiagnostics),
 
-    // Clean up diagnostics when a file is closed to prevent stale error markers
+    // -- Clean up diagnostics when a file is closed to prevent stale error markers
     vscode.workspace.onDidCloseTextDocument(doc => diagnostics.delete(doc.uri)),
 
-    // ---------- Language Feature Providers ----------
-    // All providers are registered here for cleanup on deactivation
+    // -- All providers are registered here for cleanup on deactivation
     signatureHelpProvider,
     functionCompletionProvider,
     variableCompletionProvider,
