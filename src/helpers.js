@@ -63,6 +63,18 @@ const NON_VARIABLE_IDENTIFIERS = new Set([
 ]);
 
 // ============================================================
+// TIME UTILITIES
+// ============================================================
+
+/**
+ * Returns current time formatted as HH:MM:SS.
+ * @returns {string}
+ */
+function timestamp() {
+  return new Date().toLocaleTimeString([], { hour12: false });
+}
+
+// ============================================================
 // LOGGER
 // ============================================================
 
@@ -300,14 +312,6 @@ function stripStrings(line) {
     // Single-quoted strings: 'anything here' becomes ''
     // Handles escaped quotes: \', and escaped backslashes: \\
     .replace(/'([^'\\]|\\.)*'/g, "''");
-}
-
-/**
- * Returns current time formatted as HH:MM:SS.
- * @returns {string}
- */
-function timestamp() {
-  return new Date().toLocaleTimeString([], { hour12: false });
 }
 
 // ============================================================
