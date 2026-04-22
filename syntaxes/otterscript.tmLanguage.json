@@ -126,7 +126,14 @@
       "patterns": [
         {
           "name": "keyword.control.otterscript",
-          "match": "\\b(else|foreach|for|in|set|raise-error|global|local|call|return|break|continue|try|catch|throw|fail|error|warn|force\\s+normal|await)\\b"
+          "match": "\\b(else|foreach|in|set|raise-error|global|local|call|return|break|continue|try|catch|throw|fail|error|warn|force\\s+normal|await)\\b"
+        },
+        {
+          "name": "keyword.control.context.otterscript",
+          "match": "\\bfor\\s+(server|role|deployable|directory)\\b",
+          "captures": {
+            "1": { "name": "storage.type.context.otterscript" }
+          }
         },
         {
           "name": "storage.modifier.otterscript",

@@ -3,9 +3,11 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "monthly"
+      interval: "weekly"
       time: "09:00"
       timezone: "Europe/Oslo"
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore(ci)"
     labels:
@@ -19,9 +21,11 @@ updates:
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
-      interval: "monthly"
+      interval: "weekly"
       time: "09:00"
       timezone: "Europe/Oslo"
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "chore(deps)"
     labels:

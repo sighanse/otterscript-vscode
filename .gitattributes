@@ -3,6 +3,7 @@
 
 # Source Files
 *.js text eol=lf
+src/**/*.js text eol=lf
 *.json text eol=lf
 *.jsonc text eol=lf
 *.sh text eol=lf
@@ -21,9 +22,13 @@
 
 # Other
 .vscodeignore text eol=lf
+.vscode/** text eol=lf
 .gitignore    text eol=lf
 .gitattributes text eol=lf
+*.code-workspace text eol=lf
+package-lock.json text eol=lf
 
 # Binaries
 *.png binary
 *.vsix binary
+*.zip binary

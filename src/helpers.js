@@ -1,10 +1,9 @@
 // @ts-check
 /**
- * @fileoverview Pure helper functions for OtterScript extension.
+ * @fileoverview Pure helper functions for OtterScript language extension.
  *
- * This module contains only pure functions and constants with no
- * dependencies on `activate()` scope. All functions are testable
- * and reusable.
+ * Dependencies:
+ * - vscode (required for OutputChannel, CompletionItem, etc.)
  *
  * @module helpers
  */
@@ -53,7 +52,7 @@ function loadConfig() {
  * These are language literals, not user-defined variables.
  *
  * Used by diagnostics to avoid false "missing $" errors on literals.
- *
+ * @readonly
  * @type {Set<string>}
  */
 const NON_VARIABLE_IDENTIFIERS = new Set([
@@ -61,6 +60,18 @@ const NON_VARIABLE_IDENTIFIERS = new Set([
   "false",  // Boolean literal
   "null"    // Null literal
 ]);
+
+// ============================================================
+// TIME UTILITIES
+// ============================================================
+
+/**
+ * Returns current time formatted as HH:MM:SS.
+ * @returns {string}
+ */
+function timestamp() {
+  return new Date().toLocaleTimeString([], { hour12: false });
+}
 
 // ============================================================
 // LOGGER
@@ -302,14 +313,6 @@ function stripStrings(line) {
     .replace(/'([^'\\]|\\.)*'/g, "''");
 }
 
-/**
- * Returns current time formatted as HH:MM:SS.
- * @returns {string}
- */
-function timestamp() {
-  return new Date().toLocaleTimeString([], { hour12: false });
-}
-
 // ============================================================
 // HOVER & COMPLETION BUILDERS
 // ============================================================
@@ -427,20 +430,23 @@ function buildCompletionItem(doc, kind, sortPrefix, insertText, triggerSignature
  */
 function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
   const match = line.match(/^\s*if\s+([a-zA-Z][a-zA-Z0-9_]*)\s*(=|==|!=|<=|>=|<|>)/);
-  if (!match) return null;
+
+  // -- Guard: ensure regex matched and we have a valid index position
+  if (!match || typeof match.index !== 'number') return null;
 
   const varName = match[1];
 
-  // Skip known literals that don't need '$'
+  // -- Skip known literals that don't need '$' (true, false, null)
   if (nonVariableIdentifiers.has(varName)) {
     return null;
   }
 
-  const startIndex = line.indexOf(varName);
+  // -- Calculate exact position of variable name within the line
+  const varNameIndex = match.index + match[0].indexOf(varName);
   const diagnostic = new vscode.Diagnostic(
     new vscode.Range(
-      new vscode.Position(lineIndex, startIndex),
-      new vscode.Position(lineIndex, startIndex + varName.length)
+      new vscode.Position(lineIndex, varNameIndex),
+      new vscode.Position(lineIndex, varNameIndex + varName.length)
     ),
     `Missing '$' before variable: ${varName}. Use $${varName}`,
     vscode.DiagnosticSeverity.Error
@@ -448,6 +454,39 @@ function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
   diagnostic.code = "missing-dollar";
 
   return diagnostic;
+}
+
+// ============================================================
+// CODE ACTION FACTORY
+// ============================================================
+
+/**
+ * Generic code action factory for creating quick-fix actions.
+ *
+ * This factory centralizes the creation of VS Code CodeAction objects,
+ * reducing duplication across multiple fix providers.
+ *
+ * @private
+ * @param {string} title - Human-readable action title shown in lightbulb menu
+ * @param {vscode.Diagnostic} diagnostic - The diagnostic this action fixes
+ * @param {(edit: vscode.WorkspaceEdit) => void} applyFix - Callback that applies the fix to a WorkspaceEdit
+ * @returns {vscode.CodeAction} Configured code action ready to be returned to VS Code
+ *
+ * @example
+ * // Create a fix that inserts a character
+ * createCodeAction("Insert '$'", diagnostic, (edit) => {
+ *   edit.insert(uri, position, "$");
+ * });
+ *
+ */
+function createCodeAction(title, diagnostic, applyFix) {
+  const action = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
+  action.diagnostics = [diagnostic];
+  action.isPreferred = true;
+  const edit = new vscode.WorkspaceEdit();
+  applyFix(edit);
+  action.edit = edit;
+  return action;
 }
 
 /**
@@ -465,23 +504,12 @@ function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
  * // The action inserts "$" before "x" -> "if $x > 5"
  */
 function createMissingDollarFix(document, diagnostic) {
-  const action = new vscode.CodeAction(
-    "Insert missing '$'",
-    vscode.CodeActionKind.QuickFix
-  );
+  const uri = document.uri;
+  const start = diagnostic.range.start;
 
-  action.diagnostics = [diagnostic];
-  action.isPreferred = true;
-
-  const edit = new vscode.WorkspaceEdit();
-  edit.insert(
-    document.uri,
-    diagnostic.range.start,
-    "$"
-  );
-
-  action.edit = edit;
-  return action;
+  return createCodeAction("Insert missing '$'", diagnostic, (edit) => {
+    edit.insert(uri, start, "$");
+  });
 }
 
 /**
@@ -492,37 +520,60 @@ function createMissingDollarFix(document, diagnostic) {
  *
  * @param {vscode.TextDocument} document - The document containing the diagnostic
  * @param {vscode.Diagnostic} diagnostic - The diagnostic with the invalid operator
- * @returns {vscode.CodeAction | null} - Code action or null if replacement unknown
+ * @returns {vscode.CodeAction | null} Code action or null if replacement unknown
  *
  * @example
  * // For diagnostic on "&" -> creates action to replace with "&&"
  */
 function createInvalidOperatorFix(document, diagnostic) {
   const text = document.getText(diagnostic.range);
-
-  let replacement = null;
-  if (text === "&") replacement = "&&";
-  if (text === "|") replacement = "||";
+  const replacement = text === "&" ? "&&" : text === "|" ? "||" : null;
 
   if (!replacement) return null;
 
-  const action = new vscode.CodeAction(
-    `Replace '${text}' with '${replacement}'`,
-    vscode.CodeActionKind.QuickFix
+  return createCodeAction(`Replace '${text}' with '${replacement}'`, diagnostic, (edit) => {
+    edit.replace(document.uri, diagnostic.range, replacement);
+  });
+}
+
+/**
+ * Creates a quick-fix that replaces incorrect 'for' loop usage with 'foreach'.
+ *
+ * @param {vscode.TextDocument} document - The document containing the diagnostic
+ * @param {vscode.Diagnostic} diagnostic - The diagnostic with the incorrect 'for' usage
+ * @returns {vscode.CodeAction | null} Code action or null if replacement unknown
+ */
+function createForToForeachFix(document, diagnostic) {
+  return createCodeAction("Replace 'for' with 'foreach'", diagnostic, (edit) => {
+    edit.replace(document.uri, diagnostic.range, 'foreach');
+  });
+}
+
+/**
+ * Creates a diagnostic for unbalanced symbols.
+ * @param {number} count - Current count (positive = unclosed, negative = extra closing)
+ * @param {number} lastPos - Position of last unmatched symbol
+ * @param {string} openChar - Opening character ('{', '(', '[')
+ * @param {string} closeChar - Closing character ('}', ')', ']')
+ * @param {string} name - Display name ('brace', 'parenthesis', 'bracket')
+ * @param {vscode.TextDocument} document The document
+ * @returns {vscode.Diagnostic | null}
+ */
+function createUnbalancedDiagnostic(count, lastPos, openChar, closeChar, name, document) {
+  if (count === 0) return null;
+
+  const pos = document.positionAt(lastPos);
+  const lineNum = pos.line + 1;
+  const colNum = pos.character + 1;
+  const message = count > 0
+    ? `Unclosed ${name}(s): ${count} '${openChar}' not closed (first at line ${lineNum}, col ${colNum})`
+    : `Unexpected closing ${name}(s): ${Math.abs(count)} extra '${closeChar}' (first at line ${lineNum}, col ${colNum})`;
+
+  return new vscode.Diagnostic(
+    new vscode.Range(pos, document.positionAt(lastPos + 1)),
+    message,
+    vscode.DiagnosticSeverity.Error
   );
-
-  action.diagnostics = [diagnostic];
-  action.isPreferred = true;
-
-  const edit = new vscode.WorkspaceEdit();
-  edit.replace(
-    document.uri,
-    diagnostic.range,
-    replacement
-  );
-
-  action.edit = edit;
-  return action;
 }
 
 // ============================================================
@@ -530,26 +581,33 @@ function createInvalidOperatorFix(document, diagnostic) {
 // ============================================================
 
 module.exports = {
-  // Configuration
+  // -- Configuration
   loadConfig,
 
-  // Constants
+  // -- Constants
   NON_VARIABLE_IDENTIFIERS,
 
-  // Logger
+  // -- Logger
   log,
   getOutputChannel,
   timestamp,
 
-  // Helpers
+  // -- Helpers
   isInStringOrComment,
   stripStrings,
-  //buildWordRegex,
   checkMissingDollar,
   validateDocs,
+  createUnbalancedDiagnostic,
+
+  // -- Builders
   buildHoverMarkdown,
   buildCompletionItem,
+
+  // -- Code Actions
   createMissingDollarFix,
   createInvalidOperatorFix,
+  createForToForeachFix,
+
+  // -- Regex
   createRegexPatterns
 };

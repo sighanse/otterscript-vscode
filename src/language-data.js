@@ -291,15 +291,34 @@ $message = "Value: $(@list[0])";
 const keywordDocs = {
   'for': {
     name: "for",
-    signature: "for /context_type/ /literal_expression/",
-    description: "Used for declarative bindings.",
+    signature: 'for server|role|deployable|directory "name" { ... }',
+    description: "Sets the execution context for a block of statements.",
     documentation: `
-Does not perform iteration in OtterScript. It's typically used for declarative bindings, not flow control.
+**Purpose:** Changes the current execution context (server, role, or directory) for the enclosed block.
+
 **Syntax:**
 \`\`\`otterscript
-for i = 1 to 100
+for server "server-name" {
+    # statements run on that server
+}
+
+for role "role-name" {
+    # statements run in that role context
+}
+
+for directory "C:\\path" {
+    # statements run with that working directory
+}
 \`\`\`
-Although this looks like a loop in other languages, it does not perform iteration in OtterScript. It's typically used for declarative bindings, not flow control.
+
+**Important:** This is NOT an iteration statement. It does not loop. It simply sets the context once.
+
+**Example:**
+\`\`\`otterscript
+for server "web01" {
+    Ensure-Directory "C:\\Websites\\MyApp";
+}
+\`\`\`
 `
 },
   'return': {
