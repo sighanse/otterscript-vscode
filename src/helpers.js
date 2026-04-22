@@ -456,6 +456,39 @@ function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
   return diagnostic;
 }
 
+// ============================================================
+// CODE ACTION FACTORY
+// ============================================================
+
+/**
+ * Generic code action factory for creating quick-fix actions.
+ *
+ * This factory centralizes the creation of VS Code CodeAction objects,
+ * reducing duplication across multiple fix providers.
+ *
+ * @private
+ * @param {string} title - Human-readable action title shown in lightbulb menu
+ * @param {vscode.Diagnostic} diagnostic - The diagnostic this action fixes
+ * @param {(edit: vscode.WorkspaceEdit) => void} applyFix - Callback that applies the fix to a WorkspaceEdit
+ * @returns {vscode.CodeAction} Configured code action ready to be returned to VS Code
+ *
+ * @example
+ * // Create a fix that inserts a character
+ * createCodeAction("Insert '$'", diagnostic, (edit) => {
+ *   edit.insert(uri, position, "$");
+ * });
+ *
+ */
+function createCodeAction(title, diagnostic, applyFix) {
+  const action = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
+  action.diagnostics = [diagnostic];
+  action.isPreferred = true;
+  const edit = new vscode.WorkspaceEdit();
+  applyFix(edit);
+  action.edit = edit;
+  return action;
+}
+
 /**
  * Creates a quick-fix that inserts a missing '$' at the diagnostic position.
  *
@@ -471,23 +504,12 @@ function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
  * // The action inserts "$" before "x" -> "if $x > 5"
  */
 function createMissingDollarFix(document, diagnostic) {
-  const action = new vscode.CodeAction(
-    "Insert missing '$'",
-    vscode.CodeActionKind.QuickFix
-  );
+  const uri = document.uri;
+  const start = diagnostic.range.start;
 
-  action.diagnostics = [diagnostic];
-  action.isPreferred = true;
-
-  const edit = new vscode.WorkspaceEdit();
-  edit.insert(
-    document.uri,
-    diagnostic.range.start,
-    "$"
-  );
-
-  action.edit = edit;
-  return action;
+  return createCodeAction("Insert missing '$'", diagnostic, (edit) => {
+    edit.insert(uri, start, "$");
+  });
 }
 
 /**
@@ -498,37 +520,20 @@ function createMissingDollarFix(document, diagnostic) {
  *
  * @param {vscode.TextDocument} document - The document containing the diagnostic
  * @param {vscode.Diagnostic} diagnostic - The diagnostic with the invalid operator
- * @returns {vscode.CodeAction | null} - Code action or null if replacement unknown
+ * @returns {vscode.CodeAction | null} Code action or null if replacement unknown
  *
  * @example
  * // For diagnostic on "&" -> creates action to replace with "&&"
  */
 function createInvalidOperatorFix(document, diagnostic) {
   const text = document.getText(diagnostic.range);
-
-  let replacement = null;
-  if (text === "&") replacement = "&&";
-  if (text === "|") replacement = "||";
+  const replacement = text === "&" ? "&&" : text === "|" ? "||" : null;
 
   if (!replacement) return null;
 
-  const action = new vscode.CodeAction(
-    `Replace '${text}' with '${replacement}'`,
-    vscode.CodeActionKind.QuickFix
-  );
-
-  action.diagnostics = [diagnostic];
-  action.isPreferred = true;
-
-  const edit = new vscode.WorkspaceEdit();
-  edit.replace(
-    document.uri,
-    diagnostic.range,
-    replacement
-  );
-
-  action.edit = edit;
-  return action;
+  return createCodeAction(`Replace '${text}' with '${replacement}'`, diagnostic, (edit) => {
+    edit.replace(document.uri, diagnostic.range, replacement);
+  });
 }
 
 // ============================================================
