@@ -567,7 +567,7 @@ function createUnbalancedDiagnostic(count, lastPos, openChar, closeChar, name, d
   const colNum = pos.character + 1;
   const message = count > 0
     ? `Unclosed ${name}(s): ${count} '${openChar}' not closed (first at line ${lineNum}, col ${colNum})`
-    : `Unexpected closing ${name}(s): ${Math.abs(count)} extra '${closeChar}' (first at line ${lineNum}, col ${colNum})`;
+    : `Unexpected closing ${name}: Extra '${closeChar}' at line ${lineNum}, col ${colNum}`;
 
   return new vscode.Diagnostic(
     new vscode.Range(pos, document.positionAt(lastPos + 1)),

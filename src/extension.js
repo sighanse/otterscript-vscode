@@ -901,28 +901,46 @@ function activate(context) {
           // -- Braces { }
           if (ch === '{') {
             braces++;
-            lastBracePos = document.offsetAt(new vscode.Position(lineIndex, col));
+            if (braces === 1) lastBracePos = document.offsetAt(new vscode.Position(lineIndex, col));
           } else if (ch === '}') {
-            braces--;
-            if (braces < 0) lastBracePos = document.offsetAt(new vscode.Position(lineIndex, col));
+            if (braces === 0) {
+              // Unexpected closing - report immediately
+              const pos = document.offsetAt(new vscode.Position(lineIndex, col));
+              const diag = createUnbalancedDiagnostic(-1, pos, '{', '}', 'brace', document);
+              if (diag) issues.push(diag);
+            } else {
+              braces--;
+            }
           }
 
-          // -- Parentheses ( )
+          // -- Parenthesis ( )
           else if (ch === '(') {
             parens++;
-            lastParenPos = document.offsetAt(new vscode.Position(lineIndex, col));
+            if (parens === 1) lastParenPos = document.offsetAt(new vscode.Position(lineIndex, col));
           } else if (ch === ')') {
-            parens--;
-            if (parens < 0) lastParenPos = document.offsetAt(new vscode.Position(lineIndex, col));
+            if (parens === 0) {
+              // Unexpected closing - report immediately
+              const pos = document.offsetAt(new vscode.Position(lineIndex, col));
+              const diag = createUnbalancedDiagnostic(-1, pos, '(', ')', 'parenthesis', document);
+              if (diag) issues.push(diag);
+            } else {
+              parens--;
+            }
           }
 
           // -- Brackets [ ]
           else if (ch === '[') {
             brackets++;
-            lastBracketPos = document.offsetAt(new vscode.Position(lineIndex, col));
+            if (brackets === 1) lastBracketPos = document.offsetAt(new vscode.Position(lineIndex, col));
           } else if (ch === ']') {
-            brackets--;
-            if (brackets < 0) lastBracketPos = document.offsetAt(new vscode.Position(lineIndex, col));
+            if (brackets === 0) {
+              // Unexpected closing - report immediately
+              const pos = document.offsetAt(new vscode.Position(lineIndex, col));
+              const diag = createUnbalancedDiagnostic(-1, pos, '[', ']', 'bracket', document);
+              if (diag) issues.push(diag);
+            } else {
+              brackets--;
+            }
           }
         }
       }
@@ -1040,23 +1058,20 @@ function activate(context) {
       }
     }
 
-    // -- Unbalanced braces
-    if (braces !== 0) {
-      const braceDiag = createUnbalancedDiagnostic(braces, lastBracePos, '{', '}', 'brace', document);
-      if (braceDiag) issues.push(braceDiag);
+    // -- Unbalanced opening braces, parentheses, brackets
+    const symbols = [
+      { count: braces, lastPos: lastBracePos, open: '{', close: '}', name: 'brace' },
+      { count: parens, lastPos: lastParenPos, open: '(', close: ')', name: 'parenthesis' },
+      { count: brackets, lastPos: lastBracketPos, open: '[', close: ']', name: 'bracket' }
+    ];
+
+    for (const sym of symbols) {
+      if (sym.count > 0) {
+        const diag = createUnbalancedDiagnostic(sym.count, sym.lastPos, sym.open, sym.close, sym.name, document);
+        if (diag) issues.push(diag);
+      }
     }
 
-    // -- Unbalanced parentheses
-    if (parens !== 0) {
-      const parenDiag = createUnbalancedDiagnostic(parens, lastParenPos, '(', ')', 'parenthesis', document);
-      if (parenDiag) issues.push(parenDiag);
-    }
-
-    // -- Unbalanced brackets
-    if (brackets !== 0) {
-      const bracketDiag = createUnbalancedDiagnostic(brackets, lastBracketPos, '[', ']', 'bracket', document);
-      if (bracketDiag) issues.push(bracketDiag);
-    }
     diagnostics.set(document.uri, issues);
   }
 
