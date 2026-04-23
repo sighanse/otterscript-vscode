@@ -1,10 +1,11 @@
 version: 2
 updates:
   - package-ecosystem: "github-actions"
+    open-pull-requests-limit: 10
     directory: "/"
     schedule:
       interval: "weekly"
-      time: "09:00"
+      time: "08:00"
       timezone: "Europe/Oslo"
     cooldown:
       default-days: 7
@@ -19,15 +20,19 @@ updates:
           - "*"
 
   - package-ecosystem: "npm"
+    open-pull-requests-limit: 10
     directory: "/"
     schedule:
       interval: "weekly"
-      time: "09:00"
+      time: "08:00"
       timezone: "Europe/Oslo"
+    allow:
+      - dependency-type: "direct" # Only update top-level packages
     cooldown:
-      default-days: 7
+      default-days: 3
     commit-message:
-      prefix: "chore(deps)"
+      prefix: "chore"
+      include: "scope"
     labels:
       - dependencies
       - npm
@@ -35,3 +40,7 @@ updates:
       npm:
         patterns:
           - "*"
+    ignore:
+      - dependency-name: "@types/vscode"
+        versions:
+          - ">=1.85.0"
