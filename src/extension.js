@@ -57,7 +57,11 @@ const {
  * @param {vscode.ExtensionContext} context
  */
 function activate(context) {
-  log.info(`OtterScript extension v${context.extension.packageJSON.version} activated`);
+  const pkg = context.extension.packageJSON;
+  const extensionName = pkg.displayName || pkg.name;
+  const version = pkg.version;
+
+  log.info(`${extensionName} v${version} activated`);
 
   // -- Load initial configuration
   let { completionEnabled, hoverEnabled, signatureHelpEnabled } = loadConfig();
@@ -93,7 +97,7 @@ function activate(context) {
 
     // -- Show user-friendly error message
     vscode.window.showErrorMessage(
-      `OtterScript Language Extension failed to load ${languageFile}.` +
+      `${extensionName} failed to load ${languageFile}.` +
       "The extension could not be activated. Check the developer console for details."
     );
 
