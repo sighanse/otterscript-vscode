@@ -53,7 +53,7 @@ const {
  * @param {vscode.ExtensionContext} context
  */
 function activate(context) {
-  log.info("OtterScript extension active");
+  log.info(`OtterScript extension v${context.extension.packageJSON.version} activated`);
 
   // -- Load initial configuration
   let { completionEnabled, hoverEnabled, signatureHelpEnabled } = loadConfig();
