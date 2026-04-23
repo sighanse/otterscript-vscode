@@ -135,7 +135,7 @@ const log = {
 };
 
 // ============================================================
-// VALIDATION (uses log)
+// VALIDATION
 // ============================================================
 
 /**
@@ -194,6 +194,19 @@ function validateDocs(label, docsTable) {
   }
 
   return { errors, warnings };
+}
+
+/**
+ * Checks if the cursor is in a valid position for showing completions.
+ * @param {vscode.TextDocument} document - The current text document
+ * @param {vscode.Position} position - The current cursor position
+ * @param {boolean} completionEnabled - Whether completion is enabled in settings
+ * @returns {boolean}
+ */
+function isValidCompletionPosition(document, position, completionEnabled) {
+    if (!completionEnabled) return false;
+    const line = document.lineAt(position.line).text;
+    return !isInStringOrComment(line, position.character);
 }
 
 // ============================================================
@@ -593,6 +606,7 @@ module.exports = {
   timestamp,
 
   // -- Helpers
+  isValidCompletionPosition,
   isInStringOrComment,
   stripStrings,
   checkMissingDollar,

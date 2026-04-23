@@ -38,6 +38,7 @@ const {
   createMissingDollarFix,
   createUnbalancedDiagnostic,
   getOutputChannel,
+  isValidCompletionPosition,
   isInStringOrComment,
   loadConfig,
   stripStrings,
@@ -104,24 +105,6 @@ function activate(context) {
     scalarFunctionDocs,
     vectorFunctionDocs
   } = languageData;
-
-  /**
-   * Checks if the cursor is in a valid position for showing completions.
-   * Completions are disabled when:
-   * - The user has disabled them via settings
-   * - The cursor is inside a string literal
-   * - The cursor is inside a comment
-   *
-   * @param {vscode.TextDocument} document - The current text document
-   * @param {vscode.Position} position - The current cursor position
-   * @returns {boolean} - True if completions should be shown, false otherwise
-   */
-  function isValidCompletionPosition(document, position) {
-    if (!completionEnabled) return false;
-    const line = document.lineAt(position.line).text;
-    const cursor = position.character;
-    return !isInStringOrComment(line, cursor);
-  }
 
   // -- Validate all documentation sources (intentionally ignore return value)
   void validateDocs("scalarFunctionDocs", scalarFunctionDocs); // $ToJson, $Base64Encode, etc.
@@ -305,7 +288,7 @@ function activate(context) {
       {
         provideCompletionItems(document, position) {
           // -- Check if completion is enabled and not in a string/comment
-          if (!isValidCompletionPosition(document, position)) return [];
+          if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
           const linePrefix = document
             .lineAt(position.line)
@@ -346,7 +329,7 @@ function activate(context) {
       {
         provideCompletionItems(document, position) {
           // -- Check if completion is enabled and not in a string/comment
-          if (!isValidCompletionPosition(document, position)) return [];
+          if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
           const text = document
             .lineAt(position.line)
@@ -384,7 +367,7 @@ function activate(context) {
       {
         provideCompletionItems(document, position) {
           // -- Check if completion is enabled and not in a string/comment
-          if (!isValidCompletionPosition(document, position)) return [];
+          if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
           // -- Get text from line start to cursor
           const linePrefix = document
@@ -431,7 +414,7 @@ function activate(context) {
     {
       provideCompletionItems(document, position) {
         // -- Check if completion is enabled and not in a string/comment
-        if (!isValidCompletionPosition(document, position)) return [];
+        if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
         // -- Ensure syntaxDocs and mapExpr exist
         if (!syntaxDocs?.mapExpr) {
@@ -464,7 +447,7 @@ function activate(context) {
       {
         provideCompletionItems(document, position) {
           // -- Check if completion is enabled and not in a string/comment
-          if (!isValidCompletionPosition(document, position)) return [];
+          if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
           const line = document.lineAt(position.line).text;
           const cursor = position.character;
