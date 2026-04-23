@@ -17,7 +17,7 @@
  * @license MIT
  * @see src/language-data.js - Plain data documentation module
  * @see src/helpers.js - Helpers, functions, constants
- * @see src/package.json - Extension manifest and configuration schema
+ * @see package.json - Extension manifest and configuration schema
  * @see syntaxes/otterscript.tmLanguage.json - TextMate grammar (syntax highlighting)
  * @see snippets/otterscript.json - Snippets for structural templates only
  * @see {@link https://github.com/sighanse/otterscript-vscode} - Github repository
