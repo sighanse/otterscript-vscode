@@ -26,6 +26,9 @@
 // -- VS Code Extension API
 const vscode = require("vscode");
 
+// -- Path to the language file for OtterScript (functions, variables, operations, keywords)
+const languageFile = "./language-data.js";
+
 // -- Import helpers
 const {
   NON_VARIABLE_IDENTIFIERS,
@@ -58,6 +61,7 @@ function activate(context) {
 
   // -- Load initial configuration
   let { completionEnabled, hoverEnabled, signatureHelpEnabled } = loadConfig();
+  log.info(`Settings loaded: completion=${completionEnabled}, hover=${hoverEnabled}, signatureHelp=${signatureHelpEnabled}`);
 
   // -- Watch for settings changes while extension is running
   context.subscriptions.push(
@@ -65,30 +69,31 @@ function activate(context) {
       // -- Only reload if OtterScript settings changed
       if (e.affectsConfiguration("otterscript")) {
         ({ completionEnabled, hoverEnabled, signatureHelpEnabled } = loadConfig());
+        log.info(`Settings reloaded: completion=${completionEnabled}, hover=${hoverEnabled}, signatureHelp=${signatureHelpEnabled}`);
       }
     })
   );
 
-  // -- Language documentation data loading
-  // Loads language documentation from language-data.js (plain data module).
+  // -- Loads language documentation from language-data.js.
   // Objects contain plain strings only.
   // Any conversion to MarkdownString happens in this file.
   let languageData;
   // -- Attempt to load the documentation module with error handling
   try {
-    languageData = require("./language-data.js");
+    languageData = require(languageFile);
 
     // -- Quick validation to ensure languageData loaded correctly
     if (!languageData || typeof languageData !== "object") {
-      throw new Error("language-data.js did not export an object");
+      throw new Error(`${languageFile} did not export an object`);
     }
+    log.debug(`${languageFile} loaded successfully`);
   } catch (err) {
     // -- Log errors
-    log.error("Failed to load language-data.js", err);
+    log.error(`Failed to load ${languageFile}`, err);
 
     // -- Show user-friendly error message
     vscode.window.showErrorMessage(
-      "OtterScript Language Extension failed to load documentation data. " +
+      `OtterScript Language Extension failed to load ${languageFile}.` +
       "The extension could not be activated. Check the developer console for details."
     );
 
