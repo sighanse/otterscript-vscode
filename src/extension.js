@@ -295,7 +295,9 @@ function activate(context) {
     vscode.languages.registerCompletionItemProvider(
       "otterscript",
       {
-        provideCompletionItems(document, position) {
+        provideCompletionItems(document, position, _token, context) {
+          log.info(`[FUNC] Triggered at line ${position.line}, character ${position.character}`);
+          log.info(`[FUNC] Trigger kind: ${context.triggerKind} - 0=Invoke, 1=TriggerCharacter, 2=TriggerForIncomplete`);
           // -- Check if completion is enabled and not in a string/comment
           if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
@@ -336,7 +338,9 @@ function activate(context) {
     vscode.languages.registerCompletionItemProvider(
       "otterscript",
       {
-        provideCompletionItems(document, position) {
+        provideCompletionItems(document, position, _token, context) {
+          log.info(`[VARIABLE] Triggered at line ${position.line}, character ${position.character}`);
+          log.info(`[VARIABLE] Trigger kind: ${context.triggerKind} - 0=Invoke, 1=TriggerCharacter, 2=TriggerForIncomplete`);
           // -- Check if completion is enabled and not in a string/comment
           if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
@@ -374,7 +378,9 @@ function activate(context) {
     vscode.languages.registerCompletionItemProvider(
       "otterscript",
       {
-        provideCompletionItems(document, position) {
+        provideCompletionItems(document, position, _token, context) {
+          log.info(`[VEC] Triggered at line ${position.line}, character ${position.character}`);
+          log.info(`[VEC] Trigger kind: ${context.triggerKind} - 0=Invoke, 1=TriggerCharacter, 2=TriggerForIncomplete`);
           // -- Check if completion is enabled and not in a string/comment
           if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
@@ -421,7 +427,9 @@ function activate(context) {
   vscode.languages.registerCompletionItemProvider(
     "otterscript",
     {
-      provideCompletionItems(document, position) {
+      provideCompletionItems(document, position, token, context) {
+        log.info(`[MAP] Triggered at line ${position.line}, character ${position.character}`);
+        log.info(`[MAP] Trigger kind: ${context.triggerKind}  - // 0=Invoke, 1=TriggerCharacter, 2=TriggerForIncomplete`);
         // -- Check if completion is enabled and not in a string/comment
         if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
@@ -454,29 +462,34 @@ function activate(context) {
     vscode.languages.registerCompletionItemProvider(
       "otterscript",
       {
-        provideCompletionItems(document, position) {
+        provideCompletionItems(document, position, token, context) {
           // -- Check if completion is enabled and not in a string/comment
+          log.info(`[OP] Triggered at line ${position.line}, character ${position.character}`);
+          log.info(`[OP] Trigger kind: ${context.triggerKind} - // 0=Invoke, 1=TriggerCharacter, 2=TriggerForIncomplete`);
           if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
-
+          log.info(`[OP] Valid position for completion`);
           const line = document.lineAt(position.line).text;
           const cursor = position.character;
           const prefix = line.slice(0, cursor);
-
+          log.info(`[OP] Line prefix: "${prefix}"`);
           // -- Match: word at cursor position (letters + hyphens allowed)
           const match = prefix.match(/\b([A-Za-z]+(?:-[A-Za-z]+)*)$/);
+          log.info(`[OP] Match found: ${match}`);
           if (!match) return [];
 
           const typed = match[1];
-
+          log.info(`[OP] Typed text: "${typed}"`);
           // -- Require at least 3 characters to avoid noise
-          if (typed.length < 3) {
+          if (typed.length < 2) {
+            log.info(`[OP] Returning, due to length: "${typed.length}"`);
             return [];
           }
           const items = [];
-
+          log.info(`[OP] Providing completions for typed: "${typed}"`);
           // -- Operations (priority 0_)
           for (const [name, doc] of Object.entries(operationDocs)) {
               if (name.toLowerCase().startsWith(typed.toLowerCase())) {
+                  log.info(`[OP] Adding operation completion: "${name}"`);
                   const snippet = doc.snippet
                       ? new vscode.SnippetString(doc.snippet)
                       : new vscode.SnippetString(`${name} "\${0}";`);
@@ -487,6 +500,7 @@ function activate(context) {
           // -- Keywords (priority 1_)
           for (const [name, doc] of Object.entries(keywordDocs)) {
               if (name.toLowerCase().startsWith(typed.toLowerCase())) {
+                  log.info(`[OP] Adding keyword completion: "${name}"`);
                   const snippet = doc.snippet
                       ? new vscode.SnippetString(doc.snippet)
                       : name;
@@ -497,7 +511,6 @@ function activate(context) {
           return items;
         }
       }
-      // -- Note: No trigger character specified - this provider runs on every keystroke
       // The 3-character minimum prevents excessive triggering
     );
 
