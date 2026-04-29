@@ -97,7 +97,7 @@ function activate(context) {
 
     // -- Show user-friendly error message
     vscode.window.showErrorMessage(
-      `${extensionName} failed to load ${languageFile}.` +
+      `${extensionName} failed to load ${languageFile}. ` +
       "The extension could not be activated. Check the developer console for details."
     );
 
@@ -484,8 +484,8 @@ function activate(context) {
           for (const [name, doc] of Object.entries(operationDocs)) {
               if (!typed || name.toLowerCase().startsWith(lowerTyped)) {
                   const snippet = doc.snippet
-                      ? new vscode.SnippetString(doc.snippet)
-                      : new vscode.SnippetString(`${name} "\${0}";`);
+                    ? new vscode.SnippetString(doc.snippet)
+                    : new vscode.SnippetString(`${name} "\${0}";`);
                   const item = buildCompletionItem(doc, vscode.CompletionItemKind.Function, '0_', snippet, true);
                   item.range = replaceRange;
                   items.push(item);
@@ -496,8 +496,8 @@ function activate(context) {
           for (const [name, doc] of Object.entries(keywordDocs)) {
               if (!typed || name.toLowerCase().startsWith(lowerTyped)) {
                   const snippet = doc.snippet
-                      ? new vscode.SnippetString(doc.snippet)
-                      : name;
+                    ? new vscode.SnippetString(doc.snippet)
+                    : name;
                   const item = buildCompletionItem(doc, vscode.CompletionItemKind.Keyword, '1_', snippet, false);
                   item.range = replaceRange;
                   items.push(item);

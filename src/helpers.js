@@ -204,9 +204,9 @@ function validateDocs(label, docsTable) {
  * @returns {boolean}
  */
 function isValidCompletionPosition(document, position, completionEnabled) {
-    if (!completionEnabled) return false;
-    const line = document.lineAt(position.line).text;
-    return !isInStringOrComment(line, position.character);
+  if (!completionEnabled) return false;
+  const line = document.lineAt(position.line).text;
+  return !isInStringOrComment(line, position.character);
 }
 
 // ============================================================
