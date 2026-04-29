@@ -462,56 +462,70 @@ function activate(context) {
     vscode.languages.registerCompletionItemProvider(
       "otterscript",
       {
-        provideCompletionItems(document, position, token, context) {
+        provideCompletionItems(document, position, _token, context) {
           // -- Check if completion is enabled and not in a string/comment
           log.info(`[OP] Triggered at line ${position.line}, character ${position.character}`);
           log.info(`[OP] Trigger kind: ${context.triggerKind} - // 0=Invoke, 1=TriggerCharacter, 2=TriggerForIncomplete`);
           if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
           log.info(`[OP] Valid position for completion`);
+
           const line = document.lineAt(position.line).text;
           const cursor = position.character;
           const prefix = line.slice(0, cursor);
-          log.info(`[OP] Line prefix: "${prefix}"`);
-          // -- Match: word at cursor position (letters + hyphens allowed)
-          const match = prefix.match(/\b([A-Za-z]+(?:-[A-Za-z]+)*)$/);
-          log.info(`[OP] Match found: ${match}`);
-          if (!match) return [];
 
-          const typed = match[1];
+          // -- Match the identifier fragment immediately before cursor (letters + hyphens)
+          // Manual invoke (Ctrl+Space) should still return suggestions even when typed is empty.
+          const match = prefix.match(/([A-Za-z][A-Za-z-]*)$/);
+          const typed = match ? match[1] : "";
+          const isManualInvoke = context.triggerKind === vscode.CompletionTriggerKind.Invoke;
+
           log.info(`[OP] Typed text: "${typed}"`);
-          // -- Require at least 3 characters to avoid noise
-          if (typed.length < 2) {
+          // -- For auto-triggered suggestions, require at least 2 typed characters to avoid noise.
+          if (!isManualInvoke && typed.length < 2) {
             log.info(`[OP] Returning, due to length: "${typed.length}"`);
             return [];
           }
+
+          const lowerTyped = typed.toLowerCase();
+          const replaceRange = new vscode.Range(
+            new vscode.Position(position.line, cursor - typed.length),
+            position
+          );
+
           const items = [];
           log.info(`[OP] Providing completions for typed: "${typed}"`);
+
           // -- Operations (priority 0_)
           for (const [name, doc] of Object.entries(operationDocs)) {
-              if (name.toLowerCase().startsWith(typed.toLowerCase())) {
+              if (!typed || name.toLowerCase().startsWith(lowerTyped)) {
                   log.info(`[OP] Adding operation completion: "${name}"`);
                   const snippet = doc.snippet
                       ? new vscode.SnippetString(doc.snippet)
                       : new vscode.SnippetString(`${name} "\${0}";`);
                   const item = buildCompletionItem(doc, vscode.CompletionItemKind.Function, '0_', snippet, true);
+                  item.range = replaceRange;
                   items.push(item);
               }
           }
+
           // -- Keywords (priority 1_)
           for (const [name, doc] of Object.entries(keywordDocs)) {
-              if (name.toLowerCase().startsWith(typed.toLowerCase())) {
+              if (!typed || name.toLowerCase().startsWith(lowerTyped)) {
                   log.info(`[OP] Adding keyword completion: "${name}"`);
                   const snippet = doc.snippet
                       ? new vscode.SnippetString(doc.snippet)
                       : name;
                   const item = buildCompletionItem(doc, vscode.CompletionItemKind.Keyword, '1_', snippet, false);
+                  item.range = replaceRange;
                   items.push(item);
               }
           }
+
           return items;
         }
       }
-      // The 3-character minimum prevents excessive triggering
+      // Manual invoke (Ctrl+Space) can return all operations/keywords.
+      // Auto-trigger still requires a short typed prefix to reduce noise.
     );
 
   // ============================================================
