@@ -17,7 +17,7 @@
  * @license MIT
  * @see src/language-data.js - Plain data documentation module
  * @see src/helpers.js - Helpers, functions, constants
- * @see src/package.json - Extension manifest and configuration schema
+ * @see package.json - Extension manifest and configuration schema
  * @see syntaxes/otterscript.tmLanguage.json - TextMate grammar (syntax highlighting)
  * @see snippets/otterscript.json - Snippets for structural templates only
  * @see {@link https://github.com/sighanse/otterscript-vscode} - Github repository
@@ -25,6 +25,9 @@
 
 // -- VS Code Extension API
 const vscode = require("vscode");
+
+// -- Path to the language file for OtterScript (functions, variables, operations, keywords)
+const languageFile = "./language-data.js";
 
 // -- Import helpers
 const {
@@ -38,6 +41,7 @@ const {
   createMissingDollarFix,
   createUnbalancedDiagnostic,
   getOutputChannel,
+  isValidCompletionPosition,
   isInStringOrComment,
   loadConfig,
   stripStrings,
@@ -53,10 +57,15 @@ const {
  * @param {vscode.ExtensionContext} context
  */
 function activate(context) {
-  log.info("OtterScript extension active");
+  const pkg = context.extension.packageJSON;
+  const extensionName = pkg.displayName || pkg.name;
+  const version = pkg.version;
+
+  log.info(`${extensionName} v${version} activated`);
 
   // -- Load initial configuration
   let { completionEnabled, hoverEnabled, signatureHelpEnabled } = loadConfig();
+  log.info(`Settings loaded: completion=${completionEnabled}, hover=${hoverEnabled}, signatureHelp=${signatureHelpEnabled}`);
 
   // -- Watch for settings changes while extension is running
   context.subscriptions.push(
@@ -64,30 +73,31 @@ function activate(context) {
       // -- Only reload if OtterScript settings changed
       if (e.affectsConfiguration("otterscript")) {
         ({ completionEnabled, hoverEnabled, signatureHelpEnabled } = loadConfig());
+        log.info(`Settings reloaded: completion=${completionEnabled}, hover=${hoverEnabled}, signatureHelp=${signatureHelpEnabled}`);
       }
     })
   );
 
-  // -- Language documentation data loading
-  // Loads language documentation from language-data.js (plain data module).
+  // -- Loads language documentation from language-data.js.
   // Objects contain plain strings only.
   // Any conversion to MarkdownString happens in this file.
   let languageData;
   // -- Attempt to load the documentation module with error handling
   try {
-    languageData = require("./language-data.js");
+    languageData = require(languageFile);
 
     // -- Quick validation to ensure languageData loaded correctly
     if (!languageData || typeof languageData !== "object") {
-      throw new Error("language-data.js did not export an object");
+      throw new Error(`${languageFile} did not export an object`);
     }
+    log.debug(`${languageFile} loaded successfully`);
   } catch (err) {
     // -- Log errors
-    log.error("Failed to load language-data.js", err);
+    log.error(`Failed to load ${languageFile}`, err);
 
     // -- Show user-friendly error message
     vscode.window.showErrorMessage(
-      "OtterScript Language Extension failed to load documentation data. " +
+      `${extensionName} failed to load ${languageFile}. ` +
       "The extension could not be activated. Check the developer console for details."
     );
 
@@ -104,24 +114,6 @@ function activate(context) {
     scalarFunctionDocs,
     vectorFunctionDocs
   } = languageData;
-
-  /**
-   * Checks if the cursor is in a valid position for showing completions.
-   * Completions are disabled when:
-   * - The user has disabled them via settings
-   * - The cursor is inside a string literal
-   * - The cursor is inside a comment
-   *
-   * @param {vscode.TextDocument} document - The current text document
-   * @param {vscode.Position} position - The current cursor position
-   * @returns {boolean} - True if completions should be shown, false otherwise
-   */
-  function isValidCompletionPosition(document, position) {
-    if (!completionEnabled) return false;
-    const line = document.lineAt(position.line).text;
-    const cursor = position.character;
-    return !isInStringOrComment(line, cursor);
-  }
 
   // -- Validate all documentation sources (intentionally ignore return value)
   void validateDocs("scalarFunctionDocs", scalarFunctionDocs); // $ToJson, $Base64Encode, etc.
@@ -305,7 +297,7 @@ function activate(context) {
       {
         provideCompletionItems(document, position) {
           // -- Check if completion is enabled and not in a string/comment
-          if (!isValidCompletionPosition(document, position)) return [];
+          if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
           const linePrefix = document
             .lineAt(position.line)
@@ -346,7 +338,7 @@ function activate(context) {
       {
         provideCompletionItems(document, position) {
           // -- Check if completion is enabled and not in a string/comment
-          if (!isValidCompletionPosition(document, position)) return [];
+          if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
           const text = document
             .lineAt(position.line)
@@ -384,7 +376,7 @@ function activate(context) {
       {
         provideCompletionItems(document, position) {
           // -- Check if completion is enabled and not in a string/comment
-          if (!isValidCompletionPosition(document, position)) return [];
+          if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
           // -- Get text from line start to cursor
           const linePrefix = document
@@ -431,11 +423,10 @@ function activate(context) {
     {
       provideCompletionItems(document, position) {
         // -- Check if completion is enabled and not in a string/comment
-        if (!isValidCompletionPosition(document, position)) return [];
+        if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
         // -- Ensure syntaxDocs and mapExpr exist
         if (!syntaxDocs?.mapExpr) {
-          log.warn('[completion] syntaxDocs.mapExpr is missing, cannot provide % completion');
           return [];
         }
 
@@ -462,51 +453,62 @@ function activate(context) {
     vscode.languages.registerCompletionItemProvider(
       "otterscript",
       {
-        provideCompletionItems(document, position) {
+        provideCompletionItems(document, position, _token, localContext) {
           // -- Check if completion is enabled and not in a string/comment
-          if (!isValidCompletionPosition(document, position)) return [];
+          if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
           const line = document.lineAt(position.line).text;
           const cursor = position.character;
           const prefix = line.slice(0, cursor);
 
-          // -- Match: word at cursor position (letters + hyphens allowed)
-          const match = prefix.match(/\b([A-Za-z]+(?:-[A-Za-z]+)*)$/);
-          if (!match) return [];
+          // -- Match the identifier fragment immediately before cursor (letters + hyphens)
+          // Manual invoke (Ctrl+Space) should still return suggestions even when typed is empty.
+          const match = prefix.match(/([A-Za-z][A-Za-z-]*)$/);
+          const typed = match ? match[1] : "";
+          const isManualInvoke = localContext.triggerKind === vscode.CompletionTriggerKind.Invoke;
 
-          const typed = match[1];
-
-          // -- Require at least 3 characters to avoid noise
-          if (typed.length < 3) {
+          // -- For auto-triggered suggestions, require at least 2 typed characters to avoid noise.
+          if (!isManualInvoke && typed.length < 2) {
             return [];
           }
+
+          const lowerTyped = typed.toLowerCase();
+          const replaceRange = new vscode.Range(
+            new vscode.Position(position.line, cursor - typed.length),
+            position
+          );
+
           const items = [];
 
           // -- Operations (priority 0_)
           for (const [name, doc] of Object.entries(operationDocs)) {
-              if (name.toLowerCase().startsWith(typed.toLowerCase())) {
+              if (!typed || name.toLowerCase().startsWith(lowerTyped)) {
                   const snippet = doc.snippet
-                      ? new vscode.SnippetString(doc.snippet)
-                      : new vscode.SnippetString(`${name} "\${0}";`);
+                    ? new vscode.SnippetString(doc.snippet)
+                    : new vscode.SnippetString(`${name} "\${0}";`);
                   const item = buildCompletionItem(doc, vscode.CompletionItemKind.Function, '0_', snippet, true);
+                  item.range = replaceRange;
                   items.push(item);
               }
           }
+
           // -- Keywords (priority 1_)
           for (const [name, doc] of Object.entries(keywordDocs)) {
-              if (name.toLowerCase().startsWith(typed.toLowerCase())) {
+              if (!typed || name.toLowerCase().startsWith(lowerTyped)) {
                   const snippet = doc.snippet
-                      ? new vscode.SnippetString(doc.snippet)
-                      : name;
+                    ? new vscode.SnippetString(doc.snippet)
+                    : name;
                   const item = buildCompletionItem(doc, vscode.CompletionItemKind.Keyword, '1_', snippet, false);
+                  item.range = replaceRange;
                   items.push(item);
               }
           }
+
           return items;
         }
       }
-      // -- Note: No trigger character specified - this provider runs on every keystroke
-      // The 3-character minimum prevents excessive triggering
+      // Manual invoke (Ctrl+Space) can return all operations/keywords.
+      // Auto-trigger still requires a short typed prefix to reduce noise.
     );
 
   // ============================================================
@@ -901,28 +903,46 @@ function activate(context) {
           // -- Braces { }
           if (ch === '{') {
             braces++;
-            lastBracePos = document.offsetAt(new vscode.Position(lineIndex, col));
+            if (braces === 1) lastBracePos = document.offsetAt(new vscode.Position(lineIndex, col));
           } else if (ch === '}') {
-            braces--;
-            if (braces < 0) lastBracePos = document.offsetAt(new vscode.Position(lineIndex, col));
+            if (braces === 0) {
+              // Unexpected closing - report immediately
+              const pos = document.offsetAt(new vscode.Position(lineIndex, col));
+              const diag = createUnbalancedDiagnostic(-1, pos, '{', '}', 'brace', document);
+              if (diag) issues.push(diag);
+            } else {
+              braces--;
+            }
           }
 
-          // -- Parentheses ( )
+          // -- Parenthesis ( )
           else if (ch === '(') {
             parens++;
-            lastParenPos = document.offsetAt(new vscode.Position(lineIndex, col));
+            if (parens === 1) lastParenPos = document.offsetAt(new vscode.Position(lineIndex, col));
           } else if (ch === ')') {
-            parens--;
-            if (parens < 0) lastParenPos = document.offsetAt(new vscode.Position(lineIndex, col));
+            if (parens === 0) {
+              // Unexpected closing - report immediately
+              const pos = document.offsetAt(new vscode.Position(lineIndex, col));
+              const diag = createUnbalancedDiagnostic(-1, pos, '(', ')', 'parenthesis', document);
+              if (diag) issues.push(diag);
+            } else {
+              parens--;
+            }
           }
 
           // -- Brackets [ ]
           else if (ch === '[') {
             brackets++;
-            lastBracketPos = document.offsetAt(new vscode.Position(lineIndex, col));
+            if (brackets === 1) lastBracketPos = document.offsetAt(new vscode.Position(lineIndex, col));
           } else if (ch === ']') {
-            brackets--;
-            if (brackets < 0) lastBracketPos = document.offsetAt(new vscode.Position(lineIndex, col));
+            if (brackets === 0) {
+              // Unexpected closing - report immediately
+              const pos = document.offsetAt(new vscode.Position(lineIndex, col));
+              const diag = createUnbalancedDiagnostic(-1, pos, '[', ']', 'bracket', document);
+              if (diag) issues.push(diag);
+            } else {
+              brackets--;
+            }
           }
         }
       }
@@ -1040,23 +1060,20 @@ function activate(context) {
       }
     }
 
-    // -- Unbalanced braces
-    if (braces !== 0) {
-      const braceDiag = createUnbalancedDiagnostic(braces, lastBracePos, '{', '}', 'brace', document);
-      if (braceDiag) issues.push(braceDiag);
+    // -- Unbalanced opening braces, parentheses, brackets
+    const symbols = [
+      { count: braces, lastPos: lastBracePos, open: '{', close: '}', name: 'brace' },
+      { count: parens, lastPos: lastParenPos, open: '(', close: ')', name: 'parenthesis' },
+      { count: brackets, lastPos: lastBracketPos, open: '[', close: ']', name: 'bracket' }
+    ];
+
+    for (const sym of symbols) {
+      if (sym.count > 0) {
+        const diag = createUnbalancedDiagnostic(sym.count, sym.lastPos, sym.open, sym.close, sym.name, document);
+        if (diag) issues.push(diag);
+      }
     }
 
-    // -- Unbalanced parentheses
-    if (parens !== 0) {
-      const parenDiag = createUnbalancedDiagnostic(parens, lastParenPos, '(', ')', 'parenthesis', document);
-      if (parenDiag) issues.push(parenDiag);
-    }
-
-    // -- Unbalanced brackets
-    if (brackets !== 0) {
-      const bracketDiag = createUnbalancedDiagnostic(brackets, lastBracketPos, '[', ']', 'bracket', document);
-      if (bracketDiag) issues.push(bracketDiag);
-    }
     diagnostics.set(document.uri, issues);
   }
 
