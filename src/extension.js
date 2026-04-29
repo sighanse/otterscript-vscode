@@ -295,7 +295,7 @@ function activate(context) {
     vscode.languages.registerCompletionItemProvider(
       "otterscript",
       {
-        provideCompletionItems(document, position, _token, context) {
+        provideCompletionItems(document, position) {
           // -- Check if completion is enabled and not in a string/comment
           if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
@@ -336,7 +336,7 @@ function activate(context) {
     vscode.languages.registerCompletionItemProvider(
       "otterscript",
       {
-        provideCompletionItems(document, position, _token, context) {
+        provideCompletionItems(document, position) {
           // -- Check if completion is enabled and not in a string/comment
           if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
@@ -374,7 +374,7 @@ function activate(context) {
     vscode.languages.registerCompletionItemProvider(
       "otterscript",
       {
-        provideCompletionItems(document, position, _token, context) {
+        provideCompletionItems(document, position) {
           // -- Check if completion is enabled and not in a string/comment
           if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
@@ -421,7 +421,7 @@ function activate(context) {
   vscode.languages.registerCompletionItemProvider(
     "otterscript",
     {
-      provideCompletionItems(document, position, token, context) {
+      provideCompletionItems(document, position) {
         // -- Check if completion is enabled and not in a string/comment
         if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
@@ -453,7 +453,7 @@ function activate(context) {
     vscode.languages.registerCompletionItemProvider(
       "otterscript",
       {
-        provideCompletionItems(document, position, _token, context) {
+        provideCompletionItems(document, position, _token, localContext) {
           // -- Check if completion is enabled and not in a string/comment
           if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
@@ -465,7 +465,7 @@ function activate(context) {
           // Manual invoke (Ctrl+Space) should still return suggestions even when typed is empty.
           const match = prefix.match(/([A-Za-z][A-Za-z-]*)$/);
           const typed = match ? match[1] : "";
-          const isManualInvoke = context.triggerKind === vscode.CompletionTriggerKind.Invoke;
+          const isManualInvoke = localContext.triggerKind === vscode.CompletionTriggerKind.Invoke;
 
           // -- For auto-triggered suggestions, require at least 2 typed characters to avoid noise.
           if (!isManualInvoke && typed.length < 2) {
