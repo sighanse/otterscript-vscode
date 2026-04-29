@@ -296,8 +296,6 @@ function activate(context) {
       "otterscript",
       {
         provideCompletionItems(document, position, _token, context) {
-          log.info(`[FUNC] Triggered at line ${position.line}, character ${position.character}`);
-          log.info(`[FUNC] Trigger kind: ${context.triggerKind} - 0=Invoke, 1=TriggerCharacter, 2=TriggerForIncomplete`);
           // -- Check if completion is enabled and not in a string/comment
           if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
@@ -339,8 +337,6 @@ function activate(context) {
       "otterscript",
       {
         provideCompletionItems(document, position, _token, context) {
-          log.info(`[VARIABLE] Triggered at line ${position.line}, character ${position.character}`);
-          log.info(`[VARIABLE] Trigger kind: ${context.triggerKind} - 0=Invoke, 1=TriggerCharacter, 2=TriggerForIncomplete`);
           // -- Check if completion is enabled and not in a string/comment
           if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
@@ -379,8 +375,6 @@ function activate(context) {
       "otterscript",
       {
         provideCompletionItems(document, position, _token, context) {
-          log.info(`[VEC] Triggered at line ${position.line}, character ${position.character}`);
-          log.info(`[VEC] Trigger kind: ${context.triggerKind} - 0=Invoke, 1=TriggerCharacter, 2=TriggerForIncomplete`);
           // -- Check if completion is enabled and not in a string/comment
           if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
@@ -428,14 +422,11 @@ function activate(context) {
     "otterscript",
     {
       provideCompletionItems(document, position, token, context) {
-        log.info(`[MAP] Triggered at line ${position.line}, character ${position.character}`);
-        log.info(`[MAP] Trigger kind: ${context.triggerKind}  - // 0=Invoke, 1=TriggerCharacter, 2=TriggerForIncomplete`);
         // -- Check if completion is enabled and not in a string/comment
         if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
         // -- Ensure syntaxDocs and mapExpr exist
         if (!syntaxDocs?.mapExpr) {
-          log.warn('[completion] syntaxDocs.mapExpr is missing, cannot provide % completion');
           return [];
         }
 
@@ -464,10 +455,7 @@ function activate(context) {
       {
         provideCompletionItems(document, position, _token, context) {
           // -- Check if completion is enabled and not in a string/comment
-          log.info(`[OP] Triggered at line ${position.line}, character ${position.character}`);
-          log.info(`[OP] Trigger kind: ${context.triggerKind} - // 0=Invoke, 1=TriggerCharacter, 2=TriggerForIncomplete`);
           if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
-          log.info(`[OP] Valid position for completion`);
 
           const line = document.lineAt(position.line).text;
           const cursor = position.character;
@@ -479,10 +467,8 @@ function activate(context) {
           const typed = match ? match[1] : "";
           const isManualInvoke = context.triggerKind === vscode.CompletionTriggerKind.Invoke;
 
-          log.info(`[OP] Typed text: "${typed}"`);
           // -- For auto-triggered suggestions, require at least 2 typed characters to avoid noise.
           if (!isManualInvoke && typed.length < 2) {
-            log.info(`[OP] Returning, due to length: "${typed.length}"`);
             return [];
           }
 
@@ -493,12 +479,10 @@ function activate(context) {
           );
 
           const items = [];
-          log.info(`[OP] Providing completions for typed: "${typed}"`);
 
           // -- Operations (priority 0_)
           for (const [name, doc] of Object.entries(operationDocs)) {
               if (!typed || name.toLowerCase().startsWith(lowerTyped)) {
-                  log.info(`[OP] Adding operation completion: "${name}"`);
                   const snippet = doc.snippet
                       ? new vscode.SnippetString(doc.snippet)
                       : new vscode.SnippetString(`${name} "\${0}";`);
@@ -511,7 +495,6 @@ function activate(context) {
           // -- Keywords (priority 1_)
           for (const [name, doc] of Object.entries(keywordDocs)) {
               if (!typed || name.toLowerCase().startsWith(lowerTyped)) {
-                  log.info(`[OP] Adding keyword completion: "${name}"`);
                   const snippet = doc.snippet
                       ? new vscode.SnippetString(doc.snippet)
                       : name;
