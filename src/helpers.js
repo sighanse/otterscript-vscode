@@ -68,6 +68,7 @@ const NON_VARIABLE_IDENTIFIERS = new Set([
 /**
  * Returns current time formatted as HH:MM:SS.
  * @returns {string}
+ * @private
  */
 function timestamp() {
   return new Date().toLocaleTimeString([], { hour12: false });
@@ -603,7 +604,6 @@ module.exports = {
   // -- Logger
   log,
   getOutputChannel,
-  timestamp,
 
   // -- Helpers
   isValidCompletionPosition,
