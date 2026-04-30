@@ -140,6 +140,8 @@ function activate(context) {
     operationRegex,
   } = createRegexPatterns(knownOperations);
 
+  const cachedOperationRegex = operationRegex();
+
   // ============================================================
   // SIGNATURE HELP PROVIDER
   // ============================================================
@@ -634,7 +636,7 @@ function activate(context) {
         // Built-in operations. Distinguished by hyphenated names.
         const operationRange = document.getWordRangeAtPosition(
         position,
-        operationRegex()
+        cachedOperationRegex
         );
 
         if (operationRange) {
