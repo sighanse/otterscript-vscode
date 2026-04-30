@@ -20,7 +20,7 @@
  * @see package.json - Extension manifest and configuration schema
  * @see syntaxes/otterscript.tmLanguage.json - TextMate grammar (syntax highlighting)
  * @see snippets/otterscript.json - Snippets for structural templates only
- * @see {@link https://github.com/sighanse/otterscript-vscode} - Github repository
+ * @see {@link https://github.com/sighanse/otterscript-vscode} - GitHub repository
  */
 
 // -- VS Code Extension API
