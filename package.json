@@ -115,6 +115,7 @@
   },
   "scripts": {
     "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "package": "vsce package --no-yarn",
     "vscode:prepublish": "npm run lint",
     "publish:vsce": "vsce publish",
