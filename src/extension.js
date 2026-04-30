@@ -1085,6 +1085,9 @@ function activate(context) {
   // Without this, users would need to retype or reopen files to see errors
   vscode.workspace.textDocuments.forEach(updateDiagnostics);
 
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let diagnosticTimer;
+
   // Register all extension subscriptions in a single batch
   // VS Code automatically disposes these when the extension deactivates
   context.subscriptions.push(
@@ -1093,8 +1096,11 @@ function activate(context) {
     getOutputChannel(),
 
     // -- Re-run diagnostics whenever text changes (every keystroke)
-    vscode.workspace.onDidChangeTextDocument(e => updateDiagnostics(e.document)),
 
+    vscode.workspace.onDidChangeTextDocument(e => {
+      clearTimeout(diagnosticTimer);
+      diagnosticTimer = setTimeout(() => updateDiagnostics(e.document), 400);
+    }),
     // -- Run diagnostics when a new file is opened (handles files opened after activation)
     vscode.workspace.onDidOpenTextDocument(updateDiagnostics),
 
