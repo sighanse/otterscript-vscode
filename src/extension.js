@@ -745,7 +745,11 @@ function activate(context) {
 
       const document = editor.document;
       const diagnostics = vscode.languages.getDiagnostics(document.uri);
-      if (diagnostics.length === 0) {
+      // -- Filter to fixable diagnostic codes
+      const fixableCodes = new Set(["missing-dollar", "invalid-operator", "incorrect-for-usage"]);
+      const fixableDiagnostics = diagnostics.filter(d => fixableCodes.has(getDiagnosticCode(d)));
+
+      if (fixableDiagnostics.length === 0) {
         const msg = `No fixable OtterScript issues found in ${document.fileName}`;
         vscode.window.showInformationMessage(msg);
         log.info(msg);
@@ -753,7 +757,7 @@ function activate(context) {
       }
 
       // -- Sort from end to start to avoid position shifts
-      const sorted = [...diagnostics].sort((a, b) => b.range.start.compareTo(a.range.start));
+      const sorted = [...fixableDiagnostics].sort((a, b) => b.range.start.compareTo(a.range.start));
       const workspaceEdit = new vscode.WorkspaceEdit();
       let fixedCount = 0;
 
