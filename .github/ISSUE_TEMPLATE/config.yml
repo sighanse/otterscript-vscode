@@ -5,6 +5,14 @@ contact_links:
     url: https://github.com/sighanse/otterscript-vscode/discussions
     about: Ask questions or discuss usage here.
 
+  - name: Bug reports
+    url: https://github.com/sighanse/otterscript-vscode/issues/new/choose
+    about: Report bugs or issues here.
+
   - name: Security issues
     url: https://github.com/sighanse/otterscript-vscode/security
     about: Report security vulnerabilities privately
+
+  - name: Extension Documentation
+    url: https://github.com/sighanse/otterscript-vscode#readme
+    about: Read the extension documentation and settings guide
