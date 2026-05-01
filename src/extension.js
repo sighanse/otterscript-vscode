@@ -770,9 +770,12 @@ function activate(context) {
         for (const [uri, uriEdits] of action.edit.entries()) {
           if (uriEdits.length) hasEdits = true;
           for (const uriEdit of uriEdits) {
-            const e = /** @type {any} */ (uriEdit);
-            if (e.newText && e.range) workspaceEdit.replace(uri, e.range, e.newText);
-            else if (e.text && e.position) workspaceEdit.insert(uri, e.position, e.text);
+            const edit = /** @type {{ range?: vscode.Range, newText?: string, position?: vscode.Position, text?: string }} */ (uriEdit);
+            if (edit.range && edit.newText) {
+              workspaceEdit.replace(uri, edit.range, edit.newText);
+            } else if (edit.position && edit.text) {
+              workspaceEdit.insert(uri, edit.position, edit.text);
+            }
           }
         }
         if (hasEdits) fixedCount++;
