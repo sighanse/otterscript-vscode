@@ -3,7 +3,7 @@
   "displayName": "OtterScript Language Extension",
   "description": "Syntax highlighting, snippets, and function support for OtterScript",
   "publisher": "sighanse",
-  "author": "Sigurd Hansen <sigurd.hansen@gmail.com>",
+  "author": "Sigurd Hansen <@sighanse>",
   "contributors": [],
   "repository": {
     "type": "git",
@@ -12,7 +12,8 @@
   "bugs": {
     "url": "https://github.com/sighanse/otterscript-vscode/issues"
   },
-  "homepage": "https://github.com/sighanse/otterscript-vscode",
+  "homepage": "https://github.com/sighanse/otterscript-vscode#readme",
+  "markdown": "github",
   "license": "MIT",
   "version": "0.2.0",
   "icon": "images/logo.png",
