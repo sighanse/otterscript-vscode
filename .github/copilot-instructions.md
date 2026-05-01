@@ -160,3 +160,21 @@ When returning results for a code task, include:
 3. Validation performed (commands and outcome)
 4. Risks or follow-up checks (if any)
 5. Supply recommended conventional commit message
+
+## VS Code Extension Best Practices (Review Guidelines)
+
+When proposing changes, ensure:
+
+- Code runs in the **extension host (Node.js)**, not a browser:
+  - Do not use `window`, `document`, `localStorage`, or DOM APIs.
+- Activation path must stay lightweight:
+  - Avoid heavy computation or I/O during `activate()`.
+- Providers must be defensive:
+  - Never throw from completion/hover/diagnostics providers.
+- Do not block the event loop:
+  - Avoid synchronous filesystem or CPU-heavy work on hot paths.
+- Prefer VS Code APIs over custom implementations:
+  - Use `vscode.window`, `vscode.workspace`, `vscode.languages`.
+- Dispose resources correctly:
+  - All disposables must be registered via `context.subscriptions`.
+- If a change would slow startup, break IntelliSense, or behave differently in the Extension Host, it needs explicit justification.
