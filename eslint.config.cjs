@@ -9,7 +9,7 @@ module.exports = [
     files: ["**/*.js"],
 
     languageOptions: {
-      ecmaVersion: 2022,
+      ecmaVersion: 2026,
       sourceType: "commonjs",
       globals: {
         ...globals.node
@@ -39,7 +39,8 @@ module.exports = [
 
       "eqeqeq": ["warn", "smart"],
       "no-empty": ["warn", { allowEmptyCatch: true }],
-
+      "comma-dangle": ["warn", "only-multiline"],
+      "eol-last": ["warn", "always"],
       /*
        * Explicitly allowed
        */

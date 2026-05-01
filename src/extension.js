@@ -20,7 +20,7 @@
  * @see package.json - Extension manifest and configuration schema
  * @see syntaxes/otterscript.tmLanguage.json - TextMate grammar (syntax highlighting)
  * @see snippets/otterscript.json - Snippets for structural templates only
- * @see {@link https://github.com/sighanse/otterscript-vscode} - Github repository
+ * @see {@link https://github.com/sighanse/otterscript-vscode} - GitHub repository
  */
 
 // -- VS Code Extension API
@@ -139,6 +139,8 @@ function activate(context) {
     operationSignatureRegex,
     operationRegex,
   } = createRegexPatterns(knownOperations);
+
+  const cachedOperationRegex = operationRegex();
 
   // ============================================================
   // SIGNATURE HELP PROVIDER
@@ -634,7 +636,7 @@ function activate(context) {
         // Built-in operations. Distinguished by hyphenated names.
         const operationRange = document.getWordRangeAtPosition(
         position,
-        operationRegex()
+        cachedOperationRegex
         );
 
         if (operationRange) {
@@ -1085,6 +1087,9 @@ function activate(context) {
   // Without this, users would need to retype or reopen files to see errors
   vscode.workspace.textDocuments.forEach(updateDiagnostics);
 
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let diagnosticTimer;
+
   // Register all extension subscriptions in a single batch
   // VS Code automatically disposes these when the extension deactivates
   context.subscriptions.push(
@@ -1093,8 +1098,11 @@ function activate(context) {
     getOutputChannel(),
 
     // -- Re-run diagnostics whenever text changes (every keystroke)
-    vscode.workspace.onDidChangeTextDocument(e => updateDiagnostics(e.document)),
 
+    vscode.workspace.onDidChangeTextDocument(e => {
+      clearTimeout(diagnosticTimer);
+      diagnosticTimer = setTimeout(() => updateDiagnostics(e.document), 400);
+    }),
     // -- Run diagnostics when a new file is opened (handles files opened after activation)
     vscode.workspace.onDidOpenTextDocument(updateDiagnostics),
 
