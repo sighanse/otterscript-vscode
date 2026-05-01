@@ -92,7 +92,7 @@ Please see [SECURITY.md](https://github.com/sighanse/otterscript-vscode/blob/mai
 
 ## License
 
-MIT
+[MIT](https://github.com/sighanse/otterscript-vscode/blob/main/LICENSE)
 
 ## Code of Conduct
 
