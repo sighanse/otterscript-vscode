@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Report a problem with OtterScript Language Support
+about: Report a problem with OtterScript Language Extension
 title: "[BUG]: "
 labels: bug
 ---
