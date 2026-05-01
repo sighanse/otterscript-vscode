@@ -28,7 +28,9 @@ module.exports = [
       "no-unused-vars": [
         "warn",
         {
-          args: "none",
+          args: "all",
+          argsIgnorePattern: "^_",   // Explicit opt-out for params
+          varsIgnorePattern: "^_",   // Explicit opt-out for variables
           ignoreRestSiblings: true
         }
       ],
@@ -62,6 +64,7 @@ module.exports = [
       "require-atomic-updates": "warn",
       "prefer-promise-reject-errors": "warn",
       "no-throw-literal": "error",
+      "linebreak-style": ["error", "unix"],
       /*
        * Explicitly allowed
        */
