@@ -471,18 +471,15 @@ function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
 }
 
 /**
- * Gets the diagnostic code as a string or number value.
- * Handles object format (with .value property) used by VS Code for code links.
- *
+ * Gets the diagnostic code as a string.
  * @param {vscode.Diagnostic} diagnostic
- * @returns {string | number | undefined}
+ * @returns {string}
  */
 function getDiagnosticCode(diagnostic) {
   const code = diagnostic.code;
-  if (code && typeof code === "object" && "value" in code) {
-    return code.value;
-  }
-  return code;
+  if (code === undefined || code === null) return '';
+  if (typeof code === 'object') return String(code.value);
+  return String(code);
 }
 
 // ============================================================
