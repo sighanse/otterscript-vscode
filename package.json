@@ -112,7 +112,37 @@
         }
       }
     ],
-    "commands": []
+    "commands": [
+      {
+        "command": "otterscript.fixAll",
+        "title": "Fix All Issues",
+        "category": "OtterScript",
+        "icon": "$(check-all)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "otterscript.fixAll",
+        "key": "ctrl+shift+alt+f",
+        "mac": "cmd+shift+alt+f",
+        "when": "editorLangId == otterscript && editorTextFocus"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "otterscript.fixAll",
+          "group": "2_fix@1",
+          "when": "editorLangId == otterscript && editorTextFocus"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "otterscript.fixAll",
+          "when": "editorLangId == otterscript"
+        }
+      ]
+    }
   },
   "scripts": {
     "lint": "eslint . --cache",

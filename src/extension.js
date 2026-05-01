@@ -41,6 +41,7 @@ const {
   createMissingDollarFix,
   createUnbalancedDiagnostic,
   getOutputChannel,
+  getDiagnosticCode,
   isValidCompletionPosition,
   isInStringOrComment,
   loadConfig,
@@ -698,17 +699,18 @@ function activate(context) {
           const actions = [];
 
           for (const diagnostic of codeActionContext.diagnostics) {
+            const code = getDiagnosticCode(diagnostic);
 
-            if (diagnostic.code === "missing-dollar") {
+            if (code === "missing-dollar") {
               actions.push(createMissingDollarFix(document, diagnostic));
             }
 
-            if (diagnostic.code === "invalid-operator") {
+            if (code === "invalid-operator") {
               const fix = createInvalidOperatorFix(document, diagnostic);
               if (fix) actions.push(fix);
             }
 
-            if (diagnostic.code === "incorrect-for-usage") {
+            if (code === "incorrect-for-usage") {
               const fix = createForToForeachFix(document, diagnostic);
               if (fix) actions.push(fix);
             }
@@ -720,6 +722,69 @@ function activate(context) {
       {
         providedCodeActionKinds: [vscode.CodeActionKind.QuickFix]
       }
+  );
+
+  // ============================================================
+  // FIX ALL COMMAND
+  // ============================================================
+  /**
+   * Command to fix all auto-fixable diagnostics in the current OtterScript document.
+   * All fixes are applied in a single WorkspaceEdit (single undo step).
+   *
+   * Triggered by: Command Palette or Ctrl+Shift+Alt+F
+   *
+   * @see createMissingDollarFix
+   * @see createInvalidOperatorFix
+   * @see createForToForeachFix
+   */
+  const fixAllCommand = vscode.commands.registerCommand(
+    'otterscript.fixAll',
+    async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor || editor.document.languageId !== "otterscript") return;
+
+      const document = editor.document;
+      const diagnostics = vscode.languages.getDiagnostics(document.uri);
+      if (diagnostics.length === 0) {
+        const msg = `No fixable OtterScript issues found in ${document.fileName}`;
+        vscode.window.showInformationMessage(msg);
+        log.info(msg);
+        return;
+      }
+
+      // -- Sort from end to start to avoid position shifts
+      const sorted = [...diagnostics].sort((a, b) => b.range.start.compareTo(a.range.start));
+      const workspaceEdit = new vscode.WorkspaceEdit();
+      let fixedCount = 0;
+
+      for (const diagnostic of sorted) {
+        const code = getDiagnosticCode(diagnostic);
+        const action = code === "missing-dollar" ? createMissingDollarFix(document, diagnostic)
+          : code === "invalid-operator" ? createInvalidOperatorFix(document, diagnostic)
+          : code === "incorrect-for-usage" ? createForToForeachFix(document, diagnostic)
+          : null;
+
+        if (!action?.edit) continue;
+
+        let hasEdits = false;
+        for (const [uri, uriEdits] of action.edit.entries()) {
+          if (uriEdits.length) hasEdits = true;
+          for (const uriEdit of uriEdits) {
+            const e = /** @type {any} */ (uriEdit);
+            if (e.newText && e.range) workspaceEdit.replace(uri, e.range, e.newText);
+            else if (e.text && e.position) workspaceEdit.insert(uri, e.position, e.text);
+          }
+        }
+        if (hasEdits) fixedCount++;
+      }
+
+      if (fixedCount) {
+        await vscode.workspace.applyEdit(workspaceEdit);
+        const msg = `Fixed ${fixedCount} issue(s) in ${document.fileName}`;
+        vscode.window.showInformationMessage(msg);
+        log.info(msg);
+      }
+    }
   );
 
   // ============================================================
@@ -1118,7 +1183,8 @@ function activate(context) {
     operationCompletionProvider,
     hoverProvider,
     codeActionsProvider,
-    definitionProvider
+    definitionProvider,
+    fixAllCommand
   );
 }
 

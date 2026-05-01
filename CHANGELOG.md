@@ -6,6 +6,7 @@
 
 - Improved diagnostics performance with debouncing and caching
 - Enhancements to `for` language construct and related quick fixes
+- **Fix All Issues** command (`otterscript.fixAll`) that automatically applies all available quick-fixes in the current document
 
 ### Changed
 
