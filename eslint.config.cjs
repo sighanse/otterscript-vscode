@@ -65,6 +65,15 @@ module.exports = [
       "prefer-promise-reject-errors": "warn",
       "no-throw-literal": "error",
       "linebreak-style": ["error", "unix"],
+      "no-constant-binary-expression": "error",
+      "no-unreachable": "error",
+      "no-fallthrough": "error",
+      "no-useless-return": "warn",
+      "no-misleading-character-class": "error",
+      "no-async-promise-executor": "error",
+      "default-case": "warn",
+      "no-else-return": "warn",
+      "no-lonely-if": "warn",
       /*
        * Explicitly allowed
        */
