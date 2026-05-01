@@ -63,7 +63,7 @@ jobs:
 
       - name: ESLint
         id: eslint
-        run: npm run lint
+        run: npm run lint:ci
         continue-on-error: true
 
       - name: npm security audit

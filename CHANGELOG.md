@@ -1,11 +1,24 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.1] - 2026-05-01
+
+### Added
+
+- Improved diagnostics performance with debouncing and caching
+- Enhancements to `for` language construct and related quick fixes
+- **Fix All Issues** command (`otterscript.fixAll`) that automatically applies all available quick-fixes in the current document
 
 ### Changed
 
 - Move source code to src/
-- Rename docs.js to language-data.js
+- Rename `docs.js` to `language-data.js`
+- Improve logging consistency and startup information
+
+### Fixed
+
+- Reliability issues in completions and diagnostics
+- Incorrect variable position detection in diagnostics
+- Minor bugs, formatting, and documentation issues
 
 ## [0.2.0] - 2026-04-21
 

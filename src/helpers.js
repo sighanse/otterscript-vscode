@@ -470,6 +470,18 @@ function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
   return diagnostic;
 }
 
+/**
+ * Gets the diagnostic code as a string.
+ * @param {vscode.Diagnostic} diagnostic
+ * @returns {string}
+ */
+function getDiagnosticCode(diagnostic) {
+  const code = diagnostic.code;
+  if (code === undefined || code === null) return '';
+  if (typeof code === 'object') return String(code.value);
+  return String(code);
+}
+
 // ============================================================
 // CODE ACTION FACTORY
 // ============================================================
@@ -612,6 +624,7 @@ module.exports = {
   checkMissingDollar,
   validateDocs,
   createUnbalancedDiagnostic,
+  getDiagnosticCode,
 
   // -- Builders
   buildHoverMarkdown,

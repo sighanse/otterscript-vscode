@@ -3,7 +3,11 @@
   "displayName": "OtterScript Language Extension",
   "description": "Syntax highlighting, snippets, and function support for OtterScript",
   "publisher": "sighanse",
-  "author": "Sigurd Hansen <sigurd.hansen@gmail.com>",
+  "author": {
+    "name": "Sigurd Hansen",
+    "email": "sigurd.hansen@gmail.com",
+    "url": "https://github.com/sighanse"
+  },
   "contributors": [],
   "repository": {
     "type": "git",
@@ -12,9 +16,10 @@
   "bugs": {
     "url": "https://github.com/sighanse/otterscript-vscode/issues"
   },
-  "homepage": "https://github.com/sighanse/otterscript-vscode",
+  "homepage": "https://github.com/sighanse/otterscript-vscode#readme",
+  "markdown": "github",
   "license": "MIT",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "icon": "images/logo.png",
   "engines": {
     "vscode": "^1.85.0"
@@ -111,13 +116,44 @@
         }
       }
     ],
-    "commands": []
+    "commands": [
+      {
+        "command": "otterscript.fixAll",
+        "title": "Fix All Issues",
+        "category": "OtterScript",
+        "icon": "$(check-all)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "otterscript.fixAll",
+        "key": "ctrl+shift+alt+f",
+        "mac": "cmd+shift+alt+f",
+        "when": "editorLangId == otterscript && editorTextFocus"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "otterscript.fixAll",
+          "group": "2_fix@1",
+          "when": "editorLangId == otterscript && editorTextFocus"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "otterscript.fixAll",
+          "when": "editorLangId == otterscript"
+        }
+      ]
+    }
   },
   "scripts": {
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
+    "lint": "eslint . --cache",
+    "lint:fix": "eslint . --fix --cache",
+    "lint:ci": "eslint . --max-warnings=0 --cache",
     "package": "vsce package --no-yarn",
-    "vscode:prepublish": "npm run lint",
+    "vscode:prepublish": "npm run lint:ci",
     "publish:vsce": "vsce publish",
     "publish:ovsx": "ovsx publish --no-dependencies"
   }

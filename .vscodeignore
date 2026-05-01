@@ -1,21 +1,24 @@
 .git/
 .github/
-.gitignore
 .vscode/
 node_modules/
 test/
+.eslintcache
+.gitattributes
+.gitignore
 .DS_Store
+.markdownlint.jsonc
 *.vsix
 *.ps1
 *.log
 *.tmp
+*.map
 CONTRIBUTING.md
 CODE_OF_CONDUCT.md
 eslint.config.cjs
-SECURITY.md
 package-lock.json
-.markdownlint.jsonc
-# Exclude source maps etc.
+SECURITY.md
+# Exclude source etc.
 !src/
 !src/**/*.js
 !syntaxes/

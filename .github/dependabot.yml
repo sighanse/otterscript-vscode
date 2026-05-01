@@ -18,6 +18,9 @@ updates:
       actions:
         patterns:
           - "*"
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: "npm"
     open-pull-requests-limit: 10
@@ -30,6 +33,7 @@ updates:
       - dependency-type: "direct" # Only update top-level packages
     cooldown:
       default-days: 3
+      semver-major-days: 7
     commit-message:
       prefix: "chore"
       include: "scope"
@@ -37,9 +41,21 @@ updates:
       - dependencies
       - npm
     groups:
-      npm:
+      # Group all development dependencies together
+      dev-dependencies:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+      # Group ESLint and linting packages
+      linting:
         patterns:
-          - "*"
+          - "eslint"
+          - "eslint-*"
+          - "@eslint/*"
+        update-types:
+          - minor
+          - patch
     ignore:
       - dependency-name: "@types/vscode"
         versions:
