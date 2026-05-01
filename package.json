@@ -3,7 +3,11 @@
   "displayName": "OtterScript Language Extension",
   "description": "Syntax highlighting, snippets, and function support for OtterScript",
   "publisher": "sighanse",
-  "author": "Sigurd Hansen <@sighanse>",
+  "author": {
+    "name": "Sigurd Hansen",
+    "email": "sigurd.hansen@gmail.com",
+    "url": "https://github.com/sighanse"
+  },
   "contributors": [],
   "repository": {
     "type": "git",
