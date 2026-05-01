@@ -1,5 +1,5 @@
 # Default behaviour
-* text=auto
+* text=auto eol=lf
 
 # Source Files
 *.js text eol=lf
