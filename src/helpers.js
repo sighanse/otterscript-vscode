@@ -479,7 +479,10 @@ function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
  */
 function getDiagnosticCode(diagnostic) {
   const code = diagnostic.code;
-  return typeof code === "object" ? code.value : code;
+  if (code && typeof code === "object" && "value" in code) {
+    return code.value;
+  }
+  return code;
 }
 
 // ============================================================
