@@ -114,10 +114,11 @@
     "commands": []
   },
   "scripts": {
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
+    "lint": "eslint . --cache",
+    "lint:fix": "eslint . --fix --cache",
+    "lint:ci": "eslint . --max-warnings=0 --cache",
     "package": "vsce package --no-yarn",
-    "vscode:prepublish": "npm run lint",
+    "vscode:prepublish": "npm run lint:ci",
     "publish:vsce": "vsce publish",
     "publish:ovsx": "ovsx publish --no-dependencies"
   }

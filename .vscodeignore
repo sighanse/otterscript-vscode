@@ -14,6 +14,7 @@ CODE_OF_CONDUCT.md
 eslint.config.cjs
 SECURITY.md
 package-lock.json
+.eslintcache
 .markdownlint.jsonc
 # Exclude source maps etc.
 !src/

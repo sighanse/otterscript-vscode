@@ -2,6 +2,13 @@ const js = require("@eslint/js");
 const globals = require("globals");
 
 module.exports = [
+  // -- Global ignores (applies to all configs)
+  {
+    ignores: [
+      "node_modules/**",
+      "*.vsix"
+    ]
+  },
   // Base ESLint recommended rules
   js.configs.recommended,
 
@@ -9,18 +16,15 @@ module.exports = [
     files: ["**/*.js"],
 
     languageOptions: {
-      ecmaVersion: 2026,
+      ecmaVersion: "latest",
       sourceType: "commonjs",
       globals: {
-        ...globals.node
+        ...globals.node,
+        ...globals.es2021
       }
     },
 
     rules: {
-      /*
-       * Refactor safety / correctness
-       */
-
       "no-unused-vars": [
         "warn",
         {
@@ -42,12 +46,40 @@ module.exports = [
       "comma-dangle": ["warn", "only-multiline"],
       "eol-last": ["warn", "always"],
       /*
+       * Other
+       */
+      "curly": ["warn", "multi-line"],
+      "consistent-return": "warn",
+      "object-shorthand": "warn",
+      "prefer-const": "warn",
+      "no-var": "error",
+      "no-process-exit": "error",
+      "no-warning-comments": ["warn", {
+        terms: ["TODO", "FIXME"],
+        location: "start"
+      }],
+      "no-return-await": "warn",
+      "require-atomic-updates": "warn",
+      "prefer-promise-reject-errors": "warn",
+      "no-throw-literal": "error",
+      /*
        * Explicitly allowed
        */
 
       "no-console": "off",
-      "no-debugger": "off"
-    }
+      "no-debugger": "off",
+      "no-invalid-this": "off",
+
+      "no-restricted-globals": ["error",
+        { name: "window", message: "Use vscode.window instead." },
+        { name: "document", message: "VS Code extensions run in Node.js, not browsers." },
+        { name: "alert", message: "Use vscode.window.showInformationMessage()" },
+        { name: "confirm", message: "Use vscode.window.showWarningMessage({ modal: true })" },
+        { name: "prompt", message: "Use vscode.window.showInputBox()" },
+        { name: "localStorage", message: "Use vscode.workspace.state or memento" },
+        { name: "sessionStorage", message: "Use vscode.workspace.state or memento" }
+      ],
+    },
   },
   {
     files: ["src/language-data.js"],
