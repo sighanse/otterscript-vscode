@@ -24,7 +24,7 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - uses: DavidAnson/markdownlint-cli2-action@v23
+      - uses: DavidAnson/markdownlint-cli2-action@v23.1.0
         with:
           config: '.markdownlint.jsonc'
           globs: '**/*.md'
