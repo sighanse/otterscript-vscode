@@ -8,8 +8,8 @@
     { "include": "#swim-strings" },
     { "include": "#with-block" },
     { "include": "#if-block" },
-    { "include": "#keywords" },
     { "include": "#statements" },
+    { "include": "#keywords" },
     { "include": "#proget-variables" },
     { "include": "#variables" },
     { "include": "#literals" },
@@ -284,11 +284,14 @@
         {
           "name": "meta.statement.apply-template.otterscript",
           "begin": "\\bApply-Template\\b",
+          "beginCaptures": {
+            "0": { "name": "keyword.other.operation.otterscript" }
+          },
           "end": ";",
           "patterns": [
             {
               "name": "entity.name.resource.asset.otterscript",
-              "match": "\\bApply-Template\\s+([a-zA-Z][a-zA-Z0-9_-]*)\\b",
+              "match": "\\G\\s+([a-zA-Z][a-zA-Z0-9_-]*)\\b",
               "captures": {
                 "1": { "name": "entity.name.resource.asset.otterscript" }
               }
