@@ -14,6 +14,10 @@
     {
       "fileMatch": ["syntaxes/*.tmLanguage.json"],
       "url": "https://json.schemastore.org/tmlanguage.json"
+    },
+    {
+      "fileMatch": [".markdownlint.jsonc"],
+      "url": "https://raw.githubusercontent.com/DavidAnson/markdownlint/refs/heads/main/schema/markdownlint-config-schema.json"
     }
   ],
   "eslint.validate": ["javascript", "json", "jsonc"],
@@ -52,6 +56,10 @@
 
   // Spell checking
   "cSpell.words": [
+    "cooldown",
+    "eslintcache",
+    "foreachaffected",
+    "foreachapikey",
     "hdars",
     "Inedo",
     "LOGPREFIX",
@@ -71,7 +79,8 @@
     "proget",
     "readwrite",
     "rubygems",
-    "sighanse"
+    "sighanse",
+    "tplforeach"
   ],
   "cSpell.minWordLength": 5
 }
