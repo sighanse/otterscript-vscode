@@ -5,6 +5,7 @@ on:
   pull_request:
     paths:
       - '**/*.md'
+      - '.markdownlint.jsonc'
       - ".github/workflows/markdownlint.yml"
 
 concurrency:
