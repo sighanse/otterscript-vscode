@@ -24,7 +24,7 @@
       "url": "https://raw.githubusercontent.com/DavidAnson/markdownlint/refs/heads/main/schema/markdownlint-config-schema.json"
     }
   ],
-  "eslint.validate": ["javascript", "json", "jsonc"],
+  "eslint.validate": ["javascript"],
   "editor.codeActionsOnSave": {
     "source.fixAll.eslint": "explicit"
   },
