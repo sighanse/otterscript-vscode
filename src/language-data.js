@@ -376,7 +376,7 @@ for server "web01" {
     signature: "return;",
     description: "Returns execution to the calling script.",
     documentation: `
-This has no elements; if this statment is found, the execution engine ends the current script and returns execution to the calling script, if any.
+This has no elements; if this statement is found, the execution engine ends the current script and returns execution to the calling script, if any.
 `
 },
   'local': {
