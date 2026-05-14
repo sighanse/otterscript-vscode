@@ -870,25 +870,25 @@ const variableDocs = {
     documentation: `
 **Available in:** ProGet
 `
-    },
-    "PackageComplianceDetails": {
-      name: "$PackageComplianceDetails",
-      description: "Detailed compliance information for the package.",
-      documentation: `
+  },
+  "PackageComplianceDetails": {
+    name: "$PackageComplianceDetails",
+    description: "Detailed compliance information for the package.",
+    documentation: `
 **Available in:** ProGet
 `
-    },
-    "PackageComplianceResult": {
-      name: "$PackageComplianceResult",
-      description: "The overall compliance result for the package.",
-      documentation: `
+  },
+  "PackageComplianceResult": {
+    name: "$PackageComplianceResult",
+    description: "The overall compliance result for the package.",
+    documentation: `
 **Available in:** ProGet
 `
-    },
-    "PackageEvent": {
-      name: "$PackageEvent",
-      description: "Returns the name of the event which triggered the current notifier.",
-      documentation: `
+  },
+  "PackageEvent": {
+    name: "$PackageEvent",
+    description: "Returns the name of the event which triggered the current notifier.",
+    documentation: `
 **Available in:** ProGet
 
 | $PackageEvent   | Description            |
