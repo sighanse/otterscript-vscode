@@ -733,52 +733,52 @@ force normal;
 
 /** @type {DocsTable} */
 const variableDocs = {
-    BuildId: {
-      name: "$BuildId",
-      description: "The numeric ID of the current build.",
-      documentation: `
+  "BuildId": {
+    name: "$BuildId",
+    description: "The numeric ID of the current build.",
+    documentation: `
 **Available in:** ProGet
 `
-    },
-    BuildNumber: {
-      name: "$BuildNumber",
-      description: "The display number of the current build.",
-      documentation: `
+  },
+  "BuildNumber": {
+    name: "$BuildNumber",
+    description: "The display number of the current build.",
+    documentation: `
 **Available in:** ProGet
 `
-    },
-    BuildProjectName: {
-      name: "$BuildProjectName",
-      description: "The name of the project associated with the build.",
-      documentation: `
+  },
+  "BuildProjectName": {
+    name: "$BuildProjectName",
+    description: "The name of the project associated with the build.",
+    documentation: `
 **Available in:** ProGet
 `
-    },
-    BuildReleaseNumber: {
-      name: "$BuildReleaseNumber",
-      description: "The release number associated with the current build.",
-      documentation: `
+  },
+  "BuildReleaseNumber": {
+    name: "$BuildReleaseNumber",
+    description: "The release number associated with the current build.",
+    documentation: `
 **Available in:** ProGet
 `
-    },
-    FeedId: {
-      name: "$FeedId",
-      description: "The unique identifier of the feed in scope.",
-      documentation: `
+  },
+  "FeedId": {
+    name: "$FeedId",
+    description: "The unique identifier of the feed in scope.",
+    documentation: `
 **Available in:** ProGet
 `
-    },
-    FeedName: {
-      name: "$FeedName",
-      description: "The name of the feed in scope.",
-      documentation: `
+  },
+  "FeedName": {
+    name: "$FeedName",
+    description: "The name of the feed in scope.",
+    documentation: `
 **Available in:** ProGet
 `
-    },
-    FeedType: {
-      name: "$FeedType",
-      description: "The type of feed (NuGet, npm, PyPI, etc.).",
-      documentation: `
+  },
+  "FeedType": {
+    name: "$FeedType",
+    description: "The type of feed (NuGet, npm, PyPI, etc.).",
+    documentation: `
 **Available in:** ProGet
 
 **Feed types:**
@@ -806,36 +806,36 @@ const variableDocs = {
 - universal
 - vsix
 `
-    },
-    NotifierId: {
-      name: "$NotifierId",
-      description: "The unique identifier of the notifier handling the event.",
-      documentation: `
+  },
+  "NotifierId": {
+    name: "$NotifierId",
+    description: "The unique identifier of the notifier handling the event.",
+    documentation: `
+**Available in:** ProGet
+`
+  },
+  "NotifierName": {
+    name: "$NotifierName",
+    description: "The name of the notifier handling the event.",
+    documentation: `
 **Available in:** ProGet
 `
     },
-    NotifierName: {
-      name: "$NotifierName",
-      description: "The name of the notifier handling the event.",
-      documentation: `
-**Available in:** ProGet
-`
-    },
-    PackageComplianceDetails: {
+    "PackageComplianceDetails": {
       name: "$PackageComplianceDetails",
       description: "Detailed compliance information for the package.",
       documentation: `
 **Available in:** ProGet
 `
     },
-    PackageComplianceResult: {
+    "PackageComplianceResult": {
       name: "$PackageComplianceResult",
       description: "The overall compliance result for the package.",
       documentation: `
 **Available in:** ProGet
 `
     },
-    PackageEvent: {
+    "PackageEvent": {
       name: "$PackageEvent",
       description: "Returns the name of the event which triggered the current notifier.",
       documentation: `
@@ -854,40 +854,41 @@ const variableDocs = {
 **Example:**
 \`\`\`otterscript
 %( title: "**Feed**", value: $FeedName )
-\`\`\``
-    },
-    PackageGroup: {
-      name: "$PackageGroup",
-      description: "The package group associated with the event.",
-      documentation: `
+\`\`\`
+`
+  },
+  "PackageGroup": {
+    name: "$PackageGroup",
+    description: "The package group associated with the event.",
+    documentation: `
 **Available in:** ProGet
 `
-    },
-    PackageId: {
-      name: "$PackageId",
-      description: "The identifier of the affected package.",
-      documentation: `
+  },
+  "PackageId": {
+    name: "$PackageId",
+    description: "The identifier of the affected package.",
+    documentation: `
 **Available in:** ProGet
 `
-    },
-    PackageName: {
-      name: "$PackageName",
-      description: "The name of the affected package.",
-      documentation: `
+  },
+  "PackageName": {
+    name: "$PackageName",
+    description: "The name of the affected package.",
+    documentation: `
 **Available in:** ProGet
 `
-    },
-    PackageSize: {
-      name: "$PackageSize",
-      description: "The size of the affected package in bytes.",
-      documentation: `
+  },
+  "PackageSize": {
+    name: "$PackageSize",
+    description: "The size of the affected package in bytes.",
+    documentation: `
 **Available in:** ProGet
 `
-    },
-    PackageVersion: {
-      name: "$PackageVersion",
-      description: "The version of the affected package.",
-      documentation: `
+  },
+  "PackageVersion": {
+    name: "$PackageVersion",
+    description: "The version of the affected package.",
+    documentation: `
 **Available in:** ProGet
 
 **Example:**
@@ -895,56 +896,56 @@ const variableDocs = {
       %( title: "**Version**", value: $PackageVersion )
 \`\`\`
 `
-    },
-    UserName: {
-      name: "$UserName",
-      description: "The name of the user associated with the event.",
-      documentation: `
+  },
+  "UserName": {
+    name: "$UserName",
+    description: "The name of the user associated with the event.",
+    documentation: `
 **Available in:** ProGet
 `
-    },
-    VulnerabilityId: {
-      name: "$VulnerabilityId",
-      description: "The identifier of the vulnerability.",
-      documentation: `
+  },
+  "VulnerabilityId": {
+    name: "$VulnerabilityId",
+    description: "The identifier of the vulnerability.",
+    documentation: `
 **Available in:** ProGet
 `
-    },
-    VulnerabilityScore: {
-      name: "$VulnerabilityScore",
-      description: "The numeric score assigned to the vulnerability.",
-      documentation: `
+  },
+  "VulnerabilityScore": {
+    name: "$VulnerabilityScore",
+    description: "The numeric score assigned to the vulnerability.",
+    documentation: `
 **Available in:** ProGet
 `
-    },
-    VulnerabilitySeverity: {
-      name: "$VulnerabilitySeverity",
-      description: "The severity classification of the vulnerability.",
-      documentation: `
+  },
+  "VulnerabilitySeverity": {
+    name: "$VulnerabilitySeverity",
+    description: "The severity classification of the vulnerability.",
+    documentation: `
 **Available in:** ProGet
 `
-    },
-    VulnerabilitySummary: {
-      name: "$VulnerabilitySummary",
-      description: "A short summary of the vulnerability.",
-      documentation: `
+  },
+  "VulnerabilitySummary": {
+    name: "$VulnerabilitySummary",
+    description: "A short summary of the vulnerability.",
+    documentation: `
 **Available in:** ProGet
 `
-    },
-    WebBaseUrl: {
-      name: "$WebBaseUrl",
-      description: "The base URL of the ProGet web application.",
-      documentation: `
+  },
+  "WebBaseUrl": {
+    name: "$WebBaseUrl",
+    description: "The base URL of the ProGet web application.",
+    documentation: `
 **Available in:** ProGet
 `
-    },
-    WorkingDirectory: {
-      name: "$WorkingDirectory",
-      description: "Returns the current working directory.",
-      documentation: `
+  },
+  "WorkingDirectory": {
+    name: "$WorkingDirectory",
+    description: "Returns the current working directory.",
+    documentation: `
 **Available in:** Otter
 `
-    }
+  }
 };
 
 // ============================================================
