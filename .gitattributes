@@ -1,4 +1,4 @@
-# Default behaviour
+# Default behavior
 * text=auto eol=lf
 
 # Source Files
@@ -14,7 +14,7 @@ src/**/*.js text eol=lf
 
 # Documentation
 *.txt text eol=lf
-*.md text eol=lf
+*.md text eol=lf linguist-documentation=true
 
 # YAML (Github Actions, configs)
 *.yml  text eol=lf
@@ -23,10 +23,10 @@ src/**/*.js text eol=lf
 # Other
 .vscodeignore text eol=lf
 .vscode/** text eol=lf
-.gitignore    text eol=lf
+.gitignore text eol=lf
 .gitattributes text eol=lf
 *.code-workspace text eol=lf
-package-lock.json text eol=lf
+package-lock.json text eol=lf linguist-generated=true
 
 # Binaries
 *.png binary

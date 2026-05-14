@@ -5,6 +5,8 @@ on:
   pull_request:
     paths:
       - '**/*.md'
+      - '.markdownlint.jsonc'
+      - ".github/workflows/markdownlint.yml"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -15,8 +17,8 @@ permissions:
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
 
     steps:
       - uses: actions/checkout@v6

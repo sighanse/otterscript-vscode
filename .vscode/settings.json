@@ -4,14 +4,30 @@
     "snippets/*.json": "jsonc",
     ".vscode/*.json": "jsonc"  // VS Code workspace settings
   },
+  "files.readonlyInclude": {
+    ".eslintcache": true,
+    "package-lock.json": true
+  },
   // JSON tooling
   "json.validate.enable": true,
   "json.schemas": [
     {
       "fileMatch": ["snippets/*.json"],
       "url": "vscode://schemas/snippets"
+    },
+    {
+      "fileMatch": ["syntaxes/*.tmLanguage.json"],
+      "url": "https://json.schemastore.org/tmlanguage.json"
+    },
+    {
+      "fileMatch": [".markdownlint.jsonc"],
+      "url": "https://raw.githubusercontent.com/DavidAnson/markdownlint/refs/heads/main/schema/markdownlint-config-schema.json"
     }
   ],
+  "eslint.validate": ["javascript"],
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
   // TypeScript & JavaScript
   "js/ts.implicitProjectConfig.checkJs": true,
   "js/ts.preferences.includePackageJsonAutoImports": "auto",
@@ -22,10 +38,23 @@
   "editor.renderWhitespace": "boundary",
   "editor.renderControlCharacters": true,
 
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.patterns": {
+    "package.json": "package-lock.json",
+    "README.md": "CODE_OF_CONDUCT.md, CHANGELOG.md, SECURITY.md, CONTRIBUTING.md, LICENSE",
+    "eslint.config.cjs": ".eslintcache"
+  },
+
   // File hygiene
   "files.eol": "\n",
   "files.insertFinalNewline": true,
   "files.trimTrailingWhitespace": true,
+  "[json]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
+  },
 
   // Use the same markdownlint rules in VS Code as in CI
   "markdownlint.configFile": ".markdownlint.jsonc",
@@ -34,5 +63,36 @@
   "git.branchProtection": ["main"],
   "git.branchProtectionPrompt": "alwaysCommitToNewBranch",
   "git.branchRandomName.enable": true,
-  "git.autofetch": true
+  "git.autofetch": true,
+
+  // Spell checking
+  "cSpell.words": [
+    "cooldown",
+    "eslintcache",
+    "foreachaffected",
+    "foreachapikey",
+    "hdars",
+    "Inedo",
+    "LOGPREFIX",
+    "newversion",
+    "oscript",
+    "otterscript",
+    "PKGDEL",
+    "PKGDPL",
+    "PKGMDF",
+    "PKGPGD",
+    "PKGPMT",
+    "PKGSTA",
+    "preid",
+    "premajor",
+    "preminor",
+    "prepatch",
+    "proget",
+    "readwrite",
+    "rubygems",
+    "sighanse",
+    "tplforeach",
+    "vscodeignore"
+  ],
+  "cSpell.minWordLength": 5
 }

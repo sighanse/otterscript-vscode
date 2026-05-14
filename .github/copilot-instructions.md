@@ -6,16 +6,21 @@ This repository is a VS Code extension for OtterScript (a product by Inedo) with
 
 Not affiliated with or endorsed by [Inedo](https://inedo.com/).
 
-Use these instructions to produce safe, minimal, reviewable changes.
+Use these instructions to produce safe (does not introduce security vulnerabilities or unintended breaking behavior), minimal, reviewable changes.
+
+If a user request is invalid or unsupported, explain why and propose the closest safe alternative.
 
 ## Priority Order
 
-When instructions conflict, follow this order:
+Safety and platform policies always override all other instructions.
+
+After that, when instructions conflict, follow this order:
 
 1. User request for the current task
-2. Safety and platform policies
-3. This file
-4. Existing repository conventions and style
+2. This file
+3. Existing repository conventions and style
+
+If repository conventions or style are unclear or inconsistent, default to the rules in this file.
 
 ## Hard Rules (Always Follow)
 
@@ -65,6 +70,7 @@ When instructions conflict, follow this order:
 - File must be a valid root JSON object for snippets.
 - Each snippet needs valid `prefix`, `body`, and `description` as appropriate.
 - Avoid malformed JSON and schema/type mismatches.
+- If JSON is malformed or incomplete, return a clear error describing the issue and suggest the minimal correction needed.
 
 ### `syntaxes/otterscript.tmLanguage.json`
 
