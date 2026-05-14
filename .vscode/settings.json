@@ -10,8 +10,16 @@
     {
       "fileMatch": ["snippets/*.json"],
       "url": "vscode://schemas/snippets"
+    },
+    {
+      "fileMatch": ["syntaxes/*.tmLanguage.json"],
+      "url": "https://json.schemastore.org/tmlanguage.json"
     }
   ],
+  "eslint.validate": ["javascript", "json", "jsonc"],
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
   // TypeScript & JavaScript
   "js/ts.implicitProjectConfig.checkJs": true,
   "js/ts.preferences.includePackageJsonAutoImports": "auto",
@@ -26,6 +34,12 @@
   "files.eol": "\n",
   "files.insertFinalNewline": true,
   "files.trimTrailingWhitespace": true,
+  "[json]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "vscode.json-language-features"
+  },
 
   // Use the same markdownlint rules in VS Code as in CI
   "markdownlint.configFile": ".markdownlint.jsonc",
@@ -34,5 +48,30 @@
   "git.branchProtection": ["main"],
   "git.branchProtectionPrompt": "alwaysCommitToNewBranch",
   "git.branchRandomName.enable": true,
-  "git.autofetch": true
+  "git.autofetch": true,
+
+  // Spell checking
+  "cSpell.words": [
+    "hdars",
+    "Inedo",
+    "LOGPREFIX",
+    "newversion",
+    "oscript",
+    "otterscript",
+    "PKGDEL",
+    "PKGDPL",
+    "PKGMDF",
+    "PKGPGD",
+    "PKGPMT",
+    "PKGSTA",
+    "preid",
+    "premajor",
+    "preminor",
+    "prepatch",
+    "proget",
+    "readwrite",
+    "rubygems",
+    "sighanse"
+  ],
+  "cSpell.minWordLength": 5
 }
