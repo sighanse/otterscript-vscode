@@ -4,6 +4,10 @@
     "snippets/*.json": "jsonc",
     ".vscode/*.json": "jsonc"  // VS Code workspace settings
   },
+  "files.readonlyInclude": {
+    ".eslintcache": true,
+    "package-lock.json": true
+  },
   // JSON tooling
   "json.validate.enable": true,
   "json.schemas": [
@@ -33,6 +37,13 @@
   "editor.detectIndentation": false,
   "editor.renderWhitespace": "boundary",
   "editor.renderControlCharacters": true,
+
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.patterns": {
+    "package.json": "package-lock.json",
+    "README.md": "CODE_OF_CONDUCT.md, CHANGELOG.md, SECURITY.md, CONTRIBUTING.md, LICENSE",
+    "eslint.config.cjs": ".eslintcache"
+  },
 
   // File hygiene
   "files.eol": "\n",
@@ -80,7 +91,8 @@
     "readwrite",
     "rubygems",
     "sighanse",
-    "tplforeach"
+    "tplforeach",
+    "vscodeignore"
   ],
   "cSpell.minWordLength": 5
 }
