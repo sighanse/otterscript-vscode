@@ -188,7 +188,7 @@ Sleep 5;
   "Apply-Template": {
     name: "Apply-Template",
     signature: "Apply-Template([Asset: <text>], [OutputVariable: <text>], [OutputFile: <text>], [Literal: <text>], [InputFile: <text>], [AdditionalVariables: <%(key1: value1, ...)>], [NewLines: <integer>]);",
-    snippet: "Apply-Template(\n    Literal: >>${1:template text}>>,\n    OutputVariable => ${2:$text},\n    AdditionalVariables: %(\n        ${3:key}: ${4:value}\n    ),\n    NewLines: ${5:newLines}\n);$0",
+    snippet: "Apply-Template(\n    Literal: >>${1:template text}>>,\n    OutputVariable => ${2:\\$text},\n    AdditionalVariables: %(\n        ${3:key}: ${4:value}\n    ),\n    NewLines: ${5:newLines}\n);$0",
     description: "Applies full template transformation on a literal, an input file, or a template asset.",
     documentation: `
 Applies full template transformation on a literal, a file, or a template asset.
