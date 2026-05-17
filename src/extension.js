@@ -1101,6 +1101,41 @@ function activate(context) {
 
           // -- Detect invalid logical operators
           if (/^\s*if\b/.test(line)) {
+            // -- Detect assignment-like '=' in conditions (likely intended as '==')
+            // Ignore operators that legitimately contain '=': ==, !=, <=, >=, =>
+            // and skip inline comments.
+            const hashComment = line.indexOf('#');
+            const slashComment = line.indexOf('//');
+            const commentIndex = hashComment === -1
+              ? slashComment
+              : slashComment === -1
+                ? hashComment
+                : Math.min(hashComment, slashComment);
+            const conditionLine = commentIndex >= 0 ? line.slice(0, commentIndex) : line;
+
+            for (let j = 0; j < conditionLine.length; j++) {
+              if (conditionLine[j] !== '=') continue;
+
+              const prev = conditionLine[j - 1];
+              const next = conditionLine[j + 1];
+              const isSingleEquals = prev !== '=' && prev !== '!' && prev !== '<' && prev !== '>'
+                && next !== '=' && next !== '>';
+
+              if (!isSingleEquals) continue;
+
+              const diagnostic = new vscode.Diagnostic(
+                new vscode.Range(
+                  new vscode.Position(lineIndex, j),
+                  new vscode.Position(lineIndex, j + 1)
+                ),
+                "Possible assignment in condition. Did you mean '=='?",
+                vscode.DiagnosticSeverity.Warning
+              );
+              diagnostic.code = "assignment-in-condition";
+              diagnostic.source = "OtterScript";
+              issues.push(diagnostic);
+            }
+
             for (let j = 0; j < line.length; j++) {
               const ch = line[j];
               if (ch === "&" || ch === "|") {
