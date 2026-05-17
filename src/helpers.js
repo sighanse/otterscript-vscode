@@ -564,6 +564,22 @@ function createInvalidOperatorFix(document, diagnostic) {
 }
 
 /**
+ * Creates a quick-fix that replaces assignment-like '=' with '==' in conditions.
+ *
+ * @param {vscode.TextDocument} document - The document containing the diagnostic
+ * @param {vscode.Diagnostic} diagnostic - The diagnostic with assignment-like usage
+ * @returns {vscode.CodeAction | null} Code action or null if replacement unknown
+ */
+function createAssignmentInConditionFix(document, diagnostic) {
+  const text = document.getText(diagnostic.range);
+  if (text !== "=") return null;
+
+  return createCodeAction("Replace '=' with '=='", diagnostic, (edit) => {
+    edit.replace(document.uri, diagnostic.range, "==");
+  });
+}
+
+/**
  * Creates a quick-fix that replaces incorrect 'for' loop usage with 'foreach'.
  *
  * @param {vscode.TextDocument} document - The document containing the diagnostic
@@ -636,6 +652,7 @@ module.exports = {
   // -- Code Actions
   createMissingDollarFix,
   createInvalidOperatorFix,
+  createAssignmentInConditionFix,
   createForToForeachFix,
 
   // -- Regex

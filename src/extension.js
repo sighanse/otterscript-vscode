@@ -36,6 +36,7 @@ const {
   buildCompletionItem,
   buildHoverMarkdown,
   checkMissingDollar,
+  createAssignmentInConditionFix,
   createForToForeachFix,
   createInvalidOperatorFix,
   createMissingDollarFix,
@@ -712,6 +713,11 @@ function activate(context) {
               if (fix) actions.push(fix);
             }
 
+            if (code === "assignment-in-condition") {
+              const fix = createAssignmentInConditionFix(document, diagnostic);
+              if (fix) actions.push(fix);
+            }
+
             if (code === "incorrect-for-usage") {
               const fix = createForToForeachFix(document, diagnostic);
               if (fix) actions.push(fix);
@@ -750,7 +756,7 @@ function activate(context) {
         .getDiagnostics(document.uri)
         .filter(diagnostic => diagnostic.source === "OtterScript");
       // -- Filter to fixable diagnostic codes
-      const fixableCodes = new Set(["missing-dollar", "invalid-operator", "incorrect-for-usage"]);
+      const fixableCodes = new Set(["missing-dollar", "invalid-operator", "assignment-in-condition", "incorrect-for-usage"]);
       const fixableDiagnostics = diagnostics.filter(d => fixableCodes.has(getDiagnosticCode(d)));
 
       if (fixableDiagnostics.length === 0) {
@@ -769,6 +775,7 @@ function activate(context) {
         const code = getDiagnosticCode(diagnostic);
         const action = code === "missing-dollar" ? createMissingDollarFix(document, diagnostic)
           : code === "invalid-operator" ? createInvalidOperatorFix(document, diagnostic)
+          : code === "assignment-in-condition" ? createAssignmentInConditionFix(document, diagnostic)
           : code === "incorrect-for-usage" ? createForToForeachFix(document, diagnostic)
           : null;
 
