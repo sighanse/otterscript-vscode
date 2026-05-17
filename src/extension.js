@@ -1047,6 +1047,7 @@ function activate(context) {
                 `Unknown scalar function '$${name}'`,
                 vscode.DiagnosticSeverity.Warning
               );
+              diagnostic.code = "unknown-scalar-function";
               diagnostic.source = "OtterScript";
               issues.push(diagnostic);
             }
@@ -1065,6 +1066,7 @@ function activate(context) {
                 `Unknown vector function '@${name}'`,
                 vscode.DiagnosticSeverity.Warning
               );
+              diagnostic.code = "unknown-vector-function";
               diagnostic.source = "OtterScript";
               issues.push(diagnostic);
             }
@@ -1091,6 +1093,7 @@ function activate(context) {
                 `Unknown operation '${name}'`,
                 vscode.DiagnosticSeverity.Warning
               );
+              diagnostic.code = "unknown-operation";
               diagnostic.source = "OtterScript";
               issues.push(diagnostic);
             }
