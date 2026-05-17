@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.2.2] - 2026-05-??
+
+### Added
+
+- Added language data and documentation for `Apply-Template`.
+
+### Fixed
+
+- Added diagnostic codes for unknown scalar, vector, and operation warnings.
+- Set `diagnostic.source` to `OtterScript` for extension diagnostics.
+- Improved grammar handling for `Apply-Template` so asset highlighting is reachable and position-aware.
+- Fixed variable escaping before snippet insertion in language data.
+- Minor typo and formatting fixes.
+
+### Changed
+
+- General language-data cleanup and maintenance.
+
 ## [0.2.1] - 2026-05-01
 
 ### Added
