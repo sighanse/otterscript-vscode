@@ -699,6 +699,8 @@ function activate(context) {
           const actions = [];
 
           for (const diagnostic of codeActionContext.diagnostics) {
+            if (diagnostic.source !== "OtterScript") continue;
+
             const code = getDiagnosticCode(diagnostic);
 
             if (code === "missing-dollar") {
@@ -744,7 +746,9 @@ function activate(context) {
       if (!editor || editor.document.languageId !== "otterscript") return;
 
       const document = editor.document;
-      const diagnostics = vscode.languages.getDiagnostics(document.uri);
+      const diagnostics = vscode.languages
+        .getDiagnostics(document.uri)
+        .filter(diagnostic => diagnostic.source === "OtterScript");
       // -- Filter to fixable diagnostic codes
       const fixableCodes = new Set(["missing-dollar", "invalid-operator", "incorrect-for-usage"]);
       const fixableDiagnostics = diagnostics.filter(d => fixableCodes.has(getDiagnosticCode(d)));
@@ -1035,16 +1039,16 @@ function activate(context) {
             const name = match[1];
             if (!knownScalarFunctions.has(name)) {
               const start = match.index + 1;
-              issues.push(
-                new vscode.Diagnostic(
-                  new vscode.Range(
-                    new vscode.Position(lineIndex, start),
-                    new vscode.Position(lineIndex, start + name.length)
-                  ),
-                  `Unknown scalar function '$${name}'`,
-                  vscode.DiagnosticSeverity.Warning
-                )
+              const diagnostic = new vscode.Diagnostic(
+                new vscode.Range(
+                  new vscode.Position(lineIndex, start),
+                  new vscode.Position(lineIndex, start + name.length)
+                ),
+                `Unknown scalar function '$${name}'`,
+                vscode.DiagnosticSeverity.Warning
               );
+              diagnostic.source = "OtterScript";
+              issues.push(diagnostic);
             }
           }
 
@@ -1053,16 +1057,16 @@ function activate(context) {
             const name = match[1];
             if (!knownVectorFunctions.has(name)) {
               const start = match.index + 1;
-              issues.push(
-                new vscode.Diagnostic(
-                  new vscode.Range(
-                    new vscode.Position(lineIndex, start),
-                    new vscode.Position(lineIndex, start + name.length)
-                  ),
-                  `Unknown vector function '@${name}'`,
-                  vscode.DiagnosticSeverity.Warning
-                )
+              const diagnostic = new vscode.Diagnostic(
+                new vscode.Range(
+                  new vscode.Position(lineIndex, start),
+                  new vscode.Position(lineIndex, start + name.length)
+                ),
+                `Unknown vector function '@${name}'`,
+                vscode.DiagnosticSeverity.Warning
               );
+              diagnostic.source = "OtterScript";
+              issues.push(diagnostic);
             }
           }
 
@@ -1079,16 +1083,16 @@ function activate(context) {
               !knownVectorFunctions.has(name)
             ) {
               const start = match.index;
-              issues.push(
-                new vscode.Diagnostic(
-                  new vscode.Range(
-                    new vscode.Position(lineIndex, start),
-                    new vscode.Position(lineIndex, start + name.length)
-                  ),
-                  `Unknown operation '${name}'`,
-                  vscode.DiagnosticSeverity.Warning
-                )
+              const diagnostic = new vscode.Diagnostic(
+                new vscode.Range(
+                  new vscode.Position(lineIndex, start),
+                  new vscode.Position(lineIndex, start + name.length)
+                ),
+                `Unknown operation '${name}'`,
+                vscode.DiagnosticSeverity.Warning
               );
+              diagnostic.source = "OtterScript";
+              issues.push(diagnostic);
             }
           }
 
@@ -1109,6 +1113,7 @@ function activate(context) {
                     vscode.DiagnosticSeverity.Warning
                   );
                   diagnostic.code = "invalid-operator";
+                  diagnostic.source = "OtterScript";
                   issues.push(diagnostic);
                 }
               }
@@ -1128,6 +1133,7 @@ function activate(context) {
               vscode.DiagnosticSeverity.Warning
             );
             diagnostic.code = "incorrect-for-usage";
+            diagnostic.source = "OtterScript";
             issues.push(diagnostic);
           }
         }

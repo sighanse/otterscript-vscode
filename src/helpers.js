@@ -466,6 +466,7 @@ function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
     vscode.DiagnosticSeverity.Error
   );
   diagnostic.code = "missing-dollar";
+  diagnostic.source = "OtterScript";
 
   return diagnostic;
 }
@@ -595,11 +596,13 @@ function createUnbalancedDiagnostic(count, lastPos, openChar, closeChar, name, d
     ? `Unclosed ${name}(s): ${count} '${openChar}' not closed (first at line ${lineNum}, col ${colNum})`
     : `Unexpected closing ${name}: Extra '${closeChar}' at line ${lineNum}, col ${colNum}`;
 
-  return new vscode.Diagnostic(
+  const diagnostic = new vscode.Diagnostic(
     new vscode.Range(pos, document.positionAt(lastPos + 1)),
     message,
     vscode.DiagnosticSeverity.Error
   );
+  diagnostic.source = "OtterScript";
+  return diagnostic;
 }
 
 // ============================================================
