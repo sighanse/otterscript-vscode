@@ -36,6 +36,7 @@ const {
   buildCompletionItem,
   buildHoverMarkdown,
   checkMissingDollar,
+  findDuplicateMapKeyDiagnostics,
   createAssignmentInConditionFix,
   createForToForeachFix,
   createInvalidOperatorFix,
@@ -1198,6 +1199,9 @@ function activate(context) {
         if (diag) issues.push(diag);
       }
     }
+
+    // -- Detect duplicate keys inside map expressions: %( key: value, key: value )
+    issues.push(...findDuplicateMapKeyDiagnostics(document));
 
     diagnostics.set(document.uri, issues);
   }

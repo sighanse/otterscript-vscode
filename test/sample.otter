@@ -340,7 +340,8 @@ $fullPath = $PathCombine("path1", "path2")
 
 $json = $ToJson(%(
     name: "example",
+    name: "example",
     count: $count,
-    values: @(1, 2, 3)
+    values: @(1, 2, 3),
 ));
 

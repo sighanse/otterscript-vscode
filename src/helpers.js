@@ -472,6 +472,111 @@ function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
 }
 
 /**
+ * Finds duplicate keys inside map expressions and returns diagnostics.
+ *
+ * This performs a best-effort scan of `%(... )` blocks and warns when
+ * the same key appears more than once at the top level of a map.
+ *
+ * @param {vscode.TextDocument} document - Document to analyze
+ * @returns {vscode.Diagnostic[]} Duplicate-key diagnostics
+ */
+function findDuplicateMapKeyDiagnostics(document) {
+  const source = document.getText();
+  const text = source
+    // Mask block comments but keep indexes stable.
+    .replace(/\/\*[\s\S]*?\*\//g, match => match.replace(/[^\n]/g, " "))
+    // Mask line comments (# and //) but keep indexes stable.
+    .replace(/(^|[^\S\r\n])(\/\/|#).*$/gm, match => match.replace(/[^\n]/g, " "))
+    // Mask quoted strings but keep indexes stable.
+    .replace(/"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/g, match => match.replace(/[^\n]/g, " "));
+
+  /** @type {vscode.Diagnostic[]} */
+  const issues = [];
+
+  /**
+   * Finds the matching ')' for an opening '(' position.
+   *
+   * @param {number} openParenIndex - Index of opening '('
+   * @returns {number} Matching ')' index, or -1 when not found
+   */
+  function findMatchingParen(openParenIndex) {
+    let depth = 1;
+    for (let i = openParenIndex + 1; i < text.length; i++) {
+      if (text[i] === '(') depth++;
+      if (text[i] === ')') depth--;
+      if (depth === 0) return i;
+    }
+    return -1;
+  }
+
+  /**
+   * Parses a map expression body and reports duplicate top-level keys.
+   *
+   * @param {number} start - Start index of map body (after '%(')
+   * @param {number} end - End index of map body (at matching ')')
+   * @returns {void}
+   */
+  function scanMapBody(start, end) {
+    let nestingDepth = 0;
+    let segmentStart = start;
+    const seenKeys = new Set();
+
+    for (let i = start; i <= end; i++) {
+      const ch = i === end ? ',' : text[i];
+
+      if (ch === '(' || ch === '[' || ch === '{') {
+        nestingDepth++;
+        continue;
+      }
+      if (ch === ')' || ch === ']' || ch === '}') {
+        if (nestingDepth > 0) nestingDepth--;
+        continue;
+      }
+
+      if (ch === ',' && nestingDepth === 0) {
+        const segmentText = text.slice(segmentStart, i);
+        const keyMatch = segmentText.match(/^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*:/);
+
+        if (keyMatch) {
+          const key = keyMatch[1];
+          const keyStart = segmentStart + keyMatch[0].indexOf(key);
+
+          if (seenKeys.has(key)) {
+            const diagnostic = new vscode.Diagnostic(
+              new vscode.Range(
+                document.positionAt(keyStart),
+                document.positionAt(keyStart + key.length)
+              ),
+              `Duplicate key '${key}' in map expression.`,
+              vscode.DiagnosticSeverity.Warning
+            );
+            diagnostic.code = "duplicate-map-key";
+            diagnostic.source = "OtterScript";
+            issues.push(diagnostic);
+          } else {
+            seenKeys.add(key);
+          }
+        }
+
+        segmentStart = i + 1;
+      }
+    }
+  }
+
+  for (let i = 0; i < text.length - 1; i++) {
+    if (text[i] === '%' && text[i + 1] === '(') {
+      const close = findMatchingParen(i + 1);
+      if (close !== -1) {
+        scanMapBody(i + 2, close);
+        i = close;
+      }
+    }
+  }
+
+  return issues;
+}
+
+/**
  * Gets the diagnostic code as a string.
  * @param {vscode.Diagnostic} diagnostic
  * @returns {string}
@@ -641,6 +746,7 @@ module.exports = {
   isInStringOrComment,
   stripStrings,
   checkMissingDollar,
+  findDuplicateMapKeyDiagnostics,
   validateDocs,
   createUnbalancedDiagnostic,
   getDiagnosticCode,
