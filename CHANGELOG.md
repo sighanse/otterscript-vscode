@@ -6,6 +6,7 @@
 
 - Added language data and documentation for `Apply-Template`.
 - Added warning for assignment-like `=` in `if` conditions with a quick-fix to replace `=` with `==`.
+- Added warning diagnostics for duplicate keys in map expressions.
 
 ### Fixed
 
