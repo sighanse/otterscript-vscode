@@ -5,6 +5,7 @@
 ### Added
 
 - Added language data and documentation for `Apply-Template`.
+- Added warning for assignment-like `=` in `if` conditions with a quick-fix to replace `=` with `==`.
 
 ### Fixed
 
@@ -12,6 +13,7 @@
 - Set `diagnostic.source` to `OtterScript` for extension diagnostics.
 - Improved grammar handling for `Apply-Template` so asset highlighting is reachable and position-aware.
 - Fixed variable escaping before snippet insertion in language data.
+- Fixed missing `$` diagnostics in parenthesized `if` conditions.
 - Minor typo and formatting fixes.
 
 ### Changed
