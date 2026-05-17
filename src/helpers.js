@@ -443,7 +443,7 @@ function buildCompletionItem(doc, kind, sortPrefix, insertText, triggerSignature
  * @returns {vscode.Diagnostic | null} - Diagnostic if missing '$' found, null otherwise
  */
 function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
-  const match = line.match(/^\s*if\s+([a-zA-Z][a-zA-Z0-9_]*)\s*(=|==|!=|<=|>=|<|>)/);
+  const match = line.match(/^\s*if\s*(?:\(\s*)*([a-zA-Z][a-zA-Z0-9_]*)\s*(=|==|!=|<=|>=|<|>)/);
 
   // -- Guard: ensure regex matched and we have a valid index position
   if (!match || typeof match.index !== 'number') return null;
