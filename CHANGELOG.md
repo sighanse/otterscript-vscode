@@ -1,12 +1,13 @@
 # Changelog
 
-## [0.2.2] - 2026-05-??
+## [0.2.2] - 2026-05-18
 
 ### Added
 
 - Added language data and documentation for `Apply-Template`.
 - Added warning for assignment-like `=` in `if` conditions with a quick-fix to replace `=` with `==`.
 - Added warning diagnostics for duplicate keys in map expressions.
+- Added duplicate map key diagnostics entry
 
 ### Fixed
 
