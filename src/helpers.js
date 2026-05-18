@@ -483,12 +483,12 @@ function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
  */
 function findDuplicateMapKeyDiagnostics(document, source = document.getText()) {
   const text = source
+    // Mask quoted strings first so // or # inside strings are not treated as comments.
+    .replace(/"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/g, match => match.replace(/[^\n]/g, " "))
     // Mask block comments but keep indexes stable.
     .replace(/\/\*[\s\S]*?\*\//g, match => match.replace(/[^\n]/g, " "))
-    // Mask line comments (# and //) but keep indexes stable.
-    .replace(/(^|[^\S\r\n])(\/\/|#).*$/gm, match => match.replace(/[^\n]/g, " "))
-    // Mask quoted strings but keep indexes stable.
-    .replace(/"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/g, match => match.replace(/[^\n]/g, " "));
+    // Mask line comments (# and //) — no preceding-whitespace requirement.
+    .replace(/(\/\/|#).*$/gm, match => ' '.repeat(match.length));
 
   /** @type {vscode.Diagnostic[]} */
   const issues = [];
