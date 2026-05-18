@@ -478,10 +478,10 @@ function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
  * the same key appears more than once at the top level of a map.
  *
  * @param {vscode.TextDocument} document - Document to analyze
+ * @param {string} [source] - Optional pre-fetched document text; defaults to document.getText()
  * @returns {vscode.Diagnostic[]} Duplicate-key diagnostics
  */
-function findDuplicateMapKeyDiagnostics(document) {
-  const source = document.getText();
+function findDuplicateMapKeyDiagnostics(document, source = document.getText()) {
   const text = source
     // Mask block comments but keep indexes stable.
     .replace(/\/\*[\s\S]*?\*\//g, match => match.replace(/[^\n]/g, " "))

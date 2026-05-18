@@ -1197,7 +1197,7 @@ function activate(context) {
     }
 
     // -- Detect duplicate keys inside map expressions: %( key: value, key: value )
-    issues.push(...findDuplicateMapKeyDiagnostics(document));
+    issues.push(...findDuplicateMapKeyDiagnostics(document, text));
 
     diagnostics.set(document.uri, issues);
   }
