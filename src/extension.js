@@ -1110,22 +1110,18 @@ function activate(context) {
           // -- Detect invalid logical operators
           if (/^\s*if\b/.test(line)) {
             // -- Detect assignment-like '=' in conditions (likely intended as '==')
-            // Ignore operators that legitimately contain '=': ==, !=, <=, >=, =>
-            // and skip inline comments.
-            const hashComment = line.indexOf('#');
-            const slashComment = line.indexOf('//');
-            const commentIndex = hashComment === -1
-              ? slashComment
-              : slashComment === -1
-                ? hashComment
-                : Math.min(hashComment, slashComment);
-            const conditionLine = commentIndex >= 0 ? line.slice(0, commentIndex) : line;
+            // Scan rawLine with a length-preserving mask so that column index j
+            // always maps correctly back to the original document position.
+            // Replacing string contents with spaces (not empty) keeps all indexes stable.
+            const maskedLine = rawLine
+              .replace(/"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/g, m => m[0] + ' '.repeat(m.length - 2) + m[0])
+              .replace(/(#|\/\/).*$/, m => ' '.repeat(m.length));
 
-            for (let j = 0; j < conditionLine.length; j++) {
-              if (conditionLine[j] !== '=') continue;
+            for (let j = 0; j < maskedLine.length; j++) {
+              if (maskedLine[j] !== '=') continue;
 
-              const prev = conditionLine[j - 1];
-              const next = conditionLine[j + 1];
+              const prev = maskedLine[j - 1];
+              const next = maskedLine[j + 1];
               const isSingleEquals = prev !== '=' && prev !== '!' && prev !== '<' && prev !== '>'
                 && next !== '=' && next !== '>';
 
