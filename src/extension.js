@@ -36,6 +36,8 @@ const {
   buildCompletionItem,
   buildHoverMarkdown,
   checkMissingDollar,
+  findDuplicateMapKeyDiagnostics,
+  createAssignmentInConditionFix,
   createForToForeachFix,
   createInvalidOperatorFix,
   createMissingDollarFix,
@@ -699,6 +701,8 @@ function activate(context) {
           const actions = [];
 
           for (const diagnostic of codeActionContext.diagnostics) {
+            if (diagnostic.source !== "OtterScript") continue;
+
             const code = getDiagnosticCode(diagnostic);
 
             if (code === "missing-dollar") {
@@ -707,6 +711,11 @@ function activate(context) {
 
             if (code === "invalid-operator") {
               const fix = createInvalidOperatorFix(document, diagnostic);
+              if (fix) actions.push(fix);
+            }
+
+            if (code === "assignment-in-condition") {
+              const fix = createAssignmentInConditionFix(document, diagnostic);
               if (fix) actions.push(fix);
             }
 
@@ -744,9 +753,11 @@ function activate(context) {
       if (!editor || editor.document.languageId !== "otterscript") return;
 
       const document = editor.document;
-      const diagnostics = vscode.languages.getDiagnostics(document.uri);
+      const diagnostics = vscode.languages
+        .getDiagnostics(document.uri)
+        .filter(diagnostic => diagnostic.source === "OtterScript");
       // -- Filter to fixable diagnostic codes
-      const fixableCodes = new Set(["missing-dollar", "invalid-operator", "incorrect-for-usage"]);
+      const fixableCodes = new Set(["missing-dollar", "invalid-operator", "assignment-in-condition", "incorrect-for-usage"]);
       const fixableDiagnostics = diagnostics.filter(d => fixableCodes.has(getDiagnosticCode(d)));
 
       if (fixableDiagnostics.length === 0) {
@@ -765,6 +776,7 @@ function activate(context) {
         const code = getDiagnosticCode(diagnostic);
         const action = code === "missing-dollar" ? createMissingDollarFix(document, diagnostic)
           : code === "invalid-operator" ? createInvalidOperatorFix(document, diagnostic)
+          : code === "assignment-in-condition" ? createAssignmentInConditionFix(document, diagnostic)
           : code === "incorrect-for-usage" ? createForToForeachFix(document, diagnostic)
           : null;
 
@@ -1035,16 +1047,17 @@ function activate(context) {
             const name = match[1];
             if (!knownScalarFunctions.has(name)) {
               const start = match.index + 1;
-              issues.push(
-                new vscode.Diagnostic(
-                  new vscode.Range(
-                    new vscode.Position(lineIndex, start),
-                    new vscode.Position(lineIndex, start + name.length)
-                  ),
-                  `Unknown scalar function '$${name}'`,
-                  vscode.DiagnosticSeverity.Warning
-                )
+              const diagnostic = new vscode.Diagnostic(
+                new vscode.Range(
+                  new vscode.Position(lineIndex, start),
+                  new vscode.Position(lineIndex, start + name.length)
+                ),
+                `Unknown scalar function '$${name}'`,
+                vscode.DiagnosticSeverity.Warning
               );
+              diagnostic.code = "unknown-scalar-function";
+              diagnostic.source = "OtterScript";
+              issues.push(diagnostic);
             }
           }
 
@@ -1053,16 +1066,17 @@ function activate(context) {
             const name = match[1];
             if (!knownVectorFunctions.has(name)) {
               const start = match.index + 1;
-              issues.push(
-                new vscode.Diagnostic(
-                  new vscode.Range(
-                    new vscode.Position(lineIndex, start),
-                    new vscode.Position(lineIndex, start + name.length)
-                  ),
-                  `Unknown vector function '@${name}'`,
-                  vscode.DiagnosticSeverity.Warning
-                )
+              const diagnostic = new vscode.Diagnostic(
+                new vscode.Range(
+                  new vscode.Position(lineIndex, start),
+                  new vscode.Position(lineIndex, start + name.length)
+                ),
+                `Unknown vector function '@${name}'`,
+                vscode.DiagnosticSeverity.Warning
               );
+              diagnostic.code = "unknown-vector-function";
+              diagnostic.source = "OtterScript";
+              issues.push(diagnostic);
             }
           }
 
@@ -1079,21 +1093,53 @@ function activate(context) {
               !knownVectorFunctions.has(name)
             ) {
               const start = match.index;
-              issues.push(
-                new vscode.Diagnostic(
-                  new vscode.Range(
-                    new vscode.Position(lineIndex, start),
-                    new vscode.Position(lineIndex, start + name.length)
-                  ),
-                  `Unknown operation '${name}'`,
-                  vscode.DiagnosticSeverity.Warning
-                )
+              const diagnostic = new vscode.Diagnostic(
+                new vscode.Range(
+                  new vscode.Position(lineIndex, start),
+                  new vscode.Position(lineIndex, start + name.length)
+                ),
+                `Unknown operation '${name}'`,
+                vscode.DiagnosticSeverity.Warning
               );
+              diagnostic.code = "unknown-operation";
+              diagnostic.source = "OtterScript";
+              issues.push(diagnostic);
             }
           }
 
           // -- Detect invalid logical operators
           if (/^\s*if\b/.test(line)) {
+            // -- Detect assignment-like '=' in conditions (likely intended as '==')
+            // Scan rawLine with a length-preserving mask so that column index j
+            // always maps correctly back to the original document position.
+            // Replacing string contents with spaces (not empty) keeps all indexes stable.
+            const maskedLine = rawLine
+              .replace(/"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/g, m => m[0] + ' '.repeat(m.length - 2) + m[0])
+              .replace(/(#|\/\/).*$/, m => ' '.repeat(m.length));
+
+            for (let j = 0; j < maskedLine.length; j++) {
+              if (maskedLine[j] !== '=') continue;
+
+              const prev = maskedLine[j - 1];
+              const next = maskedLine[j + 1];
+              const isSingleEquals = prev !== '=' && prev !== '!' && prev !== '<' && prev !== '>'
+                && next !== '=' && next !== '>';
+
+              if (!isSingleEquals) continue;
+
+              const diagnostic = new vscode.Diagnostic(
+                new vscode.Range(
+                  new vscode.Position(lineIndex, j),
+                  new vscode.Position(lineIndex, j + 1)
+                ),
+                "Possible assignment in condition. Did you mean '=='?",
+                vscode.DiagnosticSeverity.Warning
+              );
+              diagnostic.code = "assignment-in-condition";
+              diagnostic.source = "OtterScript";
+              issues.push(diagnostic);
+            }
+
             for (let j = 0; j < line.length; j++) {
               const ch = line[j];
               if (ch === "&" || ch === "|") {
@@ -1109,6 +1155,7 @@ function activate(context) {
                     vscode.DiagnosticSeverity.Warning
                   );
                   diagnostic.code = "invalid-operator";
+                  diagnostic.source = "OtterScript";
                   issues.push(diagnostic);
                 }
               }
@@ -1128,6 +1175,7 @@ function activate(context) {
               vscode.DiagnosticSeverity.Warning
             );
             diagnostic.code = "incorrect-for-usage";
+            diagnostic.source = "OtterScript";
             issues.push(diagnostic);
           }
         }
@@ -1147,6 +1195,9 @@ function activate(context) {
         if (diag) issues.push(diag);
       }
     }
+
+    // -- Detect duplicate keys inside map expressions: %( key: value, key: value )
+    issues.push(...findDuplicateMapKeyDiagnostics(document, text));
 
     diagnostics.set(document.uri, issues);
   }

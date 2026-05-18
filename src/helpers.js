@@ -443,7 +443,7 @@ function buildCompletionItem(doc, kind, sortPrefix, insertText, triggerSignature
  * @returns {vscode.Diagnostic | null} - Diagnostic if missing '$' found, null otherwise
  */
 function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
-  const match = line.match(/^\s*if\s+([a-zA-Z][a-zA-Z0-9_]*)\s*(=|==|!=|<=|>=|<|>)/);
+  const match = line.match(/^\s*if\s*(?:\(\s*)*([a-zA-Z][a-zA-Z0-9_]*)\s*(=|==|!=|<=|>=|<|>)/);
 
   // -- Guard: ensure regex matched and we have a valid index position
   if (!match || typeof match.index !== 'number') return null;
@@ -466,8 +466,114 @@ function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
     vscode.DiagnosticSeverity.Error
   );
   diagnostic.code = "missing-dollar";
+  diagnostic.source = "OtterScript";
 
   return diagnostic;
+}
+
+/**
+ * Finds duplicate keys inside map expressions and returns diagnostics.
+ *
+ * This performs a best-effort scan of `%(... )` blocks and warns when
+ * the same key appears more than once at the top level of a map.
+ *
+ * @param {vscode.TextDocument} document - Document to analyze
+ * @param {string} [source] - Optional pre-fetched document text; defaults to document.getText()
+ * @returns {vscode.Diagnostic[]} Duplicate-key diagnostics
+ */
+function findDuplicateMapKeyDiagnostics(document, source = document.getText()) {
+  const text = source
+    // Mask quoted strings first so // or # inside strings are not treated as comments.
+    .replace(/"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/g, match => match.replace(/[^\n]/g, " "))
+    // Mask block comments but keep indexes stable.
+    .replace(/\/\*[\s\S]*?\*\//g, match => match.replace(/[^\n]/g, " "))
+    // Mask line comments (# and //) — no preceding-whitespace requirement.
+    .replace(/(\/\/|#).*$/gm, match => ' '.repeat(match.length));
+
+  /** @type {vscode.Diagnostic[]} */
+  const issues = [];
+
+  /**
+   * Finds the matching ')' for an opening '(' position.
+   *
+   * @param {number} openParenIndex - Index of opening '('
+   * @returns {number} Matching ')' index, or -1 when not found
+   */
+  function findMatchingParen(openParenIndex) {
+    let depth = 1;
+    for (let i = openParenIndex + 1; i < text.length; i++) {
+      if (text[i] === '(') depth++;
+      if (text[i] === ')') depth--;
+      if (depth === 0) return i;
+    }
+    return -1;
+  }
+
+  /**
+   * Parses a map expression body and reports duplicate top-level keys.
+   *
+   * @param {number} start - Start index of map body (after '%(')
+   * @param {number} end - End index of map body (at matching ')')
+   * @returns {void}
+   */
+  function scanMapBody(start, end) {
+    let nestingDepth = 0;
+    let segmentStart = start;
+    const seenKeys = new Set();
+
+    for (let i = start; i <= end; i++) {
+      const ch = i === end ? ',' : text[i];
+
+      if (ch === '(' || ch === '[' || ch === '{') {
+        nestingDepth++;
+        continue;
+      }
+      if (ch === ')' || ch === ']' || ch === '}') {
+        if (nestingDepth > 0) nestingDepth--;
+        continue;
+      }
+
+      if (ch === ',' && nestingDepth === 0) {
+        const segmentText = text.slice(segmentStart, i);
+        const keyMatch = segmentText.match(/^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*:/);
+
+        if (keyMatch) {
+          const key = keyMatch[1];
+          const keyStart = segmentStart + keyMatch[0].indexOf(key);
+
+          if (seenKeys.has(key)) {
+            const diagnostic = new vscode.Diagnostic(
+              new vscode.Range(
+                document.positionAt(keyStart),
+                document.positionAt(keyStart + key.length)
+              ),
+              `Duplicate key '${key}' in map expression.`,
+              vscode.DiagnosticSeverity.Warning
+            );
+            diagnostic.code = "duplicate-map-key";
+            diagnostic.source = "OtterScript";
+            issues.push(diagnostic);
+          } else {
+            seenKeys.add(key);
+          }
+        }
+
+        segmentStart = i + 1;
+      }
+    }
+  }
+
+  for (let i = 0; i < text.length - 1; i++) {
+    if (text[i] === '%' && text[i + 1] === '(') {
+      const close = findMatchingParen(i + 1);
+      if (close !== -1) {
+        scanMapBody(i + 2, close);
+        i = close;
+      }
+    }
+  }
+
+  return issues;
 }
 
 /**
@@ -563,6 +669,22 @@ function createInvalidOperatorFix(document, diagnostic) {
 }
 
 /**
+ * Creates a quick-fix that replaces assignment-like '=' with '==' in conditions.
+ *
+ * @param {vscode.TextDocument} document - The document containing the diagnostic
+ * @param {vscode.Diagnostic} diagnostic - The diagnostic with assignment-like usage
+ * @returns {vscode.CodeAction | null} Code action or null if replacement unknown
+ */
+function createAssignmentInConditionFix(document, diagnostic) {
+  const text = document.getText(diagnostic.range);
+  if (text !== "=") return null;
+
+  return createCodeAction("Replace '=' with '=='", diagnostic, (edit) => {
+    edit.replace(document.uri, diagnostic.range, "==");
+  });
+}
+
+/**
  * Creates a quick-fix that replaces incorrect 'for' loop usage with 'foreach'.
  *
  * @param {vscode.TextDocument} document - The document containing the diagnostic
@@ -595,11 +717,13 @@ function createUnbalancedDiagnostic(count, lastPos, openChar, closeChar, name, d
     ? `Unclosed ${name}(s): ${count} '${openChar}' not closed (first at line ${lineNum}, col ${colNum})`
     : `Unexpected closing ${name}: Extra '${closeChar}' at line ${lineNum}, col ${colNum}`;
 
-  return new vscode.Diagnostic(
+  const diagnostic = new vscode.Diagnostic(
     new vscode.Range(pos, document.positionAt(lastPos + 1)),
     message,
     vscode.DiagnosticSeverity.Error
   );
+  diagnostic.source = "OtterScript";
+  return diagnostic;
 }
 
 // ============================================================
@@ -622,6 +746,7 @@ module.exports = {
   isInStringOrComment,
   stripStrings,
   checkMissingDollar,
+  findDuplicateMapKeyDiagnostics,
   validateDocs,
   createUnbalancedDiagnostic,
   getDiagnosticCode,
@@ -633,6 +758,7 @@ module.exports = {
   // -- Code Actions
   createMissingDollarFix,
   createInvalidOperatorFix,
+  createAssignmentInConditionFix,
   createForToForeachFix,
 
   // -- Regex

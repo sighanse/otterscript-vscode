@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.2.2] - 2026-05-18
+
+### Added
+
+- Added language data and documentation for `Apply-Template`.
+- Added warning for assignment-like `=` in `if` conditions with a quick-fix to replace `=` with `==`.
+- Added warning diagnostics for duplicate keys in map expressions.
+- Added duplicate map key diagnostics entry
+
+### Fixed
+
+- Added diagnostic codes for unknown scalar, vector, and operation warnings.
+- Set `diagnostic.source` to `OtterScript` for extension diagnostics.
+- Improved grammar handling for `Apply-Template` so asset highlighting is reachable and position-aware.
+- Fixed variable escaping before snippet insertion in language data.
+- Fixed missing `$` diagnostics in parenthesized `if` conditions.
+- Minor typo and formatting fixes.
+
+### Changed
+
+- General language-data cleanup and maintenance.
+
 ## [0.2.1] - 2026-05-01
 
 ### Added
