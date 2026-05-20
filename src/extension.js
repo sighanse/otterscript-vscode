@@ -365,7 +365,7 @@ function activate(context) {
                   // -- Remove leading $ for insertion (user already typed it)
                   const snippet = doc.snippet
                     ? new vscode.SnippetString(doc.snippet?.replace(/^\$/, ""))
-                    : new vscode.SnippetString(doc.name?.replace(/^\$/, ""));
+                    : new vscode.SnippetString(doc.name.replace(/^\$/, ""));
                   return buildCompletionItem(doc, vscode.CompletionItemKind.Variable, '2_', snippet, false);
           });
         }
