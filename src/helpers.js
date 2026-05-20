@@ -382,21 +382,12 @@ function buildHoverMarkdown(doc, isTrusted = false) {
 }
 
 /**
- * @typedef {Object} DocEntry
- * @property {string} name - Human-readable name shown in completion and hover
- * @property {string} description - Short summary shown in IntelliSense
- * @property {string=} signature - Usage syntax
- * @property {string=} snippet - VS Code snippet insertion text
- * @property {string=} documentation - Extended Markdown documentation
- */
-
-/**
  * Builds a completion item with consistent formatting.
  *
  * This centralizes completion item creation to ensure all providers
  * produce consistent UI elements (labels, details, documentation, sorting).
  *
- * @param {DocEntry} doc - Documentation object
+ * @param {import('../src/language-data.js').DocEntry} doc - Documentation object
  * @param {vscode.CompletionItemKind} kind - Item kind (Function, Variable, Keyword, etc.)
  * @param {string} sortPrefix - Sort order prefix (e.g., "0_" for operations, "1_" for functions)
  * @param {string | vscode.SnippetString} insertText - Text to insert when selected
