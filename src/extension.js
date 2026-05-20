@@ -689,6 +689,21 @@ function activate(context) {
   );
 
   // ============================================================
+  // FIX DISPATCH TABLE
+  // ============================================================
+  // Single source of truth for all quick-fix factories.
+  // Add a new entry here to expose a fix in both the lightbulb
+  // menu (provideCodeActions) and the "Fix All" command.
+
+  /** @type {Record<string, (doc: vscode.TextDocument, diag: vscode.Diagnostic) => vscode.CodeAction | null>} */
+  const FIX_FACTORIES = Object.freeze({
+    "missing-dollar":          createMissingDollarFix,
+    "invalid-operator":        createInvalidOperatorFix,
+    "assignment-in-condition": createAssignmentInConditionFix,
+    "incorrect-for-usage":     createForToForeachFix,
+  });
+
+  // ============================================================
   // QUICK FIX CODE ACTION PROVIDER
   // ============================================================
   // Provides lightbulb (💡) quick-fix actions for selected
@@ -704,26 +719,9 @@ function activate(context) {
           for (const diagnostic of codeActionContext.diagnostics) {
             if (diagnostic.source !== "OtterScript") continue;
 
-            const code = getDiagnosticCode(diagnostic);
-
-            if (code === "missing-dollar") {
-              actions.push(createMissingDollarFix(document, diagnostic));
-            }
-
-            if (code === "invalid-operator") {
-              const fix = createInvalidOperatorFix(document, diagnostic);
-              if (fix) actions.push(fix);
-            }
-
-            if (code === "assignment-in-condition") {
-              const fix = createAssignmentInConditionFix(document, diagnostic);
-              if (fix) actions.push(fix);
-            }
-
-            if (code === "incorrect-for-usage") {
-              const fix = createForToForeachFix(document, diagnostic);
-              if (fix) actions.push(fix);
-            }
+            const factory = FIX_FACTORIES[getDiagnosticCode(diagnostic)];
+            const fix = factory?.(document, diagnostic);
+            if (fix) actions.push(fix);
           }
 
           return actions;
@@ -757,9 +755,8 @@ function activate(context) {
       const diagnostics = vscode.languages
         .getDiagnostics(document.uri)
         .filter(diagnostic => diagnostic.source === "OtterScript");
-      // -- Filter to fixable diagnostic codes
-      const fixableCodes = new Set(["missing-dollar", "invalid-operator", "assignment-in-condition", "incorrect-for-usage"]);
-      const fixableDiagnostics = diagnostics.filter(d => fixableCodes.has(getDiagnosticCode(d)));
+      // -- Filter to fixable diagnostic codes (keys of FIX_FACTORIES)
+      const fixableDiagnostics = diagnostics.filter(d => getDiagnosticCode(d) in FIX_FACTORIES);
 
       if (fixableDiagnostics.length === 0) {
         const msg = `No fixable OtterScript issues found in ${document.fileName}`;
@@ -774,12 +771,8 @@ function activate(context) {
       let fixedCount = 0;
 
       for (const diagnostic of sorted) {
-        const code = getDiagnosticCode(diagnostic);
-        const action = code === "missing-dollar" ? createMissingDollarFix(document, diagnostic)
-          : code === "invalid-operator" ? createInvalidOperatorFix(document, diagnostic)
-          : code === "assignment-in-condition" ? createAssignmentInConditionFix(document, diagnostic)
-          : code === "incorrect-for-usage" ? createForToForeachFix(document, diagnostic)
-          : null;
+        const factory = FIX_FACTORIES[getDiagnosticCode(diagnostic)];
+        const action = factory?.(document, diagnostic) ?? null;
 
         if (!action?.edit) continue;
 
