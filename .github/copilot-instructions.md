@@ -43,6 +43,7 @@ If repository conventions or style are unclear or inconsistent, default to the r
 - `src/extension.js`: extension activation and provider wiring.
 - `src/language-data.js`: OtterScript docs model used by IntelliSense including snippets.
 - `src/helpers.js`: pure helper utilities.
+- `src/diagnostics.js`: diagnostic rules and checks.
 - `syntaxes/otterscript.tmLanguage.json`: TextMate grammar.
 - `snippets/otterscript.json`: VS Code snippets.
 - `language-configuration.json`: comments/brackets/indentation rules.
