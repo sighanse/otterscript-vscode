@@ -52,6 +52,9 @@ const {
   createRegexPatterns
 } = require('./helpers');
 
+/** @type {ReturnType<typeof setTimeout> | undefined} */
+let diagnosticTimer;
+
 // ============================================================
 // ACTIVATION
 // ============================================================
@@ -1210,9 +1213,6 @@ function activate(context) {
   // Without this, users would need to retype or reopen files to see errors
   vscode.workspace.textDocuments.forEach(updateDiagnostics);
 
-  /** @type {ReturnType<typeof setTimeout> | undefined} */
-  let diagnosticTimer;
-
   // Register all extension subscriptions in a single batch
   // VS Code automatically disposes these when the extension deactivates
   context.subscriptions.push(
@@ -1250,7 +1250,9 @@ function activate(context) {
 // DEACTIVATION
 // ============================================================
 // Called when the extension is disabled or VS Code shuts down.
-function deactivate() {}
+function deactivate() {
+  clearTimeout(diagnosticTimer);
+}
 
 // MODULE EXPORTS
 module.exports = {
