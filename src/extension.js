@@ -426,29 +426,29 @@ function activate(context) {
   // Map variables are user-defined and cannot be enumerated
 
   const mapCompletionProvider =
-  vscode.languages.registerCompletionItemProvider(
-    "otterscript",
-    {
-      provideCompletionItems(document, position) {
-        // -- Check if completion is enabled and not in a string/comment
-        if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
+    vscode.languages.registerCompletionItemProvider(
+      "otterscript",
+      {
+        provideCompletionItems(document, position) {
+          // -- Check if completion is enabled and not in a string/comment
+          if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
-        // -- Ensure syntaxDocs and mapExpr exist
-        if (!syntaxDocs?.mapExpr) {
-          return [];
+          // -- Ensure syntaxDocs and mapExpr exist
+          if (!syntaxDocs?.mapExpr) {
+            return [];
+          }
+
+          const snippet = syntaxDocs.mapExpr.snippet
+            ? new vscode.SnippetString(syntaxDocs.mapExpr.snippet)
+            : new vscode.SnippetString(`${syntaxDocs.mapExpr.name} "(\${0})"`);
+          const kind = vscode.CompletionItemKind.Snippet;
+          const sortPrefix = "~";
+
+          return [buildCompletionItem(syntaxDocs.mapExpr, kind, sortPrefix, snippet, false)];
         }
-
-        const snippet = syntaxDocs.mapExpr.snippet
-          ? new vscode.SnippetString(syntaxDocs.mapExpr.snippet)
-          : new vscode.SnippetString(`${syntaxDocs.mapExpr.name} "(\${0})"`);
-        const kind = vscode.CompletionItemKind.Snippet;
-        const sortPrefix = "~";
-
-        return [buildCompletionItem(syntaxDocs.mapExpr, kind, sortPrefix, snippet, false)];
-      }
-    },
-    "%"
-  );
+      },
+      "%"
+    );
 
   // ============================================================
   // OPERATION COMPLETION PROVIDER
