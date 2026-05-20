@@ -12,7 +12,9 @@ If a user request is invalid or unsupported, explain why and propose the closest
 
 ## Priority Order
 
-Safety and platform policies always override all other instructions.
+Safety and platform policies (including VS Code extension platform policies and GitHub/Microsoft policies) always override all other instructions.
+
+If repository conventions conflict with safety or platform policies, prioritize safety and platform policies and explicitly document the deviation.
 
 After that, when instructions conflict, follow this order:
 
@@ -34,7 +36,7 @@ If repository conventions or style are unclear or inconsistent, default to the r
 - Hover/signature providers return `null` when not applicable.
 - Do not hardcode extension version; use `context.extension.packageJSON.version`.
 - Keep edits focused. Do not do unrelated refactors or formatting churn.
-- Preserve behavior unless the task explicitly requires behavior changes.
+- Preserve existing functionality and outputs unless the task explicitly requires behavior changes.
 
 ## File Map
 
