@@ -117,7 +117,7 @@ Log-Error "Failed to connect to server";
 - Combine with \`throw\` to stop execution
 `
   },
-  'Post-Http': {
+  "Post-Http": {
     name: 'Post-Http',
     signature: 'Post-Http(Url: string, [options...])',
     snippet: 'Post-Http(\n    Url: "${1:https://example.com}",\n    ${2:ContentType: "application/json",}\n    ${3:TextData: "${4:request body}"},\n    ${5:FormData: %(\n        ${6:key}: "${7:value}"\n    )},\n    ${8:LogResponseBody: true}\n);',
@@ -166,7 +166,7 @@ Post-Http(
 \`\`\`
 `
   },
-  'Sleep': {
+  "Sleep": {
     name: "Sleep",
     signature: "Sleep <integer>;",
     snippet: "Sleep ${1:seconds};$0",
@@ -243,7 +243,7 @@ Apply-Template hdars
 
 /** @type {DocsTable} */
 const syntaxDocs = {
-  swimString: {
+  "swimString": {
     name: "Swim string",
     signature: ">> ... >> or >==8> ... >==8> etc...",
     documentation: "Multi-line unquoted string literal with matching fish sentinels.",
@@ -262,7 +262,7 @@ multiple lines
 `
   },
   // Template tags
-  templateOpen: {
+  "templateOpen": {
     name: "Template Open (<% ... %>)",
     signature: "<% ... %>",
     description: "Embed OtterScript code inside text templates.",
@@ -280,14 +280,14 @@ Used to embed OtterScript code inside text templates.
 \`\`\`
 `
   },
-  templateClose: {
+  "templateClose": {
     name: "Template Close (%>)",
     signature: "%>",
     description: "Closes a template code block.",
     documentation: "Closes a template code block started with `<%`"
   },
   // Expression delimiters
-  mapExpr: {
+  "mapExpr": {
     name: "Map Expression",
     signature: "%(key: value, key2: value2)",
     snippet: "(\n    ${1:key}: ${2:value}\n)",
@@ -306,7 +306,7 @@ $config = %(
 \`\`\`
 `
   },
-  vectorExpr: {
+  "vectorExpr": {
     name: "Vector Expression",
     signature: "@(value1, value2, value3)",
     description: "Creates a vector (array/list) literal.",
@@ -318,7 +318,7 @@ $first = @colors[0];
 \`\`\`
 `
   },
-  nestedEval: {
+  "nestedEval": {
     name: "Nested Evaluation",
     signature: "$(expression)",
     description: "Evaluates an expression inside a string.",
@@ -339,7 +339,7 @@ $message = "Value: $(@list[0])";
 
 /** @type {DocsTable} */
 const keywordDocs = {
-  'for': {
+  "for": {
     name: "for",
     signature: 'for server|role|deployable|directory "name" { ... }',
     description: "Sets the execution context for a block of statements.",
@@ -371,7 +371,7 @@ for server "web01" {
 \`\`\`
 `
 },
-  'return': {
+  "return": {
     name: "return",
     signature: "return;",
     description: "Returns execution to the calling script.",
@@ -379,7 +379,7 @@ for server "web01" {
 This has no elements; if this statement is found, the execution engine ends the current script and returns execution to the calling script, if any.
 `
 },
-  'local': {
+  "local": {
     name: "local",
     signature: "local $variable = value;",
     description: "Declares a local variable scoped to the current block.",
@@ -387,7 +387,7 @@ This has no elements; if this statement is found, the execution engine ends the 
 Local variables override outer variables of the same name.
 `
 },
-  'global': {
+  "global": {
     name: "global",
     description: "Declares or assigns a global variable.",
     documentation: `
@@ -397,7 +397,7 @@ global $var = value;
 \`\`\`
 `
   },
-  'continue': {
+  "continue": {
     name: "continue",
     signature: "continue;",
     snippet: "continue;",
@@ -406,7 +406,7 @@ global $var = value;
 If there is no enclosing iteration block, a warning is written to the execution log and execution continues.
 `
   },
-  'break': {
+  "break": {
     name: "break",
     signature: "break;",
     snippet: "break;",
@@ -416,7 +416,7 @@ When the engine encounters a break statement, it immediately terminates the curr
 If break is used outside of an iteration block, a warning will be written to the log, and no action will be taken.
 `
   },
-  'foreach': {
+  "foreach": {
     name: 'foreach',
     description: 'Iterates over items in a vector. Works in both OtterScript code and template tags.',
     documentation: `
@@ -447,7 +447,7 @@ foreach $pkg in @AffectedPackages {
 \`\`\`
 `
   },
-  'in': {
+  "in": {
     name: "in",
     description: "Specifies the vector to iterate over in a foreach statement.",
     documentation: `
@@ -481,7 +481,7 @@ foreach $item in @items {
 **Note:** The \`in\` keyword is only valid within a \`foreach\` statement and cannot be used elsewhere.
 `
   },
-  'if': {
+  "if": {
     name: "if",
     description: "Conditionally executes a block when an expression evaluates to true.",
     documentation: `
@@ -507,7 +507,7 @@ if $PackageSize > 1000000 {
 - Can be combined with \`else\`
 `
   },
-  'else': {
+  "else": {
     name: "else",
     description: "Executes a block when the preceding if condition evaluates to false.",
     documentation: `
@@ -533,7 +533,7 @@ if $EnvironmentName == "Production" {
 \`\`\`
 `
   },
-  try: {
+  "try": {
     name: "try",
     description: "Executes a block of statements and allows error handling via catch.",
     documentation: `
@@ -563,7 +563,7 @@ try {
 - Control passes to \`catch\` on error
 `
   },
-  catch: {
+  "catch": {
     name: "catch",
     description: "Handles errors raised inside a try block.",
     documentation: `
@@ -583,7 +583,7 @@ try {
 - Errors may be logged, handled, or rethrown using \`throw\`
 `
   },
-  throw: {
+  "throw": {
     name: "throw",
     description: "Explicitly raises an error.",
     documentation: `
@@ -622,7 +622,7 @@ module ModuleName <out $result = "default"> {
 - Modules do not execute until called
 `
   },
-  call: {
+  "call": {
     name: "call",
     description: "Invokes a previously defined module.",
     documentation: `
@@ -641,7 +641,7 @@ call ModuleName (
 - Output parameters are assigned to variables
 `
   },
-  with: {
+  "with": {
     name: "with",
     description: "Executes a block with specific execution directives applied.",
     documentation: `
@@ -666,7 +666,7 @@ with retry=3, timeout=30 {
 - Nested \`with\` blocks are allowed
 `
   },
-  set: {
+  "set": {
     name: "set",
     description: "Assigns a value to a variable.",
     documentation: `
@@ -697,7 +697,7 @@ raise-error "message";
 - Similar in effect to \`throw\`
 `
   },
-  await: {
+  "await": {
     name: "await",
     description: "Pauses execution until asynchronous blocks have completed.",
     documentation: `
@@ -713,7 +713,7 @@ await TokenName;
 - Commonly used with asynchronous execution patterns
 `
   },
-  warn: {
+  "warn": {
     name: "warn",
     description: "Sets the execution status to Warn.",
     documentation: `
@@ -736,7 +736,7 @@ catch
 - Commonly used inside \`catch\` blocks
 `
   },
-  fail: {
+  "fail": {
     name: "fail",
     description: "Sets the execution status to Fail.",
     documentation: `
@@ -1004,7 +1004,7 @@ const variableDocs = {
 
 /** @type {DocsTable} */
 const scalarFunctionDocs = {
-  ToJson: {
+  "ToJson": {
     name: "$ToJson",
     signature: "$ToJson(data)",
     snippet: '\\$ToJson(${1:data})${0}',
@@ -1038,7 +1038,7 @@ $json = $ToJson(%(
 - Scalars → JSON strings
 `,
   },
-  HtmlEncode: {
+  "HtmlEncode": {
       name: "$HtmlEncode",
       signature: "$HtmlEncode(text)",
       snippet: "\\$HtmlEncode(${1:text})",
@@ -1056,7 +1056,7 @@ $encoded = $HtmlEncode("<script>alert('xss')</script>");
 \`\`\`
 `,
   },
-  UrlEncode: {
+  "UrlEncode": {
     name: "$UrlEncode",
     signature: "$UrlEncode(text)",
     snippet: "\\$UrlEncode(${1:text})",
@@ -1073,7 +1073,7 @@ $url = "https://example.com/search?q=" + $UrlEncode($query);
 \`\`\`
 `,
   },
-  PathCombine: {
+  "PathCombine": {
     name: "$PathCombine",
     signature: "$PathCombine(path1, path2, ...)",
     snippet: "\\$PathCombine(${1:path1}, ${2:path2})",
@@ -1093,7 +1093,7 @@ $fullPath = $PathCombine("C:\\Websites", "MyApp", "web.config");
 \`\`\`
 `,
   },
-  Eval: {
+  "Eval": {
     name: "$Eval",
     signature: "$Eval(expression)",
     snippet: "\\$Eval(${1:expression})",
@@ -1112,7 +1112,7 @@ $result = $Eval($template);  # Expands $name
 `,
   },
   // String Manipulation Functions
-  ToLower: {
+  "ToLower": {
     name: "$ToLower",
     signature: "$ToLower(text)",
     snippet: "\\$ToLower(${1:text})",
@@ -1130,7 +1130,7 @@ $lower = $ToLower("Hello World");
 \`\`\`
 `,
   },
-  ToUpper: {
+  "ToUpper": {
     name: "$ToUpper",
     signature: "$ToUpper(text)",
     snippet: "\\$ToUpper(${1:text})",
@@ -1148,7 +1148,7 @@ $upper = $ToUpper("Hello World");
 \`\`\`
 `,
   },
-  Trim: {
+  "Trim": {
     name: "$Trim",
     signature: "$Trim(text)",
     snippet: "\\$Trim(${1:text})",
@@ -1168,7 +1168,7 @@ $trimmed = $Trim("  hello  ");
 \`\`\`
 `,
   },
-  Substring: {
+  "Substring": {
     name: "$Substring",
     signature: "$Substring(text, startIndex, length)",
     snippet: "\\$Substring(${1:text}, ${2:startIndex}, ${3: length})",
@@ -1190,7 +1190,7 @@ $sub = $Substring("Hello World", 6, 5);
 \`\`\`
 `,
   },
-  Replace: {
+  "Replace": {
     name: "$Replace",
     signature: "$Replace(text, oldValue, newValue, [ignoreCase])",
     snippet: "\\$Replace(${1:text}, ${2:oldValue}, ${3:newValue}, ${4|false,true|})",
@@ -1213,7 +1213,7 @@ $result = $Replace("Hello World", "World", "Otter");
 \`\`\`
 `,
   },
-  Join: {
+  "Join": {
     name: "$Join",
     signature: "$Join(separator, vector)",
     snippet: '\\$Join("${1:, }", @${2:vector})',
@@ -1235,7 +1235,7 @@ $joined = $Join(", ", @("apple", "banana", "cherry"));
 `,
   },
   // Date and Time Functions
-  Date: {
+  "Date": {
     name: '$Date',
     signature: "$Date([format])",
     snippet: "\\$Date(${1:format})",
@@ -1264,7 +1264,7 @@ $sortable = $Date("s");
 \`\`\`
 `
   },
-  DateUtc: {
+  "DateUtc": {
     name: "$DateUtc",
     signature: "$DateUtc([format])",
     snippet: "\\$DateUtc(${1:format})",
@@ -1289,7 +1289,7 @@ $customUtc = $DateUtc("yyyy-MM-dd HH:mm:ss");
 `
   },
   // Encoding Functions
-  Base64Encode: {
+  "Base64Encode": {
     name: "$Base64Encode",
     signature: "$Base64Encode(text)",
     snippet: "\\$Base64Encode(${1:text})",
@@ -1309,7 +1309,7 @@ $encoded = $Base64Encode("Hello World");
 \`\`\`
 `,
   },
-  Base64Decode: {
+  "Base64Decode": {
     name: "$Base64Decode",
     signature: "$Base64Decode(base64Text)",
     snippet: "\\$Base64Decode(${1:base64Text})",
@@ -1330,7 +1330,7 @@ $decoded = $Base64Decode("SGVsbG8gV29ybGQ=");
 `,
   },
   // JSON Functions
-  FromJson: {
+  "FromJson": {
     name: "$FromJson",
     signature: "$FromJson(jsonString)",
     snippet: '\\$FromJson("${1:jsonString}");$0',
@@ -1352,7 +1352,7 @@ $name = $data[name];
 `,
   },
   // File System Functions
-  FileExists: {
+  "FileExists": {
     name: "$FileExists",
     signature: "$FileExists(filePath)",
     snippet: '\\$FileExists("${1:filePath}");$0',
@@ -1373,7 +1373,7 @@ if $FileExists("C:\\config\\app.config") {
 \`\`\`
 `,
   },
-  DirectoryExists: {
+  "DirectoryExists": {
     name: "$DirectoryExists",
     signature: "$DirectoryExists(directoryPath)",
     snippet: '\\$DirectoryExists("${1:directoryPath}");$0',
@@ -1395,7 +1395,7 @@ if $DirectoryExists("C:\\Websites") {
 `,
   },
   // Math Functions
-  Expr: {
+  "Expr": {
     name: "$Expr",
     signature: "$Expr(expression)",
     snippet: "\\$Expr(\"${1:expression}\")",
@@ -1415,7 +1415,7 @@ $result = $Expr("(5 + 3) * 2");
 \`\`\`
 `,
   },
-  Increment: {
+  "Increment": {
     name: "$Increment",
     signature: "$Increment(value)",
     snippet: "\\$Increment(${1:variable})",
@@ -1436,7 +1436,7 @@ $count = $Increment($count);
 \`\`\`
 `,
   },
-  Decrement: {
+  "Decrement": {
     name: "$Decrement",
     signature: "$Decrement(value)",
     snippet: "\\$Decrement(${1:variable})",
@@ -1457,7 +1457,7 @@ $count = $Decrement($count);
 \`\`\`
 `,
   },
-  Abs: {
+  "Abs": {
     name: "$Abs",
     signature: "$Abs(value)",
     snippet: "\\$Abs(${1:value})",
@@ -1477,7 +1477,7 @@ $result = $Abs(-10);
 \`\`\`
 `,
   },
-  Ceiling: {
+  "Ceiling": {
     name: "$Ceiling",
     signature: "$Ceiling(value)",
     snippet: "\\$Ceiling(${1:value})",
@@ -1497,7 +1497,7 @@ $result = $Ceiling(3.2);
 \`\`\`
 `,
   },
-  Floor: {
+  "Floor": {
     name: "$Floor",
     signature: "$Floor(value)",
     snippet: "\\$Floor(${1:value})",
@@ -1517,7 +1517,7 @@ $result = $Floor(3.8);
 \`\`\`
 `,
   },
-  Compare: {
+  "Compare": {
     name: "$Compare",
     signature: "$Compare(arg1, operator, arg2, [asNumber])",
     snippet: "\\$Compare(${1:value1}, ${2|<,>,<=,>=,=,!=|}, ${3:value2}${4:, true})",
@@ -1549,7 +1549,7 @@ $Compare("07", >, "6", true)
 `
   },
   // Regular Expression Functions
-  MatchesRegex: {
+  "MatchesRegex": {
     name: "$MatchesRegex",
     signature: "$MatchesRegex(text, pattern)",
     snippet: "\\$MatchesRegex(${1:text}, \"${2:pattern}\")",
@@ -1571,7 +1571,7 @@ if $MatchesRegex($email, "^[\\w\\.]+@[\\w\\.]+\\.\\w+$") {
 \`\`\`
 `,
   },
-  RegexReplace: {
+  "RegexReplace": {
     name: "$RegexReplace",
     signature: "$RegexReplace(text, pattern, replacement)",
     snippet: "\\$RegexReplace(${1:text}, \"${2:pattern}\", \"${3:replacement}\")",
@@ -1594,7 +1594,7 @@ $result = $RegexReplace("Hello 123 World", "\\d+", "XXX");
 `,
   },
   // Server/Environment Information Functions
-  ServerName: {
+  "ServerName": {
     name: "$ServerName",
     signature: "$ServerName()",
     snippet: "\\$ServerName()",
@@ -1610,7 +1610,7 @@ Log-Information "Running on server: $ServerName";
 \`\`\`
 `,
   },
-  EnvironmentName: {
+  "EnvironmentName": {
     name: "$EnvironmentName",
     signature: "$EnvironmentName()",
     snippet: "\\$EnvironmentName()",
@@ -1629,7 +1629,7 @@ if $EnvironmentName == "Production" {
 `,
   },
   // List/Vector Functions
-  ListCount: {
+  "ListCount": {
     name: "$ListCount",
     signature: "$ListCount(vector)",
     snippet: "\\$ListCount(${1:vector})",
@@ -1650,7 +1650,7 @@ $count = $ListCount($items);
 \`\`\`
 `,
   },
-  ListItem: {
+  "ListItem": {
     name: "$ListItem",
     signature: "$ListItem(vector, index)",
     snippet: "\\$ListItem(${1:vector}, ${2:index})",
@@ -1673,7 +1673,7 @@ $second = $ListItem($items, 1);
 `
   },
   // ProGet Functions
-  EncodeBasicAuth: {
+  "EncodeBasicAuth": {
     name: "$EncodeBasicAuth",
     signature: "$EncodeBasicAuth(userName, password)",
     snippet: "\\$EncodeBasicAuth(\"${1:userName}\", \"${2:password}\")",
@@ -1694,7 +1694,7 @@ $auth = $EncodeBasicAuth("admin", "secret");
 \`\`\`
 `
   },
-  PackageHash: {
+  "PackageHash": {
     name: "$PackageHash",
     signature: "$PackageHash(format, algorithm)",
     snippet: "\\$PackageHash(\"${1|hex,base64|}\", \"${2|sha512,sha1|}\")",
@@ -1714,7 +1714,7 @@ $hash = $PackageHash("hex", "sha512");
 \`\`\`
 `
   },
-  PackageProperty: {
+  "PackageProperty": {
     name: "$PackageProperty",
     signature: "$PackageProperty(name, default)",
     snippet: "\\$PackageProperty(\"${1:propertyName}\", \"${2:defaultValue}\")",
@@ -1742,7 +1742,7 @@ $description = $PackageProperty("myPropertyName", "No property defined");
 
 /** @type {DocsTable} */
 const vectorFunctionDocs = {
-  'Split': {
+  "Split": {
     name: '@Split',
     signature: '@Split(Text, Separator, [Count])',
     snippet: "@Split(\"${1:text}\", \"${2:,}\"${3:, ${4:count}})",
@@ -1765,7 +1765,7 @@ const vectorFunctionDocs = {
 \`\`\`
 `
   },
-  'ListConcat': {
+  "ListConcat": {
     name: '@ListConcat',
     signature: '@ListConcat(list1, list2, ...)',
     snippet: "@ListConcat(${1:@list1}, ${2:@list2})",
@@ -1783,7 +1783,7 @@ const vectorFunctionDocs = {
 \`\`\`
 `
   },
-  'ListInsert': {
+  "ListInsert": {
     name: '@ListInsert',
     signature: '@ListInsert(list, item, index)',
     snippet: "@ListInsert(${1:@list}, \"${2:item}\", ${3:index})",
@@ -1806,7 +1806,7 @@ Inserts an item into a list at the specified index.
 \`\`\`
 `
   },
-  'ListRemove': {
+  "ListRemove": {
     name: '@ListRemove',
     signature: '@ListRemove(list, index)',
     snippet: "@ListRemove(${1:@list}, ${2:index})",
@@ -1828,7 +1828,7 @@ Removes an item from a list at the specified index.
 \`\`\`
 `
   },
-  'ListSet': {
+  "ListSet": {
     name: '@ListSet',
     signature: '@ListSet(list, index, item)',
     snippet: "@ListSet(${1:@list}, ${2:index},\"${3:item}\")",
@@ -1851,7 +1851,7 @@ Updates the value at a given position in the list to a new value.
 \`\`\`
 `
   },
-  'MapKeys': {
+  "MapKeys": {
     name: '@MapKeys',
     signature: '@MapKeys(map)',
     snippet: "@MapKeys(${1:@map})",
@@ -1872,7 +1872,7 @@ Lists the keys of a map as a vector.
 \`\`\`
 `
   },
-  'Range': {
+  "Range": {
     name: '@Range',
     signature: '@Range(start, count)',
     snippet: "@Range(${1:start}, ${2:count})",
@@ -1893,7 +1893,7 @@ Returns a range of integers starting from a specified value.
 \`\`\`
 `
   },
-  'RegexFind': {
+  "RegexFind": {
     name: '@RegexFind',
     signature: '@RegexFind(text, matchExpression, [matchGroup])',
     snippet: "@RegexFind(${1:text}, ${2:matchExpression}${3:, ${4:matchGroup}})",
@@ -1916,7 +1916,7 @@ Finds all matches of a regular expression in a string, optionally returning only
 `
   },
   // Vector Variables (ProGet)
-  'AffectedPackages': {
+  "AffectedPackages": {
     name: '@AffectedPackages',
     signature: '@AffectedPackages',
     description: 'Returns a list of packages affected by the vulnerability in the current scope.',
@@ -1933,7 +1933,7 @@ Finds all matches of a regular expression in a string, optionally returning only
 \`\`\`
 `
   },
-  'ApiKeys': {
+  "ApiKeys": {
     name: '@ApiKeys',
     signature: '@ApiKeys',
     description: 'Returns a list of API Keys in the current scope.',
@@ -1953,7 +1953,7 @@ foreach $key in @ApiKeys {
 \`\`\`
 `
   },
-  'BuildIssues': {
+  "BuildIssues": {
     name: '@BuildIssues',
     signature: '@BuildIssues(includeClosed)',
     description: 'Returns a list of issues on the build in the current scope.',
