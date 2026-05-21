@@ -853,6 +853,52 @@ function activate(context) {
   );
 
   // ============================================================
+  // DOCUMENT SYMBOL PROVIDER (Outline / Go to Symbol)
+  // ============================================================
+  // Populates the Outline panel and breadcrumbs with module declarations.
+  // Enables Ctrl+Shift+O (Go to Symbol) to jump to any module in the file.
+
+  const documentSymbolProvider = vscode.languages.registerDocumentSymbolProvider(
+    "otterscript",
+    {
+      /**
+       * Scans the document for module declarations and returns them as symbols.
+       *
+       * @param {vscode.TextDocument} document
+       * @returns {vscode.DocumentSymbol[]}
+       */
+      provideDocumentSymbols(document) {
+        /** @type {vscode.DocumentSymbol[]} */
+        const symbols = [];
+        const moduleRegex = /^\s*module\s+(\w[\w-]*)/;
+
+        for (let i = 0; i < document.lineCount; i++) {
+          const line = document.lineAt(i);
+          const match = moduleRegex.exec(line.text);
+          if (!match) continue;
+
+          const name = match[1];
+          const nameStart = line.text.indexOf(name, match.index);
+          const nameRange = new vscode.Range(
+            new vscode.Position(i, nameStart),
+            new vscode.Position(i, nameStart + name.length)
+          );
+
+          symbols.push(new vscode.DocumentSymbol(
+            name,
+            "",
+            vscode.SymbolKind.Module,
+            line.range,
+            nameRange
+          ));
+        }
+
+        return symbols;
+      }
+    }
+  );
+
+  // ============================================================
   // DIAGNOSTICS (ERRORS & WARNINGS)
   // ============================================================
   // Provides real-time syntax checking and problem detection.
@@ -913,6 +959,7 @@ function activate(context) {
     hoverProvider,
     codeActionsProvider,
     definitionProvider,
+    documentSymbolProvider,
     fixAllCommand
   );
 }
