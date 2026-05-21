@@ -584,16 +584,16 @@ function activate(context) {
         if (exprRange) {
             const text = document.getText(exprRange);
             if (text === '%(') {
-                return new vscode.Hover(
-                    buildHoverMarkdown(syntaxDocs.mapExpr), exprRange);
+              return new vscode.Hover(
+                buildHoverMarkdown(syntaxDocs.mapExpr), exprRange);
             }
             if (text === '@(') {
-                return new vscode.Hover(
-                    buildHoverMarkdown(syntaxDocs.vectorExpr),exprRange);
+              return new vscode.Hover(
+                buildHoverMarkdown(syntaxDocs.vectorExpr), exprRange);
             }
             if (text === '$(') {
-                return new vscode.Hover(
-                    buildHoverMarkdown(syntaxDocs.nestedEval),exprRange);
+              return new vscode.Hover(
+                buildHoverMarkdown(syntaxDocs.nestedEval), exprRange);
             }
         }
         // -- Keywords (if, foreach, with, set, etc.)
@@ -639,8 +639,8 @@ function activate(context) {
         // -- Operations (Log-Information, Log-Warning, Log-Error, etc.)
         // Built-in operations. Distinguished by hyphenated names.
         const operationRange = document.getWordRangeAtPosition(
-        position,
-        cachedOperationRegex
+          position,
+          cachedOperationRegex
         );
 
         if (operationRange) {

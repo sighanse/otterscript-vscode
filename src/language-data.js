@@ -65,7 +65,7 @@ Log-Debug "Calculated value: $value";
 - May be hidden or filtered depending on execution settings
 - Does not affect execution flow
 `
-},
+  },
   "Log-Information": {
     name: "Log-Information",
     signature: 'Log-Information "message";',
@@ -370,7 +370,7 @@ for server "web01" {
 }
 \`\`\`
 `
-},
+  },
   "return": {
     name: "return",
     signature: "return;",
@@ -378,7 +378,7 @@ for server "web01" {
     documentation: `
 This has no elements; if this statement is found, the execution engine ends the current script and returns execution to the calling script, if any.
 `
-},
+  },
   "local": {
     name: "local",
     signature: "local $variable = value;",
@@ -386,7 +386,7 @@ This has no elements; if this statement is found, the execution engine ends the 
     documentation: `
 Local variables override outer variables of the same name.
 `
-},
+  },
   "global": {
     name: "global",
     description: "Declares or assigns a global variable.",
@@ -603,10 +603,10 @@ if !$PackageName {
 \`\`\`
 `
   },
-module: {
-  name: "module",
-  description: "Defines a reusable module with optional parameters and outputs.",
-  documentation: `
+  "module": {
+    name: "module",
+    description: "Defines a reusable module with optional parameters and outputs.",
+    documentation: `
 Defines a reusable module that can be invoked using \`call\`.
 
 **Syntax:**
@@ -844,7 +844,6 @@ const variableDocs = {
 - docker
 - helm
 - maven(Java)
-- npm
 - npm
 - nuget
 - powershell
