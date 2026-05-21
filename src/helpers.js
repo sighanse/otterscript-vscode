@@ -98,6 +98,21 @@ function getOutputChannel() {
 }
 
 /**
+ * Appends a line to the cached output channel with lazy initialization.
+ *
+ * @param {string} line
+ * @returns {void}
+ */
+function appendOutputLine(line) {
+  if (outputChannel) {
+    outputChannel.appendLine(line);
+    return;
+  }
+
+  getOutputChannel().appendLine(line);
+}
+
+/**
  * Centralized logger for OtterScript Language extension.
  *
  * @example
@@ -111,21 +126,21 @@ const log = {
   info: (...args) => {
     const now = timestamp();
     console.log(LOGPREFIX, `[${now}]`, ...args);
-    getOutputChannel().appendLine(`[${now}] ${args.join(' ')}`);
+    appendOutputLine(`[${now}] ${args.join(' ')}`);
   },
 
   /** @param {...any} args - @example log.warn('Missing field') */
   warn: (...args) => {
     const now = timestamp();
     console.warn(LOGPREFIX, `[${now}]`, ...args);
-    getOutputChannel().appendLine(`⚠️ [${now}] ${args.join(' ')}`);
+    appendOutputLine(`⚠️ [${now}] ${args.join(' ')}`);
   },
 
   /** @param {...any} args - @example log.error('Failed', err) */
   error: (...args) => {
     const now = timestamp();
     console.error(LOGPREFIX, `[${now}]`, ...args);
-    getOutputChannel().appendLine(`❌ [${now}] ${args.join(' ')}`);
+    appendOutputLine(`❌ [${now}] ${args.join(' ')}`);
   },
 
   /** @param {...any} args - @example log.debug('Processing', lineIndex) */
