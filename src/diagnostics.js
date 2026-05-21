@@ -57,9 +57,9 @@ function updateDiagnostics(document, collection, ctx) {
   let braces = 0;             // { } balance
   let parens = 0;             // ( ) balance
   let brackets = 0;           // [ ] balance
-  let lastBracePos = 0;       // Position of last unmatched brace
-  let lastParenPos = 0;       // Position of last unmatched parens
-  let lastBracketPos = 0;     // Position of last unmatched bracket
+  let lastBracePos = -1;      // Offset of first unmatched '{'; -1 = not yet seen
+  let lastParenPos = -1;      // Offset of first unmatched '('; -1 = not yet seen
+  let lastBracketPos = -1;    // Offset of first unmatched '['; -1 = not yet seen
   let inString = false;       // Currently inside a quoted string?
   let inBlockComment = false; // Currently inside a block comment?
   let swimDelimiter = null;   // Active swim-string delimiter (e.g., ">==8>")
