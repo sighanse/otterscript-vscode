@@ -1,4 +1,4 @@
-// @ts-check
+﻿// @ts-check
 
 /**
  * OtterScript language documentation model.
@@ -781,49 +781,40 @@ force normal;
 // VARIABLE DOCS (ProGet / Execution Context)
 // ============================================================
 
+/** Shared documentation footer for basic ProGet context variables. */
+const PROGET_VAR_DOC = "\n**Available in:** ProGet\n";
+
 /** @type {DocsTable} */
 const variableDocs = {
   "BuildId": {
     name: "$BuildId",
     description: "The numeric ID of the current build.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "BuildNumber": {
     name: "$BuildNumber",
     description: "The display number of the current build.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "BuildProjectName": {
     name: "$BuildProjectName",
     description: "The name of the project associated with the build.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "BuildReleaseNumber": {
     name: "$BuildReleaseNumber",
     description: "The release number associated with the current build.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "FeedId": {
     name: "$FeedId",
     description: "The unique identifier of the feed in scope.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "FeedName": {
     name: "$FeedName",
     description: "The name of the feed in scope.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "FeedType": {
     name: "$FeedType",
@@ -859,30 +850,22 @@ const variableDocs = {
   "NotifierId": {
     name: "$NotifierId",
     description: "The unique identifier of the notifier handling the event.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "NotifierName": {
     name: "$NotifierName",
     description: "The name of the notifier handling the event.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "PackageComplianceDetails": {
     name: "$PackageComplianceDetails",
     description: "Detailed compliance information for the package.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "PackageComplianceResult": {
     name: "$PackageComplianceResult",
     description: "The overall compliance result for the package.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "PackageEvent": {
     name: "$PackageEvent",
@@ -909,30 +892,22 @@ const variableDocs = {
   "PackageGroup": {
     name: "$PackageGroup",
     description: "The package group associated with the event.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "PackageId": {
     name: "$PackageId",
     description: "The identifier of the affected package.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "PackageName": {
     name: "$PackageName",
     description: "The name of the affected package.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "PackageSize": {
     name: "$PackageSize",
     description: "The size of the affected package in bytes.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "PackageVersion": {
     name: "$PackageVersion",
@@ -949,44 +924,32 @@ const variableDocs = {
   "UserName": {
     name: "$UserName",
     description: "The name of the user associated with the event.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "VulnerabilityId": {
     name: "$VulnerabilityId",
     description: "The identifier of the vulnerability.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "VulnerabilityScore": {
     name: "$VulnerabilityScore",
     description: "The numeric score assigned to the vulnerability.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "VulnerabilitySeverity": {
     name: "$VulnerabilitySeverity",
     description: "The severity classification of the vulnerability.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "VulnerabilitySummary": {
     name: "$VulnerabilitySummary",
     description: "A short summary of the vulnerability.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "WebBaseUrl": {
     name: "$WebBaseUrl",
     description: "The base URL of the ProGet web application.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "WorkingDirectory": {
     name: "$WorkingDirectory",
@@ -1032,9 +995,9 @@ $json = $ToJson(%(
 \`\`\`
 
 **Notes:**
-- Maps → JSON objects
-- Vectors → JSON arrays
-- Scalars → JSON strings
+- Maps â†’ JSON objects
+- Vectors â†’ JSON arrays
+- Scalars â†’ JSON strings
 `,
   },
   "HtmlEncode": {
@@ -1525,10 +1488,10 @@ $result = $Floor(3.8);
 Compares two scalar values using the specified operator.
 
 **Parameters:**
-- \`arg1\` – Left-hand value
-- \`operator\` – One of: \`<\`, \`>\`, \`<=\`, \`>=\`, \`=\`, \`!=\`
-- \`arg2\` – Right-hand value
-- \`asNumber\` – (Optional) Forces numeric comparison when \`true\`
+- \`arg1\` â€“ Left-hand value
+- \`operator\` â€“ One of: \`<\`, \`>\`, \`<=\`, \`>=\`, \`=\`, \`!=\`
+- \`arg2\` â€“ Right-hand value
+- \`asNumber\` â€“ (Optional) Forces numeric comparison when \`true\`
 
 **Behavior:**
 - If both values can be parsed as numbers, a numeric comparison is used
