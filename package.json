@@ -157,6 +157,7 @@
     "lint": "eslint . --cache",
     "lint:fix": "eslint . --fix --cache",
     "lint:ci": "eslint . --max-warnings=0 --cache",
+    "check:js": "npx -y -p typescript@6.0.3 tsc -p jsconfig.json --noEmit",
     "package": "vsce package --no-yarn",
     "vscode:prepublish": "npm run lint:ci",
     "publish:vsce": "vsce publish",

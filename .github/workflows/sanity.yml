@@ -66,6 +66,11 @@ jobs:
         run: npm run lint:ci
         continue-on-error: true
 
+      - name: JS + JSDoc type check
+        id: jscheck
+        run: npm run check:js
+        continue-on-error: true
+
       - name: npm security audit
         id: audit
         continue-on-error: true
@@ -146,6 +151,13 @@ jobs:
             echo "✅ ESLint: passed" >> "$GITHUB_STEP_SUMMARY"
           elif [ "${{ steps.eslint.outcome }}" == "failure" ]; then
             echo "⚠️ ESLint: issues found" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # JS + JSDoc type check
+          if [ "${{ steps.jscheck.outcome }}" == "success" ]; then
+            echo "✅ JS + JSDoc type check: passed" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${{ steps.jscheck.outcome }}" == "failure" ]; then
+            echo "⚠️ JS + JSDoc type check: issues found" >> "$GITHUB_STEP_SUMMARY"
           fi
 
           # JSON

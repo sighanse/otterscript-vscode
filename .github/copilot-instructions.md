@@ -28,6 +28,7 @@ If priorities conflict, always follow the highest item in this list. Safety and 
 - Install deps: `npm ci --no-audit --no-fund`
 - Lint local: `npm run lint`
 - Lint strict (CI parity): `npm run lint:ci`
+- JS + JSDoc type check: `npm run check:js`
 - Package extension: `npm run package`
 
 No dedicated `npm test` script exists; rely on lint/package/CI checks and manual Extension Host smoke tests.
@@ -82,14 +83,17 @@ For OtterScript semantics, verify against Inedo docs before changing language in
 Run these when applicable:
 
 1. `npm run lint`
-2. `npm run package` when behavior changes
-3. Manual smoke test (`F5`) when provider/grammar/snippet behavior changes:
+2. `npm run check:js`
+3. `npm run package` when behavior changes
+4. Manual smoke test (`F5`) when provider/grammar/snippet behavior changes:
    - `$` completion appears
    - `@` vector completion appears
    - Hover shows docs
    - `if condition =` warns about missing `$`
    - `>>` auto-closes swim string
-4. Confirm no unrelated files were modified
+5. Confirm no unrelated files were modified
+
+Before recommending or finalizing changes, require both `npm run lint` and `npm run check:js` to pass.
 
 ## Common Failure Modes
 
