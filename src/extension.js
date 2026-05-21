@@ -43,6 +43,7 @@ const {
   createMissingDollarFix,
   getOutputChannel,
   getDiagnosticCode,
+  getActiveParameterIndex,
   getModuleDeclarations,
   findModuleDeclarationRange,
   findModuleReferences,
@@ -198,54 +199,7 @@ function activate(context) {
           // Active parameter detection
           // ------------------------------------------------------------
 
-          let activeParam = 0;
-          let inString = false;
-          let quote = null;
-          let parenDepth = 0;   // Track ( ) nesting
-          let braceDepth = 0;   // Track [ ] nesting
-          let curlyDepth = 0;   // Track { } nesting
-
-          for (let i = 0; i < args.length; i++) {
-            const ch = args[i];
-
-            // -- Handle string literals
-            // Toggle string state when encountering unescaped quotes
-            if ((ch === '"' || ch === "'") && !inString) {
-              inString = true;
-              quote = ch;
-              continue;
-            }
-
-            if (inString && ch === quote) {
-              // -- Check if quote is escaped (odd number of backslashes before it)
-              let backslashCount = 0;
-              let j = i - 1;
-              while (j >= 0 && args[j] === '\\') {
-                backslashCount++;
-                j--;
-              }
-              if (backslashCount % 2 === 0) {
-                inString = false;
-              }
-              continue;
-            }
-
-            // -- Skip all processing inside strings
-            if (inString) continue;
-
-            // -- Track nesting depth for different bracket types
-            if (ch === '(') parenDepth++;
-            if (ch === ')') parenDepth--;
-            if (ch === '[') braceDepth++;
-            if (ch === ']') braceDepth--;
-            if (ch === '{') curlyDepth++;
-            if (ch === '}') curlyDepth--;
-
-            // -- Count commas as parameter separators
-            if (ch === ',' && parenDepth === 0 && braceDepth === 0 && curlyDepth === 0) {
-              activeParam++;
-            }
-          }
+          const activeParam = getActiveParameterIndex(args);
 
           // ------------------------------------------------------------
           // Build signature help UI

@@ -422,6 +422,62 @@ function isInStringOrComment(line, position) {
 }
 
 /**
+ * Counts the active parameter index from a partial argument string.
+ *
+ * The input should be the text between an opening `(` and the cursor.
+ * Commas are only counted at top level (not inside nested (), [], {}, or strings).
+ *
+ * @param {string} argsText - Partial argument text from opening `(` to cursor
+ * @returns {number} Zero-based active parameter index
+ */
+function getActiveParameterIndex(argsText) {
+  let activeParam = 0;
+  let inString = false;
+  let quote = null;
+  let parenDepth = 0;
+  let bracketDepth = 0;
+  let curlyDepth = 0;
+
+  for (let i = 0; i < argsText.length; i++) {
+    const ch = argsText[i];
+
+    if ((ch === '"' || ch === "'") && !inString) {
+      inString = true;
+      quote = ch;
+      continue;
+    }
+
+    if (inString && ch === quote) {
+      let backslashCount = 0;
+      let j = i - 1;
+      while (j >= 0 && argsText[j] === "\\") {
+        backslashCount++;
+        j--;
+      }
+      if (backslashCount % 2 === 0) {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (ch === "(") parenDepth++;
+    if (ch === ")") parenDepth--;
+    if (ch === "[") bracketDepth++;
+    if (ch === "]") bracketDepth--;
+    if (ch === "{") curlyDepth++;
+    if (ch === "}") curlyDepth--;
+
+    if (ch === "," && parenDepth === 0 && bracketDepth === 0 && curlyDepth === 0) {
+      activeParam++;
+    }
+  }
+
+  return activeParam;
+}
+
+/**
  * Replaces quoted string literals in a line with empty placeholders.
  *
  * This is used by diagnostics to avoid flagging symbols inside strings.
@@ -859,6 +915,7 @@ module.exports = {
   // -- Helpers
   isValidCompletionPosition,
   isInStringOrComment,
+  getActiveParameterIndex,
   stripStrings,
   checkMissingDollar,
   findDuplicateMapKeyDiagnostics,
