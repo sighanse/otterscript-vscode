@@ -287,6 +287,7 @@ function createRegexPatterns(knownOperations) {
 const MODULE_NAME_TOKEN_REGEX = /[A-Za-z][\w-]*/;
 
 const MODULE_DECLARATION_REGEX = /^\s*module\s+(\w[\w-]*)/;
+const MODULE_CALL_TARGET_REGEX = /^\s*call\s+(?:[A-Za-z][\w-]*::)?([A-Za-z][\w-]*)\b/;
 const MODULE_DECL_PREFIX_REGEX = /^\s*module\s+$/i;
 const MODULE_CALL_PREFIX_REGEX = /\bcall\s+(?:[A-Za-z][\w-]*::)?$/i;
 
@@ -362,17 +363,13 @@ function findModuleDeclarationRange(document, moduleName) {
  * @returns {vscode.Location[]}
  */
 function findModuleReferences(document, moduleName, includeDeclaration) {
-  const escaped = moduleName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const declarationRegex = new RegExp(`^\\s*module\\s+(${escaped})\\b`);
-  const callRegex = new RegExp(`^\\s*call\\s+(?:[A-Za-z][\\w-]*::)?(${escaped})\\b`);
-
   /** @type {vscode.Location[]} */
   const locations = [];
 
   for (let line = 0; line < document.lineCount; line++) {
     const lineText = document.lineAt(line).text;
-    const declMatch = declarationRegex.exec(lineText);
-    if (declMatch) {
+    const declMatch = MODULE_DECLARATION_REGEX.exec(lineText);
+    if (declMatch && declMatch[1] === moduleName) {
       const start = declMatch.index + declMatch[0].indexOf(declMatch[1]);
       const range = new vscode.Range(
         new vscode.Position(line, start),
@@ -384,8 +381,8 @@ function findModuleReferences(document, moduleName, includeDeclaration) {
       continue;
     }
 
-    const callMatch = callRegex.exec(lineText);
-    if (callMatch) {
+    const callMatch = MODULE_CALL_TARGET_REGEX.exec(lineText);
+    if (callMatch && callMatch[1] === moduleName) {
       const start = callMatch.index + callMatch[0].indexOf(callMatch[1]);
       const range = new vscode.Range(
         new vscode.Position(line, start),
