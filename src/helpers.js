@@ -697,7 +697,7 @@ function createForToForeachFix(document, diagnostic) {
  * @param {string} openChar - Opening character ('{', '(', '[')
  * @param {string} closeChar - Closing character ('}', ')', ']')
  * @param {string} name - Display name ('brace', 'parenthesis', 'bracket')
- * @param {vscode.TextDocument} document The document
+ * @param {vscode.TextDocument} document - The document
  * @returns {vscode.Diagnostic | null}
  */
 function createUnbalancedDiagnostic(count, lastPos, openChar, closeChar, name, document) {
