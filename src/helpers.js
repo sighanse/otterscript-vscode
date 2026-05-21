@@ -587,9 +587,7 @@ function buildCompletionItem(doc, kind, sortPrefix, insertText, triggerSignature
 
   item.insertText = insertText;
   item.detail = doc.signature ?? doc.description;
-  item.documentation = doc.documentation
-    ? new vscode.MarkdownString(doc.documentation)
-    : undefined;
+  item.documentation = buildHoverMarkdown(doc);
   item.sortText = `${sortPrefix}${doc.name}`;
 
   // Trigger signature help after insertion (for functions with parameters)
