@@ -43,9 +43,15 @@ const {
   createMissingDollarFix,
   getOutputChannel,
   getDiagnosticCode,
+  getModuleDeclarations,
+  findModuleDeclarationRange,
+  findModuleReferences,
+  isModuleCallContext,
+  isModuleDeclarationContext,
   isValidCompletionPosition,
   isInStringOrComment,
   loadConfig,
+  MODULE_NAME_TOKEN_REGEX,
   validateDocs,
   createRegexPatterns
 } = require('./helpers');
@@ -68,16 +74,16 @@ function activate(context) {
   log.info(`${extensionName} v${version} activated`);
 
   // -- Load initial configuration
-  let { completionEnabled, hoverEnabled, signatureHelpEnabled } = loadConfig();
-  log.info(`Settings loaded: completion=${completionEnabled}, hover=${hoverEnabled}, signatureHelp=${signatureHelpEnabled}`);
+  let { completionEnabled, hoverEnabled, signatureHelpEnabled, codeLensEnabled } = loadConfig();
+  log.info(`Settings loaded: completion=${completionEnabled}, hover=${hoverEnabled}, signatureHelp=${signatureHelpEnabled}, codeLens=${codeLensEnabled}`);
 
   // -- Watch for settings changes while extension is running
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
       // -- Only reload if OtterScript settings changed
       if (e.affectsConfiguration("otterscript")) {
-        ({ completionEnabled, hoverEnabled, signatureHelpEnabled } = loadConfig());
-        log.info(`Settings reloaded: completion=${completionEnabled}, hover=${hoverEnabled}, signatureHelp=${signatureHelpEnabled}`);
+        ({ completionEnabled, hoverEnabled, signatureHelpEnabled, codeLensEnabled } = loadConfig());
+        log.info(`Settings reloaded: completion=${completionEnabled}, hover=${hoverEnabled}, signatureHelp=${signatureHelpEnabled}, codeLens=${codeLensEnabled}`);
       }
     })
   );
@@ -810,7 +816,7 @@ function activate(context) {
     "otterscript", {
       provideDefinition(document, position) {
 
-        const wordRange = document.getWordRangeAtPosition(position);
+        const wordRange = document.getWordRangeAtPosition(position, MODULE_NAME_TOKEN_REGEX);
         if (!wordRange) return null;
 
         const calledName = document.getText(wordRange);
@@ -818,36 +824,45 @@ function activate(context) {
 
         // -- Verify this is actually a 'call' statement
         const lineText = document.lineAt(position.line).text;
-        const textBeforeWord = lineText.slice(0, wordRange.start.character);
-
-        // -- Check if 'call' appears immediately before the word (with whitespace)
-        if (!/\bcall\s+$/i.test(textBeforeWord)) {
+        if (!isModuleCallContext(lineText, wordRange.start.character)) {
           return null;  // Not a 'call' statement - ignore
         }
 
-        // -- Match: module <Name>
-        const escaped = calledName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const moduleRegex = new RegExp(`^\\s*module\\s+(${escaped})\\b`);
+        const declarationRange = findModuleDeclarationRange(document, calledName);
+        return declarationRange ? new vscode.Location(document.uri, declarationRange) : null;
+      }
+    }
+  );
 
-        for (let line = 0; line < document.lineCount; line++) {
-          const text = document.lineAt(line).text;
+  // ============================================================
+  // FIND REFERENCES PROVIDER (Modules)
+  // ============================================================
+  // Enables Shift+F12 and powers CodeLens reference counts for module calls.
 
-          const match = moduleRegex.exec(text);
-          if (match) {
-            // -- Calculate start position from regex match
-            const nameStartInMatch = match[0].indexOf(match[1]);
-            const start = match.index + nameStartInMatch;
+  const referenceProvider = vscode.languages.registerReferenceProvider(
+    "otterscript",
+    {
+      /**
+       * Resolves references for a module symbol from either declaration or call sites.
+       *
+       * @param {vscode.TextDocument} document
+       * @param {vscode.Position} position
+       * @param {vscode.ReferenceContext} refContext
+       * @returns {vscode.Location[]}
+       */
+          provideReferences(document, position, refContext) {
+        const wordRange = document.getWordRangeAtPosition(position, MODULE_NAME_TOKEN_REGEX);
+        if (!wordRange) return [];
 
-            const range = new vscode.Range(
-              new vscode.Position(line, start),
-              new vscode.Position(line, start + calledName.length)
-            );
+        const moduleName = document.getText(wordRange);
+        if (!moduleName) return [];
 
-            return new vscode.Location(document.uri, range);
-          }
-        }
+        const currentLine = document.lineAt(position.line).text;
+        const isModuleDecl = isModuleDeclarationContext(currentLine, wordRange.start.character);
+        const isCallSite = isModuleCallContext(currentLine, wordRange.start.character);
+        if (!isModuleDecl && !isCallSite) return [];
 
-        return null;
+        return findModuleReferences(document, moduleName, refContext.includeDeclaration);
       }
     }
   );
@@ -868,32 +883,73 @@ function activate(context) {
        * @returns {vscode.DocumentSymbol[]}
        */
       provideDocumentSymbols(document) {
-        /** @type {vscode.DocumentSymbol[]} */
-        const symbols = [];
-        const moduleRegex = /^\s*module\s+(\w[\w-]*)/;
-
-        for (let i = 0; i < document.lineCount; i++) {
-          const line = document.lineAt(i);
-          const match = moduleRegex.exec(line.text);
-          if (!match) continue;
-
-          const name = match[1];
-          const nameStart = line.text.indexOf(name, match.index);
-          const nameRange = new vscode.Range(
-            new vscode.Position(i, nameStart),
-            new vscode.Position(i, nameStart + name.length)
-          );
-
-          symbols.push(new vscode.DocumentSymbol(
-            name,
+        return getModuleDeclarations(document).map(entry =>
+          new vscode.DocumentSymbol(
+            entry.name,
             "",
             vscode.SymbolKind.Module,
-            line.range,
-            nameRange
-          ));
+            entry.lineRange,
+            entry.range
+          )
+        );
+      }
+    }
+  );
+
+  // ============================================================
+  // CODE LENS PROVIDER (Module References)
+  // ============================================================
+  // Shows reference counts above module declarations and links to
+  // VS Code's reference peek UI.
+
+  const codeLensProvider = vscode.languages.registerCodeLensProvider(
+    "otterscript",
+    {
+      /**
+       * Builds code lenses for module declarations.
+       *
+       * @param {vscode.TextDocument} document
+       * @returns {Promise<vscode.CodeLens[]>}
+       */
+      async provideCodeLenses(document) {
+        if (!codeLensEnabled) return [];
+        /** @type {vscode.CodeLens[]} */
+        const lenses = [];
+        const declarations = getModuleDeclarations(document);
+
+        for (const declaration of declarations) {
+          const range = declaration.range;
+
+          /** @type {vscode.Location[]} */
+          let references;
+          try {
+            const result = await vscode.commands.executeCommand(
+              "vscode.executeReferenceProvider",
+              document.uri,
+              range.start
+            );
+            references = Array.isArray(result) ? result : [];
+          } catch {
+            references = [];
+          }
+
+          const usageRefs = references.filter(location => {
+            const sameFile = location.uri.toString() === document.uri.toString();
+            const sameStart = location.range.start.isEqual(range.start);
+            const sameEnd = location.range.end.isEqual(range.end);
+            return !(sameFile && sameStart && sameEnd);
+          });
+
+          lenses.push(
+            new vscode.CodeLens(range, {
+              title: `${usageRefs.length} reference${usageRefs.length === 1 ? "" : "s"}`,
+              command: "editor.action.showReferences",
+              arguments: [document.uri, range.start, usageRefs]
+            })
+          );
         }
 
-        return symbols;
+        return lenses;
       }
     }
   );
@@ -959,7 +1015,9 @@ function activate(context) {
     hoverProvider,
     codeActionsProvider,
     definitionProvider,
+    referenceProvider,
     documentSymbolProvider,
+    codeLensProvider,
     fixAllCommand
   );
 }

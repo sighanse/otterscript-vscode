@@ -23,7 +23,8 @@ const vscode = require("vscode");
  * @returns {{
  *   completionEnabled: boolean,
  *   hoverEnabled: boolean,
- *   signatureHelpEnabled: boolean
+ *   signatureHelpEnabled: boolean,
+ *   codeLensEnabled: boolean
  * }}
  *
  * @example
@@ -39,7 +40,8 @@ function loadConfig() {
   return {
     completionEnabled: config.get("completion.enable", true),
     hoverEnabled: config.get("hover.enable", true),
-    signatureHelpEnabled: config.get("signatureHelp.enable", true)
+    signatureHelpEnabled: config.get("signatureHelp.enable", true),
+    codeLensEnabled: config.get("codeLens.enable", true)
   };
 }
 
@@ -259,6 +261,126 @@ function createRegexPatterns(knownOperations) {
     operationSignatureRegex: () => /(?:^|\s)([A-Za-z][A-Za-z-]*)\s*\(([^()]*)$/,
     operationRegex: () => buildWordRegex(knownOperations),
   };
+}
+
+/**
+ * Token regex for module names used by word-range lookups.
+ *
+ * @readonly
+ * @type {RegExp}
+ */
+const MODULE_NAME_TOKEN_REGEX = /[A-Za-z][\w-]*/;
+
+const MODULE_DECLARATION_REGEX = /^\s*module\s+(\w[\w-]*)/;
+const MODULE_DECL_PREFIX_REGEX = /^\s*module\s+$/i;
+const MODULE_CALL_PREFIX_REGEX = /\bcall\s+(?:[A-Za-z][\w-]*::)?$/i;
+
+/**
+ * Returns true when the current word position is in a module declaration context.
+ *
+ * @param {string} lineText - Full source line text
+ * @param {number} wordStart - Start index of the current word
+ * @returns {boolean}
+ */
+function isModuleDeclarationContext(lineText, wordStart) {
+  const beforeWord = lineText.slice(0, wordStart);
+  return MODULE_DECL_PREFIX_REGEX.test(beforeWord);
+}
+
+/**
+ * Returns true when the current word position is in a module call context.
+ *
+ * @param {string} lineText - Full source line text
+ * @param {number} wordStart - Start index of the current word
+ * @returns {boolean}
+ */
+function isModuleCallContext(lineText, wordStart) {
+  const beforeWord = lineText.slice(0, wordStart);
+  return MODULE_CALL_PREFIX_REGEX.test(beforeWord);
+}
+
+/**
+ * Scans a document and returns all module declarations.
+ *
+ * @param {vscode.TextDocument} document
+ * @returns {{ name: string, range: vscode.Range, lineRange: vscode.Range }[]}
+ */
+function getModuleDeclarations(document) {
+  const declarations = [];
+
+  for (let line = 0; line < document.lineCount; line++) {
+    const lineText = document.lineAt(line).text;
+    const match = MODULE_DECLARATION_REGEX.exec(lineText);
+    if (!match) continue;
+
+    const name = match[1];
+    const nameStart = lineText.indexOf(name, match.index);
+    const range = new vscode.Range(
+      new vscode.Position(line, nameStart),
+      new vscode.Position(line, nameStart + name.length)
+    );
+
+    declarations.push({ name, range, lineRange: document.lineAt(line).range });
+  }
+
+  return declarations;
+}
+
+/**
+ * Finds the declaration range of a module in the document.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {string} moduleName
+ * @returns {vscode.Range | null}
+ */
+function findModuleDeclarationRange(document, moduleName) {
+  const declaration = getModuleDeclarations(document).find(entry => entry.name === moduleName);
+  return declaration?.range ?? null;
+}
+
+/**
+ * Finds references to a module declaration and module calls in the document.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {string} moduleName
+ * @param {boolean} includeDeclaration
+ * @returns {vscode.Location[]}
+ */
+function findModuleReferences(document, moduleName, includeDeclaration) {
+  const escaped = moduleName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const declarationRegex = new RegExp(`^\\s*module\\s+(${escaped})\\b`);
+  const callRegex = new RegExp(`^\\s*call\\s+(?:[A-Za-z][\\w-]*::)?(${escaped})\\b`);
+
+  /** @type {vscode.Location[]} */
+  const locations = [];
+
+  for (let line = 0; line < document.lineCount; line++) {
+    const lineText = document.lineAt(line).text;
+    const declMatch = declarationRegex.exec(lineText);
+    if (declMatch) {
+      const start = declMatch.index + declMatch[0].indexOf(declMatch[1]);
+      const range = new vscode.Range(
+        new vscode.Position(line, start),
+        new vscode.Position(line, start + moduleName.length)
+      );
+      if (includeDeclaration) {
+        locations.push(new vscode.Location(document.uri, range));
+      }
+      continue;
+    }
+
+    const callMatch = callRegex.exec(lineText);
+    if (callMatch) {
+      const start = callMatch.index + callMatch[0].indexOf(callMatch[1]);
+      const range = new vscode.Range(
+        new vscode.Position(line, start),
+        new vscode.Position(line, start + moduleName.length)
+      );
+      locations.push(new vscode.Location(document.uri, range));
+    }
+  }
+
+  return locations;
 }
 
 // ============================================================
@@ -753,6 +875,14 @@ module.exports = {
   createInvalidOperatorFix,
   createAssignmentInConditionFix,
   createForToForeachFix,
+
+  // -- Module navigation
+  MODULE_NAME_TOKEN_REGEX,
+  isModuleDeclarationContext,
+  isModuleCallContext,
+  getModuleDeclarations,
+  findModuleDeclarationRange,
+  findModuleReferences,
 
   // -- Regex
   createRegexPatterns

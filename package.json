@@ -95,6 +95,11 @@
           "type": "boolean",
           "default": true,
           "description": "Enable hover information for functions and operations"
+        },
+        "otterscript.codeLens.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable CodeLens reference counts above module declarations"
         }
       }
     },
