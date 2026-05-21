@@ -473,7 +473,9 @@ function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
  * @returns {vscode.Diagnostic[]} Duplicate-key diagnostics
  */
 function findDuplicateMapKeyDiagnostics(document, source = document.getText()) {
-  const text = source
+  // Produce a length-preserving masked copy so offsets remain valid for document.positionAt().
+  // String contents and comments are replaced with spaces; newlines are kept to preserve line offsets.
+  const maskedText = source
     // Mask quoted strings first so // or # inside strings are not treated as comments.
     .replace(/"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/g, match => match.replace(/[^\n]/g, " "))
     // Mask block comments but keep indexes stable.
@@ -492,9 +494,9 @@ function findDuplicateMapKeyDiagnostics(document, source = document.getText()) {
    */
   function findMatchingParen(openParenIndex) {
     let depth = 1;
-    for (let i = openParenIndex + 1; i < text.length; i++) {
-      if (text[i] === '(') depth++;
-      if (text[i] === ')') depth--;
+    for (let i = openParenIndex + 1; i < maskedText.length; i++) {
+      if (maskedText[i] === '(') depth++;
+      if (maskedText[i] === ')') depth--;
       if (depth === 0) return i;
     }
     return -1;
@@ -513,7 +515,7 @@ function findDuplicateMapKeyDiagnostics(document, source = document.getText()) {
     const seenKeys = new Set();
 
     for (let i = start; i <= end; i++) {
-      const ch = i === end ? ',' : text[i];
+      const ch = i === end ? ',' : maskedText[i];
 
       if (ch === '(' || ch === '[' || ch === '{') {
         nestingDepth++;
@@ -525,7 +527,7 @@ function findDuplicateMapKeyDiagnostics(document, source = document.getText()) {
       }
 
       if (ch === ',' && nestingDepth === 0) {
-        const segmentText = text.slice(segmentStart, i);
+        const segmentText = maskedText.slice(segmentStart, i);
         const keyMatch = segmentText.match(/^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*:/);
 
         if (keyMatch) {
@@ -554,8 +556,8 @@ function findDuplicateMapKeyDiagnostics(document, source = document.getText()) {
     }
   }
 
-  for (let i = 0; i < text.length - 1; i++) {
-    if (text[i] === '%' && text[i + 1] === '(') {
+  for (let i = 0; i < maskedText.length - 1; i++) {
+    if (maskedText[i] === '%' && maskedText[i + 1] === '(') {
       const close = findMatchingParen(i + 1);
       if (close !== -1) {
         scanMapBody(i + 2, close);
