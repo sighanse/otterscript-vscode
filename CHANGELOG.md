@@ -1,5 +1,31 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- CodeLens reference counts above module declarations, linking to VS Code's reference peek UI (`otterscript.codeLens.enable` setting, default `true`).
+- `ReferenceProvider` for module declarations and call sites (powers Shift+F12 and CodeLens counts).
+- `DocumentSymbolProvider` populating the Outline panel, breadcrumbs, and Ctrl+Shift+O.
+- JS/JSDoc validation workflow via `npm run check:js` (pinned TypeScript 6.0.3, `jsconfig.json`).
+
+### Changed
+
+- Unified completion item documentation to use `buildHoverMarkdown` for consistent formatting across hover and completion popups.
+- Extracted `getActiveParameterIndex(argsText)` as a pure reusable helper in `helpers.js`.
+- Extracted shared module navigation helpers (`getModuleDeclarations`, `findModuleDeclarationRange`, `findModuleReferences`, `isModuleCallContext`, `isModuleDeclarationContext`, `MODULE_NAME_TOKEN_REGEX`) into `helpers.js`.
+- Replaced per-call dynamic regex compilation in `findModuleReferences` with static module-level constants.
+- Optimized logger hot path with a cached output channel reference (`appendOutputLine`).
+- Extracted `PROGET_VAR_DOC` constant in `language-data.js` to deduplicate 20 identical ProGet variable documentation strings.
+- Aligned ESLint globals to ES2022 to match `jsconfig.json` compiler target.
+
+### Fixed
+
+- Fixed pending diagnostic timer not cleared on deactivation.
+- Fixed optional chaining on `DocEntry.name` in variable completion provider.
+- Fixed `DocEntry` typedef duplication by importing from `language-data.js`.
+- Fixed `lastBracePos`/`lastParenPos`/`lastBracketPos` using `-1` sentinel instead of `null`.
+
 ## [0.2.2] - 2026-05-18
 
 ### Added
