@@ -788,6 +788,10 @@ function activate(context) {
 
         // -- Verify this is actually a 'call' statement
         const lineText = document.lineAt(position.line).text;
+        if (isInStringOrComment(lineText, wordRange.start.character)) {
+          return null;
+        }
+
         if (!isModuleCallContext(lineText, wordRange.start.character)) {
           return null;  // Not a 'call' statement - ignore
         }
@@ -822,6 +826,10 @@ function activate(context) {
         if (!moduleName) return [];
 
         const currentLine = document.lineAt(position.line).text;
+        if (isInStringOrComment(currentLine, wordRange.start.character)) {
+          return [];
+        }
+
         const isModuleDecl = isModuleDeclarationContext(currentLine, wordRange.start.character);
         const isCallSite = isModuleCallContext(currentLine, wordRange.start.character);
         if (!isModuleDecl && !isCallSite) return [];

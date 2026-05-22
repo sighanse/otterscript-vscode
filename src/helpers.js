@@ -303,6 +303,13 @@ const MODULE_CALL_PREFIX_REGEX = /\bcall\s+(?:[A-Za-z][\w-]*::)?$/i;
 const moduleInfoCache = new Map();
 
 /**
+ * @typedef {{
+ *   inBlockComment: boolean,
+ *   swimDelimiter: string | null
+ * }} ModuleScanState
+ */
+
+/**
  * Returns true when a quote at the given index is not escaped.
  *
  * @param {string} text
@@ -352,6 +359,107 @@ function getModuleDeclarations(document) {
 }
 
 /**
+ * Produces a length-preserving mask of non-code spans for module navigation scans.
+ *
+ * Masked spans include strings, line comments, block comments, and swim-strings.
+ * State for block comments and swim-strings is carried across lines.
+ *
+ * @param {string} lineText
+ * @param {ModuleScanState} state
+ * @returns {string}
+ */
+function maskModuleScanLine(lineText, state) {
+  const chars = lineText.split("");
+  let inString = false;
+  let quote = null;
+
+  for (let i = 0; i < chars.length; i++) {
+    const ch = lineText[i];
+
+    if (state.inBlockComment) {
+      chars[i] = " ";
+      if (ch === "*" && lineText[i + 1] === "/") {
+        chars[i + 1] = " ";
+        state.inBlockComment = false;
+        i++;
+      }
+      continue;
+    }
+
+    if (state.swimDelimiter) {
+      chars[i] = " ";
+      if (lineText.startsWith(state.swimDelimiter, i)) {
+        for (let j = 0; j < state.swimDelimiter.length; j++) {
+          if (i + j < chars.length) {
+            chars[i + j] = " ";
+          }
+        }
+        i += state.swimDelimiter.length - 1;
+        state.swimDelimiter = null;
+      }
+      continue;
+    }
+
+    if (inString) {
+      chars[i] = " ";
+      if (ch === quote && isUnescapedQuoteAt(lineText, i)) {
+        inString = false;
+        quote = null;
+      }
+      continue;
+    }
+
+    if (ch === "/" && lineText[i + 1] === "*") {
+      chars[i] = " ";
+      if (i + 1 < chars.length) {
+        chars[i + 1] = " ";
+      }
+      state.inBlockComment = true;
+      i++;
+      continue;
+    }
+
+    if (ch === ">") {
+      const swimMatch = lineText.slice(i).match(/^>[^>]{0,5}>/);
+      if (swimMatch) {
+        const delimiter = swimMatch[0];
+        for (let j = 0; j < delimiter.length; j++) {
+          if (i + j < chars.length) {
+            chars[i + j] = " ";
+          }
+        }
+        state.swimDelimiter = delimiter;
+        i += delimiter.length - 1;
+        continue;
+      }
+    }
+
+    if (ch === '"' || ch === "'") {
+      chars[i] = " ";
+      inString = true;
+      quote = ch;
+      continue;
+    }
+
+    if (ch === "#") {
+      for (let j = i; j < chars.length; j++) {
+        chars[j] = " ";
+      }
+      break;
+    }
+
+    if (ch === "/" && lineText[i + 1] === "/") {
+      for (let j = i; j < chars.length; j++) {
+        chars[j] = " ";
+      }
+      break;
+    }
+  }
+
+  return chars.join("");
+}
+
+/**
  * Builds and caches module declarations and module call references for a document version.
  *
  * @param {vscode.TextDocument} document
@@ -368,14 +476,17 @@ function getModuleInfo(document) {
   const declarations = [];
   /** @type {Map<string, vscode.Location[]>} */
   const refsByName = new Map();
+  /** @type {ModuleScanState} */
+  const scanState = { inBlockComment: false, swimDelimiter: null };
 
   for (let line = 0; line < document.lineCount; line++) {
     const lineText = document.lineAt(line).text;
+    const maskedLineText = maskModuleScanLine(lineText, scanState);
 
-    const declMatch = MODULE_DECLARATION_REGEX.exec(lineText);
+    const declMatch = MODULE_DECLARATION_REGEX.exec(maskedLineText);
     if (declMatch) {
       const name = declMatch[1];
-      const nameStart = lineText.indexOf(name, declMatch.index);
+      const nameStart = maskedLineText.indexOf(name, declMatch.index);
       const range = new vscode.Range(
         new vscode.Position(line, nameStart),
         new vscode.Position(line, nameStart + name.length)
@@ -385,14 +496,9 @@ function getModuleInfo(document) {
     }
 
     MODULE_CALL_TARGET_GLOBAL_REGEX.lastIndex = 0;
-    for (const callMatch of lineText.matchAll(MODULE_CALL_TARGET_GLOBAL_REGEX)) {
+    for (const callMatch of maskedLineText.matchAll(MODULE_CALL_TARGET_GLOBAL_REGEX)) {
       const moduleName = callMatch[1];
       if (typeof moduleName !== "string" || typeof callMatch.index !== "number") {
-        continue;
-      }
-
-      // Ignore call-like text occurring inside quoted strings or comments.
-      if (isInStringOrComment(lineText, callMatch.index)) {
         continue;
       }
 
