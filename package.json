@@ -19,7 +19,7 @@
   "homepage": "https://github.com/sighanse/otterscript-vscode#readme",
   "markdown": "github",
   "license": "MIT",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "icon": "images/logo.png",
   "engines": {
     "vscode": "^1.85.0"
@@ -95,6 +95,11 @@
           "type": "boolean",
           "default": true,
           "description": "Enable hover information for functions and operations"
+        },
+        "otterscript.codeLens.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable CodeLens reference counts above module declarations"
         }
       }
     },
@@ -152,6 +157,7 @@
     "lint": "eslint . --cache",
     "lint:fix": "eslint . --fix --cache",
     "lint:ci": "eslint . --max-warnings=0 --cache",
+    "check:js": "npx -y -p typescript@6.0.3 tsc -p jsconfig.json --noEmit",
     "package": "vsce package --no-yarn",
     "vscode:prepublish": "npm run lint:ci",
     "publish:vsce": "vsce publish",

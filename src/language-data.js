@@ -65,7 +65,7 @@ Log-Debug "Calculated value: $value";
 - May be hidden or filtered depending on execution settings
 - Does not affect execution flow
 `
-},
+  },
   "Log-Information": {
     name: "Log-Information",
     signature: 'Log-Information "message";',
@@ -117,7 +117,7 @@ Log-Error "Failed to connect to server";
 - Combine with \`throw\` to stop execution
 `
   },
-  'Post-Http': {
+  "Post-Http": {
     name: 'Post-Http',
     signature: 'Post-Http(Url: string, [options...])',
     snippet: 'Post-Http(\n    Url: "${1:https://example.com}",\n    ${2:ContentType: "application/json",}\n    ${3:TextData: "${4:request body}"},\n    ${5:FormData: %(\n        ${6:key}: "${7:value}"\n    )},\n    ${8:LogResponseBody: true}\n);',
@@ -166,7 +166,486 @@ Post-Http(
 \`\`\`
 `
   },
-  'Sleep': {
+  "Download-Http": {
+    name: "Download-Http",
+    signature: "Download-Http(FileName: <text>, Url: <text>, [LogResponseBody: <true/false>], [ErrorStatusCodes: <text>], [ResponseBody: <text>], [RequestHeaders: <%(key1: value1, ...)>], [MaxResponseLength: <integer>], [ProxyRequest: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [IgnoreSslErrors: <true/false>]);",
+    snippet: "Download-Http ${1:https://example.com/file.zip}\n(\n    FileName: ${2:artifact.zip},\n    LogResponseBody: ${3:false}\n);$0",
+    description: "Downloads a file from a specified URL using an HTTP GET.",
+    documentation: `
+Downloads a file from a specified URL using an HTTP GET.
+
+**Script Usage:**
+\`\`\`otterscript
+Download-Http(
+    FileName: <text>,
+    Url: <text>,
+    [LogResponseBody: <true/false>],
+    [ErrorStatusCodes: <text>],
+    [ResponseBody: <text>],
+    [RequestHeaders: <%(key1: value1, ...)>],
+    [MaxResponseLength: <integer>],
+    [ProxyRequest: <true/false>],
+    [Credentials: <text>],
+    [UserName: <text>],
+    [Password: <text>],
+    [IgnoreSslErrors: <true/false>]
+);
+\`\`\`
+
+**Arguments:**
+- \`FileName\` (required) - Destination path for the downloaded file.
+- \`Url\` (required) - Source URL to download from.
+- \`LogResponseBody\` - Whether to log response body text.
+- \`ErrorStatusCodes\` - Comma-separated status codes/ranges treated as failure (default: \`400:599\`).
+- \`ResponseBody\` - Optional variable to store response text.
+- \`RequestHeaders\` - Optional request headers map.
+- \`MaxResponseLength\` - Maximum response length in bytes.
+- \`ProxyRequest\` - Proxy through the server in context.
+- \`Credentials\`, \`UserName\`, \`Password\` - Authentication options.
+- \`IgnoreSslErrors\` - Ignore SSL certificate errors.
+
+**Example:**
+\`\`\`otterscript
+Download-Http https://downloadurl.local
+(
+    FileName: destfilename
+);
+\`\`\`
+`
+  },
+  "Upload-Http": {
+    name: "Upload-Http",
+    signature: "Upload-Http([Method: <integer>], FileName: <text>, Url: <text>, [LogResponseBody: <true/false>], [ErrorStatusCodes: <text>], [ResponseBody: <text>], [RequestHeaders: <%(key1: value1, ...)>], [MaxResponseLength: <integer>], [ProxyRequest: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [IgnoreSslErrors: <true/false>]);",
+    snippet: "Upload-Http ${1:file.txt}\n(\n    Method: ${2:POST},\n    Url: ${3:url.local}\n);$0",
+    description: "Uploads a file to a specified URL using an HTTP POST or PUT.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Upload-Http(
+    [Method: <integer>],
+    FileName: <text>,
+    Url: <text>,
+    [LogResponseBody: <true/false>],
+    [ErrorStatusCodes: <text>],
+    [ResponseBody: <text>],
+    [RequestHeaders: <%(key1: value1, ...)>],
+    [MaxResponseLength: <integer>],
+    [ProxyRequest: <true/false>],
+    [Credentials: <text>],
+    [UserName: <text>],
+    [Password: <text>],
+    [IgnoreSslErrors: <true/false>]
+);
+\`\`\`
+
+**Arguments:**
+- \`FileName\` (required) - Path of the file to upload.
+- \`Url\` (required) - Destination URL.
+- \`Method\` - HTTP method.
+- \`LogResponseBody\` - Whether to log response body text.
+- \`ErrorStatusCodes\` - Comma-separated status codes/ranges treated as failure (default: \`400:599\`).
+- \`ResponseBody\` - Optional variable to store response text.
+- \`RequestHeaders\` - Optional request headers map.
+- \`MaxResponseLength\` - Maximum response length in bytes.
+- \`ProxyRequest\` - Proxy through the server in context.
+- \`Credentials\`, \`UserName\`, \`Password\` - Authentication options.
+- \`IgnoreSslErrors\` - Ignore SSL certificate errors.
+
+**Example:**
+\`\`\`otterscript
+Upload-Http file.txt
+(
+    Method: POST,
+    Url: url.local
+);
+\`\`\`
+`
+  },
+  "Execute-PowerShell": {
+    name: "Execute-PowerShell",
+    signature: "Execute-PowerShell(Text: <text>, [Debug: <true/false>], [Verbose: <true/false>], [RunOnSimulation: <true/false>], [Isolated: <true/false>], [SuccessExitCode: <text>], [PreferWindowsPowerShell: <text>]);",
+    snippet: "Execute-PowerShell >>\n    ${1:Get-Service | Where-Object { $_.Status -eq \"Running\" } | Out-String}\n>> (\n    Verbose: ${2:false},\n    Debug: ${3:false},\n    RunOnSimulation: ${4:false}\n);$0",
+    description: "Executes a specified PowerShell script.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Execute-PowerShell(
+    Text: <text>,
+    [Debug: <true/false>],
+    [Verbose: <true/false>],
+    [RunOnSimulation: <true/false>],
+    [Isolated: <true/false>],
+    [SuccessExitCode: <text>],
+    [PreferWindowsPowerShell: <text>]
+);
+\`\`\`
+
+**Arguments:**
+- \`Text\` (required) - PowerShell script text.
+- \`Debug\` - Capture \`Write-Debug\` output in execution debug log.
+- \`Verbose\` - Capture \`Write-Verbose\` output in execution debug log.
+- \`RunOnSimulation\` - Whether the script executes in simulation mode.
+- \`Isolated\` - Run script in a temporary AppDomain.
+- \`SuccessExitCode\` - Exit code value/rule that indicates success.
+- \`PreferWindowsPowerShell\` - Prefer Windows PowerShell 5.1 where available.
+
+**Example:**
+\`\`\`otterscript
+Execute-PowerShell >>
+    Get-Service | Where-Object { $_.Status -eq "Running" } | Out-String
+>>;
+\`\`\`
+
+**Notes:**
+- Docs also refer to this operation as PSExec / \`psexec\`.
+`
+  },
+  "Ensure-Service": {
+    name: "Ensure-Service",
+    signature: "Ensure-Service(Name: <text>, [DisplayName: <text>], [Description: <text>], [Status: <integer>], [Exists: <true/false>], Path: <text>, [Startup: <integer>], [DelayedStart: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [FirstFailure: <integer>], [SecondFailure: <integer>], [SubsequentFailures: <integer>], [RestartDelay: <integer>], [OnFailureProgramPath: <text>], [RebootMessage: <text>], [Dependencies: <@(text)>], [StatusChangeTimeout: <TimeSpan>]);",
+    snippet: "Ensure-Service(\n    Name: ${1:myName},\n    DisplayName: ${2:myDisplayName},\n    Status: ${3:Running},\n    Path: ${4:c:\\\\myservice.exe}\n);$0",
+    description: "Ensures the configuration of a Windows service on a server.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Ensure-Service(
+    Name: <text>,
+    [DisplayName: <text>],
+    [Description: <text>],
+    [Status: <integer>],
+    [Exists: <true/false>],
+    Path: <text>,
+    [Startup: <integer>],
+    [DelayedStart: <true/false>],
+    [Credentials: <text>],
+    [UserName: <text>],
+    [Password: <text>],
+    [FirstFailure: <integer>],
+    [SecondFailure: <integer>],
+    [SubsequentFailures: <integer>],
+    [RestartDelay: <integer>],
+    [OnFailureProgramPath: <text>],
+    [RebootMessage: <text>],
+    [Dependencies: <@(text)>],
+    [StatusChangeTimeout: <TimeSpan>]
+);
+\`\`\`
+
+**Key Arguments:**
+- \`Name\` (required) - Service name.
+- \`Path\` (required) - Service executable path (may include args).
+- \`DisplayName\`, \`Description\` - Service metadata.
+- \`Status\`, \`Startup\`, \`DelayedStart\` - Runtime/startup behavior.
+- \`Exists\` - Ensure presence or absence.
+- \`Credentials\` or \`UserName\`/\`Password\` - Service account.
+- \`Dependencies\`, \`StatusChangeTimeout\` - Dependency and state transition controls.
+
+**Example:**
+\`\`\`otterscript
+Ensure-Service
+(
+    Name: myName,
+    DisplayName: myDisplayName,
+    Status: Running,
+    Path: c:\\myservice.exe
+);
+\`\`\`
+`
+  },
+  "Ensure-Directory": {
+    name: "Ensure-Directory",
+    signature: "Ensure-Directory(Name: <text>, [Exists: <true/false>]);",
+    snippet: "Ensure-Directory ${1:myFolderName}\n(\n    Exists: ${2:true}\n);$0",
+    description: "Ensures the existence of a directory on a server.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Ensure-Directory(
+    Name: <text>,
+    [Exists: <true/false>]
+);
+\`\`\`
+
+**Arguments:**
+- \`Name\` (required) - Directory path/name.
+- \`Exists\` - Ensure presence (true) or absence (false).
+
+**Example:**
+\`\`\`otterscript
+Ensure-Directory myFolderName
+(
+    Exists: true
+);
+\`\`\`
+`
+  },
+  "Ensure-Server": {
+    name: "Ensure-Server",
+    signature: "Ensure-Server(Name: <text>, [Exists: <true/false>], [Roles: <@(text)>], [Environments: <@(text)>], [RoutineExecutionType: <text>], [AgentConfigurationXml: <text>]);",
+    snippet: "Ensure-Server ${1:myServerName}\n(\n    Exists: ${2:true}\n);$0",
+    description: "Ensures that a server exists within Otter.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Ensure-Server(
+    Name: <text>,
+    [Exists: <true/false>],
+    [Roles: <@(text)>],
+    [Environments: <@(text)>],
+    [RoutineExecutionType: <text>],
+    [AgentConfigurationXml: <text>]
+);
+\`\`\`
+
+**Arguments:**
+- \`Name\` (required) - Server name.
+- \`Exists\` - Ensure presence (true) or absence (false).
+- \`Roles\` - Server roles.
+- \`Environments\` - Environments membership.
+- \`RoutineExecutionType\` - Drift remediation mode.
+- \`AgentConfigurationXml\` - Serialized agent configuration.
+
+**Example:**
+\`\`\`otterscript
+Ensure-Server myServerName
+(
+    Exists: true
+);
+\`\`\`
+`
+  },
+  "Ensure-Asset": {
+    name: "Ensure-Asset",
+    signature: "Ensure-Asset(Name: <text>, [Raft: <text>], [Type: <integer>], [Exists: <true/false>], Directory: <text>, [FileName: <text>]);",
+    snippet: "Ensure-Asset(\n    Exists: ${1:true},\n    Name: ${2:myAssetName},\n    Raft: ${3:Default},\n    Type: ${4:RoleConfigurationScript},\n    Directory: ${5:c:\\\\targetdir}\n);$0",
+    description: "Ensures the existence of an asset file on a server.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Ensure-Asset(
+    Name: <text>,
+    [Raft: <text>],
+    [Type: <integer>],
+    [Exists: <true/false>],
+    Directory: <text>,
+    [FileName: <text>]
+);
+\`\`\`
+
+**Arguments:**
+- \`Name\` (required) - Asset name.
+- \`Directory\` (required) - Target directory on server.
+- \`Raft\` - Raft name.
+- \`Type\` - Asset type.
+- \`Exists\` - Ensure presence (true) or absence (false).
+- \`FileName\` - Rename asset file on disk.
+
+**Example:**
+\`\`\`otterscript
+Ensure-Asset
+(
+    Exists: true,
+    Name: myAssetName,
+    Raft: Default,
+    Type: RoleConfigurationScript,
+    Directory: c:\\targetdir
+);
+\`\`\`
+`
+  },
+  "Ensure-PsModule": {
+    name: "Ensure-PsModule",
+    signature: "Ensure-PsModule(Module: <text>, [Version: <text>], [MinimumVersion: <text>], [Force: <true/false>], [Repository: <text>], [Scope: <text>], [Exists: <true/false>], [AllowClobber: <true/false>], [AllowPrerelease: <true/false>], [AcceptLicense: <true/false>], [AllVersions: <true/false>], [Parameters: <%(key1: value1, ...)>], [Verbose: <true/false>], [DebugLogging: <true/false>], [PreferWindowsPowerShell: <text>]);",
+    snippet: "Ensure-PsModule\n(\n    Exists: ${1:true},\n    Module: ${2:PackageManagement},\n    MinimumVersion: ${3:1.4.6},\n    Repository: ${4:internal-powershell}\n);$0",
+    description: "Ensures that the specified PowerShell module is installed.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Ensure-PsModule(
+    Module: <text>,
+    [Version: <text>],
+    [MinimumVersion: <text>],
+    [Force: <true/false>],
+    [Repository: <text>],
+    [Scope: <text>],
+    [Exists: <true/false>],
+    [AllowClobber: <true/false>],
+    [AllowPrerelease: <true/false>],
+    [AcceptLicense: <true/false>],
+    [AllVersions: <true/false>],
+    [Parameters: <%(key1: value1, ...)>],
+    [Verbose: <true/false>],
+    [DebugLogging: <true/false>],
+    [PreferWindowsPowerShell: <text>]
+);
+\`\`\`
+`
+  },
+  "Ensure-HostsEntry": {
+    name: "Ensure-HostsEntry",
+    signature: "Ensure-HostsEntry(Host: <text>, IP: <text>, [Exists: <true/false>]);",
+    snippet: "Ensure-HostsEntry ${1:myHostName}\n(\n    Exists: ${2:true},\n    IP: ${3:127.0.0.1}\n);$0",
+    description: "Ensures an entry in the hosts file on a server.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Ensure-HostsEntry(
+    Host: <text>,
+    IP: <text>,
+    [Exists: <true/false>]
+);
+\`\`\`
+`
+  },
+  "Acquire-Server": {
+    name: "Acquire-Server",
+    signature: "Acquire-Server([Role: <text>], [ServerName: <text>], [Verbose: <true/false>]);",
+    snippet: "Acquire-Server(\n   Role: ${1:build-servers},\n   ServerName => ${2:\$AcquiredServerName}\n);$0",
+    description: "Acquires a server from a resource pool defined by a server role.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Acquire-Server(
+    [Role: <text>],
+    [ServerName: <text>],
+    [Verbose: <true/false>]
+);
+\`\`\`
+`
+  },
+  "Get-Http": {
+    name: "Get-Http",
+    signature: "Get-Http([Method: <integer>], Url: <text>, [LogResponseBody: <true/false>], [ErrorStatusCodes: <text>], [ResponseBody: <text>], [RequestHeaders: <%(key1: value1, ...)>], [MaxResponseLength: <integer>], [ProxyRequest: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [IgnoreSslErrors: <true/false>]);",
+    snippet: "Get-Http ${1:https://myurl.local}\n(\n    Method: ${2:GET}\n);$0",
+    description: "Executes an HTTP GET, DELETE, or HEAD request against a URL.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Get-Http(
+    [Method: <integer>],
+    Url: <text>,
+    [LogResponseBody: <true/false>],
+    [ErrorStatusCodes: <text>],
+    [ResponseBody: <text>],
+    [RequestHeaders: <%(key1: value1, ...)>],
+    [MaxResponseLength: <integer>],
+    [ProxyRequest: <true/false>],
+    [Credentials: <text>],
+    [UserName: <text>],
+    [Password: <text>],
+    [IgnoreSslErrors: <true/false>]
+);
+\`\`\`
+`
+  },
+  "Concatenate-Files": {
+    name: "Concatenate-Files",
+    signature: "Concatenate-Files(File: <text>, [Directory: <text>], [Include: <@(text)>], [Exclude: <@(text)>], [Encoding: <text>], [Separator: <text>]);",
+    snippet: "Concatenate-Files\n(\n    File: ${1:myoutputfile.txt}\n);$0",
+    description: "Concatenates files on a server.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Concatenate-Files(
+    File: <text>,
+    [Directory: <text>],
+    [Include: <@(text)>],
+    [Exclude: <@(text)>],
+    [Encoding: <text>],
+    [Separator: <text>]
+);
+\`\`\`
+`
+  },
+  "Create-ZipFile": {
+    name: "Create-ZipFile",
+    signature: "Create-ZipFile(Name: <text>, Directory: <text>, [Overwrite: <true/false>]);",
+    snippet: "Create-ZipFile\n(\n    Overwrite: ${1:true},\n    Name: ${2:myZipFileName.zip},\n    Directory: ${3:c:\\\\sourceDir}\n);$0",
+    description: "Creates a zip file on a server.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Create-ZipFile(
+    Name: <text>,
+    Directory: <text>,
+    [Overwrite: <true/false>]
+);
+\`\`\`
+`
+  },
+  "Rename-File": {
+    name: "Rename-File",
+    signature: "Rename-File(From: <text>, To: <text>, [Overwrite: <true/false>]);",
+    snippet: "Rename-File\n(\n    Overwrite: ${1:true},\n    From: ${2:mySourceFile.txt},\n    To: ${3:myDestFile.txt}\n);$0",
+    description: "Renames a file on a server.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Rename-File(
+    From: <text>,
+    To: <text>,
+    [Overwrite: <true/false>]
+);
+\`\`\`
+`
+  },
+  "Transfer-Files": {
+    name: "Transfer-Files",
+    signature: "Transfer-Files([Include: <@(text)>], [Exclude: <@(text)>], [FromDirectory: <text>], [FromServer: <text>], ToDirectory: <text>, [ToServer: <text>], [DeleteTarget: <true/false>], [SetLastModifiedDate: <true/false>], [BatchSize: <integer>], [Verbose: <true/false>]);",
+    snippet: "Transfer-Files\n(\n    DeleteTarget: ${1:true},\n    ToDirectory: ${2:c:\\\\targetDir}\n);$0",
+    description: "Copies files from a source directory to a target directory.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Transfer-Files(
+    [Include: <@(text)>],
+    [Exclude: <@(text)>],
+    [FromDirectory: <text>],
+    [FromServer: <text>],
+    ToDirectory: <text>,
+    [ToServer: <text>],
+    [DeleteTarget: <true/false>],
+    [SetLastModifiedDate: <true/false>],
+    [BatchSize: <integer>],
+    [Verbose: <true/false>]
+);
+\`\`\`
+`
+  },
+  "Sign-Exe": {
+    name: "Sign-Exe",
+    signature: "Sign-Exe(SubjectName: <text>, [TimestampServer: <text>], [ContentDescription: <text>], [ContentUrl: <text>], Include: <@(text)>, [Exclude: <@(text)>], [SignToolPath: <text>], [SourceDirectory: <text>]);",
+    snippet: "Sign-Exe IncludeText\n(\n    SubjectName: ${1:mySubjectOfCertificate}\n);$0",
+    description: "Signs .exe or .dll files using an installed code signing certificate.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Sign-Exe(
+    SubjectName: <text>,
+    [TimestampServer: <text>],
+    [ContentDescription: <text>],
+    [ContentUrl: <text>],
+    Include: <@(text)>,
+    [Exclude: <@(text)>],
+    [SignToolPath: <text>],
+    [SourceDirectory: <text>]
+);
+\`\`\`
+`
+  },
+  "Collect-RpmPackages": {
+    name: "Collect-RpmPackages",
+    signature: "Collect-RpmPackages [DefaultArgument] ();",
+    snippet: "Collect-RpmPackages();$0",
+    description: "Collects the names and versions of .rpm packages installed on a server.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Collect-RpmPackages [DefaultArgument] ();
+\`\`\`
+`
+  },
+  "Sleep": {
     name: "Sleep",
     signature: "Sleep <integer>;",
     snippet: "Sleep ${1:seconds};$0",
@@ -183,6 +662,105 @@ Sleep 5;
 **Notes:**
 - The argument is an integer representing seconds.
 - Useful for adding delays between operations, such as waiting for a service to start or avoiding rate limits.
+`
+  },
+  "Restart-Server": {
+    name: "Restart-Server",
+    signature: "Restart-Server([After: <integer>], [MinimumDelay: <integer>]);",
+    snippet: "Restart-Server(\n    After: ${1:5},\n    MinimumDelay: ${2:15}\n);$0",
+    description: "Restarts a server and waits for it to become available again.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Restart-Server(
+    [After: <integer>],
+    [MinimumDelay: <integer>]
+);
+\`\`\`
+
+**Arguments:**
+- \`After\` - Number of seconds to wait before initiating the restart.
+- \`MinimumDelay\` - Number of seconds to wait after initiating restart before polling the server.
+
+**Notes:**
+- Default and minimum for \`After\` is 5 seconds.
+- Default and minimum for \`MinimumDelay\` is 15 seconds.
+- If \`MinimumDelay\` is too low, the operation could appear to succeed before restart begins.
+
+**Example:**
+\`\`\`otterscript
+Restart-Server(
+    After: 10
+);
+\`\`\`
+`
+  },
+  "Get-Asset": {
+    name: "Get-Asset",
+    signature: "Get-Asset(Name: <text>, [Raft: <text>], [Type: <integer>], [Overwrite: <true/false>], [To: <text>]);",
+    snippet: "Get-Asset ${1:assetName}\n(\n    Type: ${2:Module},\n    Raft: ${3:Raft},\n    Overwrite: ${4:false}\n);$0",
+    description: "Gets the specified asset file and saves it to the current working directory or target path.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Get-Asset(
+    Name: <text>,
+    [Raft: <text>],
+    [Type: <integer>],
+    [Overwrite: <true/false>],
+    [To: <text>]
+);
+\`\`\`
+
+**Arguments:**
+- \`Name\` (required) - Asset name.
+- \`Raft\` - Raft containing the asset.
+- \`Type\` - Asset type.
+- \`Overwrite\` - Whether to overwrite an existing file at destination.
+- \`To\` - Target file path to save as.
+
+**Examples:**
+\`\`\`otterscript
+# Gets the readme file from the current raft
+Get-Asset readme.md;
+
+Get-Asset myAsset
+(
+    Type: Module,
+    Raft: Raft,
+    Overwrite: false
+);
+\`\`\`
+`
+  },
+  "Release-Server": {
+    name: "Release-Server",
+    signature: "Release-Server(Server: <text>, [Role: <text>], [Verbose: <true/false>]);",
+    snippet: "Release-Server ${1:serverName}\n(\n    Role: ${2:build-servers},\n    Verbose: ${3:false}\n);$0",
+    description: "Releases a server from a resource pool if acquired previously in the execution.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Release-Server(
+    Server: <text>,
+    [Role: <text>],
+    [Verbose: <true/false>]
+);
+\`\`\`
+
+**Arguments:**
+- \`Server\` (required) - Server name to release.
+- \`Role\` - Server role / resource pool role.
+- \`Verbose\` - Whether to log verbose output.
+
+**Example:**
+\`\`\`otterscript
+# releases a server acquired earlier in a plan
+Release-Server(
+    Role: build-servers,
+    Server: $AcquiredServerName
+);
+\`\`\`
 `
   },
   "Apply-Template": {
@@ -243,11 +821,11 @@ Apply-Template hdars
 
 /** @type {DocsTable} */
 const syntaxDocs = {
-  swimString: {
+  "swimString": {
     name: "Swim string",
     signature: ">> ... >> or >==8> ... >==8> etc...",
-    documentation: "Multi-line unquoted string literal with matching fish sentinels.",
-    description: `
+    description: "Multi-line unquoted string literal with matching fish sentinels.",
+    documentation: `
 - Preserves line breaks
 - Quotes do not need escaping
 - Supports expression evaluation using \`$()\`
@@ -262,7 +840,7 @@ multiple lines
 `
   },
   // Template tags
-  templateOpen: {
+  "templateOpen": {
     name: "Template Open (<% ... %>)",
     signature: "<% ... %>",
     description: "Embed OtterScript code inside text templates.",
@@ -280,14 +858,14 @@ Used to embed OtterScript code inside text templates.
 \`\`\`
 `
   },
-  templateClose: {
+  "templateClose": {
     name: "Template Close (%>)",
     signature: "%>",
     description: "Closes a template code block.",
     documentation: "Closes a template code block started with `<%`"
   },
   // Expression delimiters
-  mapExpr: {
+  "mapExpr": {
     name: "Map Expression",
     signature: "%(key: value, key2: value2)",
     snippet: "(\n    ${1:key}: ${2:value}\n)",
@@ -306,7 +884,7 @@ $config = %(
 \`\`\`
 `
   },
-  vectorExpr: {
+  "vectorExpr": {
     name: "Vector Expression",
     signature: "@(value1, value2, value3)",
     description: "Creates a vector (array/list) literal.",
@@ -318,7 +896,7 @@ $first = @colors[0];
 \`\`\`
 `
   },
-  nestedEval: {
+  "nestedEval": {
     name: "Nested Evaluation",
     signature: "$(expression)",
     description: "Evaluates an expression inside a string.",
@@ -339,7 +917,7 @@ $message = "Value: $(@list[0])";
 
 /** @type {DocsTable} */
 const keywordDocs = {
-  'for': {
+  "for": {
     name: "for",
     signature: 'for server|role|deployable|directory "name" { ... }',
     description: "Sets the execution context for a block of statements.",
@@ -370,24 +948,24 @@ for server "web01" {
 }
 \`\`\`
 `
-},
-  'return': {
+  },
+  "return": {
     name: "return",
     signature: "return;",
     description: "Returns execution to the calling script.",
     documentation: `
 This has no elements; if this statement is found, the execution engine ends the current script and returns execution to the calling script, if any.
 `
-},
-  'local': {
+  },
+  "local": {
     name: "local",
     signature: "local $variable = value;",
     description: "Declares a local variable scoped to the current block.",
     documentation: `
 Local variables override outer variables of the same name.
 `
-},
-  'global': {
+  },
+  "global": {
     name: "global",
     description: "Declares or assigns a global variable.",
     documentation: `
@@ -397,7 +975,7 @@ global $var = value;
 \`\`\`
 `
   },
-  'continue': {
+  "continue": {
     name: "continue",
     signature: "continue;",
     snippet: "continue;",
@@ -406,7 +984,7 @@ global $var = value;
 If there is no enclosing iteration block, a warning is written to the execution log and execution continues.
 `
   },
-  'break': {
+  "break": {
     name: "break",
     signature: "break;",
     snippet: "break;",
@@ -416,7 +994,7 @@ When the engine encounters a break statement, it immediately terminates the curr
 If break is used outside of an iteration block, a warning will be written to the log, and no action will be taken.
 `
   },
-  'foreach': {
+  "foreach": {
     name: 'foreach',
     description: 'Iterates over items in a vector. Works in both OtterScript code and template tags.',
     documentation: `
@@ -447,7 +1025,7 @@ foreach $pkg in @AffectedPackages {
 \`\`\`
 `
   },
-  'in': {
+  "in": {
     name: "in",
     description: "Specifies the vector to iterate over in a foreach statement.",
     documentation: `
@@ -481,7 +1059,7 @@ foreach $item in @items {
 **Note:** The \`in\` keyword is only valid within a \`foreach\` statement and cannot be used elsewhere.
 `
   },
-  'if': {
+  "if": {
     name: "if",
     description: "Conditionally executes a block when an expression evaluates to true.",
     documentation: `
@@ -507,7 +1085,7 @@ if $PackageSize > 1000000 {
 - Can be combined with \`else\`
 `
   },
-  'else': {
+  "else": {
     name: "else",
     description: "Executes a block when the preceding if condition evaluates to false.",
     documentation: `
@@ -533,7 +1111,7 @@ if $EnvironmentName == "Production" {
 \`\`\`
 `
   },
-  try: {
+  "try": {
     name: "try",
     description: "Executes a block of statements and allows error handling via catch.",
     documentation: `
@@ -563,7 +1141,7 @@ try {
 - Control passes to \`catch\` on error
 `
   },
-  catch: {
+  "catch": {
     name: "catch",
     description: "Handles errors raised inside a try block.",
     documentation: `
@@ -583,7 +1161,7 @@ try {
 - Errors may be logged, handled, or rethrown using \`throw\`
 `
   },
-  throw: {
+  "throw": {
     name: "throw",
     description: "Explicitly raises an error.",
     documentation: `
@@ -603,10 +1181,12 @@ if !$PackageName {
 \`\`\`
 `
   },
-module: {
-  name: "module",
-  description: "Defines a reusable module with optional parameters and outputs.",
-  documentation: `
+  "module": {
+    name: "module",
+    signature: "module ModuleName <out $param=\"default\"> { ... }",
+    snippet: "module ${1:ModuleName} <${2:out \\$param=\"default\"}> {\n    ${3:# module body}\n}",
+    description: "Defines a reusable module with optional parameters and outputs.",
+    documentation: `
 Defines a reusable module that can be invoked using \`call\`.
 
 **Syntax:**
@@ -622,8 +1202,10 @@ module ModuleName <out $result = "default"> {
 - Modules do not execute until called
 `
   },
-  call: {
+  "call": {
     name: "call",
+    signature: "call ModuleName (param: value);",
+    snippet: "call ${1:ModuleName} (\n    ${2:param}: ${3:value}\n);",
     description: "Invokes a previously defined module.",
     documentation: `
 Invokes a module defined using the \`module\` keyword.
@@ -641,7 +1223,7 @@ call ModuleName (
 - Output parameters are assigned to variables
 `
   },
-  with: {
+  "with": {
     name: "with",
     description: "Executes a block with specific execution directives applied.",
     documentation: `
@@ -666,7 +1248,7 @@ with retry=3, timeout=30 {
 - Nested \`with\` blocks are allowed
 `
   },
-  set: {
+  "set": {
     name: "set",
     description: "Assigns a value to a variable.",
     documentation: `
@@ -697,7 +1279,7 @@ raise-error "message";
 - Similar in effect to \`throw\`
 `
   },
-  await: {
+  "await": {
     name: "await",
     description: "Pauses execution until asynchronous blocks have completed.",
     documentation: `
@@ -713,7 +1295,7 @@ await TokenName;
 - Commonly used with asynchronous execution patterns
 `
   },
-  warn: {
+  "warn": {
     name: "warn",
     description: "Sets the execution status to Warn.",
     documentation: `
@@ -736,7 +1318,7 @@ catch
 - Commonly used inside \`catch\` blocks
 `
   },
-  fail: {
+  "fail": {
     name: "fail",
     description: "Sets the execution status to Fail.",
     documentation: `
@@ -781,49 +1363,40 @@ force normal;
 // VARIABLE DOCS (ProGet / Execution Context)
 // ============================================================
 
+/** Shared documentation footer for basic ProGet context variables. */
+const PROGET_VAR_DOC = "\n**Available in:** ProGet\n";
+
 /** @type {DocsTable} */
 const variableDocs = {
   "BuildId": {
     name: "$BuildId",
     description: "The numeric ID of the current build.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "BuildNumber": {
     name: "$BuildNumber",
     description: "The display number of the current build.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "BuildProjectName": {
     name: "$BuildProjectName",
     description: "The name of the project associated with the build.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "BuildReleaseNumber": {
     name: "$BuildReleaseNumber",
     description: "The release number associated with the current build.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "FeedId": {
     name: "$FeedId",
     description: "The unique identifier of the feed in scope.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "FeedName": {
     name: "$FeedName",
     description: "The name of the feed in scope.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "FeedType": {
     name: "$FeedType",
@@ -845,7 +1418,6 @@ const variableDocs = {
 - helm
 - maven(Java)
 - npm
-- npm
 - nuget
 - powershell
 - pypi
@@ -860,30 +1432,22 @@ const variableDocs = {
   "NotifierId": {
     name: "$NotifierId",
     description: "The unique identifier of the notifier handling the event.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "NotifierName": {
     name: "$NotifierName",
     description: "The name of the notifier handling the event.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "PackageComplianceDetails": {
     name: "$PackageComplianceDetails",
     description: "Detailed compliance information for the package.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "PackageComplianceResult": {
     name: "$PackageComplianceResult",
     description: "The overall compliance result for the package.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "PackageEvent": {
     name: "$PackageEvent",
@@ -910,30 +1474,22 @@ const variableDocs = {
   "PackageGroup": {
     name: "$PackageGroup",
     description: "The package group associated with the event.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "PackageId": {
     name: "$PackageId",
     description: "The identifier of the affected package.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "PackageName": {
     name: "$PackageName",
     description: "The name of the affected package.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "PackageSize": {
     name: "$PackageSize",
     description: "The size of the affected package in bytes.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "PackageVersion": {
     name: "$PackageVersion",
@@ -950,44 +1506,32 @@ const variableDocs = {
   "UserName": {
     name: "$UserName",
     description: "The name of the user associated with the event.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "VulnerabilityId": {
     name: "$VulnerabilityId",
     description: "The identifier of the vulnerability.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "VulnerabilityScore": {
     name: "$VulnerabilityScore",
     description: "The numeric score assigned to the vulnerability.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "VulnerabilitySeverity": {
     name: "$VulnerabilitySeverity",
     description: "The severity classification of the vulnerability.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "VulnerabilitySummary": {
     name: "$VulnerabilitySummary",
     description: "A short summary of the vulnerability.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "WebBaseUrl": {
     name: "$WebBaseUrl",
     description: "The base URL of the ProGet web application.",
-    documentation: `
-**Available in:** ProGet
-`
+    documentation: PROGET_VAR_DOC
   },
   "WorkingDirectory": {
     name: "$WorkingDirectory",
@@ -1004,7 +1548,7 @@ const variableDocs = {
 
 /** @type {DocsTable} */
 const scalarFunctionDocs = {
-  ToJson: {
+  "ToJson": {
     name: "$ToJson",
     signature: "$ToJson(data)",
     snippet: '\\$ToJson(${1:data})${0}',
@@ -1038,12 +1582,12 @@ $json = $ToJson(%(
 - Scalars → JSON strings
 `,
   },
-  HtmlEncode: {
-      name: "$HtmlEncode",
-      signature: "$HtmlEncode(text)",
-      snippet: "\\$HtmlEncode(${1:text})",
-      description: "Encodes a string for safe use in HTML.",
-      documentation: `
+  "HtmlEncode": {
+    name: "$HtmlEncode",
+    signature: "$HtmlEncode(text)",
+    snippet: "\\$HtmlEncode(${1:text})",
+    description: "Encodes a string for safe use in HTML.",
+    documentation: `
 **Parameters:**
 - \`text\` - The string to HTML-encode
 
@@ -1056,7 +1600,7 @@ $encoded = $HtmlEncode("<script>alert('xss')</script>");
 \`\`\`
 `,
   },
-  UrlEncode: {
+  "UrlEncode": {
     name: "$UrlEncode",
     signature: "$UrlEncode(text)",
     snippet: "\\$UrlEncode(${1:text})",
@@ -1073,7 +1617,7 @@ $url = "https://example.com/search?q=" + $UrlEncode($query);
 \`\`\`
 `,
   },
-  PathCombine: {
+  "PathCombine": {
     name: "$PathCombine",
     signature: "$PathCombine(path1, path2, ...)",
     snippet: "\\$PathCombine(${1:path1}, ${2:path2})",
@@ -1093,7 +1637,7 @@ $fullPath = $PathCombine("C:\\Websites", "MyApp", "web.config");
 \`\`\`
 `,
   },
-  Eval: {
+  "Eval": {
     name: "$Eval",
     signature: "$Eval(expression)",
     snippet: "\\$Eval(${1:expression})",
@@ -1112,7 +1656,7 @@ $result = $Eval($template);  # Expands $name
 `,
   },
   // String Manipulation Functions
-  ToLower: {
+  "ToLower": {
     name: "$ToLower",
     signature: "$ToLower(text)",
     snippet: "\\$ToLower(${1:text})",
@@ -1130,7 +1674,7 @@ $lower = $ToLower("Hello World");
 \`\`\`
 `,
   },
-  ToUpper: {
+  "ToUpper": {
     name: "$ToUpper",
     signature: "$ToUpper(text)",
     snippet: "\\$ToUpper(${1:text})",
@@ -1148,7 +1692,7 @@ $upper = $ToUpper("Hello World");
 \`\`\`
 `,
   },
-  Trim: {
+  "Trim": {
     name: "$Trim",
     signature: "$Trim(text)",
     snippet: "\\$Trim(${1:text})",
@@ -1168,7 +1712,7 @@ $trimmed = $Trim("  hello  ");
 \`\`\`
 `,
   },
-  Substring: {
+  "Substring": {
     name: "$Substring",
     signature: "$Substring(text, startIndex, length)",
     snippet: "\\$Substring(${1:text}, ${2:startIndex}, ${3: length})",
@@ -1190,7 +1734,7 @@ $sub = $Substring("Hello World", 6, 5);
 \`\`\`
 `,
   },
-  Replace: {
+  "Replace": {
     name: "$Replace",
     signature: "$Replace(text, oldValue, newValue, [ignoreCase])",
     snippet: "\\$Replace(${1:text}, ${2:oldValue}, ${3:newValue}, ${4|false,true|})",
@@ -1213,7 +1757,7 @@ $result = $Replace("Hello World", "World", "Otter");
 \`\`\`
 `,
   },
-  Join: {
+  "Join": {
     name: "$Join",
     signature: "$Join(separator, vector)",
     snippet: '\\$Join("${1:, }", @${2:vector})',
@@ -1235,7 +1779,7 @@ $joined = $Join(", ", @("apple", "banana", "cherry"));
 `,
   },
   // Date and Time Functions
-  Date: {
+  "Date": {
     name: '$Date',
     signature: "$Date([format])",
     snippet: "\\$Date(${1:format})",
@@ -1264,7 +1808,7 @@ $sortable = $Date("s");
 \`\`\`
 `
   },
-  DateUtc: {
+  "DateUtc": {
     name: "$DateUtc",
     signature: "$DateUtc([format])",
     snippet: "\\$DateUtc(${1:format})",
@@ -1289,7 +1833,7 @@ $customUtc = $DateUtc("yyyy-MM-dd HH:mm:ss");
 `
   },
   // Encoding Functions
-  Base64Encode: {
+  "Base64Encode": {
     name: "$Base64Encode",
     signature: "$Base64Encode(text)",
     snippet: "\\$Base64Encode(${1:text})",
@@ -1309,7 +1853,7 @@ $encoded = $Base64Encode("Hello World");
 \`\`\`
 `,
   },
-  Base64Decode: {
+  "Base64Decode": {
     name: "$Base64Decode",
     signature: "$Base64Decode(base64Text)",
     snippet: "\\$Base64Decode(${1:base64Text})",
@@ -1330,7 +1874,7 @@ $decoded = $Base64Decode("SGVsbG8gV29ybGQ=");
 `,
   },
   // JSON Functions
-  FromJson: {
+  "FromJson": {
     name: "$FromJson",
     signature: "$FromJson(jsonString)",
     snippet: '\\$FromJson("${1:jsonString}");$0',
@@ -1352,7 +1896,7 @@ $name = $data[name];
 `,
   },
   // File System Functions
-  FileExists: {
+  "FileExists": {
     name: "$FileExists",
     signature: "$FileExists(filePath)",
     snippet: '\\$FileExists("${1:filePath}");$0',
@@ -1373,7 +1917,7 @@ if $FileExists("C:\\config\\app.config") {
 \`\`\`
 `,
   },
-  DirectoryExists: {
+  "DirectoryExists": {
     name: "$DirectoryExists",
     signature: "$DirectoryExists(directoryPath)",
     snippet: '\\$DirectoryExists("${1:directoryPath}");$0',
@@ -1395,7 +1939,7 @@ if $DirectoryExists("C:\\Websites") {
 `,
   },
   // Math Functions
-  Expr: {
+  "Expr": {
     name: "$Expr",
     signature: "$Expr(expression)",
     snippet: "\\$Expr(\"${1:expression}\")",
@@ -1415,7 +1959,7 @@ $result = $Expr("(5 + 3) * 2");
 \`\`\`
 `,
   },
-  Increment: {
+  "Increment": {
     name: "$Increment",
     signature: "$Increment(value)",
     snippet: "\\$Increment(${1:variable})",
@@ -1436,7 +1980,7 @@ $count = $Increment($count);
 \`\`\`
 `,
   },
-  Decrement: {
+  "Decrement": {
     name: "$Decrement",
     signature: "$Decrement(value)",
     snippet: "\\$Decrement(${1:variable})",
@@ -1457,7 +2001,7 @@ $count = $Decrement($count);
 \`\`\`
 `,
   },
-  Abs: {
+  "Abs": {
     name: "$Abs",
     signature: "$Abs(value)",
     snippet: "\\$Abs(${1:value})",
@@ -1477,7 +2021,7 @@ $result = $Abs(-10);
 \`\`\`
 `,
   },
-  Ceiling: {
+  "Ceiling": {
     name: "$Ceiling",
     signature: "$Ceiling(value)",
     snippet: "\\$Ceiling(${1:value})",
@@ -1497,7 +2041,7 @@ $result = $Ceiling(3.2);
 \`\`\`
 `,
   },
-  Floor: {
+  "Floor": {
     name: "$Floor",
     signature: "$Floor(value)",
     snippet: "\\$Floor(${1:value})",
@@ -1517,7 +2061,7 @@ $result = $Floor(3.8);
 \`\`\`
 `,
   },
-  Compare: {
+  "Compare": {
     name: "$Compare",
     signature: "$Compare(arg1, operator, arg2, [asNumber])",
     snippet: "\\$Compare(${1:value1}, ${2|<,>,<=,>=,=,!=|}, ${3:value2}${4:, true})",
@@ -1526,10 +2070,10 @@ $result = $Floor(3.8);
 Compares two scalar values using the specified operator.
 
 **Parameters:**
-- \`arg1\` – Left-hand value
-- \`operator\` – One of: \`<\`, \`>\`, \`<=\`, \`>=\`, \`=\`, \`!=\`
-- \`arg2\` – Right-hand value
-- \`asNumber\` – (Optional) Forces numeric comparison when \`true\`
+- \`arg1\` - Left-hand value
+- \`operator\` - One of: \`<\`, \`>\`, \`<=\`, \`>=\`, \`=\`, \`!=\`
+- \`arg2\` - Right-hand value
+- \`asNumber\` - (Optional) Forces numeric comparison when \`true\`
 
 **Behavior:**
 - If both values can be parsed as numbers, a numeric comparison is used
@@ -1549,7 +2093,7 @@ $Compare("07", >, "6", true)
 `
   },
   // Regular Expression Functions
-  MatchesRegex: {
+  "MatchesRegex": {
     name: "$MatchesRegex",
     signature: "$MatchesRegex(text, pattern)",
     snippet: "\\$MatchesRegex(${1:text}, \"${2:pattern}\")",
@@ -1571,7 +2115,7 @@ if $MatchesRegex($email, "^[\\w\\.]+@[\\w\\.]+\\.\\w+$") {
 \`\`\`
 `,
   },
-  RegexReplace: {
+  "RegexReplace": {
     name: "$RegexReplace",
     signature: "$RegexReplace(text, pattern, replacement)",
     snippet: "\\$RegexReplace(${1:text}, \"${2:pattern}\", \"${3:replacement}\")",
@@ -1594,7 +2138,7 @@ $result = $RegexReplace("Hello 123 World", "\\d+", "XXX");
 `,
   },
   // Server/Environment Information Functions
-  ServerName: {
+  "ServerName": {
     name: "$ServerName",
     signature: "$ServerName()",
     snippet: "\\$ServerName()",
@@ -1610,7 +2154,7 @@ Log-Information "Running on server: $ServerName";
 \`\`\`
 `,
   },
-  EnvironmentName: {
+  "EnvironmentName": {
     name: "$EnvironmentName",
     signature: "$EnvironmentName()",
     snippet: "\\$EnvironmentName()",
@@ -1629,7 +2173,7 @@ if $EnvironmentName == "Production" {
 `,
   },
   // List/Vector Functions
-  ListCount: {
+  "ListCount": {
     name: "$ListCount",
     signature: "$ListCount(vector)",
     snippet: "\\$ListCount(${1:vector})",
@@ -1650,7 +2194,7 @@ $count = $ListCount($items);
 \`\`\`
 `,
   },
-  ListItem: {
+  "ListItem": {
     name: "$ListItem",
     signature: "$ListItem(vector, index)",
     snippet: "\\$ListItem(${1:vector}, ${2:index})",
@@ -1673,7 +2217,7 @@ $second = $ListItem($items, 1);
 `
   },
   // ProGet Functions
-  EncodeBasicAuth: {
+  "EncodeBasicAuth": {
     name: "$EncodeBasicAuth",
     signature: "$EncodeBasicAuth(userName, password)",
     snippet: "\\$EncodeBasicAuth(\"${1:userName}\", \"${2:password}\")",
@@ -1694,7 +2238,7 @@ $auth = $EncodeBasicAuth("admin", "secret");
 \`\`\`
 `
   },
-  PackageHash: {
+  "PackageHash": {
     name: "$PackageHash",
     signature: "$PackageHash(format, algorithm)",
     snippet: "\\$PackageHash(\"${1|hex,base64|}\", \"${2|sha512,sha1|}\")",
@@ -1714,7 +2258,7 @@ $hash = $PackageHash("hex", "sha512");
 \`\`\`
 `
   },
-  PackageProperty: {
+  "PackageProperty": {
     name: "$PackageProperty",
     signature: "$PackageProperty(name, default)",
     snippet: "\\$PackageProperty(\"${1:propertyName}\", \"${2:defaultValue}\")",
@@ -1742,7 +2286,7 @@ $description = $PackageProperty("myPropertyName", "No property defined");
 
 /** @type {DocsTable} */
 const vectorFunctionDocs = {
-  'Split': {
+  "Split": {
     name: '@Split',
     signature: '@Split(Text, Separator, [Count])',
     snippet: "@Split(\"${1:text}\", \"${2:,}\"${3:, ${4:count}})",
@@ -1765,7 +2309,7 @@ const vectorFunctionDocs = {
 \`\`\`
 `
   },
-  'ListConcat': {
+  "ListConcat": {
     name: '@ListConcat',
     signature: '@ListConcat(list1, list2, ...)',
     snippet: "@ListConcat(${1:@list1}, ${2:@list2})",
@@ -1783,14 +2327,12 @@ const vectorFunctionDocs = {
 \`\`\`
 `
   },
-  'ListInsert': {
+  "ListInsert": {
     name: '@ListInsert',
     signature: '@ListInsert(list, item, index)',
     snippet: "@ListInsert(${1:@list}, \"${2:item}\", ${3:index})",
-    description: 'Inserts an item into a list.',
+    description: 'Inserts an item into a list at the specified index.',
     documentation: `
-Inserts an item into a list at the specified index.
-
 **Parameters:**
 - \`list\` - The list to modify
 - \`item\` - The item to insert
@@ -1806,14 +2348,12 @@ Inserts an item into a list at the specified index.
 \`\`\`
 `
   },
-  'ListRemove': {
+  "ListRemove": {
     name: '@ListRemove',
     signature: '@ListRemove(list, index)',
     snippet: "@ListRemove(${1:@list}, ${2:index})",
-    description: 'Removes an item from a list.',
+    description: 'Removes an item from a list at the specified index.',
     documentation: `
-Removes an item from a list at the specified index.
-
 **Parameters:**
 - \`list\` - The list to modify
 - \`index\` - The zero-based position to remove
@@ -1828,14 +2368,12 @@ Removes an item from a list at the specified index.
 \`\`\`
 `
   },
-  'ListSet': {
+  "ListSet": {
     name: '@ListSet',
     signature: '@ListSet(list, index, item)',
-    snippet: "@ListSet(${1:@list}, ${2:index},\"${3:item}\")",
+    snippet: "@ListSet(${1:@list}, ${2:index}, \"${3:item}\")",
     description: 'Updates the value at a given position in the list to a new value.',
     documentation: `
-Updates the value at a given position in the list to a new value.
-
 **Parameters:**
 - \`list\` - The list to modify
 - \`index\` - The zero-based position to update
@@ -1851,14 +2389,12 @@ Updates the value at a given position in the list to a new value.
 \`\`\`
 `
   },
-  'MapKeys': {
+  "MapKeys": {
     name: '@MapKeys',
     signature: '@MapKeys(map)',
     snippet: "@MapKeys(${1:@map})",
-    description: 'Lists the keys of a map.',
+    description: 'Lists the keys of a map as a vector.',
     documentation: `
-Lists the keys of a map as a vector.
-
 **Parameters:**
 - \`map\` - The map to extract keys from
 
@@ -1872,14 +2408,12 @@ Lists the keys of a map as a vector.
 \`\`\`
 `
   },
-  'Range': {
+  "Range": {
     name: '@Range',
     signature: '@Range(start, count)',
     snippet: "@Range(${1:start}, ${2:count})",
     description: 'Returns a range of integers starting from a specified value.',
     documentation: `
-Returns a range of integers starting from a specified value.
-
 **Parameters:**
 - \`start\` - The starting integer
 - \`count\` - The number of integers to generate
@@ -1893,14 +2427,12 @@ Returns a range of integers starting from a specified value.
 \`\`\`
 `
   },
-  'RegexFind': {
+  "RegexFind": {
     name: '@RegexFind',
     signature: '@RegexFind(text, matchExpression, [matchGroup])',
     snippet: "@RegexFind(${1:text}, ${2:matchExpression}${3:, ${4:matchGroup}})",
     description: 'Finds all matches of a regular expression in a string, optionally returning only a matched group.',
     documentation: `
-Finds all matches of a regular expression in a string, optionally returning only a matched group.
-
 **Parameters:**
 - \`text\` - The string to search
 - \`matchExpression\` - The regular expression pattern
@@ -1916,7 +2448,7 @@ Finds all matches of a regular expression in a string, optionally returning only
 `
   },
   // Vector Variables (ProGet)
-  'AffectedPackages': {
+  "AffectedPackages": {
     name: '@AffectedPackages',
     signature: '@AffectedPackages',
     description: 'Returns a list of packages affected by the vulnerability in the current scope.',
@@ -1933,7 +2465,7 @@ Finds all matches of a regular expression in a string, optionally returning only
 \`\`\`
 `
   },
-  'ApiKeys': {
+  "ApiKeys": {
     name: '@ApiKeys',
     signature: '@ApiKeys',
     description: 'Returns a list of API Keys in the current scope.',
@@ -1953,7 +2485,7 @@ foreach $key in @ApiKeys {
 \`\`\`
 `
   },
-  'BuildIssues': {
+  "BuildIssues": {
     name: '@BuildIssues',
     signature: '@BuildIssues(includeClosed)',
     description: 'Returns a list of issues on the build in the current scope.',

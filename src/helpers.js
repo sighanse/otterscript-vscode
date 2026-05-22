@@ -23,7 +23,8 @@ const vscode = require("vscode");
  * @returns {{
  *   completionEnabled: boolean,
  *   hoverEnabled: boolean,
- *   signatureHelpEnabled: boolean
+ *   signatureHelpEnabled: boolean,
+ *   codeLensEnabled: boolean
  * }}
  *
  * @example
@@ -39,7 +40,8 @@ function loadConfig() {
   return {
     completionEnabled: config.get("completion.enable", true),
     hoverEnabled: config.get("hover.enable", true),
-    signatureHelpEnabled: config.get("signatureHelp.enable", true)
+    signatureHelpEnabled: config.get("signatureHelp.enable", true),
+    codeLensEnabled: config.get("codeLens.enable", true)
   };
 }
 
@@ -96,6 +98,16 @@ function getOutputChannel() {
 }
 
 /**
+ * Appends a line to the cached output channel with lazy initialization.
+ *
+ * @param {string} line
+ * @returns {void}
+ */
+function appendOutputLine(line) {
+  getOutputChannel().appendLine(line);
+}
+
+/**
  * Centralized logger for OtterScript Language extension.
  *
  * @example
@@ -109,21 +121,21 @@ const log = {
   info: (...args) => {
     const now = timestamp();
     console.log(LOGPREFIX, `[${now}]`, ...args);
-    getOutputChannel().appendLine(`[${now}] ${args.join(' ')}`);
+    appendOutputLine(`[${now}] ${args.join(' ')}`);
   },
 
   /** @param {...any} args - @example log.warn('Missing field') */
   warn: (...args) => {
     const now = timestamp();
     console.warn(LOGPREFIX, `[${now}]`, ...args);
-    getOutputChannel().appendLine(`⚠️ [${now}] ${args.join(' ')}`);
+    appendOutputLine(`⚠️ [${now}] ${args.join(' ')}`);
   },
 
   /** @param {...any} args - @example log.error('Failed', err) */
   error: (...args) => {
     const now = timestamp();
     console.error(LOGPREFIX, `[${now}]`, ...args);
-    getOutputChannel().appendLine(`❌ [${now}] ${args.join(' ')}`);
+    appendOutputLine(`❌ [${now}] ${args.join(' ')}`);
   },
 
   /** @param {...any} args - @example log.debug('Processing', lineIndex) */
@@ -206,8 +218,7 @@ function validateDocs(label, docsTable) {
  */
 function isValidCompletionPosition(document, position, completionEnabled) {
   if (!completionEnabled) return false;
-  const line = document.lineAt(position.line).text;
-  return !isInStringOrComment(line, position.character);
+  return !isInStringOrCommentDoc(document, position);
 }
 
 // ============================================================
@@ -261,18 +272,384 @@ function createRegexPatterns(knownOperations) {
   };
 }
 
+/**
+ * Token regex for module names used by word-range lookups.
+ *
+ * @readonly
+ * @type {RegExp}
+ */
+const MODULE_NAME_TOKEN_REGEX = /[A-Za-z][\w-]*/;
+
+const MODULE_DECLARATION_REGEX = /^\s*module\s+([A-Za-z][\w-]*)/;
+const MODULE_CALL_TARGET_REGEX = /\bcall\s+(?:[A-Za-z][\w-]*::)?([A-Za-z][\w-]*)\b/;
+const MODULE_CALL_TARGET_GLOBAL_REGEX = new RegExp(MODULE_CALL_TARGET_REGEX.source, "g");
+const MODULE_DECL_PREFIX_REGEX = /^\s*module\s+$/i;
+const MODULE_CALL_PREFIX_REGEX = /\bcall\s+(?:[A-Za-z][\w-]*::)?$/i;
+
+/**
+ * @typedef {{ name: string, range: vscode.Range, lineRange: vscode.Range }} ModuleDeclaration
+ */
+
+/**
+ * @typedef {{
+ *   version: number,
+ *   declarations: ModuleDeclaration[],
+ *   refsByName: Map<string, vscode.Location[]>
+ * }} ModuleInfoCacheEntry
+ */
+
+/** @type {Map<string, ModuleInfoCacheEntry>} */
+const moduleInfoCache = new Map();
+
+/**
+ * @typedef {{
+ *   inString: boolean,
+ *   quote: string | null,
+ *   inBlockComment: boolean,
+ *   swimDelimiter: string | null
+ * }} CodeScanState
+ */
+
+/**
+ * Returns true when a quote at the given index is not escaped.
+ *
+ * @param {string} text
+ * @param {number} index
+ * @returns {boolean}
+ */
+function isUnescapedQuoteAt(text, index) {
+  let backslashCount = 0;
+  for (let i = index - 1; i >= 0 && text[i] === "\\"; i--) {
+    backslashCount++;
+  }
+  return backslashCount % 2 === 0;
+}
+
+/**
+ * Returns true when the current word position is in a module declaration context.
+ *
+ * @param {string} lineText - Full source line text
+ * @param {number} wordStart - Start index of the current word
+ * @returns {boolean}
+ */
+function isModuleDeclarationContext(lineText, wordStart) {
+  const beforeWord = lineText.slice(0, wordStart);
+  return MODULE_DECL_PREFIX_REGEX.test(beforeWord);
+}
+
+/**
+ * Returns true when the current word position is in a module call context.
+ *
+ * @param {string} lineText - Full source line text
+ * @param {number} wordStart - Start index of the current word
+ * @returns {boolean}
+ */
+function isModuleCallContext(lineText, wordStart) {
+  const beforeWord = lineText.slice(0, wordStart);
+  return MODULE_CALL_PREFIX_REGEX.test(beforeWord);
+}
+
+/**
+ * Scans a document and returns all module declarations.
+ *
+ * @param {vscode.TextDocument} document
+ * @returns {ModuleDeclaration[]}
+ */
+function getModuleDeclarations(document) {
+  return getModuleInfo(document).declarations;
+}
+
+/**
+ * Creates a fresh code-scan state object.
+ *
+ * @returns {CodeScanState}
+ */
+function createCodeScanState() {
+  return {
+    inString: false,
+    quote: null,
+    inBlockComment: false,
+    swimDelimiter: null,
+  };
+}
+
+/**
+ * Core line scanner shared by {@link maskNonCodeSpans} and {@link advanceScanState}.
+ *
+ * Advances `state` by processing every character of `lineText`.  When `chars`
+ * is non-null it is treated as a split-string output buffer: every character
+ * that belongs to a non-code span is replaced with a space in that buffer.
+ *
+ * @param {string} lineText
+ * @param {CodeScanState} state - Mutated in place.
+ * @param {string[] | null} chars - Output buffer, or null for state-only mode.
+ * @returns {void}
+ * @private
+ */
+function scanLineState(lineText, state, chars) {
+  for (let i = 0; i < lineText.length; i++) {
+    const ch = lineText[i];
+
+    if (state.inBlockComment) {
+      if (chars) chars[i] = " ";
+      if (ch === "*" && lineText[i + 1] === "/") {
+        if (chars) chars[i + 1] = " ";
+        state.inBlockComment = false;
+        i++;
+      }
+      continue;
+    }
+
+    if (state.swimDelimiter) {
+      if (chars) chars[i] = " ";
+      if (lineText.startsWith(state.swimDelimiter, i)) {
+        if (chars) {
+          for (let j = 0; j < state.swimDelimiter.length; j++) {
+            if (i + j < chars.length) chars[i + j] = " ";
+          }
+        }
+        i += state.swimDelimiter.length - 1;
+        state.swimDelimiter = null;
+      }
+      continue;
+    }
+
+    if (state.inString) {
+      if (chars) chars[i] = " ";
+      if (ch === state.quote && isUnescapedQuoteAt(lineText, i)) {
+        state.inString = false;
+        state.quote = null;
+      }
+      continue;
+    }
+
+    if (ch === "/" && lineText[i + 1] === "*") {
+      if (chars) {
+        chars[i] = " ";
+        if (i + 1 < chars.length) chars[i + 1] = " ";
+      }
+      state.inBlockComment = true;
+      i++;
+      continue;
+    }
+
+    if (ch === ">") {
+      const swimMatch = lineText.slice(i).match(/^>[^>]{0,5}>/);
+      if (swimMatch) {
+        const delimiter = swimMatch[0];
+        if (chars) {
+          for (let j = 0; j < delimiter.length; j++) {
+            if (i + j < chars.length) chars[i + j] = " ";
+          }
+        }
+        state.swimDelimiter = delimiter;
+        i += delimiter.length - 1;
+        continue;
+      }
+    }
+
+    if (ch === '"' || ch === "'") {
+      if (chars) chars[i] = " ";
+      state.inString = true;
+      state.quote = ch;
+      continue;
+    }
+
+    if (ch === "#") {
+      if (chars) { for (let j = i; j < chars.length; j++) chars[j] = " "; }
+      break;
+    }
+
+    if (ch === "/" && lineText[i + 1] === "/") {
+      if (chars) { for (let j = i; j < chars.length; j++) chars[j] = " "; }
+      break;
+    }
+  }
+}
+
+/**
+ * Produces a length-preserving mask of non-code spans.
+ *
+ * Masked spans include strings, line comments, block comments, and swim-strings.
+ * State is carried across lines for block comments, strings, and swim-strings.
+ *
+ * @param {string} lineText
+ * @param {CodeScanState} state
+ * @returns {string}
+ */
+function maskNonCodeSpans(lineText, state) {
+  const chars = lineText.split("");
+  scanLineState(lineText, state, chars);
+  return chars.join("");
+}
+
+/**
+ * Builds and caches module declarations and module call references for a document version.
+ *
+ * @param {vscode.TextDocument} document
+ * @returns {{ declarations: ModuleDeclaration[], refsByName: Map<string, vscode.Location[]> }}
+ */
+function getModuleInfo(document) {
+  const cacheKey = document.uri.toString();
+  const cached = moduleInfoCache.get(cacheKey);
+  if (cached && cached.version === document.version) {
+    return { declarations: cached.declarations, refsByName: cached.refsByName };
+  }
+
+  /** @type {ModuleDeclaration[]} */
+  const declarations = [];
+  /** @type {Map<string, vscode.Location[]>} */
+  const refsByName = new Map();
+  const scanState = createCodeScanState();
+
+  for (let line = 0; line < document.lineCount; line++) {
+    const lineText = document.lineAt(line).text;
+    const maskedLineText = maskNonCodeSpans(lineText, scanState);
+
+    const declMatch = MODULE_DECLARATION_REGEX.exec(maskedLineText);
+    if (declMatch) {
+      const name = declMatch[1];
+      const nameStart = maskedLineText.indexOf(name, declMatch.index);
+      const range = new vscode.Range(
+        new vscode.Position(line, nameStart),
+        new vscode.Position(line, nameStart + name.length)
+      );
+
+      declarations.push({ name, range, lineRange: document.lineAt(line).range });
+    }
+
+    MODULE_CALL_TARGET_GLOBAL_REGEX.lastIndex = 0;
+    for (const callMatch of maskedLineText.matchAll(MODULE_CALL_TARGET_GLOBAL_REGEX)) {
+      const moduleName = callMatch[1];
+      if (typeof moduleName !== "string" || typeof callMatch.index !== "number") {
+        continue;
+      }
+
+      const start = callMatch.index + callMatch[0].indexOf(moduleName);
+      const range = new vscode.Range(
+        new vscode.Position(line, start),
+        new vscode.Position(line, start + moduleName.length)
+      );
+      const location = new vscode.Location(document.uri, range);
+
+      const existing = refsByName.get(moduleName);
+      if (existing) {
+        existing.push(location);
+      } else {
+        refsByName.set(moduleName, [location]);
+      }
+    }
+  }
+
+  moduleInfoCache.set(cacheKey, {
+    version: document.version,
+    declarations,
+    refsByName
+  });
+
+  return { declarations, refsByName };
+}
+
+/**
+ * Finds the declaration range of a module in the document.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {string} moduleName
+ * @returns {vscode.Range | null}
+ */
+function findModuleDeclarationRange(document, moduleName) {
+  const { declarations } = getModuleInfo(document);
+  const declaration = declarations.find(entry => entry.name === moduleName);
+  return declaration?.range ?? null;
+}
+
+/**
+ * Returns module call references by name from cached module analysis.
+ *
+ * This reuses `getModuleInfo(document)` and optionally filters to a subset
+ * of module names.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {ReadonlySet<string>} [allowedModuleNames] - Optional filter of module names to include
+ * @returns {Map<string, vscode.Location[]>}
+ */
+function getModuleCallReferencesByName(document, allowedModuleNames) {
+  const { refsByName } = getModuleInfo(document);
+  if (!allowedModuleNames) {
+    return refsByName;
+  }
+
+  /** @type {Map<string, vscode.Location[]>} */
+  const filtered = new Map();
+  for (const moduleName of allowedModuleNames) {
+    const refs = refsByName.get(moduleName);
+    if (refs) {
+      filtered.set(moduleName, refs);
+    }
+  }
+
+  return filtered;
+}
+
+/**
+ * Clears cached module info for a document URI.
+ *
+ * @param {import('vscode').Uri} uri
+ * @returns {void}
+ */
+function clearModuleInfoCache(uri) {
+  moduleInfoCache.delete(uri.toString());
+}
+
+/**
+ * Finds references to a module declaration and module calls in the document.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {string} moduleName
+ * @param {boolean} includeDeclaration
+ * @returns {vscode.Location[]}
+ */
+function findModuleReferences(document, moduleName, includeDeclaration) {
+  /** @type {vscode.Location[]} */
+  const locations = [];
+
+  const { declarations, refsByName } = getModuleInfo(document);
+
+  if (includeDeclaration) {
+    const declaration = declarations.find(entry => entry.name === moduleName);
+    if (declaration) {
+      locations.push(new vscode.Location(document.uri, declaration.range));
+    }
+  }
+
+  const callRefs = refsByName.get(moduleName);
+  if (callRefs) {
+    locations.push(...callRefs);
+  }
+
+  return locations;
+}
+
 // ============================================================
 // STRING & COMMENT DETECTION
 // ============================================================
 
 /**
- * Returns true if the given position is inside a quoted string
- * or a line comment.
+ * Returns true if the given position is inside non-code text on the line.
  *
- * This uses a fast, best-effort heuristic and does not attempt
- * full parsing.
+ * This includes quoted strings, line comments, block comments, and
+ * swim-string spans that are detectable from the current line prefix.
+ *
+ * **Cross-line accuracy:** For block comments and swim-strings that span
+ * multiple lines, pass a `CodeScanState` pre-seeded by scanning all preceding
+ * lines via {@link maskNonCodeSpans}.  Without it, this function only detects
+ * spans that opened on the same line as `position`.
+ *
  * @param {string} line - The full line of text
  * @param {number} position - Character position within the line (0-indexed)
+ * @param {CodeScanState} [initialState] - Optional scan state carried in from
+ *   previous lines.  A shallow copy is taken so the caller's object is not
+ *   mutated.  Defaults to a fresh state when omitted.
  * @returns {boolean} true if position is inside string/comment, false otherwise
  * @example
  * isInStringOrComment('if $x == 5', 5);        // false (code)
@@ -280,23 +657,165 @@ function createRegexPatterns(knownOperations) {
  * isInStringOrComment('"hello"', 3);          // true (inside string)
  *
  */
-function isInStringOrComment(line, position) {
-  // Get text from line start up to cursor position
-  const prefix = line.slice(0, position);
+function isInStringOrComment(line, position, initialState) {
+  const limit = Math.max(0, Math.min(position, line.length));
+  // Shallow-copy so callers that pass a carried state are not mutated.
+  const scanState = initialState ? { ...initialState } : createCodeScanState();
 
-  // Check if the line starts with a comment marker (# or //)
-  // Note: Only catches comments at START of line, not inline comments
-  if (/^\s*(#|\/\/)/.test(prefix)) {
-    return true;
+  for (let i = 0; i < limit; i++) {
+    const ch = line[i];
+
+    if (scanState.inBlockComment) {
+      if (ch === "*" && line[i + 1] === "/") {
+        scanState.inBlockComment = false;
+        i++;
+      }
+      continue;
+    }
+
+    if (scanState.swimDelimiter) {
+      if (line.startsWith(scanState.swimDelimiter, i)) {
+        i += scanState.swimDelimiter.length - 1;
+        scanState.swimDelimiter = null;
+      }
+      continue;
+    }
+
+    if (scanState.inString) {
+      if (ch === scanState.quote && isUnescapedQuoteAt(line, i)) {
+        scanState.inString = false;
+        scanState.quote = null;
+      }
+      continue;
+    }
+
+    if (ch === "/" && line[i + 1] === "*") {
+      scanState.inBlockComment = true;
+      i++;
+      continue;
+    }
+
+    if (ch === ">") {
+      const swimMatch = line.slice(i).match(/^>[^>]{0,5}>/);
+      if (swimMatch) {
+        scanState.swimDelimiter = swimMatch[0];
+        i += scanState.swimDelimiter.length - 1;
+        continue;
+      }
+    }
+
+    if (ch === '"' || ch === "'") {
+      scanState.inString = true;
+      scanState.quote = ch;
+      continue;
+    }
+
+    if (ch === "#" || (ch === "/" && line[i + 1] === "/")) {
+      return true;
+    }
   }
 
-  // Inside quoted string (simple, fast heuristic)
-  // Odd count of quotes means we're inside an unclosed string
-  const doubleQuotes = (prefix.match(/"/g) || []).length;
-  const singleQuotes = (prefix.match(/'/g) || []).length;
+  return scanState.inString || scanState.inBlockComment || scanState.swimDelimiter !== null;
+}
 
-  // Return true if either quote type has an odd count (unclosed string)
-  return doubleQuotes % 2 === 1 || singleQuotes % 2 === 1;
+/**
+ * Advances a {@link CodeScanState} by processing one line of text without
+ * producing any output string.
+ *
+ * This is the state-only sibling of {@link maskNonCodeSpans}.  Use it when
+ * you need to accumulate cross-line comment/string state for lines whose
+ * masked text is not required (e.g. the preceding-line scan in
+ * {@link isInStringOrCommentDoc}).  Avoids the `split`/`join` allocation that
+ * `maskNonCodeSpans` performs on every line.
+ *
+ * @param {string} lineText
+ * @param {CodeScanState} state - Mutated in place.
+ * @returns {void}
+ */
+function advanceScanState(lineText, state) {
+  scanLineState(lineText, state, null);
+}
+
+/**
+ * Document-aware version of {@link isInStringOrComment}.
+ *
+ * Scans from the beginning of the document with carried {@link CodeScanState}
+ * so that multi-line block comments (`/* ... *\/`) and swim-strings that
+ * opened on a previous line are correctly detected.
+ *
+ * Use this in providers that have access to a full `TextDocument` object.
+ * Fall back to {@link isInStringOrComment} only for isolated single-line
+ * analysis (e.g. inside loops that already carry external state).
+ *
+ * @param {import('vscode').TextDocument} document - The open text document
+ * @param {import('vscode').Position} position - Cursor or token position to test
+ * @returns {boolean} true if the position is inside a string, comment, or swim-string
+ */
+function isInStringOrCommentDoc(document, position) {
+  const state = createCodeScanState();
+
+  // Use advanceScanState (not maskNonCodeSpans) for preceding lines — we only
+  // need the state side-effect and want to avoid the split/join allocations.
+  for (let i = 0; i < position.line; i++) {
+    advanceScanState(document.lineAt(i).text, state);
+  }
+
+  return isInStringOrComment(
+    document.lineAt(position.line).text,
+    position.character,
+    state
+  );
+}
+
+/**
+ * Counts the active parameter index from a partial argument string.
+ *
+ * The input should be the text between an opening `(` and the cursor.
+ * Commas are only counted at top level (not inside nested (), [], {}, or strings).
+ *
+ * @param {string} argsText - Partial argument text from opening `(` to cursor
+ * @returns {number} Zero-based active parameter index
+ */
+function getActiveParameterIndex(argsText) {
+  let activeParam = 0;
+  let inString = false;
+  let quote = null;
+  let parenDepth = 0;
+  let bracketDepth = 0;
+  let curlyDepth = 0;
+
+  for (let i = 0; i < argsText.length; i++) {
+    const ch = argsText[i];
+
+    if ((ch === '"' || ch === "'") && !inString) {
+      inString = true;
+      quote = ch;
+      continue;
+    }
+
+    if (inString && ch === quote) {
+      if (isUnescapedQuoteAt(argsText, i)) {
+        inString = false;
+        quote = null;
+      }
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (ch === "(") parenDepth++;
+    if (ch === ")") parenDepth--;
+    if (ch === "[") bracketDepth++;
+    if (ch === "]") bracketDepth--;
+    if (ch === "{") curlyDepth++;
+    if (ch === "}") curlyDepth--;
+
+    if (ch === "," && parenDepth === 0 && bracketDepth === 0 && curlyDepth === 0) {
+      activeParam++;
+    }
+  }
+
+  return activeParam;
 }
 
 /**
@@ -382,21 +901,12 @@ function buildHoverMarkdown(doc, isTrusted = false) {
 }
 
 /**
- * @typedef {Object} DocEntry
- * @property {string} name - Human-readable name shown in completion and hover
- * @property {string} description - Short summary shown in IntelliSense
- * @property {string=} signature - Usage syntax
- * @property {string=} snippet - VS Code snippet insertion text
- * @property {string=} documentation - Extended Markdown documentation
- */
-
-/**
  * Builds a completion item with consistent formatting.
  *
  * This centralizes completion item creation to ensure all providers
  * produce consistent UI elements (labels, details, documentation, sorting).
  *
- * @param {DocEntry} doc - Documentation object
+ * @param {import('../src/language-data.js').DocEntry} doc - Documentation object
  * @param {vscode.CompletionItemKind} kind - Item kind (Function, Variable, Keyword, etc.)
  * @param {string} sortPrefix - Sort order prefix (e.g., "0_" for operations, "1_" for functions)
  * @param {string | vscode.SnippetString} insertText - Text to insert when selected
@@ -418,9 +928,7 @@ function buildCompletionItem(doc, kind, sortPrefix, insertText, triggerSignature
 
   item.insertText = insertText;
   item.detail = doc.signature ?? doc.description;
-  item.documentation = doc.documentation
-    ? new vscode.MarkdownString(doc.documentation)
-    : undefined;
+  item.documentation = buildHoverMarkdown(doc);
   item.sortText = `${sortPrefix}${doc.name}`;
 
   // Trigger signature help after insertion (for functions with parameters)
@@ -482,7 +990,9 @@ function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
  * @returns {vscode.Diagnostic[]} Duplicate-key diagnostics
  */
 function findDuplicateMapKeyDiagnostics(document, source = document.getText()) {
-  const text = source
+  // Produce a length-preserving masked copy so offsets remain valid for document.positionAt().
+  // String contents and comments are replaced with spaces; newlines are kept to preserve line offsets.
+  const maskedText = source
     // Mask quoted strings first so // or # inside strings are not treated as comments.
     .replace(/"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/g, match => match.replace(/[^\n]/g, " "))
     // Mask block comments but keep indexes stable.
@@ -501,9 +1011,9 @@ function findDuplicateMapKeyDiagnostics(document, source = document.getText()) {
    */
   function findMatchingParen(openParenIndex) {
     let depth = 1;
-    for (let i = openParenIndex + 1; i < text.length; i++) {
-      if (text[i] === '(') depth++;
-      if (text[i] === ')') depth--;
+    for (let i = openParenIndex + 1; i < maskedText.length; i++) {
+      if (maskedText[i] === '(') depth++;
+      if (maskedText[i] === ')') depth--;
       if (depth === 0) return i;
     }
     return -1;
@@ -522,7 +1032,7 @@ function findDuplicateMapKeyDiagnostics(document, source = document.getText()) {
     const seenKeys = new Set();
 
     for (let i = start; i <= end; i++) {
-      const ch = i === end ? ',' : text[i];
+      const ch = i === end ? ',' : maskedText[i];
 
       if (ch === '(' || ch === '[' || ch === '{') {
         nestingDepth++;
@@ -534,7 +1044,7 @@ function findDuplicateMapKeyDiagnostics(document, source = document.getText()) {
       }
 
       if (ch === ',' && nestingDepth === 0) {
-        const segmentText = text.slice(segmentStart, i);
+        const segmentText = maskedText.slice(segmentStart, i);
         const keyMatch = segmentText.match(/^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*:/);
 
         if (keyMatch) {
@@ -563,8 +1073,8 @@ function findDuplicateMapKeyDiagnostics(document, source = document.getText()) {
     }
   }
 
-  for (let i = 0; i < text.length - 1; i++) {
-    if (text[i] === '%' && text[i + 1] === '(') {
+  for (let i = 0; i < maskedText.length - 1; i++) {
+    if (maskedText[i] === '%' && maskedText[i + 1] === '(') {
       const close = findMatchingParen(i + 1);
       if (close !== -1) {
         scanMapBody(i + 2, close);
@@ -704,7 +1214,7 @@ function createForToForeachFix(document, diagnostic) {
  * @param {string} openChar - Opening character ('{', '(', '[')
  * @param {string} closeChar - Closing character ('}', ')', ']')
  * @param {string} name - Display name ('brace', 'parenthesis', 'bracket')
- * @param {vscode.TextDocument} document The document
+ * @param {vscode.TextDocument} document - The document
  * @returns {vscode.Diagnostic | null}
  */
 function createUnbalancedDiagnostic(count, lastPos, openChar, closeChar, name, document) {
@@ -744,6 +1254,8 @@ module.exports = {
   // -- Helpers
   isValidCompletionPosition,
   isInStringOrComment,
+  isInStringOrCommentDoc,
+  getActiveParameterIndex,
   stripStrings,
   checkMissingDollar,
   findDuplicateMapKeyDiagnostics,
@@ -760,6 +1272,18 @@ module.exports = {
   createInvalidOperatorFix,
   createAssignmentInConditionFix,
   createForToForeachFix,
+
+  // -- Module navigation
+  MODULE_NAME_TOKEN_REGEX,
+  isModuleDeclarationContext,
+  isModuleCallContext,
+  getModuleDeclarations,
+  createCodeScanState,
+  maskNonCodeSpans,
+  findModuleDeclarationRange,
+  getModuleCallReferencesByName,
+  clearModuleInfoCache,
+  findModuleReferences,
 
   // -- Regex
   createRegexPatterns

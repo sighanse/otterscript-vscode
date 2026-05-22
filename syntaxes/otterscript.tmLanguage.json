@@ -157,7 +157,7 @@
         },
         {
           "name": "keyword.other.operation.otterscript",
-          "match": "\\b(Log-Debug|Log-Information|Log-Warning|Log-Error|Post-Http|Sleep|Apply-Template)\\b"
+          "match": "\\b(Log-Debug|Log-Information|Log-Warning|Log-Error|Post-Http|Download-Http|Upload-Http|Get-Http|Execute-PowerShell|Ensure-Service|Ensure-Directory|Ensure-Server|Ensure-Asset|Ensure-HostsEntry|Ensure-PsModule|Acquire-Server|Concatenate-Files|Create-ZipFile|Rename-File|Transfer-Files|Sign-Exe|Collect-RpmPackages|Sleep|Restart-Server|Get-Asset|Release-Server|Apply-Template)\\b"
         }
       ]
     },
@@ -235,6 +235,9 @@
           "name": "meta.statement.call-module.otterscript",
           "begin": "\\bcall\\b",
           "end": ";",
+          "beginCaptures": {
+            "0": { "name": "keyword.control.otterscript" }
+          },
           "patterns": [
             { "include": "#proget-variables" },
             { "include": "#variables" },
@@ -249,6 +252,9 @@
           "name": "meta.statement.assign.otterscript",
           "begin": "\\bset\\b",
           "end": ";",
+          "beginCaptures": {
+            "0": { "name": "keyword.control.otterscript" }
+          },
           "patterns": [
             { "include": "#proget-variables" },
             { "include": "#variables" },

@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.2.3] - 2026-05-22
+
+### Added
+
+- 19 new operations with full IntelliSense (completion, hover, signature help, snippets): `Restart-Server`, `Get-Asset`, `Release-Server`, `Download-Http`, `Upload-Http`, `Ensure-Service`, `Ensure-Directory`, `Ensure-Server`, `Ensure-Asset`, `Ensure-PsModule`, `Ensure-HostsEntry`, `Acquire-Server`, `Get-Http`, `Concatenate-Files`, `Create-ZipFile`, `Rename-File`, `Transfer-Files`, `Sign-Exe`, `Collect-RpmPackages`.
+- CodeLens reference counts above module declarations linking to VS Code reference peek (`otterscript.codeLens.enable`, default `true`).
+- `ReferenceProvider` for module declarations and call sites (Shift+F12).
+- `DocumentSymbolProvider` for Outline panel, breadcrumbs, and Ctrl+Shift+O.
+
+### Fixed
+
+- Fixed `set` and `call` keywords not highlighted when lowercase (missing grammar `beginCaptures`).
+- Fixed cross-line block comment and swim-string detection for module navigation.
+- Fixed stale diagnostics after quick-fix execution.
+- Fixed module reference scans to ignore strings, comments, and swim-strings.
+- Fixed module info cache growth on document close.
+- Fixed pending diagnostic timer not cleared on deactivation.
+
+### Changed
+
+- Internal code quality improvements: scanner consolidation, module navigation helpers, cached module analysis, and shared utilities.
+
 ## [0.2.2] - 2026-05-18
 
 ### Added

@@ -2,185 +2,115 @@
 
 ## Purpose
 
-This repository is a VS Code extension for OtterScript (a product by Inedo) with syntax highlighting, snippets, completions, hover, signature help and quick-fixes.
+This repository is a VS Code extension for OtterScript (Inedo) with syntax highlighting, snippets, completion, hover, signature help, diagnostics, and quick fixes.
 
-Not affiliated with or endorsed by [Inedo](https://inedo.com/).
+Use these instructions to make minimal, safe, reviewable changes.
 
-Use these instructions to produce safe (does not introduce security vulnerabilities or unintended breaking behavior), minimal, reviewable changes.
+## Priority
 
-If a user request is invalid or unsupported, explain why and propose the closest safe alternative.
+If priorities conflict, always follow the highest item in this list. Safety and platform policy always take precedence over user requests.
 
-## Priority Order
+1. Safety and platform policy
+2. User request for current task
+3. This file
+4. Existing repository conventions
 
-Safety and platform policies always override all other instructions.
+## Start Here
 
-After that, when instructions conflict, follow this order:
+- Product and feature scope: [README.md](../README.md)
+- Contribution basics: [CONTRIBUTING.md](../CONTRIBUTING.md)
+- CI validation behavior: [sanity.yml](workflows/sanity.yml)
+- Build/package workflow: [build.yml](workflows/build.yml)
+- Release workflow: [publish.yml](workflows/publish.yml)
 
-1. User request for the current task
-2. This file
-3. Existing repository conventions and style
+## Quick Commands
 
-If repository conventions or style are unclear or inconsistent, default to the rules in this file.
+- Install deps: `npm ci --no-audit --no-fund`
+- Lint local: `npm run lint`
+- Lint strict (CI parity): `npm run lint:ci`
+- JS + JSDoc type check: `npm run check:js`
+- Package extension: `npm run package`
 
-## Hard Rules (Always Follow)
+No dedicated `npm test` script exists; rely on lint/package/CI checks and manual Extension Host smoke tests.
+
+## Architecture Map
+
+- `src/extension.js`: activation and provider wiring
+- `src/language-data.js`: language docs model for IntelliSense/snippets
+- `src/diagnostics.js`: diagnostic analysis/rules
+- `src/helpers.js`: shared pure utilities
+- `syntaxes/otterscript.tmLanguage.json`: TextMate grammar
+- `snippets/otterscript.json`: snippets (JSONC-valid)
+- `language-configuration.json`: comments/brackets/indent rules
+
+## Hard Rules
 
 - Use `const`/`let`; never use `var`.
-- Add complete JSDoc for all functions in `.js` files
-  - Repo uses `// @ts-check` at top of each file
-  - Also utilize parameters like @private, @readonly and @examples when applicable.
+- Keep edits focused; avoid unrelated refactors or formatting churn.
+- Preserve existing behavior unless task explicitly requires change.
+- Add complete JSDoc for all functions in `.js` files (`// @ts-check` is enforced style).
 - Prefer early returns for validation.
 - Use `Object.freeze()` for constant language-data objects.
-- Completion providers return `[]` when no suggestions.
-- Hover/signature providers return `null` when not applicable.
 - Do not hardcode extension version; use `context.extension.packageJSON.version`.
-- Keep edits focused. Do not do unrelated refactors or formatting churn.
-- Preserve behavior unless the task explicitly requires behavior changes.
 
-## File Map
+## Provider Contracts
 
-- `src/extension.js`: extension activation and provider wiring.
-- `src/language-data.js`: OtterScript docs model used by IntelliSense including snippets.
-- `src/helpers.js`: pure helper utilities.
-- `syntaxes/otterscript.tmLanguage.json`: TextMate grammar.
-- `snippets/otterscript.json`: VS Code snippets.
-- `language-configuration.json`: comments/brackets/indentation rules.
-- `test/sample.otter`: quick sanity file for manual checks.
-
-## File-Specific Rules
-
-### `src/language-data.js`
-
-- Keep language entries aligned with official Inedo docs.
-- Verify function/variable names before adding or changing entries.
-- Keep `DocEntry` shape consistent:
-
-```javascript
-/**
- * @typedef {Object} DocEntry
- * @property {string} name
- * @property {string} description
- * @property {string=} signature
- * @property {string=} snippet
- * @property {string=} documentation
- */
-```
-
-### `snippets/otterscript.json`
-
-- File must be a valid root JSON object for snippets.
-- Each snippet needs valid `prefix`, `body`, and `description` as appropriate.
-- Avoid malformed JSON and schema/type mismatches.
-- If JSON is malformed or incomplete, return a clear error describing the issue and suggest the minimal correction needed.
-
-### `syntaxes/otterscript.tmLanguage.json`
-
-- Keep scopes consistent with existing grammar naming.
-- Validate rule precedence with representative OtterScript examples.
-
-### Provider behavior
-
-- Completion provider: return array (`[]` when empty), never `null`.
+- Completion providers: return `[]` when no suggestions (never `null`).
 - Hover/signature providers: return `null` when not applicable.
-- Diagnostic severity:
+- Diagnostics severity:
   - Error: runtime-breaking issues (for example missing `$`, unbalanced braces)
   - Warning: suspicious but potentially valid patterns
 
-## Sources of Truth
+## VS Code Extension Constraints
 
-For language semantics and syntax, verify against:
+- Run in extension host (Node.js), not browser APIs (`window`, `document`, `localStorage`).
+- Keep `activate()` lightweight; avoid heavy startup work.
+- Providers must fail safely and avoid throwing.
+- Avoid blocking event loop on hot paths.
+- Register disposables via `context.subscriptions`.
+
+## Language/Content Accuracy
+
+For OtterScript semantics, verify against Inedo docs before changing language intelligence data:
 
 - <https://docs.inedo.com/docs/executionengine/otterscript/overview>
 - <https://docs.inedo.com/docs/executionengine/reference/formal-specification>
 - <https://docs.inedo.com/docs/executionengine/reference/otterscript-formal-grammar>
 - <https://docs.inedo.com/docs/executionengine/otterscript/strings-and-literals>
 
-## Definition of Done
+## Done Checklist
 
-Before finishing any code change, do all applicable checks:
+Run these when applicable:
 
-1. Run `npm run lint`.
-2. Run `npm run package` for full validation when behavior changed.
-3. Manual smoke test in Extension Development Host (`F5`) when provider/grammar/snippet behavior changed:
+1. `npm run lint`
+2. `npm run check:js`
+3. `npm run package` when behavior changes
+4. Manual smoke test (`F5`) when provider/grammar/snippet behavior changes:
    - `$` completion appears
    - `@` vector completion appears
    - Hover shows docs
    - `if condition =` warns about missing `$`
    - `>>` auto-closes swim string
-4. Confirm no unrelated files were modified.
+5. Confirm no unrelated files were modified
+
+Before recommending or finalizing changes, require both `npm run lint` and `npm run check:js` to pass.
 
 ## Common Failure Modes
 
-- Returning `null` from completion providers.
-- Returning `[]` from hover/signature providers when `null` is expected.
-- Incomplete JSDoc that breaks `@ts-check` quality.
-- Language-data names not matching official docs.
-- Snippet JSON schema/type problems (root not object, malformed structure).
-- Grammar changes that unintentionally shadow existing patterns.
+- Completion providers accidentally return `null`.
+- Hover/signature providers return `[]` instead of `null`.
+- Incomplete JSDoc breaks `@ts-check` quality.
+- `src/language-data.js` names diverge from official docs.
+- Snippet JSONC shape/parsing issues.
+- Grammar rule precedence changes unintentionally shadow existing matches.
+- CRLF slips into source files (CI enforces LF).
 
-## Git, Commit, and PR Requirements
+## Delivery Expectations
 
-### Conventional Commit format
-
-`<type>(<scope>): <description>`
-
-Types:
-
-- `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`, `ci`
-
-Common scopes:
-
-- `completion`, `hover`, `signature`, `grammar`, `snippets`, `language`, `diagnostics`, `config`, `deps`
-
-Breaking changes:
-
-- Use `!` in type (`feat!`) or `BREAKING CHANGE:` footer.
-
-### PR expectations
-
-- PR title follows Conventional Commits format.
-- Keep changes scoped and reviewable.
-- Ensure CI checks pass.
-- Require maintainer approval before merge.
-
-## Release/Version Rules
-
-When bumping versions:
-
-- Update `CHANGELOG.md` (Keep a Changelog format).
-- Update `README.md` if behavior/features changed.
-- Update versions in `package.json` and `package-lock.json` with:
-
-```bash
-npm version [<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease [--preid=<prerelease-id>]] --no-git-tag-version
-```
-
-- If the working tree is dirty and version bump is intentional, `--force` may be required.
-- Re-run package validation before release.
-
-## Delivery Format for Copilot Responses
-
-When returning results for a code task, include:
+When summarizing code changes, include:
 
 1. What changed
 2. Files touched
-3. Validation performed (commands and outcome)
-4. Risks or follow-up checks (if any)
-5. Supply recommended conventional commit message
-
-## VS Code Extension Best Practices (Review Guidelines)
-
-When proposing changes, ensure:
-
-- Code runs in the **extension host (Node.js)**, not a browser:
-  - Do not use `window`, `document`, `localStorage`, or DOM APIs.
-- Activation path must stay lightweight:
-  - Avoid heavy computation or I/O during `activate()`.
-- Providers must be defensive:
-  - Never throw from completion/hover/diagnostics providers.
-- Do not block the event loop:
-  - Avoid synchronous filesystem or CPU-heavy work on hot paths.
-- Prefer VS Code APIs over custom implementations:
-  - Use `vscode.window`, `vscode.workspace`, `vscode.languages`.
-- Dispose resources correctly:
-  - All disposables must be registered via `context.subscriptions`.
-- If a change would slow startup, break IntelliSense, or behave differently in the Extension Host, it needs explicit justification.
+3. Validation performed and outcomes
+4. Risks or follow-up checks
+5. Recommended conventional commit message (`<type>(<scope>): <description>`)

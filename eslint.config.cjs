@@ -20,7 +20,7 @@ module.exports = [
       sourceType: "commonjs",
       globals: {
         ...globals.node,
-        ...globals.es2021
+        ...globals.es2022
       }
     },
 
@@ -74,6 +74,7 @@ module.exports = [
       "default-case": "warn",
       "no-else-return": "warn",
       "no-lonely-if": "warn",
+      "unicode-bom": "error",
       /*
        * Explicitly allowed
        */

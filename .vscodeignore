@@ -18,6 +18,7 @@ CODE_OF_CONDUCT.md
 eslint.config.cjs
 package-lock.json
 SECURITY.md
+jsconfig.json
 # Exclude source etc.
 !src/
 !src/**/*.js

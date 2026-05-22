@@ -17,6 +17,7 @@
  * @license MIT
  * @see src/language-data.js - Plain data documentation module
  * @see src/helpers.js - Helpers, functions, constants
+ * @see src/diagnostics.js - Diagnostic checks and rules
  * @see package.json - Extension manifest and configuration schema
  * @see syntaxes/otterscript.tmLanguage.json - TextMate grammar (syntax highlighting)
  * @see snippets/otterscript.json - Snippets for structural templates only
@@ -25,6 +26,7 @@
 
 // -- VS Code Extension API
 const vscode = require("vscode");
+const { updateDiagnostics } = require("./diagnostics");
 
 // -- Path to the language file for OtterScript (functions, variables, operations, keywords)
 const languageFile = "./language-data.js";
@@ -35,22 +37,31 @@ const {
   log,
   buildCompletionItem,
   buildHoverMarkdown,
-  checkMissingDollar,
-  findDuplicateMapKeyDiagnostics,
   createAssignmentInConditionFix,
   createForToForeachFix,
   createInvalidOperatorFix,
   createMissingDollarFix,
-  createUnbalancedDiagnostic,
   getOutputChannel,
   getDiagnosticCode,
+  getActiveParameterIndex,
+  getModuleDeclarations,
+  getModuleCallReferencesByName,
+  findModuleDeclarationRange,
+  findModuleReferences,
+  isModuleCallContext,
+  isModuleDeclarationContext,
   isValidCompletionPosition,
-  isInStringOrComment,
+  isInStringOrCommentDoc,
+  clearModuleInfoCache,
   loadConfig,
-  stripStrings,
+  MODULE_NAME_TOKEN_REGEX,
   validateDocs,
   createRegexPatterns
 } = require('./helpers');
+
+/** @type {ReturnType<typeof setTimeout> | undefined} */
+let diagnosticTimer;
+const REFRESH_DIAGNOSTICS_COMMAND = "otterscript.refreshDiagnostics";
 
 // ============================================================
 // ACTIVATION
@@ -67,16 +78,16 @@ function activate(context) {
   log.info(`${extensionName} v${version} activated`);
 
   // -- Load initial configuration
-  let { completionEnabled, hoverEnabled, signatureHelpEnabled } = loadConfig();
-  log.info(`Settings loaded: completion=${completionEnabled}, hover=${hoverEnabled}, signatureHelp=${signatureHelpEnabled}`);
+  let { completionEnabled, hoverEnabled, signatureHelpEnabled, codeLensEnabled } = loadConfig();
+  log.info(`Settings loaded: completion=${completionEnabled}, hover=${hoverEnabled}, signatureHelp=${signatureHelpEnabled}, codeLens=${codeLensEnabled}`);
 
   // -- Watch for settings changes while extension is running
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
       // -- Only reload if OtterScript settings changed
       if (e.affectsConfiguration("otterscript")) {
-        ({ completionEnabled, hoverEnabled, signatureHelpEnabled } = loadConfig());
-        log.info(`Settings reloaded: completion=${completionEnabled}, hover=${hoverEnabled}, signatureHelp=${signatureHelpEnabled}`);
+        ({ completionEnabled, hoverEnabled, signatureHelpEnabled, codeLensEnabled } = loadConfig());
+        log.info(`Settings reloaded: completion=${completionEnabled}, hover=${hoverEnabled}, signatureHelp=${signatureHelpEnabled}, codeLens=${codeLensEnabled}`);
       }
     })
   );
@@ -191,54 +202,7 @@ function activate(context) {
           // Active parameter detection
           // ------------------------------------------------------------
 
-          let activeParam = 0;
-          let inString = false;
-          let quote = null;
-          let parenDepth = 0;   // Track ( ) nesting
-          let braceDepth = 0;   // Track [ ] nesting
-          let curlyDepth = 0;   // Track { } nesting
-
-          for (let i = 0; i < args.length; i++) {
-            const ch = args[i];
-
-            // -- Handle string literals
-            // Toggle string state when encountering unescaped quotes
-            if ((ch === '"' || ch === "'") && !inString) {
-              inString = true;
-              quote = ch;
-              continue;
-            }
-
-            if (inString && ch === quote) {
-              // -- Check if quote is escaped (odd number of backslashes before it)
-              let backslashCount = 0;
-              let j = i - 1;
-              while (j >= 0 && args[j] === '\\') {
-                backslashCount++;
-                j--;
-              }
-              if (backslashCount % 2 === 0) {
-                inString = false;
-              }
-              continue;
-            }
-
-            // -- Skip all processing inside strings
-            if (inString) continue;
-
-            // -- Track nesting depth for different bracket types
-            if (ch === '(') parenDepth++;
-            if (ch === ')') parenDepth--;
-            if (ch === '[') braceDepth++;
-            if (ch === ']') braceDepth--;
-            if (ch === '{') curlyDepth++;
-            if (ch === '}') curlyDepth--;
-
-            // -- Count commas as parameter separators
-            if (ch === ',' && parenDepth === 0 && braceDepth === 0 && curlyDepth === 0) {
-              activeParam++;
-            }
-          }
+          const activeParam = getActiveParameterIndex(args);
 
           // ------------------------------------------------------------
           // Build signature help UI
@@ -362,7 +326,7 @@ function activate(context) {
                   // -- Remove leading $ for insertion (user already typed it)
                   const snippet = doc.snippet
                     ? new vscode.SnippetString(doc.snippet?.replace(/^\$/, ""))
-                    : new vscode.SnippetString(doc.name?.replace(/^\$/, ""));
+                    : new vscode.SnippetString(doc.name.replace(/^\$/, ""));
                   return buildCompletionItem(doc, vscode.CompletionItemKind.Variable, '2_', snippet, false);
           });
         }
@@ -423,29 +387,29 @@ function activate(context) {
   // Map variables are user-defined and cannot be enumerated
 
   const mapCompletionProvider =
-  vscode.languages.registerCompletionItemProvider(
-    "otterscript",
-    {
-      provideCompletionItems(document, position) {
-        // -- Check if completion is enabled and not in a string/comment
-        if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
+    vscode.languages.registerCompletionItemProvider(
+      "otterscript",
+      {
+        provideCompletionItems(document, position) {
+          // -- Check if completion is enabled and not in a string/comment
+          if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
-        // -- Ensure syntaxDocs and mapExpr exist
-        if (!syntaxDocs?.mapExpr) {
-          return [];
+          // -- Ensure syntaxDocs and mapExpr exist
+          if (!syntaxDocs?.mapExpr) {
+            return [];
+          }
+
+          const snippet = syntaxDocs.mapExpr.snippet
+            ? new vscode.SnippetString(syntaxDocs.mapExpr.snippet)
+            : new vscode.SnippetString(`${syntaxDocs.mapExpr.name} "(\${0})"`);
+          const kind = vscode.CompletionItemKind.Snippet;
+          const sortPrefix = "~";
+
+          return [buildCompletionItem(syntaxDocs.mapExpr, kind, sortPrefix, snippet, false)];
         }
-
-        const snippet = syntaxDocs.mapExpr.snippet
-          ? new vscode.SnippetString(syntaxDocs.mapExpr.snippet)
-          : new vscode.SnippetString(`${syntaxDocs.mapExpr.name} "(\${0})"`);
-        const kind = vscode.CompletionItemKind.Snippet;
-        const sortPrefix = "~";
-
-        return [buildCompletionItem(syntaxDocs.mapExpr, kind, sortPrefix, snippet, false)];
-      }
-    },
-    "%"
-  );
+      },
+      "%"
+    );
 
   // ============================================================
   // OPERATION COMPLETION PROVIDER
@@ -553,7 +517,7 @@ function activate(context) {
         }
 
         // -- Prevent hover inside strings or comments
-        if (isInStringOrComment(line, position.character)) {
+        if (isInStringOrCommentDoc(document, position)) {
           return null;
         }
 
@@ -583,16 +547,16 @@ function activate(context) {
         if (exprRange) {
             const text = document.getText(exprRange);
             if (text === '%(') {
-                return new vscode.Hover(
-                    buildHoverMarkdown(syntaxDocs.mapExpr), exprRange);
+              return new vscode.Hover(
+                buildHoverMarkdown(syntaxDocs.mapExpr), exprRange);
             }
             if (text === '@(') {
-                return new vscode.Hover(
-                    buildHoverMarkdown(syntaxDocs.vectorExpr),exprRange);
+              return new vscode.Hover(
+                buildHoverMarkdown(syntaxDocs.vectorExpr), exprRange);
             }
             if (text === '$(') {
-                return new vscode.Hover(
-                    buildHoverMarkdown(syntaxDocs.nestedEval),exprRange);
+              return new vscode.Hover(
+                buildHoverMarkdown(syntaxDocs.nestedEval), exprRange);
             }
         }
         // -- Keywords (if, foreach, with, set, etc.)
@@ -638,8 +602,8 @@ function activate(context) {
         // -- Operations (Log-Information, Log-Warning, Log-Error, etc.)
         // Built-in operations. Distinguished by hyphenated names.
         const operationRange = document.getWordRangeAtPosition(
-        position,
-        cachedOperationRegex
+          position,
+          cachedOperationRegex
         );
 
         if (operationRange) {
@@ -688,6 +652,21 @@ function activate(context) {
   );
 
   // ============================================================
+  // FIX DISPATCH TABLE
+  // ============================================================
+  // Single source of truth for all quick-fix factories.
+  // Add a new entry here to expose a fix in both the lightbulb
+  // menu (provideCodeActions) and the "Fix All" command.
+
+  /** @type {Record<string, (doc: vscode.TextDocument, diag: vscode.Diagnostic) => vscode.CodeAction | null>} */
+  const FIX_FACTORIES = Object.freeze({
+    "missing-dollar":          createMissingDollarFix,
+    "invalid-operator":        createInvalidOperatorFix,
+    "assignment-in-condition": createAssignmentInConditionFix,
+    "incorrect-for-usage":     createForToForeachFix,
+  });
+
+  // ============================================================
   // QUICK FIX CODE ACTION PROVIDER
   // ============================================================
   // Provides lightbulb (💡) quick-fix actions for selected
@@ -703,25 +682,15 @@ function activate(context) {
           for (const diagnostic of codeActionContext.diagnostics) {
             if (diagnostic.source !== "OtterScript") continue;
 
-            const code = getDiagnosticCode(diagnostic);
-
-            if (code === "missing-dollar") {
-              actions.push(createMissingDollarFix(document, diagnostic));
-            }
-
-            if (code === "invalid-operator") {
-              const fix = createInvalidOperatorFix(document, diagnostic);
-              if (fix) actions.push(fix);
-            }
-
-            if (code === "assignment-in-condition") {
-              const fix = createAssignmentInConditionFix(document, diagnostic);
-              if (fix) actions.push(fix);
-            }
-
-            if (code === "incorrect-for-usage") {
-              const fix = createForToForeachFix(document, diagnostic);
-              if (fix) actions.push(fix);
+            const factory = FIX_FACTORIES[getDiagnosticCode(diagnostic)];
+            const fix = factory?.(document, diagnostic);
+            if (fix) {
+              fix.command = {
+                command: REFRESH_DIAGNOSTICS_COMMAND,
+                title: "Refresh OtterScript diagnostics",
+                arguments: [document.uri]
+              };
+              actions.push(fix);
             }
           }
 
@@ -753,12 +722,11 @@ function activate(context) {
       if (!editor || editor.document.languageId !== "otterscript") return;
 
       const document = editor.document;
-      const diagnostics = vscode.languages
+      const docDiagnostics = vscode.languages
         .getDiagnostics(document.uri)
         .filter(diagnostic => diagnostic.source === "OtterScript");
-      // -- Filter to fixable diagnostic codes
-      const fixableCodes = new Set(["missing-dollar", "invalid-operator", "assignment-in-condition", "incorrect-for-usage"]);
-      const fixableDiagnostics = diagnostics.filter(d => fixableCodes.has(getDiagnosticCode(d)));
+      // -- Filter to fixable diagnostic codes (keys of FIX_FACTORIES)
+      const fixableDiagnostics = docDiagnostics.filter(d => getDiagnosticCode(d) in FIX_FACTORIES);
 
       if (fixableDiagnostics.length === 0) {
         const msg = `No fixable OtterScript issues found in ${document.fileName}`;
@@ -773,12 +741,8 @@ function activate(context) {
       let fixedCount = 0;
 
       for (const diagnostic of sorted) {
-        const code = getDiagnosticCode(diagnostic);
-        const action = code === "missing-dollar" ? createMissingDollarFix(document, diagnostic)
-          : code === "invalid-operator" ? createInvalidOperatorFix(document, diagnostic)
-          : code === "assignment-in-condition" ? createAssignmentInConditionFix(document, diagnostic)
-          : code === "incorrect-for-usage" ? createForToForeachFix(document, diagnostic)
-          : null;
+        const factory = FIX_FACTORIES[getDiagnosticCode(diagnostic)];
+        const action = factory?.(document, diagnostic) ?? null;
 
         if (!action?.edit) continue;
 
@@ -799,6 +763,7 @@ function activate(context) {
 
       if (fixedCount) {
         await vscode.workspace.applyEdit(workspaceEdit);
+        updateDiagnostics(document, diagnostics, diagnosticsContext);
         const msg = `Fixed ${fixedCount} issue(s) in ${document.fileName}`;
         vscode.window.showInformationMessage(msg);
         log.info(msg);
@@ -816,44 +781,129 @@ function activate(context) {
     "otterscript", {
       provideDefinition(document, position) {
 
-        const wordRange = document.getWordRangeAtPosition(position);
+        const wordRange = document.getWordRangeAtPosition(position, MODULE_NAME_TOKEN_REGEX);
         if (!wordRange) return null;
 
         const calledName = document.getText(wordRange);
-        if (!calledName) return null;
 
         // -- Verify this is actually a 'call' statement
         const lineText = document.lineAt(position.line).text;
-        const textBeforeWord = lineText.slice(0, wordRange.start.character);
+        if (isInStringOrCommentDoc(document, wordRange.start)) {
+          return null;
+        }
 
-        // -- Check if 'call' appears immediately before the word (with whitespace)
-        if (!/\bcall\s+$/i.test(textBeforeWord)) {
+        if (!isModuleCallContext(lineText, wordRange.start.character)) {
           return null;  // Not a 'call' statement - ignore
         }
 
-        // -- Match: module <Name>
-        const escaped = calledName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const moduleRegex = new RegExp(`^\\s*module\\s+(${escaped})\\b`);
+        const declarationRange = findModuleDeclarationRange(document, calledName);
+        return declarationRange ? new vscode.Location(document.uri, declarationRange) : null;
+      }
+    }
+  );
 
-        for (let line = 0; line < document.lineCount; line++) {
-          const text = document.lineAt(line).text;
+  // ============================================================
+  // FIND REFERENCES PROVIDER (Modules)
+  // ============================================================
+  // Enables Shift+F12 and powers CodeLens reference counts for module calls.
 
-          const match = moduleRegex.exec(text);
-          if (match) {
-            // -- Calculate start position from regex match
-            const nameStartInMatch = match[0].indexOf(match[1]);
-            const start = match.index + nameStartInMatch;
+  const referenceProvider = vscode.languages.registerReferenceProvider(
+    "otterscript",
+    {
+      /**
+       * Resolves references for a module symbol from either declaration or call sites.
+       *
+       * @param {vscode.TextDocument} document
+       * @param {vscode.Position} position
+       * @param {vscode.ReferenceContext} refContext
+       * @returns {vscode.Location[]}
+       */
+      provideReferences(document, position, refContext) {
+        const wordRange = document.getWordRangeAtPosition(position, MODULE_NAME_TOKEN_REGEX);
+        if (!wordRange) return [];
 
-            const range = new vscode.Range(
-              new vscode.Position(line, start),
-              new vscode.Position(line, start + calledName.length)
-            );
+        const moduleName = document.getText(wordRange);
 
-            return new vscode.Location(document.uri, range);
-          }
+        const currentLine = document.lineAt(position.line).text;
+        if (isInStringOrCommentDoc(document, wordRange.start)) {
+          return [];
         }
 
-        return null;
+        const isModuleDecl = isModuleDeclarationContext(currentLine, wordRange.start.character);
+        const isCallSite = isModuleCallContext(currentLine, wordRange.start.character);
+        if (!isModuleDecl && !isCallSite) return [];
+
+        return findModuleReferences(document, moduleName, refContext.includeDeclaration);
+      }
+    }
+  );
+
+  // ============================================================
+  // DOCUMENT SYMBOL PROVIDER (Outline / Go to Symbol)
+  // ============================================================
+  // Populates the Outline panel and breadcrumbs with module declarations.
+  // Enables Ctrl+Shift+O (Go to Symbol) to jump to any module in the file.
+
+  const documentSymbolProvider = vscode.languages.registerDocumentSymbolProvider(
+    "otterscript",
+    {
+      /**
+       * Scans the document for module declarations and returns them as symbols.
+       *
+       * @param {vscode.TextDocument} document
+       * @returns {vscode.DocumentSymbol[]}
+       */
+      provideDocumentSymbols(document) {
+        return getModuleDeclarations(document).map(entry =>
+          new vscode.DocumentSymbol(
+            entry.name,
+            "",
+            vscode.SymbolKind.Module,
+            entry.lineRange,
+            entry.range
+          )
+        );
+      }
+    }
+  );
+
+  // ============================================================
+  // CODE LENS PROVIDER (Module References)
+  // ============================================================
+  // Shows reference counts above module declarations and links to
+  // VS Code's reference peek UI.
+
+  const codeLensProvider = vscode.languages.registerCodeLensProvider(
+    "otterscript",
+    {
+      /**
+       * Builds code lenses for module declarations.
+       *
+       * @param {vscode.TextDocument} document
+       * @returns {vscode.CodeLens[]}
+       */
+      provideCodeLenses(document) {
+        if (!codeLensEnabled) return [];
+        /** @type {vscode.CodeLens[]} */
+        const lenses = [];
+        const declarations = getModuleDeclarations(document);
+        const declarationNames = new Set(declarations.map(declaration => declaration.name));
+        const refsByName = getModuleCallReferencesByName(document, declarationNames);
+
+        for (const declaration of declarations) {
+          const range = declaration.range;
+          const usageRefs = refsByName.get(declaration.name) ?? [];
+
+          lenses.push(
+            new vscode.CodeLens(range, {
+              title: `${usageRefs.length} reference${usageRefs.length === 1 ? "" : "s"}`,
+              command: "editor.action.showReferences",
+              arguments: [document.uri, range.start, usageRefs]
+            })
+          );
+        }
+
+        return lenses;
       }
     }
   );
@@ -869,338 +919,32 @@ function activate(context) {
   //   - Unbalanced braces
 
   const diagnostics = vscode.languages.createDiagnosticCollection("otterscript");
+  const diagnosticsContext = {
+    nonVariableIdentifiers: NON_VARIABLE_IDENTIFIERS,
+    knownKeywords,
+    knownScalarFunctions,
+    knownVectorFunctions,
+    knownOperations,
+    scalarCallRegex,
+    vectorCallRegex,
+    operationCallRegex,
+  };
 
   context.subscriptions.push(diagnostics);
 
-  /**
-   * Updates diagnostics for an OtterScript document.
-   * Performs a full scan of the document and reports all issues.
-   * Called on document open and on every text change.
-   *
-   * @param {import('vscode').TextDocument} document - The document to analyze
-   */
-  function updateDiagnostics(document) {
-    if (document.languageId !== "otterscript") return;
+  const refreshDiagnosticsCommand = vscode.commands.registerCommand(
+    REFRESH_DIAGNOSTICS_COMMAND,
+    async (uri) => {
+      if (!uri) return;
 
-    const text = document.getText();
+      const existing = vscode.workspace.textDocuments.find(doc => doc.uri.toString() === uri.toString());
+      const document = existing ?? await vscode.workspace.openTextDocument(uri);
+      if (document.languageId !== "otterscript") return;
 
-    // -- Parser state variables (track position and context)
-    let braces = 0;           // { } balance
-    let parens = 0;           // ( ) balance
-    let brackets = 0;         // [ ] balance
-    let lastBracePos = 0;     // Position of last unmatched brace
-    let lastParenPos = 0;     // Position of last unmatched parens
-    let lastBracketPos = 0;   // Position of last unmatched bracket
-    let inString = false;     // Currently inside a quoted string?
-    let inBlockComment = false; // Currently inside a block comment?
-    let swimDelimiter = null; // Active swim-string delimiter (e.g., ">==8>")
-    let stringChar = '';      // Current quote character (' or ")
-    const issues = [];        // Collection of diagnostics to report
-
-    // -- Split into lines for line-by-line processing
-    const lines = text.split('\n');
-
-    // -- Process all lines
-    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-      const rawLine = lines[lineIndex];
-
-      // ------------------------------------------------------------
-      // Missing '$' in if conditions
-      // ------------------------------------------------------------
-      if (!inBlockComment) {
-        const diagnostic = checkMissingDollar(rawLine, lineIndex, NON_VARIABLE_IDENTIFIERS);
-        if (diagnostic) {
-          issues.push(diagnostic);
-        }
-      }
-
-      // ------------------------------------------------------------
-      // Character-by-character state tracking
-      // ------------------------------------------------------------
-      for (let col = 0; col < rawLine.length; col++) {
-        const ch = rawLine[col];
-
-        // -- Block Comment Handling (Highest priority)
-        if (inBlockComment) {
-          // -- Check for closing */
-          if (ch === '*' && rawLine[col + 1] === '/') {
-            inBlockComment = false;
-            col++;  // Skip the '/'
-          }
-          continue;  // Skip everything else while in block comment
-        }
-
-        // -- Check for opening /*
-        if (!inString && swimDelimiter === null &&
-            ch === '/' && rawLine[col + 1] === '*') {
-          inBlockComment = true;
-          col++;  // Skip the '*'
-          continue;
-        }
-
-        // -- Handle regular strings (single/double quoted)
-        if (swimDelimiter === null && (ch === '"' || ch === "'")) {
-          if (!inString) {
-            inString = true;
-            stringChar = ch;
-          } else if (ch === stringChar) {
-            // -- Check if this quote is escaped
-            let backslashCount = 0;
-            let pos = col - 1;
-            while (pos >= 0 && rawLine[pos] === '\\') {
-              backslashCount++;
-              pos--;
-            }
-            if (backslashCount % 2 === 0) {
-              inString = false;
-            }
-          }
-          continue;
-        }
-
-        // -- Handle swim-strings (fish sentinels)
-        if (!inString && swimDelimiter === null && ch === '>') {
-          const m = rawLine.slice(col).match(/^>[^>]{0,5}>/);
-          if (m) {
-            swimDelimiter = m[0];
-            col += swimDelimiter.length - 1;
-            continue;
-          }
-        }
-
-        // -- Exit swim-string when finding the matching delimiter
-        if (swimDelimiter) {
-          if (rawLine.startsWith(swimDelimiter, col)) {
-            col += swimDelimiter.length - 1;
-            swimDelimiter = null;
-          }
-          continue;
-        }
-
-        // -- Skip line comments (# or //)
-        if (!inString && swimDelimiter === null &&
-            (ch === '#' || (ch === '/' && rawLine[col + 1] === '/'))) {
-          break;  // Skip rest of line
-        }
-
-        // -- Count braces for balance checking
-        if (!inString && swimDelimiter === null) {
-
-          // -- Braces { }
-          if (ch === '{') {
-            braces++;
-            if (braces === 1) lastBracePos = document.offsetAt(new vscode.Position(lineIndex, col));
-          } else if (ch === '}') {
-            if (braces === 0) {
-              // Unexpected closing - report immediately
-              const pos = document.offsetAt(new vscode.Position(lineIndex, col));
-              const diag = createUnbalancedDiagnostic(-1, pos, '{', '}', 'brace', document);
-              if (diag) issues.push(diag);
-            } else {
-              braces--;
-            }
-          }
-
-          // -- Parenthesis ( )
-          else if (ch === '(') {
-            parens++;
-            if (parens === 1) lastParenPos = document.offsetAt(new vscode.Position(lineIndex, col));
-          } else if (ch === ')') {
-            if (parens === 0) {
-              // Unexpected closing - report immediately
-              const pos = document.offsetAt(new vscode.Position(lineIndex, col));
-              const diag = createUnbalancedDiagnostic(-1, pos, '(', ')', 'parenthesis', document);
-              if (diag) issues.push(diag);
-            } else {
-              parens--;
-            }
-          }
-
-          // -- Brackets [ ]
-          else if (ch === '[') {
-            brackets++;
-            if (brackets === 1) lastBracketPos = document.offsetAt(new vscode.Position(lineIndex, col));
-          } else if (ch === ']') {
-            if (brackets === 0) {
-              // Unexpected closing - report immediately
-              const pos = document.offsetAt(new vscode.Position(lineIndex, col));
-              const diag = createUnbalancedDiagnostic(-1, pos, '[', ']', 'bracket', document);
-              if (diag) issues.push(diag);
-            } else {
-              brackets--;
-            }
-          }
-        }
-      }
-
-      // ============================================================
-      // SYMBOL DETECTION
-      // ============================================================
-      if (!inBlockComment) {
-        // -- Skip comment-only lines
-        if (!/^\s*#/.test(rawLine) && !/^\s*\/\//.test(rawLine)) {
-          // -- Strip strings for symbol detection
-          const line = stripStrings(rawLine);
-
-          // -- Detect unknown scalar functions
-          for (const match of line.matchAll(scalarCallRegex())) {
-            const name = match[1];
-            if (!knownScalarFunctions.has(name)) {
-              const start = match.index + 1;
-              const diagnostic = new vscode.Diagnostic(
-                new vscode.Range(
-                  new vscode.Position(lineIndex, start),
-                  new vscode.Position(lineIndex, start + name.length)
-                ),
-                `Unknown scalar function '$${name}'`,
-                vscode.DiagnosticSeverity.Warning
-              );
-              diagnostic.code = "unknown-scalar-function";
-              diagnostic.source = "OtterScript";
-              issues.push(diagnostic);
-            }
-          }
-
-          // -- Detect unknown vector functions
-          for (const match of line.matchAll(vectorCallRegex())) {
-            const name = match[1];
-            if (!knownVectorFunctions.has(name)) {
-              const start = match.index + 1;
-              const diagnostic = new vscode.Diagnostic(
-                new vscode.Range(
-                  new vscode.Position(lineIndex, start),
-                  new vscode.Position(lineIndex, start + name.length)
-                ),
-                `Unknown vector function '@${name}'`,
-                vscode.DiagnosticSeverity.Warning
-              );
-              diagnostic.code = "unknown-vector-function";
-              diagnostic.source = "OtterScript";
-              issues.push(diagnostic);
-            }
-          }
-
-          // -- Detect unknown operations
-          for (const match of line.matchAll(operationCallRegex())) {
-            const name = match[1];
-            if (
-              name.includes("-") &&
-              !name.startsWith("$") &&
-              !name.startsWith("@") &&
-              !knownKeywords.has(name) &&
-              !knownOperations.has(name) &&
-              !knownScalarFunctions.has(name) &&
-              !knownVectorFunctions.has(name)
-            ) {
-              const start = match.index;
-              const diagnostic = new vscode.Diagnostic(
-                new vscode.Range(
-                  new vscode.Position(lineIndex, start),
-                  new vscode.Position(lineIndex, start + name.length)
-                ),
-                `Unknown operation '${name}'`,
-                vscode.DiagnosticSeverity.Warning
-              );
-              diagnostic.code = "unknown-operation";
-              diagnostic.source = "OtterScript";
-              issues.push(diagnostic);
-            }
-          }
-
-          // -- Detect invalid logical operators
-          if (/^\s*if\b/.test(line)) {
-            // -- Detect assignment-like '=' in conditions (likely intended as '==')
-            // Scan rawLine with a length-preserving mask so that column index j
-            // always maps correctly back to the original document position.
-            // Replacing string contents with spaces (not empty) keeps all indexes stable.
-            const maskedLine = rawLine
-              .replace(/"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/g, m => m[0] + ' '.repeat(m.length - 2) + m[0])
-              .replace(/(#|\/\/).*$/, m => ' '.repeat(m.length));
-
-            for (let j = 0; j < maskedLine.length; j++) {
-              if (maskedLine[j] !== '=') continue;
-
-              const prev = maskedLine[j - 1];
-              const next = maskedLine[j + 1];
-              const isSingleEquals = prev !== '=' && prev !== '!' && prev !== '<' && prev !== '>'
-                && next !== '=' && next !== '>';
-
-              if (!isSingleEquals) continue;
-
-              const diagnostic = new vscode.Diagnostic(
-                new vscode.Range(
-                  new vscode.Position(lineIndex, j),
-                  new vscode.Position(lineIndex, j + 1)
-                ),
-                "Possible assignment in condition. Did you mean '=='?",
-                vscode.DiagnosticSeverity.Warning
-              );
-              diagnostic.code = "assignment-in-condition";
-              diagnostic.source = "OtterScript";
-              issues.push(diagnostic);
-            }
-
-            for (let j = 0; j < line.length; j++) {
-              const ch = line[j];
-              if (ch === "&" || ch === "|") {
-                const prev = line[j - 1];
-                const next = line[j + 1];
-                if (prev !== ch && next !== ch) {
-                  const diagnostic = new vscode.Diagnostic(
-                    new vscode.Range(
-                      new vscode.Position(lineIndex, j),
-                      new vscode.Position(lineIndex, j + 1)
-                    ),
-                    `Invalid logical operator '${ch}'. Use '${ch}${ch}'.`,
-                    vscode.DiagnosticSeverity.Warning
-                  );
-                  diagnostic.code = "invalid-operator";
-                  diagnostic.source = "OtterScript";
-                  issues.push(diagnostic);
-                }
-              }
-            }
-          }
-          // -- Detect incorrect 'for' usage as a loop
-          // Matches: for i = 1 to 10, for $item in @list, for item in list
-          const forLoopLikePattern = /^\s*for\s+(\$?\w+)\s+(=|in)\s+/i;
-          if (forLoopLikePattern.test(line)) {
-            const startIndex = line.indexOf('for');
-            const diagnostic = new vscode.Diagnostic(
-              new vscode.Range(
-                new vscode.Position(lineIndex, startIndex),
-                new vscode.Position(lineIndex, startIndex + 3)
-              ),
-              "'for' in OtterScript does not perform iteration. Use 'foreach' for loops, or 'for server/role/directory' for context binding.",
-              vscode.DiagnosticSeverity.Warning
-            );
-            diagnostic.code = "incorrect-for-usage";
-            diagnostic.source = "OtterScript";
-            issues.push(diagnostic);
-          }
-        }
-      }
+      clearTimeout(diagnosticTimer);
+      updateDiagnostics(document, diagnostics, diagnosticsContext);
     }
-
-    // -- Unbalanced opening braces, parentheses, brackets
-    const symbols = [
-      { count: braces, lastPos: lastBracePos, open: '{', close: '}', name: 'brace' },
-      { count: parens, lastPos: lastParenPos, open: '(', close: ')', name: 'parenthesis' },
-      { count: brackets, lastPos: lastBracketPos, open: '[', close: ']', name: 'bracket' }
-    ];
-
-    for (const sym of symbols) {
-      if (sym.count > 0) {
-        const diag = createUnbalancedDiagnostic(sym.count, sym.lastPos, sym.open, sym.close, sym.name, document);
-        if (diag) issues.push(diag);
-      }
-    }
-
-    // -- Detect duplicate keys inside map expressions: %( key: value, key: value )
-    issues.push(...findDuplicateMapKeyDiagnostics(document, text));
-
-    diagnostics.set(document.uri, issues);
-  }
+  );
 
   // ============================================================
   // INITIAL DIAGNOSTICS & SUBSCRIPTION REGISTRATION
@@ -1208,10 +952,7 @@ function activate(context) {
   // Run initial diagnostics for already-open files
   // This handles files that were open before the extension activated
   // Without this, users would need to retype or reopen files to see errors
-  vscode.workspace.textDocuments.forEach(updateDiagnostics);
-
-  /** @type {ReturnType<typeof setTimeout> | undefined} */
-  let diagnosticTimer;
+  vscode.workspace.textDocuments.forEach(document => updateDiagnostics(document, diagnostics, diagnosticsContext));
 
   // Register all extension subscriptions in a single batch
   // VS Code automatically disposes these when the extension deactivates
@@ -1224,13 +965,16 @@ function activate(context) {
 
     vscode.workspace.onDidChangeTextDocument(e => {
       clearTimeout(diagnosticTimer);
-      diagnosticTimer = setTimeout(() => updateDiagnostics(e.document), 400);
+      diagnosticTimer = setTimeout(() => updateDiagnostics(e.document, diagnostics, diagnosticsContext), 400);
     }),
     // -- Run diagnostics when a new file is opened (handles files opened after activation)
-    vscode.workspace.onDidOpenTextDocument(updateDiagnostics),
+    vscode.workspace.onDidOpenTextDocument(document => updateDiagnostics(document, diagnostics, diagnosticsContext)),
 
-    // -- Clean up diagnostics when a file is closed to prevent stale error markers
-    vscode.workspace.onDidCloseTextDocument(doc => diagnostics.delete(doc.uri)),
+    // -- Clean up diagnostics and module navigation cache when a file is closed.
+    vscode.workspace.onDidCloseTextDocument(doc => {
+      diagnostics.delete(doc.uri);
+      clearModuleInfoCache(doc.uri);
+    }),
 
     // -- All providers are registered here for cleanup on deactivation
     signatureHelpProvider,
@@ -1242,7 +986,11 @@ function activate(context) {
     hoverProvider,
     codeActionsProvider,
     definitionProvider,
-    fixAllCommand
+    referenceProvider,
+    documentSymbolProvider,
+    codeLensProvider,
+    fixAllCommand,
+    refreshDiagnosticsCommand
   );
 }
 
@@ -1250,7 +998,9 @@ function activate(context) {
 // DEACTIVATION
 // ============================================================
 // Called when the extension is disabled or VS Code shuts down.
-function deactivate() {}
+function deactivate() {
+  clearTimeout(diagnosticTimer);
+}
 
 // MODULE EXPORTS
 module.exports = {
