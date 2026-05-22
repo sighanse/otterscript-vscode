@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.3] - 2026-05-22
 
 ### Added
 
@@ -18,6 +18,9 @@
 - Optimized logger hot path with a cached output channel reference (`appendOutputLine`).
 - Extracted `PROGET_VAR_DOC` constant in `language-data.js` to deduplicate 20 identical ProGet variable documentation strings.
 - Aligned ESLint globals to ES2022 to match `jsconfig.json` compiler target.
+- Consolidated non-code parsing logic (strings/comments/block comments/swim-strings) into shared scanner helpers used by diagnostics and module navigation.
+- Refactored module navigation lookups to consistently derive from cached `getModuleInfo(document)` data.
+- Added `signature` and `snippet` metadata for `module` and `call` keyword docs in `language-data.js` after snippet source cleanup.
 
 ### Fixed
 
@@ -25,6 +28,10 @@
 - Fixed optional chaining on `DocEntry.name` in variable completion provider.
 - Fixed `DocEntry` typedef duplication by importing from `language-data.js`.
 - Fixed `lastBracePos`/`lastParenPos`/`lastBracketPos` using `-1` sentinel instead of `null`.
+- Fixed stale diagnostics after quick-fix execution by adding immediate diagnostics refresh command wiring.
+- Fixed module reference/index scans to ignore call-like text in block comments and swim-strings.
+- Fixed module definition/reference providers to ignore strings/comments for context checks.
+- Fixed potential module info cache growth by clearing per-document cache entries on document close.
 
 ## [0.2.2] - 2026-05-18
 
