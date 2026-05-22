@@ -59,6 +59,7 @@ const {
 
 /** @type {ReturnType<typeof setTimeout> | undefined} */
 let diagnosticTimer;
+const REFRESH_DIAGNOSTICS_COMMAND = "otterscript.refreshDiagnostics";
 
 // ============================================================
 // ACTIVATION
@@ -681,7 +682,14 @@ function activate(context) {
 
             const factory = FIX_FACTORIES[getDiagnosticCode(diagnostic)];
             const fix = factory?.(document, diagnostic);
-            if (fix) actions.push(fix);
+            if (fix) {
+              fix.command = {
+                command: REFRESH_DIAGNOSTICS_COMMAND,
+                title: "Refresh OtterScript diagnostics",
+                arguments: [document.uri]
+              };
+              actions.push(fix);
+            }
           }
 
           return actions;
@@ -712,11 +720,11 @@ function activate(context) {
       if (!editor || editor.document.languageId !== "otterscript") return;
 
       const document = editor.document;
-      const diagnostics = vscode.languages
+      const docDiagnostics = vscode.languages
         .getDiagnostics(document.uri)
         .filter(diagnostic => diagnostic.source === "OtterScript");
       // -- Filter to fixable diagnostic codes (keys of FIX_FACTORIES)
-      const fixableDiagnostics = diagnostics.filter(d => getDiagnosticCode(d) in FIX_FACTORIES);
+      const fixableDiagnostics = docDiagnostics.filter(d => getDiagnosticCode(d) in FIX_FACTORIES);
 
       if (fixableDiagnostics.length === 0) {
         const msg = `No fixable OtterScript issues found in ${document.fileName}`;
@@ -753,6 +761,7 @@ function activate(context) {
 
       if (fixedCount) {
         await vscode.workspace.applyEdit(workspaceEdit);
+        updateDiagnostics(document, diagnostics, diagnosticsContext);
         const msg = `Fixed ${fixedCount} issue(s) in ${document.fileName}`;
         vscode.window.showInformationMessage(msg);
         log.info(msg);
@@ -932,6 +941,20 @@ function activate(context) {
 
   context.subscriptions.push(diagnostics);
 
+  const refreshDiagnosticsCommand = vscode.commands.registerCommand(
+    REFRESH_DIAGNOSTICS_COMMAND,
+    async (uri) => {
+      if (!uri) return;
+
+      const existing = vscode.workspace.textDocuments.find(doc => doc.uri.toString() === uri.toString());
+      const document = existing ?? await vscode.workspace.openTextDocument(uri);
+      if (document.languageId !== "otterscript") return;
+
+      clearTimeout(diagnosticTimer);
+      updateDiagnostics(document, diagnostics, diagnosticsContext);
+    }
+  );
+
   // ============================================================
   // INITIAL DIAGNOSTICS & SUBSCRIPTION REGISTRATION
   // ============================================================
@@ -972,7 +995,8 @@ function activate(context) {
     referenceProvider,
     documentSymbolProvider,
     codeLensProvider,
-    fixAllCommand
+    fixAllCommand,
+    refreshDiagnosticsCommand
   );
 }
 
