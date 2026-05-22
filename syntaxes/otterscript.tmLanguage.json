@@ -235,6 +235,9 @@
           "name": "meta.statement.call-module.otterscript",
           "begin": "\\bcall\\b",
           "end": ";",
+          "beginCaptures": {
+            "0": { "name": "keyword.control.otterscript" }
+          },
           "patterns": [
             { "include": "#proget-variables" },
             { "include": "#variables" },
@@ -249,6 +252,9 @@
           "name": "meta.statement.assign.otterscript",
           "begin": "\\bset\\b",
           "end": ";",
+          "beginCaptures": {
+            "0": { "name": "keyword.control.otterscript" }
+          },
           "patterns": [
             { "include": "#proget-variables" },
             { "include": "#variables" },
