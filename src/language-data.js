@@ -216,6 +216,44 @@ Restart-Server(
 \`\`\`
 `
   },
+  "Get-Asset": {
+    name: "Get-Asset",
+    signature: "Get-Asset(Name: <text>, [Raft: <text>], [Type: <integer>], [Overwrite: <true/false>], [To: <text>]);",
+    snippet: "Get-Asset ${1:assetName}\n(\n    Type: ${2:Module},\n    Raft: ${3:Raft},\n    Overwrite: ${4:false}\n);$0",
+    description: "Gets the specified asset file and saves it to the current working directory or target path.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Get-Asset(
+    Name: <text>,
+    [Raft: <text>],
+    [Type: <integer>],
+    [Overwrite: <true/false>],
+    [To: <text>]
+);
+\`\`\`
+
+**Arguments:**
+- \`Name\` (required) - Asset name.
+- \`Raft\` - Raft containing the asset.
+- \`Type\` - Asset type.
+- \`Overwrite\` - Whether to overwrite an existing file at destination.
+- \`To\` - Target file path to save as.
+
+**Examples:**
+\`\`\`otterscript
+# Gets the readme file from the current raft
+Get-Asset readme.md;
+
+Get-Asset myAsset
+(
+    Type: Module,
+    Raft: Raft,
+    Overwrite: false
+);
+\`\`\`
+`
+  },
   "Apply-Template": {
     name: "Apply-Template",
     signature: "Apply-Template([Asset: <text>], [OutputVariable: <text>], [OutputFile: <text>], [Literal: <text>], [InputFile: <text>], [AdditionalVariables: <%(key1: value1, ...)>], [NewLines: <integer>]);",
