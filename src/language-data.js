@@ -166,6 +166,53 @@ Post-Http(
 \`\`\`
 `
   },
+  "Download-Http": {
+    name: "Download-Http",
+    signature: "Download-Http(FileName: <text>, Url: <text>, [LogResponseBody: <true/false>], [ErrorStatusCodes: <text>], [ResponseBody: <text>], [RequestHeaders: <%(key1: value1, ...)>], [MaxResponseLength: <integer>], [ProxyRequest: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [IgnoreSslErrors: <true/false>]);",
+    snippet: "Download-Http ${1:https://example.com/file.zip}\n(\n    FileName: ${2:artifact.zip},\n    LogResponseBody: ${3:false}\n);$0",
+    description: "Downloads a file from a specified URL using an HTTP GET.",
+    documentation: `
+Downloads a file from a specified URL using an HTTP GET.
+
+**Script Usage:**
+\`\`\`otterscript
+Download-Http(
+    FileName: <text>,
+    Url: <text>,
+    [LogResponseBody: <true/false>],
+    [ErrorStatusCodes: <text>],
+    [ResponseBody: <text>],
+    [RequestHeaders: <%(key1: value1, ...)>],
+    [MaxResponseLength: <integer>],
+    [ProxyRequest: <true/false>],
+    [Credentials: <text>],
+    [UserName: <text>],
+    [Password: <text>],
+    [IgnoreSslErrors: <true/false>]
+);
+\`\`\`
+
+**Arguments:**
+- \`FileName\` (required) - Destination path for the downloaded file.
+- \`Url\` (required) - Source URL to download from.
+- \`LogResponseBody\` - Whether to log response body text.
+- \`ErrorStatusCodes\` - Comma-separated status codes/ranges treated as failure (default: \`400:599\`).
+- \`ResponseBody\` - Optional variable to store response text.
+- \`RequestHeaders\` - Optional request headers map.
+- \`MaxResponseLength\` - Maximum response length in bytes.
+- \`ProxyRequest\` - Proxy through the server in context.
+- \`Credentials\`, \`UserName\`, \`Password\` - Authentication options.
+- \`IgnoreSslErrors\` - Ignore SSL certificate errors.
+
+**Example:**
+\`\`\`otterscript
+Download-Http https://downloadurl.local
+(
+    FileName: destfilename
+);
+\`\`\`
+`
+  },
   "Sleep": {
     name: "Sleep",
     signature: "Sleep <integer>;",
