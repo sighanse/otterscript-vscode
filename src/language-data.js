@@ -453,6 +453,198 @@ Ensure-Asset
 \`\`\`
 `
   },
+  "Ensure-PsModule": {
+    name: "Ensure-PsModule",
+    signature: "Ensure-PsModule(Module: <text>, [Version: <text>], [MinimumVersion: <text>], [Force: <true/false>], [Repository: <text>], [Scope: <text>], [Exists: <true/false>], [AllowClobber: <true/false>], [AllowPrerelease: <true/false>], [AcceptLicense: <true/false>], [AllVersions: <true/false>], [Parameters: <%(key1: value1, ...)>], [Verbose: <true/false>], [DebugLogging: <true/false>], [PreferWindowsPowerShell: <text>]);",
+    snippet: "Ensure-PsModule\n(\n    Exists: ${1:true},\n    Module: ${2:PackageManagement},\n    MinimumVersion: ${3:1.4.6},\n    Repository: ${4:internal-powershell}\n);$0",
+    description: "Ensures that the specified PowerShell module is installed.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Ensure-PsModule(
+    Module: <text>,
+    [Version: <text>],
+    [MinimumVersion: <text>],
+    [Force: <true/false>],
+    [Repository: <text>],
+    [Scope: <text>],
+    [Exists: <true/false>],
+    [AllowClobber: <true/false>],
+    [AllowPrerelease: <true/false>],
+    [AcceptLicense: <true/false>],
+    [AllVersions: <true/false>],
+    [Parameters: <%(key1: value1, ...)>],
+    [Verbose: <true/false>],
+    [DebugLogging: <true/false>],
+    [PreferWindowsPowerShell: <text>]
+);
+\`\`\`
+`
+  },
+  "Ensure-HostsEntry": {
+    name: "Ensure-HostsEntry",
+    signature: "Ensure-HostsEntry(Host: <text>, IP: <text>, [Exists: <true/false>]);",
+    snippet: "Ensure-HostsEntry ${1:myHostName}\n(\n    Exists: ${2:true},\n    IP: ${3:127.0.0.1}\n);$0",
+    description: "Ensures an entry in the hosts file on a server.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Ensure-HostsEntry(
+    Host: <text>,
+    IP: <text>,
+    [Exists: <true/false>]
+);
+\`\`\`
+`
+  },
+  "Acquire-Server": {
+    name: "Acquire-Server",
+    signature: "Acquire-Server([Role: <text>], [ServerName: <text>], [Verbose: <true/false>]);",
+    snippet: "Acquire-Server(\n   Role: ${1:build-servers},\n   ServerName => ${2:\$AcquiredServerName}\n);$0",
+    description: "Acquires a server from a resource pool defined by a server role.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Acquire-Server(
+    [Role: <text>],
+    [ServerName: <text>],
+    [Verbose: <true/false>]
+);
+\`\`\`
+`
+  },
+  "Get-Http": {
+    name: "Get-Http",
+    signature: "Get-Http([Method: <integer>], Url: <text>, [LogResponseBody: <true/false>], [ErrorStatusCodes: <text>], [ResponseBody: <text>], [RequestHeaders: <%(key1: value1, ...)>], [MaxResponseLength: <integer>], [ProxyRequest: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [IgnoreSslErrors: <true/false>]);",
+    snippet: "Get-Http ${1:https://myurl.local}\n(\n    Method: ${2:GET}\n);$0",
+    description: "Executes an HTTP GET, DELETE, or HEAD request against a URL.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Get-Http(
+    [Method: <integer>],
+    Url: <text>,
+    [LogResponseBody: <true/false>],
+    [ErrorStatusCodes: <text>],
+    [ResponseBody: <text>],
+    [RequestHeaders: <%(key1: value1, ...)>],
+    [MaxResponseLength: <integer>],
+    [ProxyRequest: <true/false>],
+    [Credentials: <text>],
+    [UserName: <text>],
+    [Password: <text>],
+    [IgnoreSslErrors: <true/false>]
+);
+\`\`\`
+`
+  },
+  "Concatenate-Files": {
+    name: "Concatenate-Files",
+    signature: "Concatenate-Files(File: <text>, [Directory: <text>], [Include: <@(text)>], [Exclude: <@(text)>], [Encoding: <text>], [Separator: <text>]);",
+    snippet: "Concatenate-Files\n(\n    File: ${1:myoutputfile.txt}\n);$0",
+    description: "Concatenates files on a server.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Concatenate-Files(
+    File: <text>,
+    [Directory: <text>],
+    [Include: <@(text)>],
+    [Exclude: <@(text)>],
+    [Encoding: <text>],
+    [Separator: <text>]
+);
+\`\`\`
+`
+  },
+  "Create-ZipFile": {
+    name: "Create-ZipFile",
+    signature: "Create-ZipFile(Name: <text>, Directory: <text>, [Overwrite: <true/false>]);",
+    snippet: "Create-ZipFile\n(\n    Overwrite: ${1:true},\n    Name: ${2:myZipFileName.zip},\n    Directory: ${3:c:\\\\sourceDir}\n);$0",
+    description: "Creates a zip file on a server.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Create-ZipFile(
+    Name: <text>,
+    Directory: <text>,
+    [Overwrite: <true/false>]
+);
+\`\`\`
+`
+  },
+  "Rename-File": {
+    name: "Rename-File",
+    signature: "Rename-File(From: <text>, To: <text>, [Overwrite: <true/false>]);",
+    snippet: "Rename-File\n(\n    Overwrite: ${1:true},\n    From: ${2:mySourceFile.txt},\n    To: ${3:myDestFile.txt}\n);$0",
+    description: "Renames a file on a server.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Rename-File(
+    From: <text>,
+    To: <text>,
+    [Overwrite: <true/false>]
+);
+\`\`\`
+`
+  },
+  "Transfer-Files": {
+    name: "Transfer-Files",
+    signature: "Transfer-Files([Include: <@(text)>], [Exclude: <@(text)>], [FromDirectory: <text>], [FromServer: <text>], ToDirectory: <text>, [ToServer: <text>], [DeleteTarget: <true/false>], [SetLastModifiedDate: <true/false>], [BatchSize: <integer>], [Verbose: <true/false>]);",
+    snippet: "Transfer-Files\n(\n    DeleteTarget: ${1:true},\n    ToDirectory: ${2:c:\\\\targetDir}\n);$0",
+    description: "Copies files from a source directory to a target directory.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Transfer-Files(
+    [Include: <@(text)>],
+    [Exclude: <@(text)>],
+    [FromDirectory: <text>],
+    [FromServer: <text>],
+    ToDirectory: <text>,
+    [ToServer: <text>],
+    [DeleteTarget: <true/false>],
+    [SetLastModifiedDate: <true/false>],
+    [BatchSize: <integer>],
+    [Verbose: <true/false>]
+);
+\`\`\`
+`
+  },
+  "Sign-Exe": {
+    name: "Sign-Exe",
+    signature: "Sign-Exe(SubjectName: <text>, [TimestampServer: <text>], [ContentDescription: <text>], [ContentUrl: <text>], Include: <@(text)>, [Exclude: <@(text)>], [SignToolPath: <text>], [SourceDirectory: <text>]);",
+    snippet: "Sign-Exe IncludeText\n(\n    SubjectName: ${1:mySubjectOfCertificate}\n);$0",
+    description: "Signs .exe or .dll files using an installed code signing certificate.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Sign-Exe(
+    SubjectName: <text>,
+    [TimestampServer: <text>],
+    [ContentDescription: <text>],
+    [ContentUrl: <text>],
+    Include: <@(text)>,
+    [Exclude: <@(text)>],
+    [SignToolPath: <text>],
+    [SourceDirectory: <text>]
+);
+\`\`\`
+`
+  },
+  "Collect-RpmPackages": {
+    name: "Collect-RpmPackages",
+    signature: "Collect-RpmPackages [DefaultArgument] ();",
+    snippet: "Collect-RpmPackages();$0",
+    description: "Collects the names and versions of .rpm packages installed on a server.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Collect-RpmPackages [DefaultArgument] ();
+\`\`\`
+`
+  },
   "Sleep": {
     name: "Sleep",
     signature: "Sleep <integer>;",
