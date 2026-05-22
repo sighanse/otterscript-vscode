@@ -4,34 +4,23 @@
 
 ### Added
 
-- CodeLens reference counts above module declarations, linking to VS Code's reference peek UI (`otterscript.codeLens.enable` setting, default `true`).
-- `ReferenceProvider` for module declarations and call sites (powers Shift+F12 and CodeLens counts).
-- `DocumentSymbolProvider` populating the Outline panel, breadcrumbs, and Ctrl+Shift+O.
-- JS/JSDoc validation workflow via `npm run check:js` (pinned TypeScript 6.0.3, `jsconfig.json`).
-
-### Changed
-
-- Unified completion item documentation to use `buildHoverMarkdown` for consistent formatting across hover and completion popups.
-- Extracted `getActiveParameterIndex(argsText)` as a pure reusable helper in `helpers.js`.
-- Extracted shared module navigation helpers (`getModuleDeclarations`, `findModuleDeclarationRange`, `findModuleReferences`, `isModuleCallContext`, `isModuleDeclarationContext`, `MODULE_NAME_TOKEN_REGEX`) into `helpers.js`.
-- Replaced per-call dynamic regex compilation in `findModuleReferences` with static module-level constants.
-- Optimized logger hot path with a cached output channel reference (`appendOutputLine`).
-- Extracted `PROGET_VAR_DOC` constant in `language-data.js` to deduplicate 20 identical ProGet variable documentation strings.
-- Aligned ESLint globals to ES2022 to match `jsconfig.json` compiler target.
-- Consolidated non-code parsing logic (strings/comments/block comments/swim-strings) into shared scanner helpers used by diagnostics and module navigation.
-- Refactored module navigation lookups to consistently derive from cached `getModuleInfo(document)` data.
-- Added `signature` and `snippet` metadata for `module` and `call` keyword docs in `language-data.js` after snippet source cleanup.
+- 19 new operations with full IntelliSense (completion, hover, signature help, snippets): `Restart-Server`, `Get-Asset`, `Release-Server`, `Download-Http`, `Upload-Http`, `Ensure-Service`, `Ensure-Directory`, `Ensure-Server`, `Ensure-Asset`, `Ensure-PsModule`, `Ensure-HostsEntry`, `Acquire-Server`, `Get-Http`, `Concatenate-Files`, `Create-ZipFile`, `Rename-File`, `Transfer-Files`, `Sign-Exe`, `Collect-RpmPackages`.
+- CodeLens reference counts above module declarations linking to VS Code reference peek (`otterscript.codeLens.enable`, default `true`).
+- `ReferenceProvider` for module declarations and call sites (Shift+F12).
+- `DocumentSymbolProvider` for Outline panel, breadcrumbs, and Ctrl+Shift+O.
 
 ### Fixed
 
+- Fixed `set` and `call` keywords not highlighted when lowercase (missing grammar `beginCaptures`).
+- Fixed cross-line block comment and swim-string detection for module navigation.
+- Fixed stale diagnostics after quick-fix execution.
+- Fixed module reference scans to ignore strings, comments, and swim-strings.
+- Fixed module info cache growth on document close.
 - Fixed pending diagnostic timer not cleared on deactivation.
-- Fixed optional chaining on `DocEntry.name` in variable completion provider.
-- Fixed `DocEntry` typedef duplication by importing from `language-data.js`.
-- Fixed `lastBracePos`/`lastParenPos`/`lastBracketPos` using `-1` sentinel instead of `null`.
-- Fixed stale diagnostics after quick-fix execution by adding immediate diagnostics refresh command wiring.
-- Fixed module reference/index scans to ignore call-like text in block comments and swim-strings.
-- Fixed module definition/reference providers to ignore strings/comments for context checks.
-- Fixed potential module info cache growth by clearing per-document cache entries on document close.
+
+### Changed
+
+- Internal code quality improvements: scanner consolidation, module navigation helpers, cached module analysis, and shared utilities.
 
 ## [0.2.2] - 2026-05-18
 
