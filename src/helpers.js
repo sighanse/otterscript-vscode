@@ -548,7 +548,8 @@ function getModuleInfo(document) {
  * @returns {vscode.Range | null}
  */
 function findModuleDeclarationRange(document, moduleName) {
-  const declaration = getModuleDeclarations(document).find(entry => entry.name === moduleName);
+  const { declarations } = getModuleInfo(document);
+  const declaration = declarations.find(entry => entry.name === moduleName);
   return declaration?.range ?? null;
 }
 
@@ -602,12 +603,12 @@ function findModuleReferences(document, moduleName, includeDeclaration) {
   /** @type {vscode.Location[]} */
   const locations = [];
 
-  const refsByName = getModuleCallReferencesByName(document, new Set([moduleName]));
+  const { declarations, refsByName } = getModuleInfo(document);
 
   if (includeDeclaration) {
-    const declarationRange = findModuleDeclarationRange(document, moduleName);
-    if (declarationRange) {
-      locations.push(new vscode.Location(document.uri, declarationRange));
+    const declaration = declarations.find(entry => entry.name === moduleName);
+    if (declaration) {
+      locations.push(new vscode.Location(document.uri, declaration.range));
     }
   }
 
