@@ -785,7 +785,6 @@ function activate(context) {
         if (!wordRange) return null;
 
         const calledName = document.getText(wordRange);
-        if (!calledName) return null;
 
         // -- Verify this is actually a 'call' statement
         const lineText = document.lineAt(position.line).text;
@@ -824,7 +823,6 @@ function activate(context) {
         if (!wordRange) return [];
 
         const moduleName = document.getText(wordRange);
-        if (!moduleName) return [];
 
         const currentLine = document.lineAt(position.line).text;
         if (isInStringOrComment(currentLine, wordRange.start.character)) {
