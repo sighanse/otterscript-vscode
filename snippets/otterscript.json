@@ -113,20 +113,6 @@
     ],
     "description": "Check if a directory exists"
   },
-  "Module Definition": {
-    "prefix": "module",
-    "body": [
-      "module ${1:ModuleName} <${2:out $$param=\"default\"}> {",
-      "    ${3:# module body}",
-      "}"
-    ],
-    "description": "Define a reusable module"
-  },
-  "Call Module": {
-    "prefix": "call",
-    "body": ["call ${1:ModuleName} (", "    ${2:param}: ${3:value}", ");"],
-    "description": "Call a defined module"
-  },
   "With Directive": {
     "prefix": "with",
     "body": ["with ${1:retry=3, timeout=30} {", "    ${2:# operations}", "}"],

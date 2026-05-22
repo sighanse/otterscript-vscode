@@ -605,6 +605,8 @@ if !$PackageName {
   },
   "module": {
     name: "module",
+    signature: "module ModuleName <out $param=\"default\"> { ... }",
+    snippet: "module ${1:ModuleName} <${2:out $$param=\"default\"}> {\n    ${3:# module body}\n}",
     description: "Defines a reusable module with optional parameters and outputs.",
     documentation: `
 Defines a reusable module that can be invoked using \`call\`.
@@ -624,6 +626,8 @@ module ModuleName <out $result = "default"> {
   },
   "call": {
     name: "call",
+    signature: "call ModuleName (param: value);",
+    snippet: "call ${1:ModuleName} (\n    ${2:param}: ${3:value}\n);",
     description: "Invokes a previously defined module.",
     documentation: `
 Invokes a module defined using the \`module\` keyword.
