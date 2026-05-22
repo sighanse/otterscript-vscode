@@ -728,6 +728,7 @@ function getActiveParameterIndex(argsText) {
     if (inString && ch === quote) {
       if (isUnescapedQuoteAt(argsText, i)) {
         inString = false;
+        quote = null;
       }
       continue;
     }
