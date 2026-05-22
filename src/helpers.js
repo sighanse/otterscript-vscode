@@ -473,7 +473,7 @@ function findModuleReferences(document, moduleName, includeDeclaration) {
   /** @type {vscode.Location[]} */
   const locations = [];
 
-  const refsByName = getModuleCallReferencesByName(document);
+  const refsByName = getModuleCallReferencesByName(document, new Set([moduleName]));
 
   if (includeDeclaration) {
     const declarationRange = findModuleDeclarationRange(document, moduleName);
