@@ -375,24 +375,27 @@ function createCodeScanState() {
 
 /**
  * Produces a length-preserving mask of non-code spans.
+/**
+ * Core line scanner shared by {@link maskNonCodeSpans} and {@link advanceScanState}.
  *
- * Masked spans include strings, line comments, block comments, and swim-strings.
- * State is carried across lines for block comments, strings, and swim-strings.
+ * Advances `state` by processing every character of `lineText`.  When `chars`
+ * is non-null it is treated as a split-string output buffer: every character
+ * that belongs to a non-code span is replaced with a space in that buffer.
  *
  * @param {string} lineText
- * @param {CodeScanState} state
- * @returns {string}
+ * @param {CodeScanState} state - Mutated in place.
+ * @param {string[] | null} chars - Output buffer, or null for state-only mode.
+ * @returns {void}
+ * @private
  */
-function maskNonCodeSpans(lineText, state) {
-  const chars = lineText.split("");
-
-  for (let i = 0; i < chars.length; i++) {
+function scanLineState(lineText, state, chars) {
+  for (let i = 0; i < lineText.length; i++) {
     const ch = lineText[i];
 
     if (state.inBlockComment) {
-      chars[i] = " ";
+      if (chars) chars[i] = " ";
       if (ch === "*" && lineText[i + 1] === "/") {
-        chars[i + 1] = " ";
+        if (chars) chars[i + 1] = " ";
         state.inBlockComment = false;
         i++;
       }
@@ -400,11 +403,11 @@ function maskNonCodeSpans(lineText, state) {
     }
 
     if (state.swimDelimiter) {
-      chars[i] = " ";
+      if (chars) chars[i] = " ";
       if (lineText.startsWith(state.swimDelimiter, i)) {
-        for (let j = 0; j < state.swimDelimiter.length; j++) {
-          if (i + j < chars.length) {
-            chars[i + j] = " ";
+        if (chars) {
+          for (let j = 0; j < state.swimDelimiter.length; j++) {
+            if (i + j < chars.length) chars[i + j] = " ";
           }
         }
         i += state.swimDelimiter.length - 1;
@@ -414,7 +417,7 @@ function maskNonCodeSpans(lineText, state) {
     }
 
     if (state.inString) {
-      chars[i] = " ";
+      if (chars) chars[i] = " ";
       if (ch === state.quote && isUnescapedQuoteAt(lineText, i)) {
         state.inString = false;
         state.quote = null;
@@ -423,9 +426,9 @@ function maskNonCodeSpans(lineText, state) {
     }
 
     if (ch === "/" && lineText[i + 1] === "*") {
-      chars[i] = " ";
-      if (i + 1 < chars.length) {
-        chars[i + 1] = " ";
+      if (chars) {
+        chars[i] = " ";
+        if (i + 1 < chars.length) chars[i + 1] = " ";
       }
       state.inBlockComment = true;
       i++;
@@ -436,9 +439,9 @@ function maskNonCodeSpans(lineText, state) {
       const swimMatch = lineText.slice(i).match(/^>[^>]{0,5}>/);
       if (swimMatch) {
         const delimiter = swimMatch[0];
-        for (let j = 0; j < delimiter.length; j++) {
-          if (i + j < chars.length) {
-            chars[i + j] = " ";
+        if (chars) {
+          for (let j = 0; j < delimiter.length; j++) {
+            if (i + j < chars.length) chars[i + j] = " ";
           }
         }
         state.swimDelimiter = delimiter;
@@ -448,27 +451,37 @@ function maskNonCodeSpans(lineText, state) {
     }
 
     if (ch === '"' || ch === "'") {
-      chars[i] = " ";
+      if (chars) chars[i] = " ";
       state.inString = true;
       state.quote = ch;
       continue;
     }
 
     if (ch === "#") {
-      for (let j = i; j < chars.length; j++) {
-        chars[j] = " ";
-      }
+      if (chars) { for (let j = i; j < chars.length; j++) chars[j] = " "; }
       break;
     }
 
     if (ch === "/" && lineText[i + 1] === "/") {
-      for (let j = i; j < chars.length; j++) {
-        chars[j] = " ";
-      }
+      if (chars) { for (let j = i; j < chars.length; j++) chars[j] = " "; }
       break;
     }
   }
+}
 
+/**
+ * Produces a length-preserving mask of non-code spans.
+ *
+ * Masked spans include strings, line comments, block comments, and swim-strings.
+ * State is carried across lines for block comments, strings, and swim-strings.
+ *
+ * @param {string} lineText
+ * @param {CodeScanState} state
+ * @returns {string}
+ */
+function maskNonCodeSpans(lineText, state) {
+  const chars = lineText.split("");
+  scanLineState(lineText, state, chars);
   return chars.join("");
 }
 
@@ -708,6 +721,24 @@ function isInStringOrComment(line, position, initialState) {
 }
 
 /**
+ * Advances a {@link CodeScanState} by processing one line of text without
+ * producing any output string.
+ *
+ * This is the state-only sibling of {@link maskNonCodeSpans}.  Use it when
+ * you need to accumulate cross-line comment/string state for lines whose
+ * masked text is not required (e.g. the preceding-line scan in
+ * {@link isInStringOrCommentDoc}).  Avoids the `split`/`join` allocation that
+ * `maskNonCodeSpans` performs on every line.
+ *
+ * @param {string} lineText
+ * @param {CodeScanState} state - Mutated in place.
+ * @returns {void}
+ */
+function advanceScanState(lineText, state) {
+  scanLineState(lineText, state, null);
+}
+
+/**
  * Document-aware version of {@link isInStringOrComment}.
  *
  * Scans from the beginning of the document with carried {@link CodeScanState}
@@ -725,8 +756,10 @@ function isInStringOrComment(line, position, initialState) {
 function isInStringOrCommentDoc(document, position) {
   const state = createCodeScanState();
 
+  // Use advanceScanState (not maskNonCodeSpans) for preceding lines — we only
+  // need the state side-effect and want to avoid the split/join allocations.
   for (let i = 0; i < position.line; i++) {
-    maskNonCodeSpans(document.lineAt(i).text, state);
+    advanceScanState(document.lineAt(i).text, state);
   }
 
   return isInStringOrComment(
@@ -1248,6 +1281,7 @@ module.exports = {
   isModuleCallContext,
   getModuleDeclarations,
   createCodeScanState,
+  advanceScanState,
   maskNonCodeSpans,
   findModuleDeclarationRange,
   getModuleCallReferencesByName,
