@@ -104,11 +104,6 @@ function getOutputChannel() {
  * @returns {void}
  */
 function appendOutputLine(line) {
-  if (outputChannel) {
-    outputChannel.appendLine(line);
-    return;
-  }
-
   getOutputChannel().appendLine(line);
 }
 
