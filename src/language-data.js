@@ -213,6 +213,97 @@ Download-Http https://downloadurl.local
 \`\`\`
 `
   },
+  "Execute-PowerShell": {
+    name: "Execute-PowerShell",
+    signature: "Execute-PowerShell(Text: <text>, [Debug: <true/false>], [Verbose: <true/false>], [RunOnSimulation: <true/false>], [Isolated: <true/false>], [SuccessExitCode: <text>], [PreferWindowsPowerShell: <text>]);",
+    snippet: "Execute-PowerShell >>\n    ${1:Get-Service | Where-Object { $_.Status -eq \"Running\" } | Out-String}\n>> (\n    Verbose: ${2:false},\n    Debug: ${3:false},\n    RunOnSimulation: ${4:false}\n);$0",
+    description: "Executes a specified PowerShell script.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Execute-PowerShell(
+    Text: <text>,
+    [Debug: <true/false>],
+    [Verbose: <true/false>],
+    [RunOnSimulation: <true/false>],
+    [Isolated: <true/false>],
+    [SuccessExitCode: <text>],
+    [PreferWindowsPowerShell: <text>]
+);
+\`\`\`
+
+**Arguments:**
+- \`Text\` (required) - PowerShell script text.
+- \`Debug\` - Capture \`Write-Debug\` output in execution debug log.
+- \`Verbose\` - Capture \`Write-Verbose\` output in execution debug log.
+- \`RunOnSimulation\` - Whether the script executes in simulation mode.
+- \`Isolated\` - Run script in a temporary AppDomain.
+- \`SuccessExitCode\` - Exit code value/rule that indicates success.
+- \`PreferWindowsPowerShell\` - Prefer Windows PowerShell 5.1 where available.
+
+**Example:**
+\`\`\`otterscript
+Execute-PowerShell >>
+    Get-Service | Where-Object { $_.Status -eq "Running" } | Out-String
+>>;
+\`\`\`
+
+**Notes:**
+- Docs also refer to this operation as PSExec / \`psexec\`.
+`
+  },
+  "Ensure-Service": {
+    name: "Ensure-Service",
+    signature: "Ensure-Service(Name: <text>, [DisplayName: <text>], [Description: <text>], [Status: <integer>], [Exists: <true/false>], Path: <text>, [Startup: <integer>], [DelayedStart: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [FirstFailure: <integer>], [SecondFailure: <integer>], [SubsequentFailures: <integer>], [RestartDelay: <integer>], [OnFailureProgramPath: <text>], [RebootMessage: <text>], [Dependencies: <@(text)>], [StatusChangeTimeout: <TimeSpan>]);",
+    snippet: "Ensure-Service(\n    Name: ${1:myName},\n    DisplayName: ${2:myDisplayName},\n    Status: ${3:Running},\n    Path: ${4:c:\\\\myservice.exe}\n);$0",
+    description: "Ensures the configuration of a Windows service on a server.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Ensure-Service(
+    Name: <text>,
+    [DisplayName: <text>],
+    [Description: <text>],
+    [Status: <integer>],
+    [Exists: <true/false>],
+    Path: <text>,
+    [Startup: <integer>],
+    [DelayedStart: <true/false>],
+    [Credentials: <text>],
+    [UserName: <text>],
+    [Password: <text>],
+    [FirstFailure: <integer>],
+    [SecondFailure: <integer>],
+    [SubsequentFailures: <integer>],
+    [RestartDelay: <integer>],
+    [OnFailureProgramPath: <text>],
+    [RebootMessage: <text>],
+    [Dependencies: <@(text)>],
+    [StatusChangeTimeout: <TimeSpan>]
+);
+\`\`\`
+
+**Key Arguments:**
+- \`Name\` (required) - Service name.
+- \`Path\` (required) - Service executable path (may include args).
+- \`DisplayName\`, \`Description\` - Service metadata.
+- \`Status\`, \`Startup\`, \`DelayedStart\` - Runtime/startup behavior.
+- \`Exists\` - Ensure presence or absence.
+- \`Credentials\` or \`UserName\`/\`Password\` - Service account.
+- \`Dependencies\`, \`StatusChangeTimeout\` - Dependency and state transition controls.
+
+**Example:**
+\`\`\`otterscript
+Ensure-Service
+(
+    Name: myName,
+    DisplayName: myDisplayName,
+    Status: Running,
+    Path: c:\\myservice.exe
+);
+\`\`\`
+`
+  },
   "Sleep": {
     name: "Sleep",
     signature: "Sleep <integer>;",

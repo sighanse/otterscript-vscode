@@ -157,7 +157,7 @@
         },
         {
           "name": "keyword.other.operation.otterscript",
-          "match": "\\b(Log-Debug|Log-Information|Log-Warning|Log-Error|Post-Http|Download-Http|Sleep|Restart-Server|Get-Asset|Release-Server|Apply-Template)\\b"
+          "match": "\\b(Log-Debug|Log-Information|Log-Warning|Log-Error|Post-Http|Download-Http|Execute-PowerShell|Ensure-Service|Sleep|Restart-Server|Get-Asset|Release-Server|Apply-Template)\\b"
         }
       ]
     },
