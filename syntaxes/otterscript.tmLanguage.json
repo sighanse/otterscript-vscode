@@ -157,7 +157,7 @@
         },
         {
           "name": "keyword.other.operation.otterscript",
-          "match": "\\b(Log-Debug|Log-Information|Log-Warning|Log-Error|Post-Http|Sleep|Apply-Template)\\b"
+          "match": "\\b(Log-Debug|Log-Information|Log-Warning|Log-Error|Post-Http|Sleep|Restart-Server|Apply-Template)\\b"
         }
       ]
     },

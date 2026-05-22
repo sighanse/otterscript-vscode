@@ -185,6 +185,37 @@ Sleep 5;
 - Useful for adding delays between operations, such as waiting for a service to start or avoiding rate limits.
 `
   },
+  "Restart-Server": {
+    name: "Restart-Server",
+    signature: "Restart-Server([After: <integer>], [MinimumDelay: <integer>]);",
+    snippet: "Restart-Server(\n    After: ${1:5},\n    MinimumDelay: ${2:15}\n);$0",
+    description: "Restarts a server and waits for it to become available again.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Restart-Server(
+    [After: <integer>],
+    [MinimumDelay: <integer>]
+);
+\`\`\`
+
+**Arguments:**
+- \`After\` - Number of seconds to wait before initiating the restart.
+- \`MinimumDelay\` - Number of seconds to wait after initiating restart before polling the server.
+
+**Notes:**
+- Default and minimum for \`After\` is 5 seconds.
+- Default and minimum for \`MinimumDelay\` is 15 seconds.
+- If \`MinimumDelay\` is too low, the operation could appear to succeed before restart begins.
+
+**Example:**
+\`\`\`otterscript
+Restart-Server(
+    After: 10
+);
+\`\`\`
+`
+  },
   "Apply-Template": {
     name: "Apply-Template",
     signature: "Apply-Template([Asset: <text>], [OutputVariable: <text>], [OutputFile: <text>], [Literal: <text>], [InputFile: <text>], [AdditionalVariables: <%(key1: value1, ...)>], [NewLines: <integer>]);",
