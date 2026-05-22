@@ -287,9 +287,25 @@ function createRegexPatterns(knownOperations) {
 const MODULE_NAME_TOKEN_REGEX = /[A-Za-z][\w-]*/;
 
 const MODULE_DECLARATION_REGEX = /^\s*module\s+([A-Za-z][\w-]*)/;
-const MODULE_CALL_TARGET_REGEX = /^\s*call\s+(?:[A-Za-z][\w-]*::)?([A-Za-z][\w-]*)\b/;
+const MODULE_CALL_TARGET_REGEX = /\bcall\s+(?:[A-Za-z][\w-]*::)?([A-Za-z][\w-]*)\b/;
+const MODULE_CALL_TARGET_GLOBAL_REGEX = new RegExp(MODULE_CALL_TARGET_REGEX.source, "g");
 const MODULE_DECL_PREFIX_REGEX = /^\s*module\s+$/i;
 const MODULE_CALL_PREFIX_REGEX = /\bcall\s+(?:[A-Za-z][\w-]*::)?$/i;
+
+/**
+ * Returns true when a quote at the given index is not escaped.
+ *
+ * @param {string} text
+ * @param {number} index
+ * @returns {boolean}
+ */
+function isUnescapedQuoteAt(text, index) {
+  let backslashCount = 0;
+  for (let i = index - 1; i >= 0 && text[i] === "\\"; i--) {
+    backslashCount++;
+  }
+  return backslashCount % 2 === 0;
+}
 
 /**
  * Returns true when the current word position is in a module declaration context.
@@ -381,8 +397,17 @@ function findModuleReferences(document, moduleName, includeDeclaration) {
       continue;
     }
 
-    const callMatch = MODULE_CALL_TARGET_REGEX.exec(lineText);
-    if (callMatch && callMatch[1] === moduleName) {
+    MODULE_CALL_TARGET_GLOBAL_REGEX.lastIndex = 0;
+    for (const callMatch of lineText.matchAll(MODULE_CALL_TARGET_GLOBAL_REGEX)) {
+      if (callMatch[1] !== moduleName || typeof callMatch.index !== "number") {
+        continue;
+      }
+
+      // Ignore call-like text occurring inside quoted strings or comments.
+      if (isInStringOrComment(lineText, callMatch.index)) {
+        continue;
+      }
+
       const start = callMatch.index + callMatch[0].indexOf(callMatch[1]);
       const range = new vscode.Range(
         new vscode.Position(line, start),
@@ -415,22 +440,36 @@ function findModuleReferences(document, moduleName, includeDeclaration) {
  *
  */
 function isInStringOrComment(line, position) {
-  // Get text from line start up to cursor position
-  const prefix = line.slice(0, position);
+  let inString = false;
+  let quote = null;
 
-  // Check if the line starts with a comment marker (# or //)
-  // Note: Only catches comments at START of line, not inline comments
-  if (/^\s*(#|\/\/)/.test(prefix)) {
-    return true;
+  for (let i = 0; i < position && i < line.length; i++) {
+    const ch = line[i];
+
+    if (!inString && (ch === '"' || ch === "'")) {
+      inString = true;
+      quote = ch;
+      continue;
+    }
+
+    if (inString && ch === quote) {
+      if (isUnescapedQuoteAt(line, i)) {
+        inString = false;
+        quote = null;
+      }
+      continue;
+    }
+
+    if (!inString && ch === "#") {
+      return true;
+    }
+
+    if (!inString && ch === "/" && line[i + 1] === "/") {
+      return true;
+    }
   }
 
-  // Inside quoted string (simple, fast heuristic)
-  // Odd count of quotes means we're inside an unclosed string
-  const doubleQuotes = (prefix.match(/"/g) || []).length;
-  const singleQuotes = (prefix.match(/'/g) || []).length;
-
-  // Return true if either quote type has an odd count (unclosed string)
-  return doubleQuotes % 2 === 1 || singleQuotes % 2 === 1;
+  return inString;
 }
 
 /**
@@ -460,13 +499,7 @@ function getActiveParameterIndex(argsText) {
     }
 
     if (inString && ch === quote) {
-      let backslashCount = 0;
-      let j = i - 1;
-      while (j >= 0 && argsText[j] === "\\") {
-        backslashCount++;
-        j--;
-      }
-      if (backslashCount % 2 === 0) {
+      if (isUnescapedQuoteAt(argsText, i)) {
         inString = false;
       }
       continue;
