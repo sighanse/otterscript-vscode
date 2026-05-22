@@ -45,6 +45,7 @@ const {
   getDiagnosticCode,
   getActiveParameterIndex,
   getModuleDeclarations,
+  getModuleCallReferencesByName,
   findModuleDeclarationRange,
   findModuleReferences,
   isModuleCallContext,
@@ -872,36 +873,19 @@ function activate(context) {
        * Builds code lenses for module declarations.
        *
        * @param {vscode.TextDocument} document
-       * @returns {Promise<vscode.CodeLens[]>}
+       * @returns {vscode.CodeLens[]}
        */
-      async provideCodeLenses(document) {
+      provideCodeLenses(document) {
         if (!codeLensEnabled) return [];
         /** @type {vscode.CodeLens[]} */
         const lenses = [];
         const declarations = getModuleDeclarations(document);
+        const declarationNames = new Set(declarations.map(declaration => declaration.name));
+        const refsByName = getModuleCallReferencesByName(document, declarationNames);
 
         for (const declaration of declarations) {
           const range = declaration.range;
-
-          /** @type {vscode.Location[]} */
-          let references;
-          try {
-            const result = await vscode.commands.executeCommand(
-              "vscode.executeReferenceProvider",
-              document.uri,
-              range.start
-            );
-            references = Array.isArray(result) ? result : [];
-          } catch {
-            references = [];
-          }
-
-          const usageRefs = references.filter(location => {
-            const sameFile = location.uri.toString() === document.uri.toString();
-            const sameStart = location.range.start.isEqual(range.start);
-            const sameEnd = location.range.end.isEqual(range.end);
-            return !(sameFile && sameStart && sameEnd);
-          });
+          const usageRefs = refsByName.get(declaration.name) ?? [];
 
           lenses.push(
             new vscode.CodeLens(range, {

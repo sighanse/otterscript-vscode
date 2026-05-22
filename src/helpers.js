@@ -371,6 +371,58 @@ function findModuleDeclarationRange(document, moduleName) {
 }
 
 /**
+ * Builds a single-pass index of module call references by module name.
+ *
+ * This is optimized for features like CodeLens that need counts or locations
+ * for many modules in the same document.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {ReadonlySet<string>} [allowedModuleNames] - Optional filter of module names to index
+ * @returns {Map<string, vscode.Location[]>}
+ */
+function getModuleCallReferencesByName(document, allowedModuleNames) {
+  /** @type {Map<string, vscode.Location[]>} */
+  const refsByName = new Map();
+
+  for (let line = 0; line < document.lineCount; line++) {
+    const lineText = document.lineAt(line).text;
+
+    MODULE_CALL_TARGET_GLOBAL_REGEX.lastIndex = 0;
+    for (const callMatch of lineText.matchAll(MODULE_CALL_TARGET_GLOBAL_REGEX)) {
+      const moduleName = callMatch[1];
+      if (typeof moduleName !== "string" || typeof callMatch.index !== "number") {
+        continue;
+      }
+
+      if (allowedModuleNames && !allowedModuleNames.has(moduleName)) {
+        continue;
+      }
+
+      // Ignore call-like text occurring inside quoted strings or comments.
+      if (isInStringOrComment(lineText, callMatch.index)) {
+        continue;
+      }
+
+      const start = callMatch.index + callMatch[0].indexOf(moduleName);
+      const range = new vscode.Range(
+        new vscode.Position(line, start),
+        new vscode.Position(line, start + moduleName.length)
+      );
+      const location = new vscode.Location(document.uri, range);
+
+      const existing = refsByName.get(moduleName);
+      if (existing) {
+        existing.push(location);
+      } else {
+        refsByName.set(moduleName, [location]);
+      }
+    }
+  }
+
+  return refsByName;
+}
+
+/**
  * Finds references to a module declaration and module calls in the document.
  *
  * @param {vscode.TextDocument} document
@@ -382,39 +434,18 @@ function findModuleReferences(document, moduleName, includeDeclaration) {
   /** @type {vscode.Location[]} */
   const locations = [];
 
-  for (let line = 0; line < document.lineCount; line++) {
-    const lineText = document.lineAt(line).text;
-    const declMatch = MODULE_DECLARATION_REGEX.exec(lineText);
-    if (declMatch && declMatch[1] === moduleName) {
-      const start = declMatch.index + declMatch[0].indexOf(declMatch[1]);
-      const range = new vscode.Range(
-        new vscode.Position(line, start),
-        new vscode.Position(line, start + moduleName.length)
-      );
-      if (includeDeclaration) {
-        locations.push(new vscode.Location(document.uri, range));
-      }
-      continue;
+  const refsByName = getModuleCallReferencesByName(document);
+
+  if (includeDeclaration) {
+    const declarationRange = findModuleDeclarationRange(document, moduleName);
+    if (declarationRange) {
+      locations.push(new vscode.Location(document.uri, declarationRange));
     }
+  }
 
-    MODULE_CALL_TARGET_GLOBAL_REGEX.lastIndex = 0;
-    for (const callMatch of lineText.matchAll(MODULE_CALL_TARGET_GLOBAL_REGEX)) {
-      if (callMatch[1] !== moduleName || typeof callMatch.index !== "number") {
-        continue;
-      }
-
-      // Ignore call-like text occurring inside quoted strings or comments.
-      if (isInStringOrComment(lineText, callMatch.index)) {
-        continue;
-      }
-
-      const start = callMatch.index + callMatch[0].indexOf(callMatch[1]);
-      const range = new vscode.Range(
-        new vscode.Position(line, start),
-        new vscode.Position(line, start + moduleName.length)
-      );
-      locations.push(new vscode.Location(document.uri, range));
-    }
+  const callRefs = refsByName.get(moduleName);
+  if (callRefs) {
+    locations.push(...callRefs);
   }
 
   return locations;
@@ -982,6 +1013,7 @@ module.exports = {
   isModuleCallContext,
   getModuleDeclarations,
   findModuleDeclarationRange,
+  getModuleCallReferencesByName,
   findModuleReferences,
 
   // -- Regex
