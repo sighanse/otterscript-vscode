@@ -73,10 +73,10 @@ No dedicated `npm test` script exists; rely on lint/package/CI checks and manual
 
 For OtterScript semantics, verify against Inedo docs before changing language intelligence data:
 
-- https://docs.inedo.com/docs/executionengine/otterscript/overview
-- https://docs.inedo.com/docs/executionengine/reference/formal-specification
-- https://docs.inedo.com/docs/executionengine/reference/otterscript-formal-grammar
-- https://docs.inedo.com/docs/executionengine/otterscript/strings-and-literals
+- <https://docs.inedo.com/docs/executionengine/otterscript/overview>
+- <https://docs.inedo.com/docs/executionengine/reference/formal-specification>
+- <https://docs.inedo.com/docs/executionengine/reference/otterscript-formal-grammar>
+- <https://docs.inedo.com/docs/executionengine/otterscript/strings-and-literals>
 
 ## Done Checklist
 
