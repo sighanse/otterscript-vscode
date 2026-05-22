@@ -213,6 +213,54 @@ Download-Http https://downloadurl.local
 \`\`\`
 `
   },
+  "Upload-Http": {
+    name: "Upload-Http",
+    signature: "Upload-Http([Method: <integer>], FileName: <text>, Url: <text>, [LogResponseBody: <true/false>], [ErrorStatusCodes: <text>], [ResponseBody: <text>], [RequestHeaders: <%(key1: value1, ...)>], [MaxResponseLength: <integer>], [ProxyRequest: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [IgnoreSslErrors: <true/false>]);",
+    snippet: "Upload-Http ${1:file.txt}\n(\n    Method: ${2:POST},\n    Url: ${3:url.local}\n);$0",
+    description: "Uploads a file to a specified URL using an HTTP POST or PUT.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Upload-Http(
+    [Method: <integer>],
+    FileName: <text>,
+    Url: <text>,
+    [LogResponseBody: <true/false>],
+    [ErrorStatusCodes: <text>],
+    [ResponseBody: <text>],
+    [RequestHeaders: <%(key1: value1, ...)>],
+    [MaxResponseLength: <integer>],
+    [ProxyRequest: <true/false>],
+    [Credentials: <text>],
+    [UserName: <text>],
+    [Password: <text>],
+    [IgnoreSslErrors: <true/false>]
+);
+\`\`\`
+
+**Arguments:**
+- \`FileName\` (required) - Path of the file to upload.
+- \`Url\` (required) - Destination URL.
+- \`Method\` - HTTP method.
+- \`LogResponseBody\` - Whether to log response body text.
+- \`ErrorStatusCodes\` - Comma-separated status codes/ranges treated as failure (default: \`400:599\`).
+- \`ResponseBody\` - Optional variable to store response text.
+- \`RequestHeaders\` - Optional request headers map.
+- \`MaxResponseLength\` - Maximum response length in bytes.
+- \`ProxyRequest\` - Proxy through the server in context.
+- \`Credentials\`, \`UserName\`, \`Password\` - Authentication options.
+- \`IgnoreSslErrors\` - Ignore SSL certificate errors.
+
+**Example:**
+\`\`\`otterscript
+Upload-Http file.txt
+(
+    Method: POST,
+    Url: url.local
+);
+\`\`\`
+`
+  },
   "Execute-PowerShell": {
     name: "Execute-PowerShell",
     signature: "Execute-PowerShell(Text: <text>, [Debug: <true/false>], [Verbose: <true/false>], [RunOnSimulation: <true/false>], [Isolated: <true/false>], [SuccessExitCode: <text>], [PreferWindowsPowerShell: <text>]);",
