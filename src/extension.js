@@ -51,7 +51,7 @@ const {
   isModuleCallContext,
   isModuleDeclarationContext,
   isValidCompletionPosition,
-  isInStringOrComment,
+  isInStringOrCommentDoc,
   clearModuleInfoCache,
   loadConfig,
   MODULE_NAME_TOKEN_REGEX,
@@ -517,7 +517,7 @@ function activate(context) {
         }
 
         // -- Prevent hover inside strings or comments
-        if (isInStringOrComment(line, position.character)) {
+        if (isInStringOrCommentDoc(document, position)) {
           return null;
         }
 
@@ -788,7 +788,7 @@ function activate(context) {
 
         // -- Verify this is actually a 'call' statement
         const lineText = document.lineAt(position.line).text;
-        if (isInStringOrComment(lineText, wordRange.start.character)) {
+        if (isInStringOrCommentDoc(document, wordRange.start)) {
           return null;
         }
 
@@ -825,7 +825,7 @@ function activate(context) {
         const moduleName = document.getText(wordRange);
 
         const currentLine = document.lineAt(position.line).text;
-        if (isInStringOrComment(currentLine, wordRange.start.character)) {
+        if (isInStringOrCommentDoc(document, wordRange.start)) {
           return [];
         }
 

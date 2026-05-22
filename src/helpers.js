@@ -218,8 +218,7 @@ function validateDocs(label, docsTable) {
  */
 function isValidCompletionPosition(document, position, completionEnabled) {
   if (!completionEnabled) return false;
-  const line = document.lineAt(position.line).text;
-  return !isInStringOrComment(line, position.character);
+  return !isInStringOrCommentDoc(document, position);
 }
 
 // ============================================================
@@ -629,8 +628,17 @@ function findModuleReferences(document, moduleName, includeDeclaration) {
  *
  * This includes quoted strings, line comments, block comments, and
  * swim-string spans that are detectable from the current line prefix.
+ *
+ * **Cross-line accuracy:** For block comments and swim-strings that span
+ * multiple lines, pass a `CodeScanState` pre-seeded by scanning all preceding
+ * lines via {@link maskNonCodeSpans}.  Without it, this function only detects
+ * spans that opened on the same line as `position`.
+ *
  * @param {string} line - The full line of text
  * @param {number} position - Character position within the line (0-indexed)
+ * @param {CodeScanState} [initialState] - Optional scan state carried in from
+ *   previous lines.  A shallow copy is taken so the caller's object is not
+ *   mutated.  Defaults to a fresh state when omitted.
  * @returns {boolean} true if position is inside string/comment, false otherwise
  * @example
  * isInStringOrComment('if $x == 5', 5);        // false (code)
@@ -638,9 +646,10 @@ function findModuleReferences(document, moduleName, includeDeclaration) {
  * isInStringOrComment('"hello"', 3);          // true (inside string)
  *
  */
-function isInStringOrComment(line, position) {
+function isInStringOrComment(line, position, initialState) {
   const limit = Math.max(0, Math.min(position, line.length));
-  const scanState = createCodeScanState();
+  // Shallow-copy so callers that pass a carried state are not mutated.
+  const scanState = initialState ? { ...initialState } : createCodeScanState();
 
   for (let i = 0; i < limit; i++) {
     const ch = line[i];
@@ -696,6 +705,35 @@ function isInStringOrComment(line, position) {
   }
 
   return scanState.inString || scanState.inBlockComment || scanState.swimDelimiter !== null;
+}
+
+/**
+ * Document-aware version of {@link isInStringOrComment}.
+ *
+ * Scans from the beginning of the document with carried {@link CodeScanState}
+ * so that multi-line block comments (`/* ... *\/`) and swim-strings that
+ * opened on a previous line are correctly detected.
+ *
+ * Use this in providers that have access to a full `TextDocument` object.
+ * Fall back to {@link isInStringOrComment} only for isolated single-line
+ * analysis (e.g. inside loops that already carry external state).
+ *
+ * @param {import('vscode').TextDocument} document - The open text document
+ * @param {import('vscode').Position} position - Cursor or token position to test
+ * @returns {boolean} true if the position is inside a string, comment, or swim-string
+ */
+function isInStringOrCommentDoc(document, position) {
+  const state = createCodeScanState();
+
+  for (let i = 0; i < position.line; i++) {
+    maskNonCodeSpans(document.lineAt(i).text, state);
+  }
+
+  return isInStringOrComment(
+    document.lineAt(position.line).text,
+    position.character,
+    state
+  );
 }
 
 /**
@@ -1185,6 +1223,7 @@ module.exports = {
   // -- Helpers
   isValidCompletionPosition,
   isInStringOrComment,
+  isInStringOrCommentDoc,
   getActiveParameterIndex,
   stripStrings,
   checkMissingDollar,
