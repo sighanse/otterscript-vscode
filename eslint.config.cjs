@@ -74,6 +74,7 @@ module.exports = [
       "default-case": "warn",
       "no-else-return": "warn",
       "no-lonely-if": "warn",
+      "unicode-bom": "error",
       /*
        * Explicitly allowed
        */
