@@ -1,4 +1,4 @@
-﻿// @ts-check
+// @ts-check
 
 /**
  * OtterScript language documentation model.
@@ -995,9 +995,9 @@ $json = $ToJson(%(
 \`\`\`
 
 **Notes:**
-- Maps â†’ JSON objects
-- Vectors â†’ JSON arrays
-- Scalars â†’ JSON strings
+- Maps → JSON objects
+- Vectors → JSON arrays
+- Scalars → JSON strings
 `,
   },
   "HtmlEncode": {
@@ -1488,10 +1488,10 @@ $result = $Floor(3.8);
 Compares two scalar values using the specified operator.
 
 **Parameters:**
-- \`arg1\` â€“ Left-hand value
-- \`operator\` â€“ One of: \`<\`, \`>\`, \`<=\`, \`>=\`, \`=\`, \`!=\`
-- \`arg2\` â€“ Right-hand value
-- \`asNumber\` â€“ (Optional) Forces numeric comparison when \`true\`
+- \`arg1\` - Left-hand value
+- \`operator\` - One of: \`<\`, \`>\`, \`<=\`, \`>=\`, \`=\`, \`!=\`
+- \`arg2\` - Right-hand value
+- \`asNumber\` - (Optional) Forces numeric comparison when \`true\`
 
 **Behavior:**
 - If both values can be parsed as numbers, a numeric comparison is used
