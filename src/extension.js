@@ -52,6 +52,7 @@ const {
   isModuleDeclarationContext,
   isValidCompletionPosition,
   isInStringOrComment,
+  clearModuleInfoCache,
   loadConfig,
   MODULE_NAME_TOKEN_REGEX,
   validateDocs,
@@ -971,8 +972,11 @@ function activate(context) {
     // -- Run diagnostics when a new file is opened (handles files opened after activation)
     vscode.workspace.onDidOpenTextDocument(document => updateDiagnostics(document, diagnostics, diagnosticsContext)),
 
-    // -- Clean up diagnostics when a file is closed to prevent stale error markers
-    vscode.workspace.onDidCloseTextDocument(doc => diagnostics.delete(doc.uri)),
+    // -- Clean up diagnostics/cache when a file is closed to prevent stale state growth
+    vscode.workspace.onDidCloseTextDocument(doc => {
+      diagnostics.delete(doc.uri);
+      clearModuleInfoCache(doc.uri);
+    }),
 
     // -- All providers are registered here for cleanup on deactivation
     signatureHelpProvider,

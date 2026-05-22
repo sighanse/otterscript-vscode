@@ -568,6 +568,16 @@ function getModuleCallReferencesByName(document, allowedModuleNames) {
 }
 
 /**
+ * Clears cached module info for a document URI.
+ *
+ * @param {import('vscode').Uri} uri
+ * @returns {void}
+ */
+function clearModuleInfoCache(uri) {
+  moduleInfoCache.delete(uri.toString());
+}
+
+/**
  * Finds references to a module declaration and module calls in the document.
  *
  * @param {vscode.TextDocument} document
@@ -1159,6 +1169,7 @@ module.exports = {
   getModuleDeclarations,
   findModuleDeclarationRange,
   getModuleCallReferencesByName,
+  clearModuleInfoCache,
   findModuleReferences,
 
   // -- Regex
