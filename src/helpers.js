@@ -374,8 +374,6 @@ function createCodeScanState() {
 }
 
 /**
- * Produces a length-preserving mask of non-code spans.
-/**
  * Core line scanner shared by {@link maskNonCodeSpans} and {@link advanceScanState}.
  *
  * Advances `state` by processing every character of `lineText`.  When `chars`
@@ -1281,7 +1279,6 @@ module.exports = {
   isModuleCallContext,
   getModuleDeclarations,
   createCodeScanState,
-  advanceScanState,
   maskNonCodeSpans,
   findModuleDeclarationRange,
   getModuleCallReferencesByName,
