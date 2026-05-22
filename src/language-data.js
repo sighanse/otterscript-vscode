@@ -254,6 +254,36 @@ Get-Asset myAsset
 \`\`\`
 `
   },
+  "Release-Server": {
+    name: "Release-Server",
+    signature: "Release-Server(Server: <text>, [Role: <text>], [Verbose: <true/false>]);",
+    snippet: "Release-Server ${1:serverName}\n(\n    Role: ${2:build-servers},\n    Verbose: ${3:false}\n);$0",
+    description: "Releases a server from a resource pool if acquired previously in the execution.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Release-Server(
+    Server: <text>,
+    [Role: <text>],
+    [Verbose: <true/false>]
+);
+\`\`\`
+
+**Arguments:**
+- \`Server\` (required) - Server name to release.
+- \`Role\` - Server role / resource pool role.
+- \`Verbose\` - Whether to log verbose output.
+
+**Example:**
+\`\`\`otterscript
+# releases a server acquired earlier in a plan
+Release-Server(
+    Role: build-servers,
+    Server: $AcquiredServerName
+);
+\`\`\`
+`
+  },
   "Apply-Template": {
     name: "Apply-Template",
     signature: "Apply-Template([Asset: <text>], [OutputVariable: <text>], [OutputFile: <text>], [Literal: <text>], [InputFile: <text>], [AdditionalVariables: <%(key1: value1, ...)>], [NewLines: <integer>]);",
