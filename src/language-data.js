@@ -606,7 +606,7 @@ if !$PackageName {
   "module": {
     name: "module",
     signature: "module ModuleName <out $param=\"default\"> { ... }",
-    snippet: "module ${1:ModuleName} <${2:out $$param=\"default\"}> {\n    ${3:# module body}\n}",
+    snippet: "module ${1:ModuleName} <${2:out \\$param=\"default\"}> {\n    ${3:# module body}\n}",
     description: "Defines a reusable module with optional parameters and outputs.",
     documentation: `
 Defines a reusable module that can be invoked using \`call\`.
