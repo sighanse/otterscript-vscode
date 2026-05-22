@@ -814,7 +814,7 @@ function activate(context) {
        * @param {vscode.ReferenceContext} refContext
        * @returns {vscode.Location[]}
        */
-          provideReferences(document, position, refContext) {
+      provideReferences(document, position, refContext) {
         const wordRange = document.getWordRangeAtPosition(position, MODULE_NAME_TOKEN_REGEX);
         if (!wordRange) return [];
 
