@@ -2331,10 +2331,8 @@ const vectorFunctionDocs = {
     name: '@ListInsert',
     signature: '@ListInsert(list, item, index)',
     snippet: "@ListInsert(${1:@list}, \"${2:item}\", ${3:index})",
-    description: 'Inserts an item into a list.',
+    description: 'Inserts an item into a list at the specified index.',
     documentation: `
-Inserts an item into a list at the specified index.
-
 **Parameters:**
 - \`list\` - The list to modify
 - \`item\` - The item to insert
@@ -2354,10 +2352,8 @@ Inserts an item into a list at the specified index.
     name: '@ListRemove',
     signature: '@ListRemove(list, index)',
     snippet: "@ListRemove(${1:@list}, ${2:index})",
-    description: 'Removes an item from a list.',
+    description: 'Removes an item from a list at the specified index.',
     documentation: `
-Removes an item from a list at the specified index.
-
 **Parameters:**
 - \`list\` - The list to modify
 - \`index\` - The zero-based position to remove
@@ -2378,8 +2374,6 @@ Removes an item from a list at the specified index.
     snippet: "@ListSet(${1:@list}, ${2:index}, \"${3:item}\")",
     description: 'Updates the value at a given position in the list to a new value.',
     documentation: `
-Updates the value at a given position in the list to a new value.
-
 **Parameters:**
 - \`list\` - The list to modify
 - \`index\` - The zero-based position to update
@@ -2399,10 +2393,8 @@ Updates the value at a given position in the list to a new value.
     name: '@MapKeys',
     signature: '@MapKeys(map)',
     snippet: "@MapKeys(${1:@map})",
-    description: 'Lists the keys of a map.',
+    description: 'Lists the keys of a map as a vector.',
     documentation: `
-Lists the keys of a map as a vector.
-
 **Parameters:**
 - \`map\` - The map to extract keys from
 
@@ -2422,8 +2414,6 @@ Lists the keys of a map as a vector.
     snippet: "@Range(${1:start}, ${2:count})",
     description: 'Returns a range of integers starting from a specified value.',
     documentation: `
-Returns a range of integers starting from a specified value.
-
 **Parameters:**
 - \`start\` - The starting integer
 - \`count\` - The number of integers to generate
@@ -2443,8 +2433,6 @@ Returns a range of integers starting from a specified value.
     snippet: "@RegexFind(${1:text}, ${2:matchExpression}${3:, ${4:matchGroup}})",
     description: 'Finds all matches of a regular expression in a string, optionally returning only a matched group.',
     documentation: `
-Finds all matches of a regular expression in a string, optionally returning only a matched group.
-
 **Parameters:**
 - \`text\` - The string to search
 - \`matchExpression\` - The regular expression pattern
