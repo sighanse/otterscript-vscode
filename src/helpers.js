@@ -286,7 +286,7 @@ function createRegexPatterns(knownOperations) {
  */
 const MODULE_NAME_TOKEN_REGEX = /[A-Za-z][\w-]*/;
 
-const MODULE_DECLARATION_REGEX = /^\s*module\s+(\w[\w-]*)/;
+const MODULE_DECLARATION_REGEX = /^\s*module\s+([A-Za-z][\w-]*)/;
 const MODULE_CALL_TARGET_REGEX = /^\s*call\s+(?:[A-Za-z][\w-]*::)?([A-Za-z][\w-]*)\b/;
 const MODULE_DECL_PREFIX_REGEX = /^\s*module\s+$/i;
 const MODULE_CALL_PREFIX_REGEX = /\bcall\s+(?:[A-Za-z][\w-]*::)?$/i;
