@@ -824,8 +824,8 @@ const syntaxDocs = {
   "swimString": {
     name: "Swim string",
     signature: ">> ... >> or >==8> ... >==8> etc...",
-    documentation: "Multi-line unquoted string literal with matching fish sentinels.",
-    description: `
+    description: "Multi-line unquoted string literal with matching fish sentinels.",
+    documentation: `
 - Preserves line breaks
 - Quotes do not need escaping
 - Supports expression evaluation using \`$()\`
@@ -1583,11 +1583,11 @@ $json = $ToJson(%(
 `,
   },
   "HtmlEncode": {
-      name: "$HtmlEncode",
-      signature: "$HtmlEncode(text)",
-      snippet: "\\$HtmlEncode(${1:text})",
-      description: "Encodes a string for safe use in HTML.",
-      documentation: `
+    name: "$HtmlEncode",
+    signature: "$HtmlEncode(text)",
+    snippet: "\\$HtmlEncode(${1:text})",
+    description: "Encodes a string for safe use in HTML.",
+    documentation: `
 **Parameters:**
 - \`text\` - The string to HTML-encode
 
@@ -2375,7 +2375,7 @@ Removes an item from a list at the specified index.
   "ListSet": {
     name: '@ListSet',
     signature: '@ListSet(list, index, item)',
-    snippet: "@ListSet(${1:@list}, ${2:index},\"${3:item}\")",
+    snippet: "@ListSet(${1:@list}, ${2:index}, \"${3:item}\")",
     description: 'Updates the value at a given position in the list to a new value.',
     documentation: `
 Updates the value at a given position in the list to a new value.
