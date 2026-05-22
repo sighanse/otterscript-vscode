@@ -51,6 +51,7 @@ jobs:
           node -c src/extension.js
           node -c src/helpers.js
           node -c src/language-data.js
+          node -c src/diagnostics.js
           echo "✅ JavaScript Syntax validation passed"
 
       - name: Validate module exports
