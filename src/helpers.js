@@ -304,9 +304,11 @@ const moduleInfoCache = new Map();
 
 /**
  * @typedef {{
+ *   inString: boolean,
+ *   quote: string | null,
  *   inBlockComment: boolean,
  *   swimDelimiter: string | null
- * }} ModuleScanState
+ * }} CodeScanState
  */
 
 /**
@@ -359,19 +361,31 @@ function getModuleDeclarations(document) {
 }
 
 /**
- * Produces a length-preserving mask of non-code spans for module navigation scans.
+ * Creates a fresh code-scan state object.
+ *
+ * @returns {CodeScanState}
+ */
+function createCodeScanState() {
+  return {
+    inString: false,
+    quote: null,
+    inBlockComment: false,
+    swimDelimiter: null,
+  };
+}
+
+/**
+ * Produces a length-preserving mask of non-code spans.
  *
  * Masked spans include strings, line comments, block comments, and swim-strings.
- * State for block comments and swim-strings is carried across lines.
+ * State is carried across lines for block comments, strings, and swim-strings.
  *
  * @param {string} lineText
- * @param {ModuleScanState} state
+ * @param {CodeScanState} state
  * @returns {string}
  */
-function maskModuleScanLine(lineText, state) {
+function maskNonCodeSpans(lineText, state) {
   const chars = lineText.split("");
-  let inString = false;
-  let quote = null;
 
   for (let i = 0; i < chars.length; i++) {
     const ch = lineText[i];
@@ -400,11 +414,11 @@ function maskModuleScanLine(lineText, state) {
       continue;
     }
 
-    if (inString) {
+    if (state.inString) {
       chars[i] = " ";
-      if (ch === quote && isUnescapedQuoteAt(lineText, i)) {
-        inString = false;
-        quote = null;
+      if (ch === state.quote && isUnescapedQuoteAt(lineText, i)) {
+        state.inString = false;
+        state.quote = null;
       }
       continue;
     }
@@ -436,8 +450,8 @@ function maskModuleScanLine(lineText, state) {
 
     if (ch === '"' || ch === "'") {
       chars[i] = " ";
-      inString = true;
-      quote = ch;
+      state.inString = true;
+      state.quote = ch;
       continue;
     }
 
@@ -476,12 +490,11 @@ function getModuleInfo(document) {
   const declarations = [];
   /** @type {Map<string, vscode.Location[]>} */
   const refsByName = new Map();
-  /** @type {ModuleScanState} */
-  const scanState = { inBlockComment: false, swimDelimiter: null };
+  const scanState = createCodeScanState();
 
   for (let line = 0; line < document.lineCount; line++) {
     const lineText = document.lineAt(line).text;
-    const maskedLineText = maskModuleScanLine(lineText, scanState);
+    const maskedLineText = maskNonCodeSpans(lineText, scanState);
 
     const declMatch = MODULE_DECLARATION_REGEX.exec(maskedLineText);
     if (declMatch) {
@@ -626,36 +639,63 @@ function findModuleReferences(document, moduleName, includeDeclaration) {
  *
  */
 function isInStringOrComment(line, position) {
-  let inString = false;
-  let quote = null;
+  const limit = Math.max(0, Math.min(position, line.length));
+  const scanState = createCodeScanState();
 
-  for (let i = 0; i < position && i < line.length; i++) {
+  for (let i = 0; i < limit; i++) {
     const ch = line[i];
 
-    if (!inString && (ch === '"' || ch === "'")) {
-      inString = true;
-      quote = ch;
-      continue;
-    }
-
-    if (inString && ch === quote) {
-      if (isUnescapedQuoteAt(line, i)) {
-        inString = false;
-        quote = null;
+    if (scanState.inBlockComment) {
+      if (ch === "*" && line[i + 1] === "/") {
+        scanState.inBlockComment = false;
+        i++;
       }
       continue;
     }
 
-    if (!inString && ch === "#") {
-      return true;
+    if (scanState.swimDelimiter) {
+      if (line.startsWith(scanState.swimDelimiter, i)) {
+        i += scanState.swimDelimiter.length - 1;
+        scanState.swimDelimiter = null;
+      }
+      continue;
     }
 
-    if (!inString && ch === "/" && line[i + 1] === "/") {
+    if (scanState.inString) {
+      if (ch === scanState.quote && isUnescapedQuoteAt(line, i)) {
+        scanState.inString = false;
+        scanState.quote = null;
+      }
+      continue;
+    }
+
+    if (ch === "/" && line[i + 1] === "*") {
+      scanState.inBlockComment = true;
+      i++;
+      continue;
+    }
+
+    if (ch === ">") {
+      const swimMatch = line.slice(i).match(/^>[^>]{0,5}>/);
+      if (swimMatch) {
+        scanState.swimDelimiter = swimMatch[0];
+        i += scanState.swimDelimiter.length - 1;
+        continue;
+      }
+    }
+
+    if (ch === '"' || ch === "'") {
+      scanState.inString = true;
+      scanState.quote = ch;
+      continue;
+    }
+
+    if (ch === "#" || (ch === "/" && line[i + 1] === "/")) {
       return true;
     }
   }
 
-  return inString;
+  return scanState.inString || scanState.inBlockComment || scanState.swimDelimiter !== null;
 }
 
 /**
@@ -1167,6 +1207,8 @@ module.exports = {
   isModuleDeclarationContext,
   isModuleCallContext,
   getModuleDeclarations,
+  createCodeScanState,
+  maskNonCodeSpans,
   findModuleDeclarationRange,
   getModuleCallReferencesByName,
   clearModuleInfoCache,
