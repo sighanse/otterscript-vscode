@@ -352,6 +352,107 @@ Ensure-Service
 \`\`\`
 `
   },
+  "Ensure-Directory": {
+    name: "Ensure-Directory",
+    signature: "Ensure-Directory(Name: <text>, [Exists: <true/false>]);",
+    snippet: "Ensure-Directory ${1:myFolderName}\n(\n    Exists: ${2:true}\n);$0",
+    description: "Ensures the existence of a directory on a server.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Ensure-Directory(
+    Name: <text>,
+    [Exists: <true/false>]
+);
+\`\`\`
+
+**Arguments:**
+- \`Name\` (required) - Directory path/name.
+- \`Exists\` - Ensure presence (true) or absence (false).
+
+**Example:**
+\`\`\`otterscript
+Ensure-Directory myFolderName
+(
+    Exists: true
+);
+\`\`\`
+`
+  },
+  "Ensure-Server": {
+    name: "Ensure-Server",
+    signature: "Ensure-Server(Name: <text>, [Exists: <true/false>], [Roles: <@(text)>], [Environments: <@(text)>], [RoutineExecutionType: <text>], [AgentConfigurationXml: <text>]);",
+    snippet: "Ensure-Server ${1:myServerName}\n(\n    Exists: ${2:true}\n);$0",
+    description: "Ensures that a server exists within Otter.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Ensure-Server(
+    Name: <text>,
+    [Exists: <true/false>],
+    [Roles: <@(text)>],
+    [Environments: <@(text)>],
+    [RoutineExecutionType: <text>],
+    [AgentConfigurationXml: <text>]
+);
+\`\`\`
+
+**Arguments:**
+- \`Name\` (required) - Server name.
+- \`Exists\` - Ensure presence (true) or absence (false).
+- \`Roles\` - Server roles.
+- \`Environments\` - Environments membership.
+- \`RoutineExecutionType\` - Drift remediation mode.
+- \`AgentConfigurationXml\` - Serialized agent configuration.
+
+**Example:**
+\`\`\`otterscript
+Ensure-Server myServerName
+(
+    Exists: true
+);
+\`\`\`
+`
+  },
+  "Ensure-Asset": {
+    name: "Ensure-Asset",
+    signature: "Ensure-Asset(Name: <text>, [Raft: <text>], [Type: <integer>], [Exists: <true/false>], Directory: <text>, [FileName: <text>]);",
+    snippet: "Ensure-Asset(\n    Exists: ${1:true},\n    Name: ${2:myAssetName},\n    Raft: ${3:Default},\n    Type: ${4:RoleConfigurationScript},\n    Directory: ${5:c:\\\\targetdir}\n);$0",
+    description: "Ensures the existence of an asset file on a server.",
+    documentation: `
+**Script Usage:**
+\`\`\`otterscript
+Ensure-Asset(
+    Name: <text>,
+    [Raft: <text>],
+    [Type: <integer>],
+    [Exists: <true/false>],
+    Directory: <text>,
+    [FileName: <text>]
+);
+\`\`\`
+
+**Arguments:**
+- \`Name\` (required) - Asset name.
+- \`Directory\` (required) - Target directory on server.
+- \`Raft\` - Raft name.
+- \`Type\` - Asset type.
+- \`Exists\` - Ensure presence (true) or absence (false).
+- \`FileName\` - Rename asset file on disk.
+
+**Example:**
+\`\`\`otterscript
+Ensure-Asset
+(
+    Exists: true,
+    Name: myAssetName,
+    Raft: Default,
+    Type: RoleConfigurationScript,
+    Directory: c:\\targetdir
+);
+\`\`\`
+`
+  },
   "Sleep": {
     name: "Sleep",
     signature: "Sleep <integer>;",
