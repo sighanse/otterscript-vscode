@@ -554,13 +554,13 @@ function findModuleDeclarationRange(document, moduleName) {
 }
 
 /**
- * Builds a single-pass index of module call references by module name.
+ * Returns module call references by name from cached module analysis.
  *
- * This is optimized for features like CodeLens that need counts or locations
- * for many modules in the same document.
+ * This reuses `getModuleInfo(document)` and optionally filters to a subset
+ * of module names.
  *
  * @param {vscode.TextDocument} document
- * @param {ReadonlySet<string>} [allowedModuleNames] - Optional filter of module names to index
+ * @param {ReadonlySet<string>} [allowedModuleNames] - Optional filter of module names to include
  * @returns {Map<string, vscode.Location[]>}
  */
 function getModuleCallReferencesByName(document, allowedModuleNames) {
@@ -625,11 +625,10 @@ function findModuleReferences(document, moduleName, includeDeclaration) {
 // ============================================================
 
 /**
- * Returns true if the given position is inside a quoted string
- * or a line comment.
+ * Returns true if the given position is inside non-code text on the line.
  *
- * This uses a fast, best-effort heuristic and does not attempt
- * full parsing.
+ * This includes quoted strings, line comments, block comments, and
+ * swim-string spans that are detectable from the current line prefix.
  * @param {string} line - The full line of text
  * @param {number} position - Character position within the line (0-indexed)
  * @returns {boolean} true if position is inside string/comment, false otherwise

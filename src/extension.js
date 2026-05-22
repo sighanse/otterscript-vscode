@@ -970,7 +970,7 @@ function activate(context) {
     // -- Run diagnostics when a new file is opened (handles files opened after activation)
     vscode.workspace.onDidOpenTextDocument(document => updateDiagnostics(document, diagnostics, diagnosticsContext)),
 
-    // -- Clean up diagnostics/cache when a file is closed to prevent stale state growth
+    // -- Clean up diagnostics and module navigation cache when a file is closed.
     vscode.workspace.onDidCloseTextDocument(doc => {
       diagnostics.delete(doc.uri);
       clearModuleInfoCache(doc.uri);

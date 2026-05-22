@@ -54,7 +54,7 @@ function updateDiagnostics(document, collection, ctx) {
     operationCallRegex,
   } = ctx;
 
-  // -- Parser state variables (track position and context)
+  // -- Symbol-balance state (text is pre-masked by shared scanner helpers)
   let braces = 0;             // { } balance
   let parens = 0;             // ( ) balance
   let brackets = 0;           // [ ] balance
@@ -71,6 +71,7 @@ function updateDiagnostics(document, collection, ctx) {
   // -- Process all lines
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
     const rawLine = lines[lineIndex];
+    // Shared masking keeps diagnostics aligned with completion/hover/module parsing rules.
     const line = maskNonCodeSpans(rawLine, scanState);
 
     // ------------------------------------------------------------
