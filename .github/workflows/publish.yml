@@ -19,7 +19,7 @@ jobs:
       OVSX_PAT: ${{ secrets.OVSX_PAT }}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
           persist-credentials: false
