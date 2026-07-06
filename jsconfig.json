@@ -22,9 +22,7 @@
     "node_modules",
     "test/**",
     ".github/**",
+    ".git/**",
     "images/**",
-    "snippets/**",
-    "syntaxes/**",
-    "out/**"
   ]
 }
