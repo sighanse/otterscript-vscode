@@ -3,7 +3,7 @@ name: Markdownlint
 on:
   workflow_dispatch:
   pull_request:
-    types: [ opened, synchronize, reopened ] # Skip closed/draft PRs
+    types: [ opened, synchronize, reopened ] # Skip closed PRs
     paths:
       - '**/*.md'
       - '.markdownlint.jsonc'

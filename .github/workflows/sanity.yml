@@ -2,7 +2,7 @@ name: Sanity
 
 on:
   pull_request:
-    types: [ opened, synchronize, reopened ] # Skip closed/draft PRs
+    types: [ opened, synchronize, reopened ] # Skip closed PRs
   workflow_dispatch:
 
 concurrency:
