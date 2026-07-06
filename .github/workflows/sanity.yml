@@ -103,7 +103,7 @@ jobs:
           echo ""
 
           # Check src/ files
-          CRLF_FILES=$(grep -rlI $'\r' --exclude-dir={.git,.vscode,node_modules} . 2>/dev/null || true)
+          CRLF_FILES=$(grep -rlI $'\r' --exclude-dir=.git --exclude-dir=.vscode --exclude-dir=node_modules . 2>/dev/null || true)
 
           if [ -n "$CRLF_FILES" ]; then
             echo "❌ Files with CRLF line endings:"
