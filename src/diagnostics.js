@@ -55,12 +55,11 @@ function updateDiagnostics(document, collection, ctx) {
   } = ctx;
 
   // -- Symbol-balance state (text is pre-masked by shared scanner helpers)
-  let braces = 0;             // { } balance
-  let parens = 0;             // ( ) balance
-  let brackets = 0;           // [ ] balance
-  let lastBracePos = -1;      // Offset of first unmatched '{'; -1 = not yet seen
-  let lastParenPos = -1;      // Offset of first unmatched '('; -1 = not yet seen
-  let lastBracketPos = -1;    // Offset of first unmatched '['; -1 = not yet seen
+  const symbols = [
+    { count: 0, lastPos: -1, open: "{", close: "}", name: "brace" },
+    { count: 0, lastPos: -1, open: "(", close: ")", name: "parenthesis" },
+    { count: 0, lastPos: -1, open: "[", close: "]", name: "bracket" },
+  ];
   const scanState = createCodeScanState();
   /** @type {vscode.Diagnostic[]} */
   const issues = [];
@@ -88,48 +87,25 @@ function updateDiagnostics(document, collection, ctx) {
     for (let col = 0; col < line.length; col++) {
       const ch = line[col];
 
-      // -- Braces { }
-      if (ch === "{") {
-        braces++;
-        if (braces === 1) lastBracePos = document.offsetAt(new vscode.Position(lineIndex, col));
-      } else if (ch === "}") {
-        if (braces === 0) {
-          // Unexpected closing - report immediately
-          const pos = document.offsetAt(new vscode.Position(lineIndex, col));
-          const diag = createUnbalancedDiagnostic(-1, pos, "{", "}", "brace", document);
-          if (diag) issues.push(diag);
-        } else {
-          braces--;
+      for (const sym of symbols) {
+        if (ch === sym.open) {
+          sym.count++;
+          if (sym.count === 1) {
+            sym.lastPos = document.offsetAt(new vscode.Position(lineIndex, col));
+          }
+          break;
         }
-      }
 
-      // -- Parenthesis ( )
-      else if (ch === "(") {
-        parens++;
-        if (parens === 1) lastParenPos = document.offsetAt(new vscode.Position(lineIndex, col));
-      } else if (ch === ")") {
-        if (parens === 0) {
-          // Unexpected closing - report immediately
-          const pos = document.offsetAt(new vscode.Position(lineIndex, col));
-          const diag = createUnbalancedDiagnostic(-1, pos, "(", ")", "parenthesis", document);
-          if (diag) issues.push(diag);
-        } else {
-          parens--;
-        }
-      }
-
-      // -- Brackets [ ]
-      else if (ch === "[") {
-        brackets++;
-        if (brackets === 1) lastBracketPos = document.offsetAt(new vscode.Position(lineIndex, col));
-      } else if (ch === "]") {
-        if (brackets === 0) {
-          // Unexpected closing - report immediately
-          const pos = document.offsetAt(new vscode.Position(lineIndex, col));
-          const diag = createUnbalancedDiagnostic(-1, pos, "[", "]", "bracket", document);
-          if (diag) issues.push(diag);
-        } else {
-          brackets--;
+        if (ch === sym.close) {
+          if (sym.count === 0) {
+            // Unexpected closing - report immediately
+            const pos = document.offsetAt(new vscode.Position(lineIndex, col));
+            const diag = createUnbalancedDiagnostic(-1, pos, sym.open, sym.close, sym.name, document);
+            if (diag) issues.push(diag);
+          } else {
+            sym.count--;
+          }
+          break;
         }
       }
     }
@@ -271,12 +247,6 @@ function updateDiagnostics(document, collection, ctx) {
   }
 
   // -- Unbalanced opening braces, parentheses, brackets
-  const symbols = [
-    { count: braces, lastPos: lastBracePos, open: "{", close: "}", name: "brace" },
-    { count: parens, lastPos: lastParenPos, open: "(", close: ")", name: "parenthesis" },
-    { count: brackets, lastPos: lastBracketPos, open: "[", close: "]", name: "bracket" },
-  ];
-
   for (const sym of symbols) {
     if (sym.count > 0) {
       const diag = createUnbalancedDiagnostic(sym.count, sym.lastPos, sym.open, sym.close, sym.name, document);
