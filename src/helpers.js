@@ -108,6 +108,43 @@ function appendOutputLine(line) {
 }
 
 /**
+ * Clears a scheduled timer for the given URI key.
+ *
+ * @param {Map<string, ReturnType<typeof setTimeout>>} timerMap
+ * @param {import('vscode').Uri} uri
+ * @returns {void}
+ */
+function clearTimerForUri(timerMap, uri) {
+  const key = uri.toString();
+  const timer = timerMap.get(key);
+  if (!timer) return;
+
+  clearTimeout(timer);
+  timerMap.delete(key);
+}
+
+/**
+ * Schedules a timer for the given URI key, replacing any existing one.
+ *
+ * @param {Map<string, ReturnType<typeof setTimeout>>} timerMap
+ * @param {import('vscode').Uri} uri
+ * @param {number} delayMs
+ * @param {() => void} onFire
+ * @returns {void}
+ */
+function scheduleTimerForUri(timerMap, uri, delayMs, onFire) {
+  clearTimerForUri(timerMap, uri);
+
+  const key = uri.toString();
+  const timer = setTimeout(() => {
+    timerMap.delete(key);
+    onFire();
+  }, delayMs);
+
+  timerMap.set(key, timer);
+}
+
+/**
  * Centralized logger for OtterScript Language extension.
  *
  * @example
@@ -219,6 +256,31 @@ function validateDocs(label, docsTable) {
 function isValidCompletionPosition(document, position, completionEnabled) {
   if (!completionEnabled) return false;
   return !isInStringOrCommentDoc(document, position);
+}
+
+/** @type {Readonly<Record<"$" | "@", RegExp>>} */
+const TYPED_IDENTIFIER_PATTERNS = Object.freeze({
+  "$": /\$([a-zA-Z]*)$/,
+  "@": /@([a-zA-Z]*)$/,
+});
+
+/**
+ * Extracts the currently typed identifier after a trigger character.
+ *
+ * Examples:
+ * - "$To" -> "To"
+ * - "@Spl" -> "Spl"
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Position} position
+ * @param {"$" | "@"} triggerChar
+ * @returns {string | null}
+ */
+function getTypedIdentifier(document, position, triggerChar) {
+  const linePrefix = document.lineAt(position.line).text.substring(0, position.character);
+  const pattern = TYPED_IDENTIFIER_PATTERNS[triggerChar];
+  const match = linePrefix.match(pattern);
+  return match ? match[1] : null;
 }
 
 // ============================================================
@@ -1250,9 +1312,11 @@ module.exports = {
   // -- Logger
   log,
   getOutputChannel,
+  clearTimerForUri,
 
   // -- Helpers
   isValidCompletionPosition,
+  getTypedIdentifier,
   isInStringOrComment,
   isInStringOrCommentDoc,
   getActiveParameterIndex,
@@ -1286,5 +1350,6 @@ module.exports = {
   findModuleReferences,
 
   // -- Regex
-  createRegexPatterns
+  createRegexPatterns,
+  scheduleTimerForUri
 };

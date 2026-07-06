@@ -3,6 +3,7 @@ name: Markdownlint
 on:
   workflow_dispatch:
   pull_request:
+    types: [ opened, synchronize, reopened ] # Skip closed PRs
     paths:
       - '**/*.md'
       - '.markdownlint.jsonc'
@@ -26,7 +27,7 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - uses: DavidAnson/markdownlint-cli2-action@v23
+      - uses: DavidAnson/markdownlint-cli2-action@v24
         with:
           config: '.markdownlint.jsonc'
           globs: '**/*.md'

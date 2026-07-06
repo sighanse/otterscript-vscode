@@ -44,6 +44,7 @@ const {
   getOutputChannel,
   getDiagnosticCode,
   getActiveParameterIndex,
+  getTypedIdentifier,
   getModuleDeclarations,
   getModuleCallReferencesByName,
   findModuleDeclarationRange,
@@ -53,14 +54,16 @@ const {
   isValidCompletionPosition,
   isInStringOrCommentDoc,
   clearModuleInfoCache,
+  clearTimerForUri,
   loadConfig,
   MODULE_NAME_TOKEN_REGEX,
   validateDocs,
+  scheduleTimerForUri,
   createRegexPatterns
 } = require('./helpers');
 
-/** @type {ReturnType<typeof setTimeout> | undefined} */
-let diagnosticTimer;
+/** @type {Map<string, ReturnType<typeof setTimeout>>} */
+const diagnosticTimers = new Map();
 const REFRESH_DIAGNOSTICS_COMMAND = "otterscript.refreshDiagnostics";
 
 // ============================================================
@@ -130,12 +133,16 @@ function activate(context) {
   } = languageData;
 
   // -- Validate all documentation sources (intentionally ignore return value)
-  void validateDocs("scalarFunctionDocs", scalarFunctionDocs); // $ToJson, $Base64Encode, etc.
-  void validateDocs("operationDocs", operationDocs);           // Log-Information, Log-Warning, Log-Error, etc.
-  void validateDocs("vectorFunctionDocs", vectorFunctionDocs); // @Split, @Join, etc.
-  void validateDocs("variableDocs", variableDocs);             // $BuildId, $FeedName, etc.
-  void validateDocs("syntaxDocs", syntaxDocs);                 // Template tags, swim strings, expression delimiters, etc.
-  void validateDocs("keywordDocs", keywordDocs);               // if, foreach, with, set, etc.
+  for (const [label, table] of Object.entries({
+    scalarFunctionDocs,  // $ToJson, $Base64Encode, etc.
+    operationDocs,       // Log-Information, Log-Warning, Log-Error, etc.
+    vectorFunctionDocs,  // @Split, @Join, etc.
+    variableDocs,        // $BuildId, $FeedName, etc.
+    syntaxDocs,          // Template tags, swim strings, expression delimiters, etc.
+    keywordDocs,         // if, foreach, with, set, etc.
+  })) {
+    void validateDocs(label, table);
+  }
 
   // -- Knowledge bases (Fast Lookup Sets)
   const knownKeywords = new Set(Object.keys(keywordDocs));
@@ -268,15 +275,8 @@ function activate(context) {
           // -- Check if completion is enabled and not in a string/comment
           if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
-          const linePrefix = document
-            .lineAt(position.line)
-            .text.substring(0, position.character);
-
-          // -- Match: $ followed by optional letters (partial function name)
-          const match = linePrefix.match(/\$([a-zA-Z]*)$/);
-          if (!match) return [];
-
-          const typed = match[1];
+          const typed = getTypedIdentifier(document, position, "$");
+          if (typed === null) return [];
 
           return Object.entries(scalarFunctionDocs)
               .filter(([key]) => key.toLowerCase().startsWith(typed.toLowerCase()))
@@ -309,15 +309,8 @@ function activate(context) {
           // -- Check if completion is enabled and not in a string/comment
           if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
-          const text = document
-            .lineAt(position.line)
-            .text.substring(0, position.character);
-
-          // -- Match: $ followed by optional letters (partial variable name)
-          const match = text.match(/\$([A-Za-z]*)$/);
-          if (!match) return [];
-
-          const typed = match[1];
+          const typed = getTypedIdentifier(document, position, "$");
+          if (typed === null) return [];
 
           // -- Filter variables by what user typed and create completion items
           return Object.entries(variableDocs)
@@ -347,16 +340,8 @@ function activate(context) {
           // -- Check if completion is enabled and not in a string/comment
           if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
-          // -- Get text from line start to cursor
-          const linePrefix = document
-            .lineAt(position.line)
-            .text.substring(0, position.character);
-
-          // -- Match: @ followed by optional letters (partial name)
-          const match = linePrefix.match(/@([a-zA-Z]*)$/);
-          if (!match) return [];
-
-          const typed = match[1];
+          const typed = getTypedIdentifier(document, position, "@");
+          if (typed === null) return [];
 
           // -- Filter vector languageData by what user typed
           return Object.entries(vectorFunctionDocs)
@@ -941,7 +926,7 @@ function activate(context) {
       const document = existing ?? await vscode.workspace.openTextDocument(uri);
       if (document.languageId !== "otterscript") return;
 
-      clearTimeout(diagnosticTimer);
+      clearTimerForUri(diagnosticTimers, document.uri);
       updateDiagnostics(document, diagnostics, diagnosticsContext);
     }
   );
@@ -964,8 +949,11 @@ function activate(context) {
     // -- Re-run diagnostics whenever text changes (every keystroke)
 
     vscode.workspace.onDidChangeTextDocument(e => {
-      clearTimeout(diagnosticTimer);
-      diagnosticTimer = setTimeout(() => updateDiagnostics(e.document, diagnostics, diagnosticsContext), 400);
+      if (e.document.languageId !== "otterscript") return;
+
+      scheduleTimerForUri(diagnosticTimers, e.document.uri, 400, () => {
+        updateDiagnostics(e.document, diagnostics, diagnosticsContext);
+      });
     }),
     // -- Run diagnostics when a new file is opened (handles files opened after activation)
     vscode.workspace.onDidOpenTextDocument(document => updateDiagnostics(document, diagnostics, diagnosticsContext)),
@@ -974,6 +962,7 @@ function activate(context) {
     vscode.workspace.onDidCloseTextDocument(doc => {
       diagnostics.delete(doc.uri);
       clearModuleInfoCache(doc.uri);
+      clearTimerForUri(diagnosticTimers, doc.uri);
     }),
 
     // -- All providers are registered here for cleanup on deactivation
@@ -999,7 +988,10 @@ function activate(context) {
 // ============================================================
 // Called when the extension is disabled or VS Code shuts down.
 function deactivate() {
-  clearTimeout(diagnosticTimer);
+  for (const timer of diagnosticTimers.values()) {
+    clearTimeout(timer);
+  }
+  diagnosticTimers.clear();
 }
 
 // MODULE EXPORTS

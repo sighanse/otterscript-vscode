@@ -538,6 +538,238 @@ Get-Http(
 \`\`\`
 `
   },
+  "Install-Package": {
+    name: "Install-Package",
+    signature: "Install-Package([PackageSource: <text>], Name: <text>, [Version: <text>], [To: <text>], [ClearTarget: <true/false>], [LocalRegistry: <integer>], [LocalCache: <true/false>], [DirectDownload: <true/false>], [Feed: <text>], [EndpointUrl: <text>], [UserName: <text>], [Password: <text>], [ApiKey: <text>], [FeedUrl: <text>]);",
+    snippet: "Install-Package\n(\n    PackageSource: ${1:MyPackageSource},\n    Name: ${2:MyAppPackage},\n    Version: ${3:3.4.2},\n    To: ${4:C:\\\\MyApps\\\\MyApp}\n);$0",
+    description: "Installs a universal package to a target location using a package source.",
+    documentation: `
+Installs a universal package to the specified location using a package source.
+
+**Script Usage:**
+\`\`\`otterscript
+Install-Package(
+    [PackageSource: <text>],
+    Name: <text>,
+    [Version: <text>],
+    [To: <text>],
+    [ClearTarget: <true/false>],
+    [LocalRegistry: <integer>],
+    [LocalCache: <true/false>],
+    [DirectDownload: <true/false>],
+    [Feed: <text>],
+    [EndpointUrl: <text>],
+    [UserName: <text>],
+    [Password: <text>],
+    [ApiKey: <text>],
+    [FeedUrl: <text>]
+);
+\`\`\`
+
+**Arguments:**
+- \`Name\` (required) - Package name.
+- \`PackageSource\` - Package source name.
+- \`Version\` - Package version.
+- \`To\` - Target installation directory.
+- \`ClearTarget\` - Clear target directory before install.
+- \`LocalRegistry\` - Use local registry mode.
+- \`LocalCache\` - Cache package locally.
+- \`DirectDownload\` - Set false when remote server cannot directly reach the ProGet feed.
+- \`Feed\` - Feed name.
+- \`EndpointUrl\` - ProGet API endpoint URL.
+- \`UserName\`, \`Password\` - ProGet user credentials.
+- \`ApiKey\` - ProGet API key.
+- \`FeedUrl\` - Direct feed URL.
+
+**Example:**
+\`\`\`otterscript
+Install-Package
+(
+    PackageSource: MyPackageSource,
+    Name: MyAppPackage,
+    Version: 3.4.2,
+    To: C:\\MyApps\\MyApp
+);
+\`\`\`
+`
+  },
+  "Ensure-Package": {
+    name: "Ensure-Package",
+    signature: "Ensure-Package([PackageSource: <text>], Name: <text>, [Version: <text>], [To: <text>], [ClearTarget: <true/false>], [Exists: <true/false>], [LocalRegistry: <integer>], [LocalCache: <true/false>], [FileCompare: <integer>], [Ignore: <@(text)>], [DirectDownload: <true/false>], [Feed: <text>], [EndpointUrl: <text>], [UserName: <text>], [Password: <text>], [ApiKey: <text>], [FeedUrl: <text>]);",
+    snippet: "Ensure-Package\n(\n    PackageSource: ${1:MyPackageSource},\n    Name: ${2:FooBarApp},\n    Version: ${3:\\$FooBarVersion},\n    To: ${4:D:\\\\WebApps\\\\FooBar.App},\n    Ignore: ${5:web.config}\n);$0",
+    description: "Ensures a universal package is installed in the specified target directory.",
+    documentation: `
+Ensures that the specified universal package is installed in the specified directory.
+
+**Script Usage:**
+\`\`\`otterscript
+Ensure-Package(
+    [PackageSource: <text>],
+    Name: <text>,
+    [Version: <text>],
+    [To: <text>],
+    [ClearTarget: <true/false>],
+    [Exists: <true/false>],
+    [LocalRegistry: <integer>],
+    [LocalCache: <true/false>],
+    [FileCompare: <integer>],
+    [Ignore: <@(text)>],
+    [DirectDownload: <true/false>],
+    [Feed: <text>],
+    [EndpointUrl: <text>],
+    [UserName: <text>],
+    [Password: <text>],
+    [ApiKey: <text>],
+    [FeedUrl: <text>]
+);
+\`\`\`
+
+**Arguments:**
+- \`Name\` (required) - Package name.
+- \`PackageSource\` - Package source name.
+- \`Version\` - Package version.
+- \`To\` - Target directory path on disk.
+- \`ClearTarget\` - Clear the target directory before installation.
+- \`Exists\` - Ensure package exists (or does not exist when false).
+- \`LocalRegistry\` - Controls local package registry checks.
+- \`LocalCache\` - Cache package locally.
+- \`FileCompare\` - Controls file comparison behavior.
+- \`Ignore\` - File/path masks to ignore during compare.
+- \`DirectDownload\` - Set false when remote server cannot directly access the ProGet feed.
+- \`Feed\` - Feed name.
+- \`EndpointUrl\` - ProGet API endpoint URL.
+- \`UserName\`, \`Password\` - ProGet user credentials.
+- \`ApiKey\` - ProGet API key.
+- \`FeedUrl\` - Direct feed URL.
+
+**Note:**
+- Package presence can be determined by local registry and package files; \`LocalRegistry\` and \`FileCompare\` control that behavior.
+
+**Example:**
+\`\`\`otterscript
+Ensure-Package
+(
+    PackageSource: MyPackageSource,
+    Name: FooBarApp,
+    Version: $FooBarVersion,
+    To: D:\\WebApps\\FooBar.App,
+    Ignore: web.config
+);
+\`\`\`
+`
+  },
+  "Query-Package": {
+    name: "Query-Package",
+    signature: "Query-Package([From: <text>], Name: <text>, Version: <text>, NewVersion: <text>, [Reason: <text>], [PackageFile: <text>], [Feed: <text>], [EndpointUrl: <text>], [UserName: <text>], [Password: <text>], [ApiKey: <text>], [Exists: <true/false>], [Metadata: <%(key1: value1, ...)>], [FeedUrl: <text>]);",
+    snippet: "Query-Package\n(\n    From: ${1:MyPackageSource},\n    Name: ${2:Group/Package},\n    Version: ${3:1.0.0},\n    NewVersion: ${4:1.0.1},\n    Exists => ${5:\\$exists},\n    Metadata => ${6:%packageData}\n);$0",
+    description: "Tests whether a universal package exists and optionally reads package metadata.",
+    documentation: `
+Tests whether a universal package exists and optionally extracts its metadata.
+
+**Script Usage:**
+\`\`\`otterscript
+Query-Package(
+    [From: <text>],
+    Name: <text>,
+    Version: <text>,
+    NewVersion: <text>,
+    [Reason: <text>],
+    [PackageFile: <text>],
+    [Feed: <text>],
+    [EndpointUrl: <text>],
+    [UserName: <text>],
+    [Password: <text>],
+    [ApiKey: <text>],
+    [Exists: <true/false>],
+    [Metadata: <%(key1: value1, ...)>],
+    [FeedUrl: <text>]
+);
+\`\`\`
+
+**Arguments:**
+- \`Name\` (required) - Package name.
+- \`Version\` (required) - Package version.
+- \`NewVersion\` (required) - Target/new version to query.
+- \`From\` - Package source.
+- \`Reason\` - Reason text for the query.
+- \`PackageFile\` - Path to a local package file; when set, feed/source credentials are ignored.
+- \`Feed\` - Feed name.
+- \`EndpointUrl\` - ProGet API endpoint URL.
+- \`UserName\`, \`Password\` - ProGet user credentials.
+- \`ApiKey\` - ProGet API key.
+- \`Exists\` - Output variable indicating whether package exists.
+- \`Metadata\` - Output map variable containing package metadata.
+- \`FeedUrl\` - Direct feed URL.
+
+**Examples:**
+\`\`\`otterscript
+# Test if package exists and capture metadata
+Query-Package
+(
+    From: MyPackageSource,
+    Name: Group/Package,
+    Version: 1.0.0,
+    NewVersion: 1.0.1,
+    Exists => $exists,
+    Metadata => %packageData
+);
+
+if $exists {
+    Log-Debug "Package $(%packageData.name) exists. Latest version is $(%packageData.version).";
+}
+
+# Extract metadata from a local package file
+Query-Package
+(
+    PackageFile: C:\\MyPackages\\Package-1.0.0.upack,
+    Name: Group/Package,
+    Version: 1.0.0,
+    NewVersion: 1.0.1,
+    Metadata => %packageData
+);
+\`\`\`
+`
+  },
+  "Push-PackageFile": {
+    name: "Push-PackageFile",
+    signature: "Push-PackageFile(FilePath: <text>, [To: <text>], [Feed: <text>], [EndpointUrl: <text>], [UserName: <text>], [Password: <text>], [ApiKey: <text>], [FeedUrl: <text>]);",
+    snippet: "Push-PackageFile ${1:MyPackage.1.0.0.upack}\n(\n    To: ${2:InternalFeed}\n);$0",
+    description: "Uploads a universal package file to a package source.",
+    documentation: `
+Uploads a universal package file to a package source.
+
+**Script Usage:**
+\`\`\`otterscript
+Push-PackageFile(
+    FilePath: <text>,
+    [To: <text>],
+    [Feed: <text>],
+    [EndpointUrl: <text>],
+    [UserName: <text>],
+    [Password: <text>],
+    [ApiKey: <text>],
+    [FeedUrl: <text>]
+);
+\`\`\`
+
+**Arguments:**
+- \`FilePath\` (required) - Path to the package file to upload.
+- \`To\` - Package source target.
+- \`Feed\` - Feed name.
+- \`EndpointUrl\` - ProGet API endpoint URL.
+- \`UserName\`, \`Password\` - ProGet user credentials.
+- \`ApiKey\` - ProGet API key.
+- \`FeedUrl\` - Direct feed URL.
+
+**Example:**
+\`\`\`otterscript
+Push-PackageFile MyPackage.1.0.0.upack
+(
+    To: InternalFeed
+);
+\`\`\`
+`
+  },
   "Concatenate-Files": {
     name: "Concatenate-Files",
     signature: "Concatenate-Files(File: <text>, [Directory: <text>], [Include: <@(text)>], [Exclude: <@(text)>], [Encoding: <text>], [Separator: <text>]);",
@@ -2235,6 +2467,55 @@ Returns the base64-encoded token used for HTTP basic auth requests.
 \`\`\`otterscript
 $auth = $EncodeBasicAuth("admin", "secret");
 # Result: "YWRtaW46c2VjcmV0"
+\`\`\`
+`
+  },
+  "SecureCredentialProperty": {
+    name: "$SecureCredentialProperty",
+    signature: "$SecureCredentialProperty(credential, property)",
+    snippet: "\\$SecureCredentialProperty(${1:credential}, ${2:property})",
+    description: "Returns the decrypted plain-text value of a credential property.",
+    documentation: `
+Returns the decrypted plain-text value of a specified credential property.
+
+**Parameters:**
+- \`credential\` - The name of the credential to read.
+- \`property\` - The credential property to retrieve.
+
+**Notes:**
+- If the property is encrypted, the credential must allow encrypted property extraction.
+- If extraction is not allowed, the function fails at runtime.
+
+**Example:**
+\`\`\`otterscript
+# HDarsUser is a Username & Password credential with encrypted extraction enabled
+set $username = $SecureCredentialProperty(HDarsUser, Username);
+set $password = $SecureCredentialProperty(HDarsUser, Password);
+
+Log-Debug "Executing sometool.exe -user $username -pass *****";
+Exec sometool.exe -user $username -pass $password;
+\`\`\`
+`
+  },
+  "SecureResourceProperty": {
+    name: "$SecureResourceProperty",
+    signature: "$SecureResourceProperty(resource, property, [type])",
+    snippet: "\\$SecureResourceProperty(${1:resource}, ${2:property}${3:, ${4:type}})",
+    description: "Returns the value of a secure resource property.",
+    documentation: `
+Returns the value of a specified secure resource property.
+
+**Parameters:**
+- \`resource\` - The name of the secure resource to read.
+- \`property\` - The resource property to retrieve.
+- \`type\` *(optional)* - The type of resource property to retrieve.
+
+**Example:**
+\`\`\`otterscript
+# InternalProGet is a ProGet Secure Resource
+set $host = $SecureResourceProperty(InternalProGet, ServerUrl);
+
+Exec sometool.exe --host $host;
 \`\`\`
 `
   },
