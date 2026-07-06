@@ -132,12 +132,16 @@ function activate(context) {
   } = languageData;
 
   // -- Validate all documentation sources (intentionally ignore return value)
-  void validateDocs("scalarFunctionDocs", scalarFunctionDocs); // $ToJson, $Base64Encode, etc.
-  void validateDocs("operationDocs", operationDocs);           // Log-Information, Log-Warning, Log-Error, etc.
-  void validateDocs("vectorFunctionDocs", vectorFunctionDocs); // @Split, @Join, etc.
-  void validateDocs("variableDocs", variableDocs);             // $BuildId, $FeedName, etc.
-  void validateDocs("syntaxDocs", syntaxDocs);                 // Template tags, swim strings, expression delimiters, etc.
-  void validateDocs("keywordDocs", keywordDocs);               // if, foreach, with, set, etc.
+  for (const [label, table] of Object.entries({
+    scalarFunctionDocs,  // $ToJson, $Base64Encode, etc.
+    operationDocs,       // Log-Information, Log-Warning, Log-Error, etc.
+    vectorFunctionDocs,  // @Split, @Join, etc.
+    variableDocs,        // $BuildId, $FeedName, etc.
+    syntaxDocs,          // Template tags, swim strings, expression delimiters, etc.
+    keywordDocs,         // if, foreach, with, set, etc.
+  })) {
+    void validateDocs(label, table);
+  }
 
   // -- Knowledge bases (Fast Lookup Sets)
   const knownKeywords = new Set(Object.keys(keywordDocs));
