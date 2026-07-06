@@ -970,6 +970,8 @@ function activate(context) {
     // -- Re-run diagnostics whenever text changes (every keystroke)
 
     vscode.workspace.onDidChangeTextDocument(e => {
+      if (e.document.languageId !== "otterscript") return;
+
       scheduleTimerForUri(diagnosticTimers, e.document.uri, 400, () => {
         updateDiagnostics(e.document, diagnostics, diagnosticsContext);
       });
