@@ -258,6 +258,31 @@ function isValidCompletionPosition(document, position, completionEnabled) {
   return !isInStringOrCommentDoc(document, position);
 }
 
+/** @type {Readonly<Record<"$" | "@", RegExp>>} */
+const TYPED_IDENTIFIER_PATTERNS = Object.freeze({
+  "$": /\$([a-zA-Z]*)$/,
+  "@": /@([a-zA-Z]*)$/,
+});
+
+/**
+ * Extracts the currently typed identifier after a trigger character.
+ *
+ * Examples:
+ * - "$To" -> "To"
+ * - "@Spl" -> "Spl"
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Position} position
+ * @param {"$" | "@"} triggerChar
+ * @returns {string | null}
+ */
+function getTypedIdentifier(document, position, triggerChar) {
+  const linePrefix = document.lineAt(position.line).text.substring(0, position.character);
+  const pattern = TYPED_IDENTIFIER_PATTERNS[triggerChar];
+  const match = linePrefix.match(pattern);
+  return match ? match[1] : null;
+}
+
 // ============================================================
 // REGEX UTILITIES
 // ============================================================
@@ -1291,6 +1316,7 @@ module.exports = {
 
   // -- Helpers
   isValidCompletionPosition,
+  getTypedIdentifier,
   isInStringOrComment,
   isInStringOrCommentDoc,
   getActiveParameterIndex,

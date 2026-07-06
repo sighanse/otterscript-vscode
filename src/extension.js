@@ -44,6 +44,7 @@ const {
   getOutputChannel,
   getDiagnosticCode,
   getActiveParameterIndex,
+  getTypedIdentifier,
   getModuleDeclarations,
   getModuleCallReferencesByName,
   findModuleDeclarationRange,
@@ -274,15 +275,8 @@ function activate(context) {
           // -- Check if completion is enabled and not in a string/comment
           if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
-          const linePrefix = document
-            .lineAt(position.line)
-            .text.substring(0, position.character);
-
-          // -- Match: $ followed by optional letters (partial function name)
-          const match = linePrefix.match(/\$([a-zA-Z]*)$/);
-          if (!match) return [];
-
-          const typed = match[1];
+          const typed = getTypedIdentifier(document, position, "$");
+          if (typed === null) return [];
 
           return Object.entries(scalarFunctionDocs)
               .filter(([key]) => key.toLowerCase().startsWith(typed.toLowerCase()))
@@ -315,15 +309,8 @@ function activate(context) {
           // -- Check if completion is enabled and not in a string/comment
           if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
-          const text = document
-            .lineAt(position.line)
-            .text.substring(0, position.character);
-
-          // -- Match: $ followed by optional letters (partial variable name)
-          const match = text.match(/\$([A-Za-z]*)$/);
-          if (!match) return [];
-
-          const typed = match[1];
+          const typed = getTypedIdentifier(document, position, "$");
+          if (typed === null) return [];
 
           // -- Filter variables by what user typed and create completion items
           return Object.entries(variableDocs)
@@ -353,16 +340,8 @@ function activate(context) {
           // -- Check if completion is enabled and not in a string/comment
           if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
-          // -- Get text from line start to cursor
-          const linePrefix = document
-            .lineAt(position.line)
-            .text.substring(0, position.character);
-
-          // -- Match: @ followed by optional letters (partial name)
-          const match = linePrefix.match(/@([a-zA-Z]*)$/);
-          if (!match) return [];
-
-          const typed = match[1];
+          const typed = getTypedIdentifier(document, position, "@");
+          if (typed === null) return [];
 
           // -- Filter vector languageData by what user typed
           return Object.entries(vectorFunctionDocs)
