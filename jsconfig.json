@@ -23,6 +23,6 @@
     "test/**",
     ".github/**",
     ".git/**",
-    "images/**",
+    "images/**"
   ]
 }
