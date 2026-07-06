@@ -2,12 +2,8 @@ name: Sanity
 
 on:
   pull_request:
+    types: [ opened, synchronize, reopened ] # Skip closed/draft PRs
   workflow_dispatch:
-    inputs:
-      delete_cache:
-        description: "Delete NPM Cache"
-        type: boolean
-        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -32,10 +28,6 @@ jobs:
           node-version: 24
           cache: 'npm'
 
-      - name: Delete npm cache
-        if: ${{ inputs.delete_cache }}
-        run: npm cache clean --force
-
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
@@ -47,11 +39,7 @@ jobs:
         id: syntax
         continue-on-error: true
         run: |
-          echo "Syntax checking..."
-          node -c src/extension.js
-          node -c src/helpers.js
-          node -c src/language-data.js
-          node -c src/diagnostics.js
+          find src -name "*.js" -exec node -c {} \;
           echo "✅ JavaScript Syntax validation passed"
 
       - name: Validate module exports
@@ -83,7 +71,7 @@ jobs:
         id: json
         continue-on-error: true
         run: |
-          for file in package.json language-configuration.json syntaxes/otterscript.tmLanguage.json; do
+          for file in package.json package-lock.json language-configuration.json syntaxes/otterscript.tmLanguage.json; do
             echo "Validating $file..."
             node -e "JSON.parse(require('fs').readFileSync('$file', 'utf8'))"
           done
@@ -115,7 +103,7 @@ jobs:
           echo ""
 
           # Check src/ files
-          CRLF_FILES=$(grep -rlI $'\r' src/ 2>/dev/null || true)
+          CRLF_FILES=$(grep -rlI $'\r' --exclude-dir={.git,.vscode,node_modules} . 2>/dev/null || true)
 
           if [ -n "$CRLF_FILES" ]; then
             echo "❌ Files with CRLF line endings:"
