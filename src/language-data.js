@@ -538,6 +538,61 @@ Get-Http(
 \`\`\`
 `
   },
+  "Install-Package": {
+    name: "Install-Package",
+    signature: "Install-Package([PackageSource: <text>], Name: <text>, [Version: <text>], [To: <text>], [ClearTarget: <true/false>], [LocalRegistry: <integer>], [LocalCache: <true/false>], [DirectDownload: <true/false>], [Feed: <text>], [EndpointUrl: <text>], [UserName: <text>], [Password: <text>], [ApiKey: <text>], [FeedUrl: <text>]);",
+    snippet: "Install-Package\n(\n    PackageSource: ${1:MyPackageSource},\n    Name: ${2:MyAppPackage},\n    Version: ${3:3.4.2},\n    To: ${4:C:\\\\MyApps\\\\MyApp}\n);$0",
+    description: "Installs a universal package to a target location using a package source.",
+    documentation: `
+Installs a universal package to the specified location using a package source.
+
+**Script Usage:**
+\`\`\`otterscript
+Install-Package(
+    [PackageSource: <text>],
+    Name: <text>,
+    [Version: <text>],
+    [To: <text>],
+    [ClearTarget: <true/false>],
+    [LocalRegistry: <integer>],
+    [LocalCache: <true/false>],
+    [DirectDownload: <true/false>],
+    [Feed: <text>],
+    [EndpointUrl: <text>],
+    [UserName: <text>],
+    [Password: <text>],
+    [ApiKey: <text>],
+    [FeedUrl: <text>]
+);
+\`\`\`
+
+**Arguments:**
+- \`Name\` (required) - Package name.
+- \`PackageSource\` - Package source name.
+- \`Version\` - Package version.
+- \`To\` - Target installation directory.
+- \`ClearTarget\` - Clear target directory before install.
+- \`LocalRegistry\` - Use local registry mode.
+- \`LocalCache\` - Cache package locally.
+- \`DirectDownload\` - Set false when remote server cannot directly reach the ProGet feed.
+- \`Feed\` - Feed name.
+- \`EndpointUrl\` - ProGet API endpoint URL.
+- \`UserName\`, \`Password\` - ProGet user credentials.
+- \`ApiKey\` - ProGet API key.
+- \`FeedUrl\` - Direct feed URL.
+
+**Example:**
+\`\`\`otterscript
+Install-Package
+(
+    PackageSource: MyPackageSource,
+    Name: MyAppPackage,
+    Version: 3.4.2,
+    To: C:\\MyApps\\MyApp
+);
+\`\`\`
+`
+  },
   "Concatenate-Files": {
     name: "Concatenate-Files",
     signature: "Concatenate-Files(File: <text>, [Directory: <text>], [Include: <@(text)>], [Exclude: <@(text)>], [Encoding: <text>], [Separator: <text>]);",
