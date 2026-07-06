@@ -53,14 +53,16 @@ const {
   isValidCompletionPosition,
   isInStringOrCommentDoc,
   clearModuleInfoCache,
+  clearTimerForUri,
   loadConfig,
   MODULE_NAME_TOKEN_REGEX,
   validateDocs,
+  scheduleTimerForUri,
   createRegexPatterns
 } = require('./helpers');
 
-/** @type {ReturnType<typeof setTimeout> | undefined} */
-let diagnosticTimer;
+/** @type {Map<string, ReturnType<typeof setTimeout>>} */
+const diagnosticTimers = new Map();
 const REFRESH_DIAGNOSTICS_COMMAND = "otterscript.refreshDiagnostics";
 
 // ============================================================
@@ -941,7 +943,7 @@ function activate(context) {
       const document = existing ?? await vscode.workspace.openTextDocument(uri);
       if (document.languageId !== "otterscript") return;
 
-      clearTimeout(diagnosticTimer);
+      clearTimerForUri(diagnosticTimers, document.uri);
       updateDiagnostics(document, diagnostics, diagnosticsContext);
     }
   );
@@ -964,8 +966,9 @@ function activate(context) {
     // -- Re-run diagnostics whenever text changes (every keystroke)
 
     vscode.workspace.onDidChangeTextDocument(e => {
-      clearTimeout(diagnosticTimer);
-      diagnosticTimer = setTimeout(() => updateDiagnostics(e.document, diagnostics, diagnosticsContext), 400);
+      scheduleTimerForUri(diagnosticTimers, e.document.uri, 400, () => {
+        updateDiagnostics(e.document, diagnostics, diagnosticsContext);
+      });
     }),
     // -- Run diagnostics when a new file is opened (handles files opened after activation)
     vscode.workspace.onDidOpenTextDocument(document => updateDiagnostics(document, diagnostics, diagnosticsContext)),
@@ -974,6 +977,7 @@ function activate(context) {
     vscode.workspace.onDidCloseTextDocument(doc => {
       diagnostics.delete(doc.uri);
       clearModuleInfoCache(doc.uri);
+      clearTimerForUri(diagnosticTimers, doc.uri);
     }),
 
     // -- All providers are registered here for cleanup on deactivation
@@ -999,7 +1003,10 @@ function activate(context) {
 // ============================================================
 // Called when the extension is disabled or VS Code shuts down.
 function deactivate() {
-  clearTimeout(diagnosticTimer);
+  for (const timer of diagnosticTimers.values()) {
+    clearTimeout(timer);
+  }
+  diagnosticTimers.clear();
 }
 
 // MODULE EXPORTS

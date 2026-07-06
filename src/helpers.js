@@ -108,6 +108,43 @@ function appendOutputLine(line) {
 }
 
 /**
+ * Clears a scheduled timer for the given URI key.
+ *
+ * @param {Map<string, ReturnType<typeof setTimeout>>} timerMap
+ * @param {import('vscode').Uri} uri
+ * @returns {void}
+ */
+function clearTimerForUri(timerMap, uri) {
+  const key = uri.toString();
+  const timer = timerMap.get(key);
+  if (!timer) return;
+
+  clearTimeout(timer);
+  timerMap.delete(key);
+}
+
+/**
+ * Schedules a timer for the given URI key, replacing any existing one.
+ *
+ * @param {Map<string, ReturnType<typeof setTimeout>>} timerMap
+ * @param {import('vscode').Uri} uri
+ * @param {number} delayMs
+ * @param {() => void} onFire
+ * @returns {void}
+ */
+function scheduleTimerForUri(timerMap, uri, delayMs, onFire) {
+  clearTimerForUri(timerMap, uri);
+
+  const key = uri.toString();
+  const timer = setTimeout(() => {
+    timerMap.delete(key);
+    onFire();
+  }, delayMs);
+
+  timerMap.set(key, timer);
+}
+
+/**
  * Centralized logger for OtterScript Language extension.
  *
  * @example
@@ -1250,6 +1287,7 @@ module.exports = {
   // -- Logger
   log,
   getOutputChannel,
+  clearTimerForUri,
 
   // -- Helpers
   isValidCompletionPosition,
@@ -1286,5 +1324,6 @@ module.exports = {
   findModuleReferences,
 
   // -- Regex
-  createRegexPatterns
+  createRegexPatterns,
+  scheduleTimerForUri
 };
