@@ -37,9 +37,10 @@ jobs:
         with:
           scan-type: fs
           scan-ref: '.'
-          ignore-unfixed: true
-          format: sarif
+          ignore-unfixed: false
+          format: 'sarif'
           output: trivy-results.sarif
+          scanners: vuln,secret,misconfig
           severity: HIGH,CRITICAL
           exit-code: '1'
 
