@@ -30,5 +30,5 @@ package-lock.json text eol=lf linguist-generated=true
 
 # Binaries
 *.png binary
-*.vsix binary
+*.vsix binary linguist-generated=true
 *.zip binary
