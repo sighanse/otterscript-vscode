@@ -2470,6 +2470,55 @@ $auth = $EncodeBasicAuth("admin", "secret");
 \`\`\`
 `
   },
+  "SecureCredentialProperty": {
+    name: "$SecureCredentialProperty",
+    signature: "$SecureCredentialProperty(credential, property)",
+    snippet: "\\$SecureCredentialProperty(${1:credential}, ${2:property})",
+    description: "Returns the decrypted plain-text value of a credential property.",
+    documentation: `
+Returns the decrypted plain-text value of a specified credential property.
+
+**Parameters:**
+- \`credential\` - The name of the credential to read.
+- \`property\` - The credential property to retrieve.
+
+**Notes:**
+- If the property is encrypted, the credential must allow encrypted property extraction.
+- If extraction is not allowed, the function fails at runtime.
+
+**Example:**
+\`\`\`otterscript
+# HDarsUser is a Username & Password credential with encrypted extraction enabled
+set $username = $SecureCredentialProperty(HDarsUser, Username);
+set $password = $SecureCredentialProperty(HDarsUser, Password);
+
+Log-Debug "Executing sometool.exe -user $username -pass *****";
+Exec sometool.exe -user $username -pass $password;
+\`\`\`
+`
+  },
+  "SecureResourceProperty": {
+    name: "$SecureResourceProperty",
+    signature: "$SecureResourceProperty(resource, property, [type])",
+    snippet: "\\$SecureResourceProperty(${1:resource}, ${2:property}${3:, ${4:type}})",
+    description: "Returns the value of a secure resource property.",
+    documentation: `
+Returns the value of a specified secure resource property.
+
+**Parameters:**
+- \`resource\` - The name of the secure resource to read.
+- \`property\` - The resource property to retrieve.
+- \`type\` *(optional)* - The type of resource property to retrieve.
+
+**Example:**
+\`\`\`otterscript
+# InternalProGet is a ProGet Secure Resource
+set $host = $SecureResourceProperty(InternalProGet, ServerUrl);
+
+Exec sometool.exe --host $host;
+\`\`\`
+`
+  },
   "PackageHash": {
     name: "$PackageHash",
     signature: "$PackageHash(format, algorithm)",
