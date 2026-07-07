@@ -1298,6 +1298,116 @@ function createUnbalancedDiagnostic(count, lastPos, openChar, closeChar, name, d
   return diagnostic;
 }
 
+/**
+ * Computes folding ranges for an OtterScript document.
+ *
+ * Reuses the same CodeScanState/scanLineState masking pass as diagnostics,
+ * so folding respects strings, swim-strings, and block comments identically
+ * to every other feature in the extension — braces inside a string or a
+ * swim-string body are never treated as fold boundaries.
+ *
+ * @param {vscode.TextDocument} document
+ * @returns {vscode.FoldingRange[]}
+ */
+function computeFoldingRanges(document) {
+  const ranges = [];
+  const braceStack = [];
+  const regionStack = [];
+  const templateTagStack = [];
+  const mapStack = [];   // { line, depthAtOpen } for %( map literals
+  let parenDepth = 0;    // carried across lines — map bodies can span multiple lines
+  let blockCommentStart = -1;
+  let swimStart = -1;
+  const state = createCodeScanState();
+
+  for (let lineIndex = 0; lineIndex < document.lineCount; lineIndex++) {
+    const rawLine = document.lineAt(lineIndex).text;
+    const wasInBlockComment = state.inBlockComment;
+    const wasInSwim = !!state.swimDelimiter;
+    const wasMidStringOrSwim = state.inString || wasInSwim;
+
+    if (!wasInBlockComment && !wasMidStringOrSwim) {
+      if (/^\s*#region\b/i.test(rawLine)) {
+        regionStack.push(lineIndex);
+      } else if (/^\s*#endregion\b/i.test(rawLine) && regionStack.length > 0) {
+        const start = regionStack.pop();
+        if (start !== undefined && lineIndex > start) {
+          ranges.push(new vscode.FoldingRange(start, lineIndex, vscode.FoldingRangeKind.Region));
+        }
+      }
+    }
+
+    const maskedLine = maskNonCodeSpans(rawLine, state);
+
+    // -- Block comments
+    if (!wasInBlockComment && state.inBlockComment) {
+      blockCommentStart = lineIndex;
+    } else if (wasInBlockComment && !state.inBlockComment && blockCommentStart !== -1) {
+      if (lineIndex > blockCommentStart) {
+        ranges.push(new vscode.FoldingRange(blockCommentStart, lineIndex, vscode.FoldingRangeKind.Comment));
+      }
+      blockCommentStart = -1;
+    }
+
+    // -- Swim-strings (e.g. >END>...multi-line body...>END>)
+    if (!wasInSwim && state.swimDelimiter) {
+      swimStart = lineIndex;
+    } else if (wasInSwim && !state.swimDelimiter && swimStart !== -1) {
+      if (lineIndex > swimStart) {
+        ranges.push(new vscode.FoldingRange(swimStart, lineIndex, vscode.FoldingRangeKind.Region));
+      }
+      swimStart = -1;
+    }
+
+    // -- <% %> template tags, independent of any braces inside them
+    let searchIndex = 0;
+    while (true) {
+      const openIdx = maskedLine.indexOf("<%", searchIndex);
+      const closeIdx = maskedLine.indexOf("%>", searchIndex);
+      if (openIdx === -1 && closeIdx === -1) break;
+
+      if (openIdx !== -1 && (closeIdx === -1 || openIdx < closeIdx)) {
+        templateTagStack.push(lineIndex);
+        searchIndex = openIdx + 2;
+      } else {
+        const start = templateTagStack.pop();
+        if (start !== undefined && lineIndex > start) {
+          ranges.push(new vscode.FoldingRange(start, lineIndex, vscode.FoldingRangeKind.Region));
+        }
+        searchIndex = closeIdx + 2;
+      }
+    }
+
+    // -- Braces
+    for (let col = 0; col < maskedLine.length; col++) {
+      const ch = maskedLine[col];
+      if (ch === "{") {
+        braceStack.push(lineIndex);
+      } else if (ch === "}") {
+        const start = braceStack.pop();
+        if (start !== undefined && lineIndex > start) {
+          ranges.push(new vscode.FoldingRange(start, lineIndex, vscode.FoldingRangeKind.Region));
+        }
+      } else if (ch === "(") {
+        if (col > 0 && maskedLine[col - 1] === "%") {
+          mapStack.push({ line: lineIndex, depthAtOpen: parenDepth });
+        }
+        parenDepth++;
+      } else if (ch === ")") {
+        parenDepth = Math.max(0, parenDepth - 1);
+        if (mapStack.length > 0 && mapStack[mapStack.length - 1].depthAtOpen === parenDepth) {
+          const popped = mapStack.pop();
+          if (popped !== undefined && lineIndex > popped.line) {
+            ranges.push(new vscode.FoldingRange(popped.line, lineIndex, vscode.FoldingRangeKind.Region));
+          }
+        }
+      }
+    }
+  }
+
+  return ranges;
+}
+
 // ============================================================
 // EXPORTS
 // ============================================================
@@ -1326,6 +1436,7 @@ module.exports = {
   validateDocs,
   createUnbalancedDiagnostic,
   getDiagnosticCode,
+  computeFoldingRanges,
 
   // -- Builders
   buildHoverMarkdown,
