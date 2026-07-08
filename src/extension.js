@@ -897,7 +897,7 @@ function activate(context) {
   // ============================================================
   // FOLDING RANGE PROVIDER
   // ============================================================
-  // Lets users collapse { } blocks, /* */ block comments, and #region/#endregion
+  // Lets users collapse { } blocks, %(...), @(... ), /* */ block comments, and #region/#endregion
   // sections. Reuses the same CodeScanState masking pass as diagnostics, so
   // folding never disagrees with what diagnostics/hover treat as real code.
 

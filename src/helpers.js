@@ -1339,7 +1339,7 @@ function computeFoldingRanges(document) {
   const braceStack = [];
   const regionStack = [];
   const templateTagStack = [];
-  const mapStack = [];   // { line, depthAtOpen } for %( map literals
+  const mapStack = [];   // { line, depthAtOpen } for %(...) / @(... ) literals
   let parenDepth = 0;    // carried across lines — map bodies can span multiple lines
   let blockCommentStart = -1;
   let swimStart = -1;
