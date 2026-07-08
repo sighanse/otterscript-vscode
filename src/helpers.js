@@ -1389,7 +1389,7 @@ function computeFoldingRanges(document) {
           ranges.push(new vscode.FoldingRange(start, lineIndex, vscode.FoldingRangeKind.Region));
         }
       } else if (ch === "(") {
-        if (col > 0 && maskedLine[col - 1] === "%") {
+        if (col > 0 && (maskedLine[col - 1] === "%" || maskedLine[col - 1] === "@")) {
           mapStack.push({ line: lineIndex, depthAtOpen: parenDepth });
         }
         parenDepth++;
