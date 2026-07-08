@@ -1054,13 +1054,11 @@ function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
 function findDuplicateMapKeyDiagnostics(document, source = document.getText()) {
   // Produce a length-preserving masked copy so offsets remain valid for document.positionAt().
   // String contents and comments are replaced with spaces; newlines are kept to preserve line offsets.
+  const scanState = createCodeScanState();
   const maskedText = source
-    // Mask quoted strings first so // or # inside strings are not treated as comments.
-    .replace(/"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/g, match => match.replace(/[^\n]/g, " "))
-    // Mask block comments but keep indexes stable.
-    .replace(/\/\*[\s\S]*?\*\//g, match => match.replace(/[^\n]/g, " "))
-    // Mask line comments (# and //) — no preceding-whitespace requirement.
-    .replace(/(\/\/|#).*$/gm, match => ' '.repeat(match.length));
+    .split("\n")
+    .map(line => maskNonCodeSpans(line, scanState))
+    .join("\n");
 
   /** @type {vscode.Diagnostic[]} */
   const issues = [];
