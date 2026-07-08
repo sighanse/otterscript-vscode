@@ -1419,8 +1419,9 @@ function computeFoldingRanges(document) {
         }
         parenDepth++;
       } else if (ch === ")") {
-        parenDepth = Math.max(0, parenDepth - 1);
-        if (mapStack.length > 0 && mapStack[mapStack.length - 1].depthAtOpen === parenDepth) {
+        const prevDepth = parenDepth;
+        if (parenDepth > 0) parenDepth--;
+        if (prevDepth > 0 && mapStack.length > 0 && mapStack[mapStack.length - 1].depthAtOpen === parenDepth) {
           const popped = mapStack.pop();
           if (popped !== undefined && lineIndex > popped.line) {
             ranges.push(new vscode.FoldingRange(popped.line, lineIndex, vscode.FoldingRangeKind.Region));
