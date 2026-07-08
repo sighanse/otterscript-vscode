@@ -1385,7 +1385,7 @@ function computeFoldingRanges(document) {
       swimStart = -1;
     }
 
-    // -- <% %> template tags, independent of any braces inside them
+    // -- <% %> template tags (multi-line tags only; brace folding still applies inside tags)
     let searchIndex = 0;
     while (true) {
       const openIdx = maskedLine.indexOf("<%", searchIndex);

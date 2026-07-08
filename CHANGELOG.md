@@ -12,7 +12,7 @@ Adds new language coverage and editor folding support, plus documentation update
 
 ### Changed
 
-- Updated folding range documentation.
+- Updated folding range behavior.
 - Improved duplicate map-key diagnostics internals by reusing shared scan state.
 
 ## [0.2.3] - 2026-05-22
