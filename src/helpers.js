@@ -1335,6 +1335,7 @@ function createUnbalancedDiagnostic(count, lastPos, openChar, closeChar, name, d
  * @returns {vscode.FoldingRange[]}
  */
 function computeFoldingRanges(document) {
+  /** @type {vscode.FoldingRange[]} */
   const ranges = [];
   const braceStack = [];
   const regionStack = [];
