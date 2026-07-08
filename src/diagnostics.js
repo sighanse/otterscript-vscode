@@ -11,7 +11,7 @@ const {
   checkMissingDollar,
   createCodeScanState,
   createUnbalancedDiagnostic,
-  findDuplicateMapKeyDiagnostics,
+  findDuplicateMapKeyDiagnosticsFromMasked,
   maskNonCodeSpans,
 } = require("./helpers");
 
@@ -68,10 +68,10 @@ function updateDiagnostics(document, collection, ctx) {
   const lines = text.split("\n");
 
   // -- Process all lines
+  const maskedLines = [];
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-    const rawLine = lines[lineIndex];
-    // Shared masking keeps diagnostics aligned with completion/hover/module parsing rules.
-    const line = maskNonCodeSpans(rawLine, scanState);
+    const line = maskNonCodeSpans(lines[lineIndex], scanState);
+    maskedLines.push(line);
 
     // ------------------------------------------------------------
     // Missing '$' in if conditions
@@ -255,7 +255,7 @@ function updateDiagnostics(document, collection, ctx) {
   }
 
   // -- Detect duplicate keys inside map expressions: %( key: value, key: value )
-  issues.push(...findDuplicateMapKeyDiagnostics(document, text));
+  issues.push(...findDuplicateMapKeyDiagnosticsFromMasked(document, maskedLines.join("\n")));
 
   collection.set(document.uri, issues);
 }

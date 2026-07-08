@@ -1044,22 +1044,49 @@ function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
 /**
  * Finds duplicate keys inside map expressions and returns diagnostics.
  *
- * This performs a best-effort scan of `%(... )` blocks and warns when
- * the same key appears more than once at the top level of a map.
+ * Thin convenience wrapper around {@link findDuplicateMapKeyDiagnosticsFromMasked}
+ * for callers that only have raw source text (e.g. tests, or any future caller
+ * that hasn't already masked the document). It masks `source` here using the
+ * same `CodeScanState`/`maskNonCodeSpans` scanner as `diagnostics.js` and every
+ * other feature, so strings, comments, AND swim-strings are masked identically
+ * everywhere in the extension — map-shaped text inside a swim-string body no
+ * longer produces a false duplicate-key warning.
+ *
+ * Prefer {@link findDuplicateMapKeyDiagnosticsFromMasked} directly when the
+ * caller already has a masked copy of the document, to avoid masking the
+ * whole document a second time.
  *
  * @param {vscode.TextDocument} document - Document to analyze
- * @param {string} [source] - Optional pre-fetched document text; defaults to document.getText()
+ * @param {string} [source] - Optional pre-fetched raw document text; defaults
+ *   to `document.getText()`
  * @returns {vscode.Diagnostic[]} Duplicate-key diagnostics
  */
 function findDuplicateMapKeyDiagnostics(document, source = document.getText()) {
-  // Produce a length-preserving masked copy so offsets remain valid for document.positionAt().
-  // String contents and comments are replaced with spaces; newlines are kept to preserve line offsets.
   const scanState = createCodeScanState();
-  const maskedText = source
-    .split("\n")
-    .map(line => maskNonCodeSpans(line, scanState))
-    .join("\n");
+  const maskedText = source.split("\n").map(line => maskNonCodeSpans(line, scanState)).join("\n");
+  return findDuplicateMapKeyDiagnosticsFromMasked(document, maskedText);
+}
 
+/**
+ * Finds duplicate keys inside map expressions and returns diagnostics, given
+ * text that has ALREADY been masked by {@link maskNonCodeSpans}.
+ *
+ * This performs a best-effort scan of `%(... )` blocks and warns when the
+ * same key appears more than once at the top level of a map. Callers that
+ * already have a masked copy of the document on hand (e.g. `updateDiagnostics`,
+ * which masks every line during its own scan) should call this directly to
+ * avoid masking the whole document a second time. Callers that only have raw
+ * source text should use {@link findDuplicateMapKeyDiagnostics} instead, which
+ * masks first and then delegates here.
+ *
+ * @param {vscode.TextDocument} document - Document to analyze; used only for
+ *   `positionAt()` offset-to-position conversion, not for its text.
+ * @param {string} maskedText - Document text already run through
+ *   `maskNonCodeSpans`, with strings, comments, and swim-strings blanked out
+ *   and line length/offsets preserved (so `document.positionAt()` stays valid).
+ * @returns {vscode.Diagnostic[]} Duplicate-key diagnostics
+ */
+function findDuplicateMapKeyDiagnosticsFromMasked(document, maskedText) {
   /** @type {vscode.Diagnostic[]} */
   const issues = [];
 
@@ -1431,6 +1458,7 @@ module.exports = {
   stripStrings,
   checkMissingDollar,
   findDuplicateMapKeyDiagnostics,
+  findDuplicateMapKeyDiagnosticsFromMasked,
   validateDocs,
   createUnbalancedDiagnostic,
   getDiagnosticCode,
