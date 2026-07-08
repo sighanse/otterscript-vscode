@@ -1044,24 +1044,49 @@ function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
 /**
  * Finds duplicate keys inside map expressions and returns diagnostics.
  *
- * This performs a best-effort scan of `%(... )` blocks and warns when
- * the same key appears more than once at the top level of a map.
+ * Thin convenience wrapper around {@link findDuplicateMapKeyDiagnosticsFromMasked}
+ * for callers that only have raw source text (e.g. tests, or any future caller
+ * that hasn't already masked the document). It masks `source` here using the
+ * same `CodeScanState`/`maskNonCodeSpans` scanner as `diagnostics.js` and every
+ * other feature, so strings, comments, AND swim-strings are masked identically
+ * everywhere in the extension — map-shaped text inside a swim-string body no
+ * longer produces a false duplicate-key warning.
+ *
+ * Prefer {@link findDuplicateMapKeyDiagnosticsFromMasked} directly when the
+ * caller already has a masked copy of the document, to avoid masking the
+ * whole document a second time.
  *
  * @param {vscode.TextDocument} document - Document to analyze
- * @param {string} [source] - Optional pre-fetched document text; defaults to document.getText()
+ * @param {string} [source] - Optional pre-fetched raw document text; defaults
+ *   to `document.getText()`
  * @returns {vscode.Diagnostic[]} Duplicate-key diagnostics
  */
 function findDuplicateMapKeyDiagnostics(document, source = document.getText()) {
-  // Produce a length-preserving masked copy so offsets remain valid for document.positionAt().
-  // String contents and comments are replaced with spaces; newlines are kept to preserve line offsets.
-  const maskedText = source
-    // Mask quoted strings first so // or # inside strings are not treated as comments.
-    .replace(/"([^"\\]|\\.)*"|'([^'\\]|\\.)*'/g, match => match.replace(/[^\n]/g, " "))
-    // Mask block comments but keep indexes stable.
-    .replace(/\/\*[\s\S]*?\*\//g, match => match.replace(/[^\n]/g, " "))
-    // Mask line comments (# and //) — no preceding-whitespace requirement.
-    .replace(/(\/\/|#).*$/gm, match => ' '.repeat(match.length));
+  const scanState = createCodeScanState();
+  const maskedText = source.split("\n").map(line => maskNonCodeSpans(line, scanState)).join("\n");
+  return findDuplicateMapKeyDiagnosticsFromMasked(document, maskedText);
+}
 
+/**
+ * Finds duplicate keys inside map expressions and returns diagnostics, given
+ * text that has ALREADY been masked by {@link maskNonCodeSpans}.
+ *
+ * This performs a best-effort scan of `%(... )` blocks and warns when the
+ * same key appears more than once at the top level of a map. Callers that
+ * already have a masked copy of the document on hand (e.g. `updateDiagnostics`,
+ * which masks every line during its own scan) should call this directly to
+ * avoid masking the whole document a second time. Callers that only have raw
+ * source text should use {@link findDuplicateMapKeyDiagnostics} instead, which
+ * masks first and then delegates here.
+ *
+ * @param {vscode.TextDocument} document - Document to analyze; used only for
+ *   `positionAt()` offset-to-position conversion, not for its text.
+ * @param {string} maskedText - Document text already run through
+ *   `maskNonCodeSpans`, with strings, comments, and swim-strings blanked out
+ *   and line length/offsets preserved (so `document.positionAt()` stays valid).
+ * @returns {vscode.Diagnostic[]} Duplicate-key diagnostics
+ */
+function findDuplicateMapKeyDiagnosticsFromMasked(document, maskedText) {
   /** @type {vscode.Diagnostic[]} */
   const issues = [];
 
@@ -1298,6 +1323,118 @@ function createUnbalancedDiagnostic(count, lastPos, openChar, closeChar, name, d
   return diagnostic;
 }
 
+/**
+ * Computes folding ranges for an OtterScript document.
+ *
+ * Reuses the same CodeScanState/scanLineState masking pass as diagnostics,
+ * so folding respects strings, swim-strings, and block comments identically
+ * to every other feature in the extension — braces inside a string or a
+ * swim-string body are never treated as fold boundaries.
+ *
+ * @param {vscode.TextDocument} document
+ * @returns {vscode.FoldingRange[]}
+ */
+function computeFoldingRanges(document) {
+  /** @type {vscode.FoldingRange[]} */
+  const ranges = [];
+  const braceStack = [];
+  const regionStack = [];
+  const templateTagStack = [];
+  const mapStack = [];   // { line, depthAtOpen } for %(...) / @(... ) literals
+  let parenDepth = 0;    // carried across lines — map bodies can span multiple lines
+  let blockCommentStart = -1;
+  let swimStart = -1;
+  const state = createCodeScanState();
+
+  for (let lineIndex = 0; lineIndex < document.lineCount; lineIndex++) {
+    const rawLine = document.lineAt(lineIndex).text;
+    const wasInBlockComment = state.inBlockComment;
+    const wasInSwim = !!state.swimDelimiter;
+    const wasMidStringOrSwim = state.inString || wasInSwim;
+
+    if (!wasInBlockComment && !wasMidStringOrSwim) {
+      if (/^\s*#region\b/i.test(rawLine)) {
+        regionStack.push(lineIndex);
+      } else if (/^\s*#endregion\b/i.test(rawLine) && regionStack.length > 0) {
+        const start = regionStack.pop();
+        if (start !== undefined && lineIndex > start) {
+          ranges.push(new vscode.FoldingRange(start, lineIndex, vscode.FoldingRangeKind.Region));
+        }
+      }
+    }
+
+    const maskedLine = maskNonCodeSpans(rawLine, state);
+
+    // -- Block comments
+    if (!wasInBlockComment && state.inBlockComment) {
+      blockCommentStart = lineIndex;
+    } else if (wasInBlockComment && !state.inBlockComment && blockCommentStart !== -1) {
+      if (lineIndex > blockCommentStart) {
+        ranges.push(new vscode.FoldingRange(blockCommentStart, lineIndex, vscode.FoldingRangeKind.Comment));
+      }
+      blockCommentStart = -1;
+    }
+
+    // -- Swim-strings (e.g. >END>...multi-line body...>END>)
+    if (!wasInSwim && state.swimDelimiter) {
+      swimStart = lineIndex;
+    } else if (wasInSwim && !state.swimDelimiter && swimStart !== -1) {
+      if (lineIndex > swimStart) {
+        ranges.push(new vscode.FoldingRange(swimStart, lineIndex, vscode.FoldingRangeKind.Region));
+      }
+      swimStart = -1;
+    }
+
+    // -- <% %> template tags (multi-line tags only; brace folding still applies inside tags)
+    let searchIndex = 0;
+    while (true) {
+      const openIdx = maskedLine.indexOf("<%", searchIndex);
+      const closeIdx = maskedLine.indexOf("%>", searchIndex);
+      if (openIdx === -1 && closeIdx === -1) break;
+
+      if (openIdx !== -1 && (closeIdx === -1 || openIdx < closeIdx)) {
+        templateTagStack.push(lineIndex);
+        searchIndex = openIdx + 2;
+      } else {
+        const start = templateTagStack.pop();
+        if (start !== undefined && lineIndex > start) {
+          ranges.push(new vscode.FoldingRange(start, lineIndex, vscode.FoldingRangeKind.Region));
+        }
+        searchIndex = closeIdx + 2;
+      }
+    }
+
+    // -- Braces
+    for (let col = 0; col < maskedLine.length; col++) {
+      const ch = maskedLine[col];
+      if (ch === "{") {
+        braceStack.push(lineIndex);
+      } else if (ch === "}") {
+        const start = braceStack.pop();
+        if (start !== undefined && lineIndex > start) {
+          ranges.push(new vscode.FoldingRange(start, lineIndex, vscode.FoldingRangeKind.Region));
+        }
+      } else if (ch === "(") {
+        if (col > 0 && (maskedLine[col - 1] === "%" || maskedLine[col - 1] === "@")) {
+          mapStack.push({ line: lineIndex, depthAtOpen: parenDepth });
+        }
+        parenDepth++;
+      } else if (ch === ")") {
+        const prevDepth = parenDepth;
+        if (parenDepth > 0) parenDepth--;
+        if (prevDepth > 0 && mapStack.length > 0 && mapStack[mapStack.length - 1].depthAtOpen === parenDepth) {
+          const popped = mapStack.pop();
+          if (popped !== undefined && lineIndex > popped.line) {
+            ranges.push(new vscode.FoldingRange(popped.line, lineIndex, vscode.FoldingRangeKind.Region));
+          }
+        }
+      }
+    }
+  }
+
+  return ranges;
+}
+
 // ============================================================
 // EXPORTS
 // ============================================================
@@ -1323,9 +1460,11 @@ module.exports = {
   stripStrings,
   checkMissingDollar,
   findDuplicateMapKeyDiagnostics,
+  findDuplicateMapKeyDiagnosticsFromMasked,
   validateDocs,
   createUnbalancedDiagnostic,
   getDiagnosticCode,
+  computeFoldingRanges,
 
   // -- Builders
   buildHoverMarkdown,

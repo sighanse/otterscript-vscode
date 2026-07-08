@@ -59,7 +59,8 @@ const {
   MODULE_NAME_TOKEN_REGEX,
   validateDocs,
   scheduleTimerForUri,
-  createRegexPatterns
+  createRegexPatterns,
+  computeFoldingRanges
 } = require('./helpers');
 
 /** @type {Map<string, ReturnType<typeof setTimeout>>} */
@@ -894,6 +895,27 @@ function activate(context) {
   );
 
   // ============================================================
+  // FOLDING RANGE PROVIDER
+  // ============================================================
+  // Lets users collapse { } blocks, %(...), @(... ), <% %> template tags,
+  // /* */ block comments, and #region/#endregion.
+  // Reuses the same CodeScanState masking pass as diagnostics, so folding
+  // never disagrees with what diagnostics/hover treat as real code.
+
+  const foldingRangeProvider = vscode.languages.registerFoldingRangeProvider(
+    "otterscript",
+    {
+      /**
+       * @param {vscode.TextDocument} document
+       * @returns {vscode.FoldingRange[]}
+       */
+      provideFoldingRanges(document) {
+        return computeFoldingRanges(document);
+      }
+    }
+  );
+
+  // ============================================================
   // DIAGNOSTICS (ERRORS & WARNINGS)
   // ============================================================
   // Provides real-time syntax checking and problem detection.
@@ -979,7 +1001,8 @@ function activate(context) {
     documentSymbolProvider,
     codeLensProvider,
     fixAllCommand,
-    refreshDiagnosticsCommand
+    refreshDiagnosticsCommand,
+    foldingRangeProvider
   );
 }
 

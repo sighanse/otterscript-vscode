@@ -1,15 +1,19 @@
 # Changelog
 
-## Unreleased
+## [0.2.4] - 2026-07-08
 
-Updates the OtterScript VS Code extension’s language metadata and diagnostics scheduling, alongside routine version/CI/dependency bumps.
+Adds new language coverage and editor folding support, plus documentation updates.
 
 ### Added
 
 - Added `Install-Package`, `Ensure-Package`, `Query-Package`, and `Push-PackageFile` operation to the language data.
 - Added `SecureCredentialProperty` and `SecureResourceProperty` functions to the language data.
-- Improved diagnostics refresh scheduling by moving from a single global timer to per-document timers and refactored symbol-balance scanning logic.
-- Bumped extension version and refreshed CI/dependabot/dependencies
+- Added folding range support for OtterScript blocks via a dedicated folding range provider.
+
+### Changed
+
+- Updated folding range behavior.
+- Improved duplicate map-key diagnostics internals by reusing shared scan state.
 
 ## [0.2.3] - 2026-05-22
 
