@@ -897,9 +897,10 @@ function activate(context) {
   // ============================================================
   // FOLDING RANGE PROVIDER
   // ============================================================
-  // Lets users collapse { } blocks, %(...), @(... ), /* */ block comments, and #region/#endregion
-  // sections. Reuses the same CodeScanState masking pass as diagnostics, so
-  // folding never disagrees with what diagnostics/hover treat as real code.
+  // Lets users collapse { } blocks, %(...), @(... ), <% %> template tags,
+  // /* */ block comments, and #region/#endregion.
+  // Reuses the same CodeScanState masking pass as diagnostics, so folding
+  // never disagrees with what diagnostics/hover treat as real code.
 
   const foldingRangeProvider = vscode.languages.registerFoldingRangeProvider(
     "otterscript",
