@@ -43,5 +43,3 @@ jobs:
       - name: Publish to Open VSX
         if: env.OVSX_PAT != ''
         run: npm run publish:ovsx
-
-
