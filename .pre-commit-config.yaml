@@ -27,6 +27,7 @@ repos:
       - id: detect-private-key
       - id: forbid-new-submodules
       - id: check-json
+        exclude: ^(\.vscode/|snippets/otterscript\.json)
       - id: check-ast
       - id: debug-statements
       - id: check-shebang-scripts-are-executable
