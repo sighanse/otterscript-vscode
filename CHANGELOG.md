@@ -7,6 +7,7 @@
 - Added `Copy-Files`, `Create-Directory`, `Create-File`, `Delete-Files`, `Ensure-File`, `Set-Variable`, and `Exec` operations to the language data.
 - Added `$Coalesce`, `$PadLeft`, `$PadRight`, `$TrimStart`, `$TrimEnd`, `GetVariableValue`, and `$IsVariableDefined` scalar functions to the language data.
 - Added `@FilesOnDisk`, `@AcquiredServers`, `@AllEnvironments`, `@AllRoles`, `@AllServers`, `@ServersInEnvironment`, `@ServersInRole`, and `@ServersInRoleAndEnvironment` vector functions/variables to the language data.
+
 ### Changed
 
 Fix missing highlight for: `Ensure-Package`, `Install-Package`, `Push-PackageFile`, and `Query-Package`
