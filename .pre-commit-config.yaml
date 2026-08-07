@@ -41,7 +41,7 @@ repos:
     hooks:
       - id: markdownlint-cli2
         name: Markdownlint
-        args: [--config .markdownlint.yaml]
+        args: [--config .markdownlint.jsonc]
         files: \.md$
 
   # ---------------------------------------------------------------------------
