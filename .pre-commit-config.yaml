@@ -1,0 +1,59 @@
+# =============================================================================
+# OtterScript Language Extension - Pre-commit Configuration
+# =============================================================================
+# Run with: pre-commit run --all-files
+# Install with: pre-commit install
+# -----------------------------------------------------------------------------
+
+repos:
+  # ---------------------------------------------------------------------------
+  # GENERAL FILE CHECKS
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: ['--allow-multiple-documents']
+        exclude: ^mkdocs\.yml$
+      - id: check-toml
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+      - id: detect-private-key
+      - id: forbid-new-submodules
+      - id: check-json
+      - id: check-ast
+      - id: debug-statements
+      - id: check-shebang-scripts-are-executable
+        files: \.(sh|py)$
+
+  # ---------------------------------------------------------------------------
+  # MARKDOWN - MARKDOWNLINT
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.23.2
+    hooks:
+      - id: markdownlint-cli2
+        name: Markdownlint
+        args: [--config .markdownlint.yaml]
+        files: \.md$
+
+  # ---------------------------------------------------------------------------
+  # JAVASCRIPT/TYPESCRIPT - ESLINT
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: eslint
+        name: ESLint
+        entry: eslint --config eslint.config.cjs
+        language: node
+        files: ^src/.*\.[jt]sx?$
+        additional_dependencies:
+          - eslint@10.x
+          - globals@17.x
+          - "@eslint/js@10.x"
