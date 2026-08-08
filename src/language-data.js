@@ -1047,216 +1047,303 @@ Apply-Template hdars
   },
   "Copy-Files": {
     name: "Copy-Files",
-    signature: "Copy-Files(From: <text>, To: <text>, [Include: <mask>], [Exclude: <mask>], [Overwrite: <true/false>]);",
-    snippet: "Copy-Files ${1:sourceDir}\n(\n    To: ${2:destinationDir}\n);$0",
-    description: "Copies files from one directory to another.",
+    signature: "Copy-Files([Include: <@(text)>], [Exclude: <@(text)>], [From: <text>], To: <text>, [Verbose: <true/false>], [Overwrite: <true/false>], [RenameFrom: <text>], [RenameTo: <text>], [RenameRegex: <true/false>]);",
+    snippet: "Copy-Files\n(\n    From: ${1:sourceDir},\n    To: ${2:destinationDir}\n);$0",
+    description: "Copies files on a server.",
     documentation: `
 **Script Usage:**
 \`\`\`otterscript
 Copy-Files(
-    From: <text>,
+    [Include: <@(text)>],
+    [Exclude: <@(text)>],
+    [From: <text>],
     To: <text>,
-    [Include: <mask>],
-    [Exclude: <mask>],
-    [Overwrite: <true/false>]
+    [Verbose: <true/false>],
+    [Overwrite: <true/false>],
+    [RenameFrom: <text>],
+    [RenameTo: <text>],
+    [RenameRegex: <true/false>]
 );
 \`\`\`
 
 **Arguments:**
-- \`From\` (required) - Source directory.
-- \`To\` (required) - Destination directory.
-- \`Include\` - File mask(s) to include (e.g. \`*.zip\`).
+- \`Include\` - File mask(s) to include; see KB#1119 for masking syntax.
 - \`Exclude\` - File mask(s) to exclude.
-- \`Overwrite\` - Whether to overwrite existing files at the destination.
+- \`From\` - Source directory.
+- \`To\` (required) - Target directory.
+- \`Verbose\` - Log each individual file that is copied.
+- \`Overwrite\` - Overwrite target files.
+- \`RenameFrom\` - Text or regular expression matched against the copied file name.
+- \`RenameTo\` - Replacement text for the renamed file.
+- \`RenameRegex\` - Whether \`RenameFrom\`/\`RenameTo\` should be treated as a regular expression.
 
 **Example:**
 \`\`\`otterscript
-Copy-Files sourceDir
-(
-    To: destinationDir,
-    Include: *.zip
+# copy all files and all subdirectories beneath it to the target,
+# and log each individual file that is copied, and overwrite any files
+Copy-Files(
+    From: E:\\Source,
+    To: F:\\Target,
+    Include: **,
+    Verbose: true,
+    Overwrite: true
 );
 \`\`\`
+
+**Notes:**
+- May be prefixed with \`Files::\`, though this built-in namespace isn't necessary.
 `
   },
   "Create-Directory": {
     name: "Create-Directory",
-    signature: "Create-Directory(Name: <text>);",
-    snippet: "Create-Directory ${1:myFolderName};$0",
-    description: "Creates a directory, including any missing parent directories.",
+    signature: "ProGet::Create-Directory(Path: <text>, [Source: <text>], [Resource: <text>], [EndpointUrl: <text>], [ApiKey: <text>], [UserName: <text>], [Password: <text>]);",
+    snippet: "ProGet::Create-Directory ${1:my/folder/path}\n(\n    Resource: ${2:myAssetDirResource}\n);$0",
+    description: "Ensures that a subdirectory exists in a ProGet Asset Directory.",
     documentation: `
 **Script Usage:**
 \`\`\`otterscript
-Create-Directory(
-    Name: <text>
+ProGet::Create-Directory(
+    Path: <text>,
+    [Source: <text>],
+    [Resource: <text>],
+    [EndpointUrl: <text>],
+    [ApiKey: <text>],
+    [UserName: <text>],
+    [Password: <text>]
 );
 \`\`\`
 
 **Arguments:**
-- \`Name\` (required) - Directory path to create.
+- \`Path\` (required) - Directory path within the Asset Directory.
+- \`Source\` - Asset source name.
+- \`Resource\` - Secure resource (legacy).
+- \`EndpointUrl\` - API endpoint URL.
+- \`ApiKey\` - API key.
+- \`UserName\` - User name.
+- \`Password\` - Password.
 
 **Example:**
 \`\`\`otterscript
-Create-Directory myFolderName;
+# ensures that the my/folder/path directory exists in the ProGet Asset Directory
+# specified by the MyAssetDirResource secure resource
+ProGet::Create-Directory my/folder/path
+(
+    Resource: MyAssetDirResource
+);
 \`\`\`
 
 **Notes:**
-- Does not raise an error if the directory already exists.
-- For explicit presence/absence control, use \`Ensure-Directory\` instead.
+- This creates a directory inside a **ProGet Asset Directory** (remote package/asset storage), not a local folder on the server. For a local directory, use \`Ensure-Directory\`.
 `
   },
   "Create-File": {
     name: "Create-File",
-    signature: "Create-File(Name: <text>, [Text: <text>], [Overwrite: <true/false>]);",
+    signature: "Create-File(Name: <text>, [Text: <text>], [Overwrite: <true/false>], [FileMode: <text>]);",
     snippet: "Create-File ${1:myFile.txt}\n(\n    Text: ${2:file contents}\n);$0",
-    description: "Creates a file with the specified text content.",
+    description: "Creates a file on a server.",
     documentation: `
 **Script Usage:**
 \`\`\`otterscript
 Create-File(
     Name: <text>,
     [Text: <text>],
-    [Overwrite: <true/false>]
+    [Overwrite: <true/false>],
+    [FileMode: <text>]
 );
 \`\`\`
 
 **Arguments:**
-- \`Name\` (required) - File path to create.
+- \`Name\` (required) - Path of the file to create.
 - \`Text\` - Content to write to the file.
 - \`Overwrite\` - Whether to overwrite an existing file.
+- \`FileMode\` - The octal file mode for the file. Ignored on Windows.
 
 **Example:**
 \`\`\`otterscript
-Create-File myFile.txt
-(
-    Text: "Hello, world!"
+# write the name of the current working directory to my desktop
+Create-File(
+    Name: C:\\Users\\atripp\\Desktop\\workingdir.txt,
+    Text: $WorkingDirectory
 );
 \`\`\`
+
+**Notes:**
+- May be prefixed with \`Files::\`, though this built-in namespace isn't necessary.
 `
   },
   "Delete-Files": {
     name: "Delete-Files",
-    signature: "Delete-Files(Include: <mask>, [Exclude: <mask>]);",
+    signature: "Delete-Files(Include: <@(text)>, [Exclude: <@(text)>], [Directory: <text>], [Verbose: <true/false>]);",
     snippet: "Delete-Files ${1:*.tmp};$0",
-    description: "Deletes files matching the specified mask.",
+    description: "Deletes files on a server.",
     documentation: `
 **Script Usage:**
 \`\`\`otterscript
 Delete-Files(
-    Include: <mask>,
-    [Exclude: <mask>]
+    Include: <@(text)>,
+    [Exclude: <@(text)>],
+    [Directory: <text>],
+    [Verbose: <true/false>]
 );
 \`\`\`
 
 **Arguments:**
-- \`Include\` (required) - File mask(s) to delete (e.g. \`*.tmp\`).
+- \`Include\` (required) - File mask(s) to delete; see KB#1119 for masking syntax.
 - \`Exclude\` - File mask(s) to exclude from deletion.
+- \`Directory\` - Directory to search in.
+- \`Verbose\` - Log each individual file that is deleted.
 
 **Example:**
 \`\`\`otterscript
-Delete-Files *.tmp;
+# delete all .config files in the working directory except web.config
+Delete-Files(
+    Include: *.config,
+    Exclude: web.config
+);
 \`\`\`
 
 **Notes:**
-- Does not raise an error if no matching files are found.
+- May be prefixed with \`Files::\`, though this built-in namespace isn't necessary.
+- Deletes files one-by-one; for clearing large directories, a PowerShell script may be more performant.
 `
   },
   "Ensure-File": {
     name: "Ensure-File",
-    signature: "Ensure-File(Name: <text>, [Text: <text>], [Exists: <true/false>]);",
+    signature: "Ensure-File([Text: <text>], [ReadOnly: <true/false>], Name: <text>, [Attributes: <integer>], [Exists: <true/false>], [Modified: <DateTime>]);",
     snippet: "Ensure-File ${1:myFile.txt}\n(\n    Exists: ${2:true}\n);$0",
-    description: "Ensures the existence and/or content of a file on a server.",
+    description: "Ensures the existence of a file on a server.",
     documentation: `
 **Script Usage:**
 \`\`\`otterscript
 Ensure-File(
-    Name: <text>,
     [Text: <text>],
-    [Exists: <true/false>]
+    [ReadOnly: <true/false>],
+    Name: <text>,
+    [Attributes: <integer>],
+    [Exists: <true/false>],
+    [Modified: <DateTime>]
 );
 \`\`\`
 
 **Arguments:**
-- \`Name\` (required) - File path.
-- \`Text\` - Expected file content.
+- \`Name\` (required) - Path of the file or directory.
+- \`Text\` - Contents of the file; a missing/empty value means a 0-byte file.
+- \`ReadOnly\` - Marks the file with the read-only attribute. Applied after \`Attributes\`, so it overrides any read-only flag specified there.
+- \`Attributes\` - File/directory attributes, as an integer flag or by name (\`ReadOnly=1\`, \`Hidden=2\`, \`System=4\`, \`Archive=32\`, \`Normal=128\`). Values may be ORed together, except \`Normal\`, which may only be used alone.
 - \`Exists\` - Ensure presence (true) or absence (false).
+- \`Modified\` - Last write time (UTC) of the file or directory.
 
 **Example:**
 \`\`\`otterscript
-Ensure-File myFile.txt
-(
-    Exists: true,
-    Text: "Hello, world!"
+# ensures the otter.txt file exists on the server and is marked readonly
+Ensure-File(
+    Name: E:\\Docs\\otter.txt,
+    Text: >>
+Otter is a common name for a carnivorous mammal in the subfamily Lutrinae.
+>>,
+    ReadOnly: true
 );
 \`\`\`
 
 **Notes:**
+- May be prefixed with \`Files::\`, though this built-in namespace isn't necessary.
 - Unlike \`Create-File\`, this is a drift-remediation / desired-state operation: re-running it will restore the file if it's missing or has drifted.
 `
   },
   "Set-Variable": {
     name: "Set-Variable",
-    signature: "Set-Variable(Name: <text>, Value: <text>);",
-    snippet: "Set-Variable ${1:variableName}\n(\n    Value: ${2:value}\n);$0",
-    description: "Sets the value of a runtime variable.",
+    signature: "Otter::Set-Variable([Credentials: <text>], Name: <text>, Value: <text>, [Server: <text>], [Role: <text>], [Environment: <text>], [Sensitive: <true/false>], [Host: <text>], [ApiKey: <SecureString>]);",
+    snippet: "Otter::Set-Variable\n(\n    Name: ${1:variableName},\n    Value: ${2:value}\n);$0",
+    description: "Creates or assigns a configuration variable in Otter.",
     documentation: `
 **Script Usage:**
 \`\`\`otterscript
-Set-Variable(
+Otter::Set-Variable(
+    [Credentials: <text>],
     Name: <text>,
-    Value: <text>
+    Value: <text>,
+    [Server: <text>],
+    [Role: <text>],
+    [Environment: <text>],
+    [Sensitive: <true/false>],
+    [Host: <text>],
+    [ApiKey: <SecureString>]
 );
 \`\`\`
 
 **Arguments:**
-- \`Name\` (required) - Variable name, without the \`$\` or \`@\` sigil.
+- \`Name\` (required) - Variable name.
 - \`Value\` (required) - Value to assign.
+- \`Credentials\` - Credentials used to connect to the target Otter instance.
+- \`Server\` - Server name to scope the variable to.
+- \`Role\` - Role name to scope the variable to.
+- \`Environment\` - Environment name to scope the variable to.
+- \`Sensitive\` - Whether the variable value should be masked.
+- \`Host\` - Otter server URL.
+- \`ApiKey\` - API key.
 
 **Example:**
 \`\`\`otterscript
-Set-Variable myVariable
+# sets the variable for the hdars-web-1k-tokyo server to the name of the current application
+Otter::Set-Variable
 (
-    Value: "some value"
+    Credentials: ProductionOtter,
+    Server: hdars-web-1k-tokyo,
+    Name: LatestDeployedApplication,
+    Value: $ApplicationName,
+    Sensitive: false
 );
 \`\`\`
 
 **Notes:**
-- Equivalent to the shorthand assignment \`$myVariable = "some value";\` for scalars, but also supports setting variables whose name is computed at runtime (paired with \`GetVariableValue\`).
+- This creates/updates an **Otter configuration variable** (server/role/environment-scoped, or global if no scope is given) — not a runtime script variable. For a runtime variable, use \`set $myVariable = value;\`.
+- If multiple entity scopes are provided, the variable will be multi-scoped.
 `
   },
   "Exec": {
     name: "Exec",
-    signature: "Exec(Executable: <text>, [Arguments: <text>], [WorkingDirectory: <text>], [SuccessExitCode: <integer>]);",
+    signature: "InedoCore::Exec([FileName: <text>], [Arguments: <text>], [WorkingDirectory: <text>], [OutputLogLevel: <integer>], [ErrorOutputLogLevel: <integer>], [SuccessExitCode: <text>], [ImportVariables: <true/false>], [WarnRegex: <text>], [DebugRegex: <text>], [LogArguments: <true/false>], [ReportProgressRegex: <text>], [OutputFilterRegex: <text>]);",
     snippet: "Exec ${1:executablePath}\n(\n    Arguments: ${2:arguments}\n);$0",
-    description: "Executes an external program cross-platform, waiting for it to exit.",
+    description: "Executes a process, logs its output, and waits until it exits.",
     documentation: `
 **Script Usage:**
 \`\`\`otterscript
-Exec(
-    Executable: <text>,
+InedoCore::Exec(
+    [FileName: <text>],
     [Arguments: <text>],
     [WorkingDirectory: <text>],
-    [SuccessExitCode: <integer>]
+    [OutputLogLevel: <integer>],
+    [ErrorOutputLogLevel: <integer>],
+    [SuccessExitCode: <text>],
+    [ImportVariables: <true/false>],
+    [WarnRegex: <text>],
+    [DebugRegex: <text>],
+    [LogArguments: <true/false>],
+    [ReportProgressRegex: <text>],
+    [OutputFilterRegex: <text>]
 );
 \`\`\`
 
 **Arguments:**
-- \`Executable\` (required) - Path to the executable to run.
+- \`FileName\` - Path to the executable to run.
 - \`Arguments\` - Command-line arguments.
 - \`WorkingDirectory\` - Directory to run the process from.
-- \`SuccessExitCode\` - Exit code considered successful (default: 0).
+- \`OutputLogLevel\` / \`ErrorOutputLogLevel\` - Log level for stdout/stderr output.
+- \`SuccessExitCode\` - Exit code (or inequality expression, e.g. \`>= 0\`) considered successful. Default: 0.
+- \`ImportVariables\` - When true, exports all accessible scalar execution variables as environment variables to the process.
+- \`WarnRegex\` / \`DebugRegex\` - Regular expression; matching output lines are logged at that level. Use a group named \`m\` to log only part of the message.
+- \`LogArguments\` - Whether to log the arguments used.
+- \`ReportProgressRegex\` - Regular expression for parsing real-time progress from output; use group \`m\` for a status message and \`p\` for percent complete (0-100).
+- \`OutputFilterRegex\` - When set, only output messages matching this expression are logged.
 
 **Example:**
 \`\`\`otterscript
-Exec /usr/bin/tar
-(
-    Arguments: "-czf archive.tar.gz ./src"
+# execute 7zip and only succeed if the executable returns a non-negative exit code
+Exec c:\\tools\\7za.exe (
+    Arguments: i *.*,
+    SuccessExitCode: >= 0
 );
 \`\`\`
-
-**Notes:**
-- Platform-agnostic; prefer this over \`OSCall\`/\`OSExec\` unless you specifically need OS-specific script blocks.
-- Output is captured to the execution log.
 `
   }
 };
@@ -2792,14 +2879,14 @@ $name = $Coalesce($OverrideName, $DefaultName, "unnamed");
   },
   "PadLeft": {
     name: "$PadLeft",
-    signature: "$PadLeft(text, totalWidth, [paddingChar])",
-    snippet: "\\$PadLeft(${1:text}, ${2:totalWidth})${0}",
-    description: "Pads a string on the left to a specified total length.",
+    signature: "$PadLeft(Text, Length, [PadCharacter])",
+    snippet: "\\$PadLeft(${1:Text}, ${2:Length})${0}",
+    description: "Returns a new string that right-aligns the characters by padding them on the left with a specified character, for a specified total length.",
     documentation: `
 **Parameters:**
-- \`text\` - The string to pad
-- \`totalWidth\` - The desired total length of the result
-- \`paddingChar\` - Optional character to pad with (default: space)
+- \`Text\` - The input string.
+- \`Length\` - The length of the string to return.
+- \`PadCharacter\` - (Optional) The character to pad with (default: space).
 
 **Returns:** Padded string
 
@@ -2812,14 +2899,14 @@ $padded = $PadLeft("7", 3, "0");
   },
   "PadRight": {
     name: "$PadRight",
-    signature: "$PadRight(text, totalWidth, [paddingChar])",
-    snippet: "\\$PadRight(${1:text}, ${2:totalWidth})${0}",
-    description: "Pads a string on the right to a specified total length.",
+    signature: "$PadRight(Text, Length, [PadCharacter])",
+    snippet: "\\$PadRight(${1:Text}, ${2:Length})${0}",
+    description: "Returns a new string that left-aligns the characters by padding them on the right with a specified character, for a specified total length.",
     documentation: `
 **Parameters:**
-- \`text\` - The string to pad
-- \`totalWidth\` - The desired total length of the result
-- \`paddingChar\` - Optional character to pad with (default: space)
+- \`Text\` - The input string.
+- \`Length\` - The length of the string to return.
+- \`PadCharacter\` - (Optional) The character to pad with (default: space).
 
 **Returns:** Padded string
 
@@ -2832,13 +2919,13 @@ $padded = $PadRight("Name", 10, ".");
   },
   "TrimStart": {
     name: "$TrimStart",
-    signature: "$TrimStart(text, [chars])",
-    snippet: "\\$TrimStart(${1:text})${0}",
-    description: "Removes leading whitespace or specified characters from a string.",
+    signature: "$TrimStart(Text, ...)",
+    snippet: "\\$TrimStart(${1:Text})${0}",
+    description: "Returns a string with all leading whitespace characters removed, or optionally a set of specified characters.",
     documentation: `
 **Parameters:**
-- \`text\` - The string to trim
-- \`chars\` - Optional characters to remove (default: whitespace)
+- \`Text\` - The input string.
+- \`...\` - (Optional) One or more characters to trim instead of whitespace.
 
 **Returns:** Trimmed string
 
@@ -2851,13 +2938,13 @@ $trimmed = $TrimStart("   hello");
   },
   "TrimEnd": {
     name: "$TrimEnd",
-    signature: "$TrimEnd(text, [chars])",
-    snippet: "\\$TrimEnd(${1:text})${0}",
-    description: "Removes trailing whitespace or specified characters from a string.",
+    signature: "$TrimEnd(Text, ...)",
+    snippet: "\\$TrimEnd(${1:Text})${0}",
+    description: "Returns a string with all trailing whitespace characters removed, or optionally a set of specified characters.",
     documentation: `
 **Parameters:**
-- \`text\` - The string to trim
-- \`chars\` - Optional characters to remove (default: whitespace)
+- \`Text\` - The input string.
+- \`...\` - (Optional) One or more characters to trim instead of whitespace.
 
 **Returns:** Trimmed string
 
@@ -2870,14 +2957,15 @@ $trimmed = $TrimEnd("hello   ");
   },
   "GetVariableValue": {
     name: "GetVariableValue",
-    signature: "GetVariableValue(name)",
+    signature: "GetVariableValue(VariableName, [VariableType])",
     snippet: "GetVariableValue(\"${1:variableName}\")${0}",
-    description: "Returns the value of a runtime variable given its name as a string.",
+    description: "Returns the value of a variable if the specified variable name is available in the current context; otherwise returns null.",
     documentation: `
 **Parameters:**
-- \`name\` - The variable name, without the \`$\` or \`@\` sigil
+- \`VariableName\` (required) - The name of the variable, without the \`$\`, \`@\`, or \`%\` sigil.
+- \`VariableType\` - (Optional) Must be one of: \`any\`, \`scalar\`, \`vector\`, \`map\`.
 
-**Returns:** The variable's value
+**Returns:** The variable's value, or null if not defined.
 
 **Example:**
 \`\`\`otterscript
@@ -2891,12 +2979,13 @@ $value = GetVariableValue("SomeDynamicallyNamedVariable");
   },
   "IsVariableDefined": {
     name: "$IsVariableDefined",
-    signature: "$IsVariableDefined(name)",
+    signature: "$IsVariableDefined(VariableName, [VariableType])",
     snippet: "\\$IsVariableDefined(\"${1:variableName}\")${0}",
-    description: "Returns true if a runtime variable with the given name has been defined.",
+    description: "Returns true if the specified variable name is available in the current context; otherwise returns false.",
     documentation: `
 **Parameters:**
-- \`name\` - The variable name, without the \`$\` or \`@\` sigil
+- \`VariableName\` (required) - The name of the variable, without the \`$\`, \`@\`, or \`%\` sigil.
+- \`VariableType\` - (Optional) Must be one of: \`any\`, \`scalar\`, \`vector\`, \`map\`.
 
 **Returns:** \`true\` or \`false\`
 
@@ -2907,6 +2996,174 @@ if $IsVariableDefined("OptionalSetting")
     Log-Information $OptionalSetting;
 }
 \`\`\`
+`
+  },
+  "JSEncode": {
+    name: "$JSEncode",
+    signature: "$JSEncode(Text)",
+    snippet: "\\$JSEncode(${1:Text})${0}",
+    description: "Encodes a string for use in a JavaScript string literal.",
+    documentation: `
+**Parameters:**
+- \`Text\` (required) - The text to encode.
+
+**Returns:** JavaScript-escaped string
+`
+  },
+  "SHEval": {
+    name: "$SHEval",
+    signature: "$SHEval(ScriptText)",
+    snippet: "\\$SHEval(${1:ScriptText})${0}",
+    description: "Returns the output of a shell script.",
+    documentation: `
+**Parameters:**
+- \`ScriptText\` (required) - The shell script to execute. This should be an expression.
+
+**Returns:** The script's output.
+
+**Example:**
+\`\`\`otterscript
+# set the $NextYear variable to the value of... next year
+set $ShellScript = >>
+date -d next-year +%Y
+>>;
+set $NextYear = $SHEval($ShellScript);
+Log-Information $NextYear;
+\`\`\`
+`
+  },
+  "ListIndexOf": {
+    name: "$ListIndexOf",
+    signature: "$ListIndexOf(List, Item)",
+    snippet: "\\$ListIndexOf(${1:List}, ${2:Item})${0}",
+    description: "Finds the index of an item in a list.",
+    documentation: `
+**Parameters:**
+- \`List\` (required) - The list.
+- \`Item\` (required) - The item.
+
+**Returns:** The 0-based index of the first matching item, or \`-1\` if not found.
+`
+  },
+  "XmlEncode": {
+    name: "$XmlEncode",
+    signature: "$XmlEncode(Text)",
+    snippet: "\\$XmlEncode(${1:Text})${0}",
+    description: "Encodes a string for use in an XML element.",
+    documentation: `
+**Parameters:**
+- \`Text\` (required) - The text to encode.
+
+**Returns:** XML-escaped string
+`
+  },
+  "NewLine": {
+    name: "$NewLine",
+    signature: "$NewLine([WindowsOrLinux])",
+    snippet: "\\$NewLine${1:}${0}",
+    description: "Returns the newline string for either the operating system of the current server in context, or specifically Windows or Linux.",
+    documentation: `
+**Parameters:**
+- \`WindowsOrLinux\` - (Optional) Must be \`"windows"\`, \`"linux"\`, or \`"current"\` (default).
+
+**Returns:** The newline sequence for the specified/current platform.
+`
+  },
+  "ExecutionId": {
+    name: "$ExecutionId",
+    signature: "$ExecutionId",
+    description: "Returns the current execution ID.",
+    documentation: `
+**Returns:** The ID of the current execution.
+`
+  },
+  "ExecutionState": {
+    name: "$ExecutionState",
+    signature: "$ExecutionState",
+    description: "Returns the current state of the execution (normal, warning, or error).",
+    documentation: `
+**Returns:** One of \`normal\`, \`warning\`, or \`error\`.
+`
+  },
+  "WorkingDirectory": {
+    name: "$WorkingDirectory",
+    signature: "$WorkingDirectory",
+    description: "Returns the current working directory.",
+    documentation: `
+**Returns:** The current working directory path.
+`
+  },
+  "SpecialWindowsPath": {
+    name: "$SpecialWindowsPath",
+    signature: "$SpecialWindowsPath(Name)",
+    snippet: "\\$SpecialWindowsPath(${1:Name})${0}",
+    description: "Returns the full path of a special directory on a Windows system.",
+    documentation: `
+**Parameters:**
+- \`Name\` (required) - One of the values of the \`Environment.SpecialFolder\` enumeration (e.g. \`ProgramFiles\`, \`ApplicationData\`, \`Desktop\`).
+
+**Returns:** Full path of the special directory.
+`
+  },
+  "ResolvePath": {
+    name: "$ResolvePath",
+    signature: "$ResolvePath(Path)",
+    snippet: "\\$ResolvePath(${1:Path})${0}",
+    description: "Provides an absolute path (terminated with a directory separator) based on a relative path and the current working directory.",
+    documentation: `
+**Parameters:**
+- \`Path\` - The path to resolve.
+
+**Returns:** Absolute path, with directory separators appropriate to the server in context.
+
+**Examples:**
+\`\`\`otterscript
+$ResolvePath(C:\\MyDirectory)              # -> C:\\MyDirectory\\
+$ResolvePath()                            # -> {WorkingDirectory}
+$ResolvePath(my\\path/to/directory)        # -> {WorkingDirectory}/my/path/to/directory (on Linux)
+$ResolvePath(my\\path/to/directory)        # -> {WorkingDirectory}\\my\\path\\to\\directory (on Windows)
+$ResolvePath(~\\path)                      # -> {ExecutionDirectory}\\path
+\`\`\`
+`
+  },
+  "FileContents": {
+    name: "$FileContents",
+    signature: "$FileContents(Name, [MaxLength])",
+    snippet: "\\$FileContents(${1:Name})${0}",
+    description: "Returns the contents of a file on the current server.",
+    documentation: `
+**Parameters:**
+- \`Name\` (required) - The path of the file.
+- \`MaxLength\` - (Optional) The maximum length (in characters) of the file to read.
+
+**Returns:** The file's text content.
+`
+  },
+  "EnvironmentVariable": {
+    name: "$EnvironmentVariable",
+    signature: "$EnvironmentVariable(EnvironmentVariableName)",
+    snippet: "\\$EnvironmentVariable(${1:EnvironmentVariableName})${0}",
+    description: "Returns the value of the specified environment variable on the current server.",
+    documentation: `
+**Parameters:**
+- \`EnvironmentVariableName\` (required) - The name of the environment variable.
+
+**Returns:** The environment variable's value.
+
+**Example:**
+\`\`\`otterscript
+# get the PATH on the server in context during an execution
+set $Path = $EnvironmentVariable(PATH);
+Log-Information $Path;
+\`\`\`
+`
+  },
+  "RoleName": {
+    name: "$RoleName",
+    signature: "$RoleName",
+    description: "Name of the current server role in context.",
+    documentation: `
+**Returns:** The name of the current server role.
 `
   }
 };
@@ -3138,41 +3395,44 @@ foreach $issue in @BuildIssues(true) {
   },
   "FilesOnDisk": {
     name: '@FilesOnDisk',
-    signature: '@FilesOnDisk(path, [mask], [recursive])',
-    snippet: "@FilesOnDisk(\"${1:path}\"${2:, \"${3:*.txt}\"})",
-    description: 'Returns a list of files found on disk at the specified path.',
+    signature: '@FilesOnDisk(includes, [excludes], [directory])',
+    snippet: "@FilesOnDisk(\"${1:*.txt}\")",
+    description: 'Returns a list of files matching the mask on the current server.',
     documentation: `
 **Parameters:**
-- \`path\` - Directory to search
-- \`mask\` - (Optional) File mask to filter results (e.g. \`*.zip\`)
-- \`recursive\` - (Optional) Whether to search subdirectories
+- \`includes\` (required) - File mask(s) to include
+- \`excludes\` - (Optional) File mask(s) to exclude
+- \`directory\` - (Optional) Directory to search in
 
 **Returns:** Vector of file paths
 
 **Example:**
 \`\`\`otterscript
-foreach $file in @FilesOnDisk(myDirectory, "*.log") {
-  Log-Information "Found log file: $file";
-}
+# gets project files in the working directory
+set @ProjectFiles = @FilesOnDisk(*.csproj);
 \`\`\`
 `
   },
   "AcquiredServers": {
     name: '@AcquiredServers',
-    signature: '@AcquiredServers',
-    description: 'Returns the list of servers currently acquired in the execution scope (via Acquire-Server).',
+    signature: '@AcquiredServers(Role)',
+    snippet: "@AcquiredServers(\"${1:roleName}\")",
+    description: 'Returns the list of all servers acquired for a specified role.',
     documentation: `
+**Parameters:**
+- \`Role\` (required) - The name of the server role.
+
 **Returns:** Vector of server names
 
 **Example:**
 \`\`\`otterscript
-foreach $server in @AcquiredServers {
+foreach $server in @AcquiredServers("WebServer") {
   Log-Information "Acquired: $server";
 }
 \`\`\`
 
 **Notes:**
-- Reflects servers acquired earlier in the same execution, not all servers in the infrastructure.
+- Reflects servers acquired earlier in the same execution (via \`Acquire-Server\`) for the given role, not all servers in the infrastructure.
 `
   },
   "AllEnvironments": {
@@ -3184,8 +3444,10 @@ foreach $server in @AcquiredServers {
 
 **Example:**
 \`\`\`otterscript
-foreach $env in @AllEnvironments {
-  Log-Information "Environment: $env";
+# log all environments in context to the execution log
+foreach $Env in @AllEnvironments
+{
+  Log-Information $Env;
 }
 \`\`\`
 `
@@ -3199,35 +3461,44 @@ foreach $env in @AllEnvironments {
 
 **Example:**
 \`\`\`otterscript
-foreach $role in @AllRoles {
-  Log-Information "Role: $role";
+# log all server roles in context to the execution log
+foreach $Role in @AllRoles
+{
+  Log-Information $Role;
 }
 \`\`\`
 `
   },
   "AllServers": {
     name: '@AllServers',
-    signature: '@AllServers',
+    signature: '@AllServers([IncludeInactive])',
+    snippet: "@AllServers",
     description: 'Returns the list of all servers configured in the instance.',
     documentation: `
+**Parameters:**
+- \`IncludeInactive\` - (Optional) If true, includes servers marked as inactive.
+
 **Returns:** Vector of server names
 
 **Example:**
 \`\`\`otterscript
-foreach $server in @AllServers {
-  Log-Information "Server: $server";
+# log all servers in context to the execution log
+foreach $Server in @AllServers
+{
+  Log-Information $Server;
 }
 \`\`\`
 `
   },
   "ServersInEnvironment": {
     name: '@ServersInEnvironment',
-    signature: '@ServersInEnvironment(environmentName)',
+    signature: '@ServersInEnvironment([EnvironmentName], [IncludeInactive])',
     snippet: "@ServersInEnvironment(\"${1:environmentName}\")",
-    description: 'Returns the list of servers that belong to the specified environment.',
+    description: 'Returns the list of all the servers in the specified environment name.',
     documentation: `
 **Parameters:**
-- \`environmentName\` - The environment to query
+- \`EnvironmentName\` - (Optional) The name of the environment. If not supplied, the current environment in context is used.
+- \`IncludeInactive\` - (Optional) If true, includes servers marked as inactive.
 
 **Returns:** Vector of server names
 
@@ -3241,12 +3512,13 @@ foreach $server in @ServersInEnvironment("Production") {
   },
   "ServersInRole": {
     name: '@ServersInRole',
-    signature: '@ServersInRole(roleName)',
+    signature: '@ServersInRole([RoleName], [IncludeInactive])',
     snippet: "@ServersInRole(\"${1:roleName}\")",
-    description: 'Returns the list of servers that belong to the specified role.',
+    description: 'Returns the list of servers in the specified role.',
     documentation: `
 **Parameters:**
-- \`roleName\` - The role to query
+- \`RoleName\` - (Optional) The name of the server role. If not supplied, the current role in context is used.
+- \`IncludeInactive\` - (Optional) If true, includes servers marked as inactive.
 
 **Returns:** Vector of server names
 
@@ -3260,13 +3532,14 @@ foreach $server in @ServersInRole("WebServer") {
   },
   "ServersInRoleAndEnvironment": {
     name: '@ServersInRoleAndEnvironment',
-    signature: '@ServersInRoleAndEnvironment(roleName, environmentName)',
+    signature: '@ServersInRoleAndEnvironment([RoleName], [EnvironmentName], [IncludeInactive])',
     snippet: "@ServersInRoleAndEnvironment(\"${1:roleName}\", \"${2:environmentName}\")",
-    description: 'Returns the list of servers that belong to both the specified role and environment.',
+    description: 'Returns the list of all the servers in the specified role and environment name.',
     documentation: `
 **Parameters:**
-- \`roleName\` - The role to query
-- \`environmentName\` - The environment to query
+- \`RoleName\` - (Optional) The name of the server role. If not supplied, the current role in context is used.
+- \`EnvironmentName\` - (Optional) The name of the environment. If not supplied, the current environment in context is used.
+- \`IncludeInactive\` - (Optional) If true, includes servers marked as inactive.
 
 **Returns:** Vector of server names
 
