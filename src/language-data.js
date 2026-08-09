@@ -27,6 +27,7 @@
  * Required fields:
  * - name
  * - description
+ * - namespace
  *
  * Optional fields:
  * - signature
@@ -36,6 +37,9 @@
  * @typedef {Object} DocEntry
  * @property {string} name Human-readable name shown in completion and hover
  * @property {string} description Short summary shown in IntelliSense
+ * @property {string | null} namespace The extension/product namespace this construct
+ *   belongs to (e.g. "ProGet", "Otter", "InedoCore"), or null for core OtterScript
+ *   language constructs that require no namespace prefix.
  * @property {string=} signature Usage syntax
  * @property {string=} snippet VS Code snippet insertion text
  * @property {string=} documentation Extended Markdown documentation
@@ -50,6 +54,7 @@
 /** @type {DocsTable} */
 const operationDocs = {
   "Log-Debug": {
+    namespace: null,
     name: "Log-Debug",
     signature: 'Log-Debug "message";',
     snippet: 'Log-Debug "${1:message}";$0',
@@ -67,6 +72,7 @@ Log-Debug "Calculated value: $value";
 `
   },
   "Log-Information": {
+    namespace: null,
     name: "Log-Information",
     signature: 'Log-Information "message";',
     snippet: 'Log-Information "${1:message}";$0',
@@ -84,6 +90,7 @@ Log-Information "Deployment started";
 `
   },
   "Log-Warning": {
+    namespace: null,
     name: "Log-Warning",
     signature: 'Log-Warning "message";',
     snippet: 'Log-Warning "${1:message}";$0',
@@ -101,6 +108,7 @@ Log-Warning "Configuration value is deprecated";
 `
   },
   "Log-Error": {
+    namespace: null,
     name: "Log-Error",
     signature: 'Log-Error "message";',
     snippet: 'Log-Error "${1:message}";$0',
@@ -118,6 +126,7 @@ Log-Error "Failed to connect to server";
 `
   },
   "Post-Http": {
+    namespace: null,
     name: 'Post-Http',
     signature: 'Post-Http(Url: string, [options...])',
     snippet: 'Post-Http(\n    Url: "${1:https://example.com}",\n    ${2:ContentType: "application/json",}\n    ${3:TextData: "${4:request body}"},\n    ${5:FormData: %(\n        ${6:key}: "${7:value}"\n    )},\n    ${8:LogResponseBody: true}\n);',
@@ -167,6 +176,7 @@ Post-Http(
 `
   },
   "Download-Http": {
+    namespace: null,
     name: "Download-Http",
     signature: "Download-Http(FileName: <text>, Url: <text>, [LogResponseBody: <true/false>], [ErrorStatusCodes: <text>], [ResponseBody: <text>], [RequestHeaders: <%(key1: value1, ...)>], [MaxResponseLength: <integer>], [ProxyRequest: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [IgnoreSslErrors: <true/false>]);",
     snippet: "Download-Http ${1:https://example.com/file.zip}\n(\n    FileName: ${2:artifact.zip},\n    LogResponseBody: ${3:false}\n);$0",
@@ -214,6 +224,7 @@ Download-Http https://downloadurl.local
 `
   },
   "Upload-Http": {
+    namespace: null,
     name: "Upload-Http",
     signature: "Upload-Http([Method: <integer>], FileName: <text>, Url: <text>, [LogResponseBody: <true/false>], [ErrorStatusCodes: <text>], [ResponseBody: <text>], [RequestHeaders: <%(key1: value1, ...)>], [MaxResponseLength: <integer>], [ProxyRequest: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [IgnoreSslErrors: <true/false>]);",
     snippet: "Upload-Http ${1:file.txt}\n(\n    Method: ${2:POST},\n    Url: ${3:url.local}\n);$0",
@@ -262,6 +273,7 @@ Upload-Http file.txt
 `
   },
   "Execute-PowerShell": {
+    namespace: null,
     name: "Execute-PowerShell",
     signature: "Execute-PowerShell(Text: <text>, [Debug: <true/false>], [Verbose: <true/false>], [RunOnSimulation: <true/false>], [Isolated: <true/false>], [SuccessExitCode: <text>], [PreferWindowsPowerShell: <text>]);",
     snippet: "Execute-PowerShell >>\n    ${1:Get-Service | Where-Object { $_.Status -eq \"Running\" } | Out-String}\n>> (\n    Verbose: ${2:false},\n    Debug: ${3:false},\n    RunOnSimulation: ${4:false}\n);$0",
@@ -301,6 +313,7 @@ Execute-PowerShell >>
 `
   },
   "Ensure-Service": {
+    namespace: null,
     name: "Ensure-Service",
     signature: "Ensure-Service(Name: <text>, [DisplayName: <text>], [Description: <text>], [Status: <integer>], [Exists: <true/false>], Path: <text>, [Startup: <integer>], [DelayedStart: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [FirstFailure: <integer>], [SecondFailure: <integer>], [SubsequentFailures: <integer>], [RestartDelay: <integer>], [OnFailureProgramPath: <text>], [RebootMessage: <text>], [Dependencies: <@(text)>], [StatusChangeTimeout: <TimeSpan>]);",
     snippet: "Ensure-Service(\n    Name: ${1:myName},\n    DisplayName: ${2:myDisplayName},\n    Status: ${3:Running},\n    Path: ${4:c:\\\\myservice.exe}\n);$0",
@@ -353,6 +366,7 @@ Ensure-Service
 `
   },
   "Ensure-Directory": {
+    namespace: null,
     name: "Ensure-Directory",
     signature: "Ensure-Directory(Name: <text>, [Exists: <true/false>]);",
     snippet: "Ensure-Directory ${1:myFolderName}\n(\n    Exists: ${2:true}\n);$0",
@@ -380,6 +394,7 @@ Ensure-Directory myFolderName
 `
   },
   "Ensure-Server": {
+    namespace: null,
     name: "Ensure-Server",
     signature: "Ensure-Server(Name: <text>, [Exists: <true/false>], [Roles: <@(text)>], [Environments: <@(text)>], [RoutineExecutionType: <text>], [AgentConfigurationXml: <text>]);",
     snippet: "Ensure-Server ${1:myServerName}\n(\n    Exists: ${2:true}\n);$0",
@@ -415,6 +430,7 @@ Ensure-Server myServerName
 `
   },
   "Ensure-Asset": {
+    namespace: null,
     name: "Ensure-Asset",
     signature: "Ensure-Asset(Name: <text>, [Raft: <text>], [Type: <integer>], [Exists: <true/false>], Directory: <text>, [FileName: <text>]);",
     snippet: "Ensure-Asset(\n    Exists: ${1:true},\n    Name: ${2:myAssetName},\n    Raft: ${3:Default},\n    Type: ${4:RoleConfigurationScript},\n    Directory: ${5:c:\\\\targetdir}\n);$0",
@@ -454,6 +470,7 @@ Ensure-Asset
 `
   },
   "Ensure-PsModule": {
+    namespace: null,
     name: "Ensure-PsModule",
     signature: "Ensure-PsModule(Module: <text>, [Version: <text>], [MinimumVersion: <text>], [Force: <true/false>], [Repository: <text>], [Scope: <text>], [Exists: <true/false>], [AllowClobber: <true/false>], [AllowPrerelease: <true/false>], [AcceptLicense: <true/false>], [AllVersions: <true/false>], [Parameters: <%(key1: value1, ...)>], [Verbose: <true/false>], [DebugLogging: <true/false>], [PreferWindowsPowerShell: <text>]);",
     snippet: "Ensure-PsModule\n(\n    Exists: ${1:true},\n    Module: ${2:PackageManagement},\n    MinimumVersion: ${3:1.4.6},\n    Repository: ${4:internal-powershell}\n);$0",
@@ -482,6 +499,7 @@ Ensure-PsModule(
 `
   },
   "Ensure-HostsEntry": {
+    namespace: null,
     name: "Ensure-HostsEntry",
     signature: "Ensure-HostsEntry(Host: <text>, IP: <text>, [Exists: <true/false>]);",
     snippet: "Ensure-HostsEntry ${1:myHostName}\n(\n    Exists: ${2:true},\n    IP: ${3:127.0.0.1}\n);$0",
@@ -498,6 +516,7 @@ Ensure-HostsEntry(
 `
   },
   "Acquire-Server": {
+    namespace: null,
     name: "Acquire-Server",
     signature: "Acquire-Server([Role: <text>], [ServerName: <text>], [Verbose: <true/false>]);",
     snippet: "Acquire-Server(\n   Role: ${1:build-servers},\n   ServerName => ${2:\$AcquiredServerName}\n);$0",
@@ -514,6 +533,7 @@ Acquire-Server(
 `
   },
   "Get-Http": {
+    namespace: null,
     name: "Get-Http",
     signature: "Get-Http([Method: <integer>], Url: <text>, [LogResponseBody: <true/false>], [ErrorStatusCodes: <text>], [ResponseBody: <text>], [RequestHeaders: <%(key1: value1, ...)>], [MaxResponseLength: <integer>], [ProxyRequest: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [IgnoreSslErrors: <true/false>]);",
     snippet: "Get-Http ${1:https://myurl.local}\n(\n    Method: ${2:GET}\n);$0",
@@ -539,6 +559,7 @@ Get-Http(
 `
   },
   "Install-Package": {
+    namespace: null,
     name: "Install-Package",
     signature: "Install-Package([PackageSource: <text>], Name: <text>, [Version: <text>], [To: <text>], [ClearTarget: <true/false>], [LocalRegistry: <integer>], [LocalCache: <true/false>], [DirectDownload: <true/false>], [Feed: <text>], [EndpointUrl: <text>], [UserName: <text>], [Password: <text>], [ApiKey: <text>], [FeedUrl: <text>]);",
     snippet: "Install-Package\n(\n    PackageSource: ${1:MyPackageSource},\n    Name: ${2:MyAppPackage},\n    Version: ${3:3.4.2},\n    To: ${4:C:\\\\MyApps\\\\MyApp}\n);$0",
@@ -594,6 +615,7 @@ Install-Package
 `
   },
   "Ensure-Package": {
+    namespace: null,
     name: "Ensure-Package",
     signature: "Ensure-Package([PackageSource: <text>], Name: <text>, [Version: <text>], [To: <text>], [ClearTarget: <true/false>], [Exists: <true/false>], [LocalRegistry: <integer>], [LocalCache: <true/false>], [FileCompare: <integer>], [Ignore: <@(text)>], [DirectDownload: <true/false>], [Feed: <text>], [EndpointUrl: <text>], [UserName: <text>], [Password: <text>], [ApiKey: <text>], [FeedUrl: <text>]);",
     snippet: "Ensure-Package\n(\n    PackageSource: ${1:MyPackageSource},\n    Name: ${2:FooBarApp},\n    Version: ${3:\\$FooBarVersion},\n    To: ${4:D:\\\\WebApps\\\\FooBar.App},\n    Ignore: ${5:web.config}\n);$0",
@@ -659,6 +681,7 @@ Ensure-Package
 `
   },
   "Query-Package": {
+    namespace: null,
     name: "Query-Package",
     signature: "Query-Package([From: <text>], Name: <text>, Version: <text>, NewVersion: <text>, [Reason: <text>], [PackageFile: <text>], [Feed: <text>], [EndpointUrl: <text>], [UserName: <text>], [Password: <text>], [ApiKey: <text>], [Exists: <true/false>], [Metadata: <%(key1: value1, ...)>], [FeedUrl: <text>]);",
     snippet: "Query-Package\n(\n    From: ${1:MyPackageSource},\n    Name: ${2:Group/Package},\n    Version: ${3:1.0.0},\n    NewVersion: ${4:1.0.1},\n    Exists => ${5:\\$exists},\n    Metadata => ${6:%packageData}\n);$0",
@@ -731,6 +754,7 @@ Query-Package
 `
   },
   "Push-PackageFile": {
+    namespace: null,
     name: "Push-PackageFile",
     signature: "Push-PackageFile(FilePath: <text>, [To: <text>], [Feed: <text>], [EndpointUrl: <text>], [UserName: <text>], [Password: <text>], [ApiKey: <text>], [FeedUrl: <text>]);",
     snippet: "Push-PackageFile ${1:MyPackage.1.0.0.upack}\n(\n    To: ${2:InternalFeed}\n);$0",
@@ -771,6 +795,7 @@ Push-PackageFile MyPackage.1.0.0.upack
 `
   },
   "Concatenate-Files": {
+    namespace: null,
     name: "Concatenate-Files",
     signature: "Concatenate-Files(File: <text>, [Directory: <text>], [Include: <@(text)>], [Exclude: <@(text)>], [Encoding: <text>], [Separator: <text>]);",
     snippet: "Concatenate-Files\n(\n    File: ${1:myoutputfile.txt}\n);$0",
@@ -790,6 +815,7 @@ Concatenate-Files(
 `
   },
   "Create-ZipFile": {
+    namespace: null,
     name: "Create-ZipFile",
     signature: "Create-ZipFile(Name: <text>, Directory: <text>, [Overwrite: <true/false>]);",
     snippet: "Create-ZipFile\n(\n    Overwrite: ${1:true},\n    Name: ${2:myZipFileName.zip},\n    Directory: ${3:c:\\\\sourceDir}\n);$0",
@@ -806,6 +832,7 @@ Create-ZipFile(
 `
   },
   "Rename-File": {
+    namespace: null,
     name: "Rename-File",
     signature: "Rename-File(From: <text>, To: <text>, [Overwrite: <true/false>]);",
     snippet: "Rename-File\n(\n    Overwrite: ${1:true},\n    From: ${2:mySourceFile.txt},\n    To: ${3:myDestFile.txt}\n);$0",
@@ -822,6 +849,7 @@ Rename-File(
 `
   },
   "Transfer-Files": {
+    namespace: null,
     name: "Transfer-Files",
     signature: "Transfer-Files([Include: <@(text)>], [Exclude: <@(text)>], [FromDirectory: <text>], [FromServer: <text>], ToDirectory: <text>, [ToServer: <text>], [DeleteTarget: <true/false>], [SetLastModifiedDate: <true/false>], [BatchSize: <integer>], [Verbose: <true/false>]);",
     snippet: "Transfer-Files\n(\n    DeleteTarget: ${1:true},\n    ToDirectory: ${2:c:\\\\targetDir}\n);$0",
@@ -845,6 +873,7 @@ Transfer-Files(
 `
   },
   "Sign-Exe": {
+    namespace: null,
     name: "Sign-Exe",
     signature: "Sign-Exe(SubjectName: <text>, [TimestampServer: <text>], [ContentDescription: <text>], [ContentUrl: <text>], Include: <@(text)>, [Exclude: <@(text)>], [SignToolPath: <text>], [SourceDirectory: <text>]);",
     snippet: "Sign-Exe IncludeText\n(\n    SubjectName: ${1:mySubjectOfCertificate}\n);$0",
@@ -866,6 +895,7 @@ Sign-Exe(
 `
   },
   "Collect-RpmPackages": {
+    namespace: null,
     name: "Collect-RpmPackages",
     signature: "Collect-RpmPackages [DefaultArgument] ();",
     snippet: "Collect-RpmPackages();$0",
@@ -878,6 +908,7 @@ Collect-RpmPackages [DefaultArgument] ();
 `
   },
   "Sleep": {
+    namespace: null,
     name: "Sleep",
     signature: "Sleep <integer>;",
     snippet: "Sleep ${1:seconds};$0",
@@ -897,6 +928,7 @@ Sleep 5;
 `
   },
   "Restart-Server": {
+    namespace: null,
     name: "Restart-Server",
     signature: "Restart-Server([After: <integer>], [MinimumDelay: <integer>]);",
     snippet: "Restart-Server(\n    After: ${1:5},\n    MinimumDelay: ${2:15}\n);$0",
@@ -928,6 +960,7 @@ Restart-Server(
 `
   },
   "Get-Asset": {
+    namespace: null,
     name: "Get-Asset",
     signature: "Get-Asset(Name: <text>, [Raft: <text>], [Type: <integer>], [Overwrite: <true/false>], [To: <text>]);",
     snippet: "Get-Asset ${1:assetName}\n(\n    Type: ${2:Module},\n    Raft: ${3:Raft},\n    Overwrite: ${4:false}\n);$0",
@@ -966,6 +999,7 @@ Get-Asset myAsset
 `
   },
   "Release-Server": {
+    namespace: null,
     name: "Release-Server",
     signature: "Release-Server(Server: <text>, [Role: <text>], [Verbose: <true/false>]);",
     snippet: "Release-Server ${1:serverName}\n(\n    Role: ${2:build-servers},\n    Verbose: ${3:false}\n);$0",
@@ -996,6 +1030,7 @@ Release-Server(
 `
   },
   "Apply-Template": {
+    namespace: null,
     name: "Apply-Template",
     signature: "Apply-Template([Asset: <text>], [OutputVariable: <text>], [OutputFile: <text>], [Literal: <text>], [InputFile: <text>], [AdditionalVariables: <%(key1: value1, ...)>], [NewLines: <integer>]);",
     snippet: "Apply-Template(\n    Literal: >>${1:template text}>>,\n    OutputVariable => ${2:\\$text},\n    AdditionalVariables: %(\n        ${3:key}: ${4:value}\n    ),\n    NewLines: ${5:newLines}\n);$0",
@@ -1046,6 +1081,7 @@ Apply-Template hdars
 `
   },
   "Copy-Files": {
+    namespace: null,
     name: "Copy-Files",
     signature: "Copy-Files([Include: <@(text)>], [Exclude: <@(text)>], [From: <text>], To: <text>, [Verbose: <true/false>], [Overwrite: <true/false>], [RenameFrom: <text>], [RenameTo: <text>], [RenameRegex: <true/false>]);",
     snippet: "Copy-Files\n(\n    From: ${1:sourceDir},\n    To: ${2:destinationDir}\n);$0",
@@ -1095,6 +1131,7 @@ Copy-Files(
 `
   },
   "Create-Directory": {
+    namespace: null,
     name: "Create-Directory",
     signature: "ProGet::Create-Directory(Path: <text>, [Source: <text>], [Resource: <text>], [EndpointUrl: <text>], [ApiKey: <text>], [UserName: <text>], [Password: <text>]);",
     snippet: "ProGet::Create-Directory ${1:my/folder/path}\n(\n    Resource: ${2:myAssetDirResource}\n);$0",
@@ -1137,6 +1174,7 @@ ProGet::Create-Directory my/folder/path
 `
   },
   "Create-File": {
+    namespace: null,
     name: "Create-File",
     signature: "Create-File(Name: <text>, [Text: <text>], [Overwrite: <true/false>], [FileMode: <text>]);",
     snippet: "Create-File ${1:myFile.txt}\n(\n    Text: ${2:file contents}\n);$0",
@@ -1172,6 +1210,7 @@ Create-File(
 `
   },
   "Delete-Files": {
+    namespace: null,
     name: "Delete-Files",
     signature: "Delete-Files(Include: <@(text)>, [Exclude: <@(text)>], [Directory: <text>], [Verbose: <true/false>]);",
     snippet: "Delete-Files ${1:*.tmp};$0",
@@ -1208,6 +1247,7 @@ Delete-Files(
 `
   },
   "Ensure-File": {
+    namespace: null,
     name: "Ensure-File",
     signature: "Ensure-File([Text: <text>], [ReadOnly: <true/false>], Name: <text>, [Attributes: <integer>], [Exists: <true/false>], [Modified: <DateTime>]);",
     snippet: "Ensure-File ${1:myFile.txt}\n(\n    Exists: ${2:true}\n);$0",
@@ -1251,6 +1291,7 @@ Otter is a common name for a carnivorous mammal in the subfamily Lutrinae.
 `
   },
   "Set-Variable": {
+    namespace: null,
     name: "Set-Variable",
     signature: "Otter::Set-Variable([Credentials: <text>], Name: <text>, Value: <text>, [Server: <text>], [Role: <text>], [Environment: <text>], [Sensitive: <true/false>], [Host: <text>], [ApiKey: <SecureString>]);",
     snippet: "Otter::Set-Variable\n(\n    Name: ${1:variableName},\n    Value: ${2:value}\n);$0",
@@ -1301,6 +1342,7 @@ Otter::Set-Variable
 `
   },
   "Exec": {
+    namespace: null,
     name: "Exec",
     signature: "InedoCore::Exec([FileName: <text>], [Arguments: <text>], [WorkingDirectory: <text>], [OutputLogLevel: <integer>], [ErrorOutputLogLevel: <integer>], [SuccessExitCode: <text>], [ImportVariables: <true/false>], [WarnRegex: <text>], [DebugRegex: <text>], [LogArguments: <true/false>], [ReportProgressRegex: <text>], [OutputFilterRegex: <text>]);",
     snippet: "Exec ${1:executablePath}\n(\n    Arguments: ${2:arguments}\n);$0",
@@ -1355,6 +1397,7 @@ Exec c:\\tools\\7za.exe (
 /** @type {DocsTable} */
 const syntaxDocs = {
   "swimString": {
+    namespace: null,
     name: "Swim string",
     signature: ">> ... >> or >==8> ... >==8> etc...",
     description: "Multi-line unquoted string literal with matching fish sentinels.",
@@ -1374,6 +1417,7 @@ multiple lines
   },
   // Template tags
   "templateOpen": {
+    namespace: null,
     name: "Template Open (<% ... %>)",
     signature: "<% ... %>",
     description: "Embed OtterScript code inside text templates.",
@@ -1392,6 +1436,7 @@ Used to embed OtterScript code inside text templates.
 `
   },
   "templateClose": {
+    namespace: null,
     name: "Template Close (%>)",
     signature: "%>",
     description: "Closes a template code block.",
@@ -1399,6 +1444,7 @@ Used to embed OtterScript code inside text templates.
   },
   // Expression delimiters
   "mapExpr": {
+    namespace: null,
     name: "Map Expression",
     signature: "%(key: value, key2: value2)",
     snippet: "(\n    ${1:key}: ${2:value}\n)",
@@ -1418,6 +1464,7 @@ $config = %(
 `
   },
   "vectorExpr": {
+    namespace: null,
     name: "Vector Expression",
     signature: "@(value1, value2, value3)",
     description: "Creates a vector (array/list) literal.",
@@ -1430,6 +1477,7 @@ $first = @colors[0];
 `
   },
   "nestedEval": {
+    namespace: null,
     name: "Nested Evaluation",
     signature: "$(expression)",
     description: "Evaluates an expression inside a string.",
@@ -1451,6 +1499,7 @@ $message = "Value: $(@list[0])";
 /** @type {DocsTable} */
 const keywordDocs = {
   "for": {
+    namespace: null,
     name: "for",
     signature: 'for server|role|deployable|directory "name" { ... }',
     description: "Sets the execution context for a block of statements.",
@@ -1483,6 +1532,7 @@ for server "web01" {
 `
   },
   "return": {
+    namespace: null,
     name: "return",
     signature: "return;",
     description: "Returns execution to the calling script.",
@@ -1491,6 +1541,7 @@ This has no elements; if this statement is found, the execution engine ends the 
 `
   },
   "local": {
+    namespace: null,
     name: "local",
     signature: "local $variable = value;",
     description: "Declares a local variable scoped to the current block.",
@@ -1499,6 +1550,7 @@ Local variables override outer variables of the same name.
 `
   },
   "global": {
+    namespace: null,
     name: "global",
     description: "Declares or assigns a global variable.",
     documentation: `
@@ -1509,6 +1561,7 @@ global $var = value;
 `
   },
   "continue": {
+    namespace: null,
     name: "continue",
     signature: "continue;",
     snippet: "continue;",
@@ -1518,6 +1571,7 @@ If there is no enclosing iteration block, a warning is written to the execution 
 `
   },
   "break": {
+    namespace: null,
     name: "break",
     signature: "break;",
     snippet: "break;",
@@ -1528,6 +1582,7 @@ If break is used outside of an iteration block, a warning will be written to the
 `
   },
   "foreach": {
+    namespace: null,
     name: 'foreach',
     description: 'Iterates over items in a vector. Works in both OtterScript code and template tags.',
     documentation: `
@@ -1559,6 +1614,7 @@ foreach $pkg in @AffectedPackages {
 `
   },
   "in": {
+    namespace: null,
     name: "in",
     description: "Specifies the vector to iterate over in a foreach statement.",
     documentation: `
@@ -1593,6 +1649,7 @@ foreach $item in @items {
 `
   },
   "if": {
+    namespace: null,
     name: "if",
     description: "Conditionally executes a block when an expression evaluates to true.",
     documentation: `
@@ -1619,6 +1676,7 @@ if $PackageSize > 1000000 {
 `
   },
   "else": {
+    namespace: null,
     name: "else",
     description: "Executes a block when the preceding if condition evaluates to false.",
     documentation: `
@@ -1645,6 +1703,7 @@ if $EnvironmentName == "Production" {
 `
   },
   "try": {
+    namespace: null,
     name: "try",
     description: "Executes a block of statements and allows error handling via catch.",
     documentation: `
@@ -1675,6 +1734,7 @@ try {
 `
   },
   "catch": {
+    namespace: null,
     name: "catch",
     description: "Handles errors raised inside a try block.",
     documentation: `
@@ -1695,6 +1755,7 @@ try {
 `
   },
   "throw": {
+    namespace: null,
     name: "throw",
     description: "Explicitly raises an error.",
     documentation: `
@@ -1715,6 +1776,7 @@ if !$PackageName {
 `
   },
   "module": {
+    namespace: null,
     name: "module",
     signature: "module ModuleName <out $param=\"default\"> { ... }",
     snippet: "module ${1:ModuleName} <${2:out \\$param=\"default\"}> {\n    ${3:# module body}\n}",
@@ -1736,6 +1798,7 @@ module ModuleName <out $result = "default"> {
 `
   },
   "call": {
+    namespace: null,
     name: "call",
     signature: "call ModuleName (param: value);",
     snippet: "call ${1:ModuleName} (\n    ${2:param}: ${3:value}\n);",
@@ -1757,6 +1820,7 @@ call ModuleName (
 `
   },
   "with": {
+    namespace: null,
     name: "with",
     description: "Executes a block with specific execution directives applied.",
     documentation: `
@@ -1782,6 +1846,7 @@ with retry=3, timeout=30 {
 `
   },
   "set": {
+    namespace: null,
     name: "set",
     description: "Assigns a value to a variable.",
     documentation: `
@@ -1796,6 +1861,7 @@ set $variable = value;
 `
   },
   "raise-error": {
+    namespace: null,
     name: "raise-error",
     description: "Raises an execution error with the specified message.",
     documentation: `
@@ -1813,6 +1879,7 @@ raise-error "message";
 `
   },
   "await": {
+    namespace: null,
     name: "await",
     description: "Pauses execution until asynchronous blocks have completed.",
     documentation: `
@@ -1829,6 +1896,7 @@ await TokenName;
 `
   },
   "warn": {
+    namespace: null,
     name: "warn",
     description: "Sets the execution status to Warn.",
     documentation: `
@@ -1852,6 +1920,7 @@ catch
 `
   },
   "fail": {
+    namespace: null,
     name: "fail",
     description: "Sets the execution status to Fail.",
     documentation: `
@@ -1869,6 +1938,7 @@ fail;
   },
 
   "force normal": {
+    namespace: null,
     name: "force normal",
     description: "Forces the execution status back to Normal.",
     documentation: `
@@ -1881,11 +1951,13 @@ force normal;
 `
   },
   "#region": {
+    namespace: null,
     name: "#region",
     description: "Marks a collapsible editor region.",
     documentation: "Editor-only folding directive. `#region` / `#endregion` create a collapsible section in the editor and have no effect on OtterScript execution."
   },
   "#endregion": {
+    namespace: null,
     name: "#endregion",
     description: "Ends a collapsible editor region.",
     documentation: "Editor-only folding directive. Used to close a `#region` block. This affects editor folding only and has no runtime meaning."
@@ -1902,36 +1974,43 @@ const PROGET_VAR_DOC = "\n**Available in:** ProGet\n";
 /** @type {DocsTable} */
 const variableDocs = {
   "BuildId": {
+    namespace: null,
     name: "$BuildId",
     description: "The numeric ID of the current build.",
     documentation: PROGET_VAR_DOC
   },
   "BuildNumber": {
+    namespace: null,
     name: "$BuildNumber",
     description: "The display number of the current build.",
     documentation: PROGET_VAR_DOC
   },
   "BuildProjectName": {
+    namespace: null,
     name: "$BuildProjectName",
     description: "The name of the project associated with the build.",
     documentation: PROGET_VAR_DOC
   },
   "BuildReleaseNumber": {
+    namespace: null,
     name: "$BuildReleaseNumber",
     description: "The release number associated with the current build.",
     documentation: PROGET_VAR_DOC
   },
   "FeedId": {
+    namespace: null,
     name: "$FeedId",
     description: "The unique identifier of the feed in scope.",
     documentation: PROGET_VAR_DOC
   },
   "FeedName": {
+    namespace: null,
     name: "$FeedName",
     description: "The name of the feed in scope.",
     documentation: PROGET_VAR_DOC
   },
   "FeedType": {
+    namespace: null,
     name: "$FeedType",
     description: "The type of feed (NuGet, npm, PyPI, etc.).",
     documentation: `
@@ -1963,26 +2042,31 @@ const variableDocs = {
 `
   },
   "NotifierId": {
+    namespace: null,
     name: "$NotifierId",
     description: "The unique identifier of the notifier handling the event.",
     documentation: PROGET_VAR_DOC
   },
   "NotifierName": {
+    namespace: null,
     name: "$NotifierName",
     description: "The name of the notifier handling the event.",
     documentation: PROGET_VAR_DOC
   },
   "PackageComplianceDetails": {
+    namespace: null,
     name: "$PackageComplianceDetails",
     description: "Detailed compliance information for the package.",
     documentation: PROGET_VAR_DOC
   },
   "PackageComplianceResult": {
+    namespace: null,
     name: "$PackageComplianceResult",
     description: "The overall compliance result for the package.",
     documentation: PROGET_VAR_DOC
   },
   "PackageEvent": {
+    namespace: null,
     name: "$PackageEvent",
     description: "Returns the name of the event which triggered the current notifier.",
     documentation: `
@@ -2005,26 +2089,31 @@ const variableDocs = {
 `
   },
   "PackageGroup": {
+    namespace: null,
     name: "$PackageGroup",
     description: "The package group associated with the event.",
     documentation: PROGET_VAR_DOC
   },
   "PackageId": {
+    namespace: null,
     name: "$PackageId",
     description: "The identifier of the affected package.",
     documentation: PROGET_VAR_DOC
   },
   "PackageName": {
+    namespace: null,
     name: "$PackageName",
     description: "The name of the affected package.",
     documentation: PROGET_VAR_DOC
   },
   "PackageSize": {
+    namespace: null,
     name: "$PackageSize",
     description: "The size of the affected package in bytes.",
     documentation: PROGET_VAR_DOC
   },
   "PackageVersion": {
+    namespace: null,
     name: "$PackageVersion",
     description: "The version of the affected package.",
     documentation: `
@@ -2037,36 +2126,43 @@ const variableDocs = {
 `
   },
   "UserName": {
+    namespace: null,
     name: "$UserName",
     description: "The name of the user associated with the event.",
     documentation: PROGET_VAR_DOC
   },
   "VulnerabilityId": {
+    namespace: null,
     name: "$VulnerabilityId",
     description: "The identifier of the vulnerability.",
     documentation: PROGET_VAR_DOC
   },
   "VulnerabilityScore": {
+    namespace: null,
     name: "$VulnerabilityScore",
     description: "The numeric score assigned to the vulnerability.",
     documentation: PROGET_VAR_DOC
   },
   "VulnerabilitySeverity": {
+    namespace: null,
     name: "$VulnerabilitySeverity",
     description: "The severity classification of the vulnerability.",
     documentation: PROGET_VAR_DOC
   },
   "VulnerabilitySummary": {
+    namespace: null,
     name: "$VulnerabilitySummary",
     description: "A short summary of the vulnerability.",
     documentation: PROGET_VAR_DOC
   },
   "WebBaseUrl": {
+    namespace: null,
     name: "$WebBaseUrl",
     description: "The base URL of the ProGet web application.",
     documentation: PROGET_VAR_DOC
   },
   "WorkingDirectory": {
+    namespace: null,
     name: "$WorkingDirectory",
     description: "Returns the current working directory.",
     documentation: `
@@ -2082,6 +2178,7 @@ const variableDocs = {
 /** @type {DocsTable} */
 const scalarFunctionDocs = {
   "ToJson": {
+    namespace: null,
     name: "$ToJson",
     signature: "$ToJson(data)",
     snippet: '\\$ToJson(${1:data})${0}',
@@ -2116,6 +2213,7 @@ $json = $ToJson(%(
 `,
   },
   "HtmlEncode": {
+    namespace: null,
     name: "$HtmlEncode",
     signature: "$HtmlEncode(text)",
     snippet: "\\$HtmlEncode(${1:text})",
@@ -2134,6 +2232,7 @@ $encoded = $HtmlEncode("<script>alert('xss')</script>");
 `,
   },
   "UrlEncode": {
+    namespace: null,
     name: "$UrlEncode",
     signature: "$UrlEncode(text)",
     snippet: "\\$UrlEncode(${1:text})",
@@ -2151,6 +2250,7 @@ $url = "https://example.com/search?q=" + $UrlEncode($query);
 `,
   },
   "PathCombine": {
+    namespace: null,
     name: "$PathCombine",
     signature: "$PathCombine(path1, path2, ...)",
     snippet: "\\$PathCombine(${1:path1}, ${2:path2})",
@@ -2171,6 +2271,7 @@ $fullPath = $PathCombine("C:\\Websites", "MyApp", "web.config");
 `,
   },
   "Eval": {
+    namespace: null,
     name: "$Eval",
     signature: "$Eval(expression)",
     snippet: "\\$Eval(${1:expression})",
@@ -2190,6 +2291,7 @@ $result = $Eval($template);  # Expands $name
   },
   // String Manipulation Functions
   "ToLower": {
+    namespace: null,
     name: "$ToLower",
     signature: "$ToLower(text)",
     snippet: "\\$ToLower(${1:text})",
@@ -2208,6 +2310,7 @@ $lower = $ToLower("Hello World");
 `,
   },
   "ToUpper": {
+    namespace: null,
     name: "$ToUpper",
     signature: "$ToUpper(text)",
     snippet: "\\$ToUpper(${1:text})",
@@ -2226,6 +2329,7 @@ $upper = $ToUpper("Hello World");
 `,
   },
   "Trim": {
+    namespace: null,
     name: "$Trim",
     signature: "$Trim(text)",
     snippet: "\\$Trim(${1:text})",
@@ -2246,6 +2350,7 @@ $trimmed = $Trim("  hello  ");
 `,
   },
   "Substring": {
+    namespace: null,
     name: "$Substring",
     signature: "$Substring(text, startIndex, length)",
     snippet: "\\$Substring(${1:text}, ${2:startIndex}, ${3: length})",
@@ -2268,6 +2373,7 @@ $sub = $Substring("Hello World", 6, 5);
 `,
   },
   "Replace": {
+    namespace: null,
     name: "$Replace",
     signature: "$Replace(text, oldValue, newValue, [ignoreCase])",
     snippet: "\\$Replace(${1:text}, ${2:oldValue}, ${3:newValue}, ${4|false,true|})",
@@ -2291,6 +2397,7 @@ $result = $Replace("Hello World", "World", "Otter");
 `,
   },
   "Join": {
+    namespace: null,
     name: "$Join",
     signature: "$Join(separator, vector)",
     snippet: '\\$Join("${1:, }", @${2:vector})',
@@ -2313,6 +2420,7 @@ $joined = $Join(", ", @("apple", "banana", "cherry"));
   },
   // Date and Time Functions
   "Date": {
+    namespace: null,
     name: '$Date',
     signature: "$Date([format])",
     snippet: "\\$Date(${1:format})",
@@ -2342,6 +2450,7 @@ $sortable = $Date("s");
 `
   },
   "DateUtc": {
+    namespace: null,
     name: "$DateUtc",
     signature: "$DateUtc([format])",
     snippet: "\\$DateUtc(${1:format})",
@@ -2367,6 +2476,7 @@ $customUtc = $DateUtc("yyyy-MM-dd HH:mm:ss");
   },
   // Encoding Functions
   "Base64Encode": {
+    namespace: null,
     name: "$Base64Encode",
     signature: "$Base64Encode(text)",
     snippet: "\\$Base64Encode(${1:text})",
@@ -2387,6 +2497,7 @@ $encoded = $Base64Encode("Hello World");
 `,
   },
   "Base64Decode": {
+    namespace: null,
     name: "$Base64Decode",
     signature: "$Base64Decode(base64Text)",
     snippet: "\\$Base64Decode(${1:base64Text})",
@@ -2408,6 +2519,7 @@ $decoded = $Base64Decode("SGVsbG8gV29ybGQ=");
   },
   // JSON Functions
   "FromJson": {
+    namespace: null,
     name: "$FromJson",
     signature: "$FromJson(jsonString)",
     snippet: '\\$FromJson("${1:jsonString}");$0',
@@ -2430,6 +2542,7 @@ $name = $data[name];
   },
   // File System Functions
   "FileExists": {
+    namespace: null,
     name: "$FileExists",
     signature: "$FileExists(filePath)",
     snippet: '\\$FileExists("${1:filePath}");$0',
@@ -2451,6 +2564,7 @@ if $FileExists("C:\\config\\app.config") {
 `,
   },
   "DirectoryExists": {
+    namespace: null,
     name: "$DirectoryExists",
     signature: "$DirectoryExists(directoryPath)",
     snippet: '\\$DirectoryExists("${1:directoryPath}");$0',
@@ -2473,6 +2587,7 @@ if $DirectoryExists("C:\\Websites") {
   },
   // Math Functions
   "Expr": {
+    namespace: null,
     name: "$Expr",
     signature: "$Expr(expression)",
     snippet: "\\$Expr(\"${1:expression}\")",
@@ -2493,6 +2608,7 @@ $result = $Expr("(5 + 3) * 2");
 `,
   },
   "Increment": {
+    namespace: null,
     name: "$Increment",
     signature: "$Increment(value)",
     snippet: "\\$Increment(${1:variable})",
@@ -2514,6 +2630,7 @@ $count = $Increment($count);
 `,
   },
   "Decrement": {
+    namespace: null,
     name: "$Decrement",
     signature: "$Decrement(value)",
     snippet: "\\$Decrement(${1:variable})",
@@ -2535,6 +2652,7 @@ $count = $Decrement($count);
 `,
   },
   "Abs": {
+    namespace: null,
     name: "$Abs",
     signature: "$Abs(value)",
     snippet: "\\$Abs(${1:value})",
@@ -2555,6 +2673,7 @@ $result = $Abs(-10);
 `,
   },
   "Ceiling": {
+    namespace: null,
     name: "$Ceiling",
     signature: "$Ceiling(value)",
     snippet: "\\$Ceiling(${1:value})",
@@ -2575,6 +2694,7 @@ $result = $Ceiling(3.2);
 `,
   },
   "Floor": {
+    namespace: null,
     name: "$Floor",
     signature: "$Floor(value)",
     snippet: "\\$Floor(${1:value})",
@@ -2595,6 +2715,7 @@ $result = $Floor(3.8);
 `,
   },
   "Compare": {
+    namespace: null,
     name: "$Compare",
     signature: "$Compare(arg1, operator, arg2, [asNumber])",
     snippet: "\\$Compare(${1:value1}, ${2|<,>,<=,>=,=,!=|}, ${3:value2}${4:, true})",
@@ -2627,6 +2748,7 @@ $Compare("07", >, "6", true)
   },
   // Regular Expression Functions
   "MatchesRegex": {
+    namespace: null,
     name: "$MatchesRegex",
     signature: "$MatchesRegex(text, pattern)",
     snippet: "\\$MatchesRegex(${1:text}, \"${2:pattern}\")",
@@ -2649,6 +2771,7 @@ if $MatchesRegex($email, "^[\\w\\.]+@[\\w\\.]+\\.\\w+$") {
 `,
   },
   "RegexReplace": {
+    namespace: null,
     name: "$RegexReplace",
     signature: "$RegexReplace(text, pattern, replacement)",
     snippet: "\\$RegexReplace(${1:text}, \"${2:pattern}\", \"${3:replacement}\")",
@@ -2672,6 +2795,7 @@ $result = $RegexReplace("Hello 123 World", "\\d+", "XXX");
   },
   // Server/Environment Information Functions
   "ServerName": {
+    namespace: null,
     name: "$ServerName",
     signature: "$ServerName()",
     snippet: "\\$ServerName()",
@@ -2688,6 +2812,7 @@ Log-Information "Running on server: $ServerName";
 `,
   },
   "EnvironmentName": {
+    namespace: null,
     name: "$EnvironmentName",
     signature: "$EnvironmentName()",
     snippet: "\\$EnvironmentName()",
@@ -2707,6 +2832,7 @@ if $EnvironmentName == "Production" {
   },
   // List/Vector Functions
   "ListCount": {
+    namespace: null,
     name: "$ListCount",
     signature: "$ListCount(vector)",
     snippet: "\\$ListCount(${1:vector})",
@@ -2728,6 +2854,7 @@ $count = $ListCount($items);
 `,
   },
   "ListItem": {
+    namespace: null,
     name: "$ListItem",
     signature: "$ListItem(vector, index)",
     snippet: "\\$ListItem(${1:vector}, ${2:index})",
@@ -2751,6 +2878,7 @@ $second = $ListItem($items, 1);
   },
   // ProGet Functions
   "EncodeBasicAuth": {
+    namespace: null,
     name: "$EncodeBasicAuth",
     signature: "$EncodeBasicAuth(userName, password)",
     snippet: "\\$EncodeBasicAuth(\"${1:userName}\", \"${2:password}\")",
@@ -2772,6 +2900,7 @@ $auth = $EncodeBasicAuth("admin", "secret");
 `
   },
   "SecureCredentialProperty": {
+    namespace: null,
     name: "$SecureCredentialProperty",
     signature: "$SecureCredentialProperty(credential, property)",
     snippet: "\\$SecureCredentialProperty(${1:credential}, ${2:property})",
@@ -2799,6 +2928,7 @@ Exec sometool.exe -user $username -pass $password;
 `
   },
   "SecureResourceProperty": {
+    namespace: null,
     name: "$SecureResourceProperty",
     signature: "$SecureResourceProperty(resource, property, [type])",
     snippet: "\\$SecureResourceProperty(${1:resource}, ${2:property}${3:, ${4:type}})",
@@ -2821,6 +2951,7 @@ Exec sometool.exe --host $host;
 `
   },
   "PackageHash": {
+    namespace: null,
     name: "$PackageHash",
     signature: "$PackageHash(format, algorithm)",
     snippet: "\\$PackageHash(\"${1|hex,base64|}\", \"${2|sha512,sha1|}\")",
@@ -2841,6 +2972,7 @@ $hash = $PackageHash("hex", "sha512");
 `
   },
   "PackageProperty": {
+    namespace: null,
     name: "$PackageProperty",
     signature: "$PackageProperty(name, default)",
     snippet: "\\$PackageProperty(\"${1:propertyName}\", \"${2:defaultValue}\")",
@@ -2861,6 +2993,7 @@ $description = $PackageProperty("myPropertyName", "No property defined");
 `
   },
   "Coalesce": {
+    namespace: null,
     name: "$Coalesce",
     signature: "$Coalesce(value1, value2, ...)",
     snippet: "\\$Coalesce(${1:value1}, ${2:value2})${0}",
@@ -2878,6 +3011,7 @@ $name = $Coalesce($OverrideName, $DefaultName, "unnamed");
 `
   },
   "PadLeft": {
+    namespace: null,
     name: "$PadLeft",
     signature: "$PadLeft(Text, Length, [PadCharacter])",
     snippet: "\\$PadLeft(${1:Text}, ${2:Length})${0}",
@@ -2898,6 +3032,7 @@ $padded = $PadLeft("7", 3, "0");
 `
   },
   "PadRight": {
+    namespace: null,
     name: "$PadRight",
     signature: "$PadRight(Text, Length, [PadCharacter])",
     snippet: "\\$PadRight(${1:Text}, ${2:Length})${0}",
@@ -2918,6 +3053,7 @@ $padded = $PadRight("Name", 10, ".");
 `
   },
   "TrimStart": {
+    namespace: null,
     name: "$TrimStart",
     signature: "$TrimStart(Text, ...)",
     snippet: "\\$TrimStart(${1:Text})${0}",
@@ -2937,6 +3073,7 @@ $trimmed = $TrimStart("   hello");
 `
   },
   "TrimEnd": {
+    namespace: null,
     name: "$TrimEnd",
     signature: "$TrimEnd(Text, ...)",
     snippet: "\\$TrimEnd(${1:Text})${0}",
@@ -2956,6 +3093,7 @@ $trimmed = $TrimEnd("hello   ");
 `
   },
   "GetVariableValue": {
+    namespace: null,
     name: "GetVariableValue",
     signature: "GetVariableValue(VariableName, [VariableType])",
     snippet: "GetVariableValue(\"${1:variableName}\")${0}",
@@ -2978,6 +3116,7 @@ $value = GetVariableValue("SomeDynamicallyNamedVariable");
 `
   },
   "IsVariableDefined": {
+    namespace: null,
     name: "$IsVariableDefined",
     signature: "$IsVariableDefined(VariableName, [VariableType])",
     snippet: "\\$IsVariableDefined(\"${1:variableName}\")${0}",
@@ -2999,6 +3138,7 @@ if $IsVariableDefined("OptionalSetting")
 `
   },
   "JSEncode": {
+    namespace: null,
     name: "$JSEncode",
     signature: "$JSEncode(Text)",
     snippet: "\\$JSEncode(${1:Text})${0}",
@@ -3011,6 +3151,7 @@ if $IsVariableDefined("OptionalSetting")
 `
   },
   "SHEval": {
+    namespace: null,
     name: "$SHEval",
     signature: "$SHEval(ScriptText)",
     snippet: "\\$SHEval(${1:ScriptText})${0}",
@@ -3033,6 +3174,7 @@ Log-Information $NextYear;
 `
   },
   "ListIndexOf": {
+    namespace: null,
     name: "$ListIndexOf",
     signature: "$ListIndexOf(List, Item)",
     snippet: "\\$ListIndexOf(${1:List}, ${2:Item})${0}",
@@ -3046,6 +3188,7 @@ Log-Information $NextYear;
 `
   },
   "XmlEncode": {
+    namespace: null,
     name: "$XmlEncode",
     signature: "$XmlEncode(Text)",
     snippet: "\\$XmlEncode(${1:Text})${0}",
@@ -3058,6 +3201,7 @@ Log-Information $NextYear;
 `
   },
   "NewLine": {
+    namespace: null,
     name: "$NewLine",
     signature: "$NewLine([WindowsOrLinux])",
     snippet: "\\$NewLine${1:}${0}",
@@ -3070,6 +3214,7 @@ Log-Information $NextYear;
 `
   },
   "ExecutionId": {
+    namespace: null,
     name: "$ExecutionId",
     signature: "$ExecutionId",
     description: "Returns the current execution ID.",
@@ -3078,6 +3223,7 @@ Log-Information $NextYear;
 `
   },
   "ExecutionState": {
+    namespace: null,
     name: "$ExecutionState",
     signature: "$ExecutionState",
     description: "Returns the current state of the execution (normal, warning, or error).",
@@ -3086,6 +3232,7 @@ Log-Information $NextYear;
 `
   },
   "WorkingDirectory": {
+    namespace: null,
     name: "$WorkingDirectory",
     signature: "$WorkingDirectory",
     description: "Returns the current working directory.",
@@ -3094,6 +3241,7 @@ Log-Information $NextYear;
 `
   },
   "SpecialWindowsPath": {
+    namespace: null,
     name: "$SpecialWindowsPath",
     signature: "$SpecialWindowsPath(Name)",
     snippet: "\\$SpecialWindowsPath(${1:Name})${0}",
@@ -3106,6 +3254,7 @@ Log-Information $NextYear;
 `
   },
   "ResolvePath": {
+    namespace: null,
     name: "$ResolvePath",
     signature: "$ResolvePath(Path)",
     snippet: "\\$ResolvePath(${1:Path})${0}",
@@ -3127,6 +3276,7 @@ $ResolvePath(~\\path)                      # -> {ExecutionDirectory}\\path
 `
   },
   "FileContents": {
+    namespace: null,
     name: "$FileContents",
     signature: "$FileContents(Name, [MaxLength])",
     snippet: "\\$FileContents(${1:Name})${0}",
@@ -3140,6 +3290,7 @@ $ResolvePath(~\\path)                      # -> {ExecutionDirectory}\\path
 `
   },
   "EnvironmentVariable": {
+    namespace: null,
     name: "$EnvironmentVariable",
     signature: "$EnvironmentVariable(EnvironmentVariableName)",
     snippet: "\\$EnvironmentVariable(${1:EnvironmentVariableName})${0}",
@@ -3159,6 +3310,7 @@ Log-Information $Path;
 `
   },
   "RoleName": {
+    namespace: null,
     name: "$RoleName",
     signature: "$RoleName",
     description: "Name of the current server role in context.",
@@ -3175,6 +3327,7 @@ Log-Information $Path;
 /** @type {DocsTable} */
 const vectorFunctionDocs = {
   "Split": {
+    namespace: null,
     name: '@Split',
     signature: '@Split(Text, Separator, [Count])',
     snippet: "@Split(\"${1:text}\", \"${2:,}\"${3:, ${4:count}})",
@@ -3198,6 +3351,7 @@ const vectorFunctionDocs = {
 `
   },
   "ListConcat": {
+    namespace: null,
     name: '@ListConcat',
     signature: '@ListConcat(list1, list2, ...)',
     snippet: "@ListConcat(${1:@list1}, ${2:@list2})",
@@ -3216,6 +3370,7 @@ const vectorFunctionDocs = {
 `
   },
   "ListInsert": {
+    namespace: null,
     name: '@ListInsert',
     signature: '@ListInsert(list, item, index)',
     snippet: "@ListInsert(${1:@list}, \"${2:item}\", ${3:index})",
@@ -3237,6 +3392,7 @@ const vectorFunctionDocs = {
 `
   },
   "ListRemove": {
+    namespace: null,
     name: '@ListRemove',
     signature: '@ListRemove(list, index)',
     snippet: "@ListRemove(${1:@list}, ${2:index})",
@@ -3257,6 +3413,7 @@ const vectorFunctionDocs = {
 `
   },
   "ListSet": {
+    namespace: null,
     name: '@ListSet',
     signature: '@ListSet(list, index, item)',
     snippet: "@ListSet(${1:@list}, ${2:index}, \"${3:item}\")",
@@ -3278,6 +3435,7 @@ const vectorFunctionDocs = {
 `
   },
   "MapKeys": {
+    namespace: null,
     name: '@MapKeys',
     signature: '@MapKeys(map)',
     snippet: "@MapKeys(${1:@map})",
@@ -3297,6 +3455,7 @@ const vectorFunctionDocs = {
 `
   },
   "Range": {
+    namespace: null,
     name: '@Range',
     signature: '@Range(start, count)',
     snippet: "@Range(${1:start}, ${2:count})",
@@ -3316,6 +3475,7 @@ const vectorFunctionDocs = {
 `
   },
   "RegexFind": {
+    namespace: null,
     name: '@RegexFind',
     signature: '@RegexFind(text, matchExpression, [matchGroup])',
     snippet: "@RegexFind(${1:text}, ${2:matchExpression}${3:, ${4:matchGroup}})",
@@ -3337,6 +3497,7 @@ const vectorFunctionDocs = {
   },
   // Vector Variables (ProGet)
   "AffectedPackages": {
+    namespace: null,
     name: '@AffectedPackages',
     signature: '@AffectedPackages',
     description: 'Returns a list of packages affected by the vulnerability in the current scope.',
@@ -3354,6 +3515,7 @@ const vectorFunctionDocs = {
 `
   },
   "ApiKeys": {
+    namespace: null,
     name: '@ApiKeys',
     signature: '@ApiKeys',
     description: 'Returns a list of API Keys in the current scope.',
@@ -3374,6 +3536,7 @@ foreach $key in @ApiKeys {
 `
   },
   "BuildIssues": {
+    namespace: null,
     name: '@BuildIssues',
     signature: '@BuildIssues(includeClosed)',
     description: 'Returns a list of issues on the build in the current scope.',
@@ -3394,6 +3557,7 @@ foreach $issue in @BuildIssues(true) {
 `
   },
   "FilesOnDisk": {
+    namespace: null,
     name: '@FilesOnDisk',
     signature: '@FilesOnDisk(includes, [excludes], [directory])',
     snippet: "@FilesOnDisk(\"${1:*.txt}\")",
@@ -3414,6 +3578,7 @@ set @ProjectFiles = @FilesOnDisk(*.csproj);
 `
   },
   "AcquiredServers": {
+    namespace: null,
     name: '@AcquiredServers',
     signature: '@AcquiredServers(Role)',
     snippet: "@AcquiredServers(\"${1:roleName}\")",
@@ -3436,6 +3601,7 @@ foreach $server in @AcquiredServers("WebServer") {
 `
   },
   "AllEnvironments": {
+    namespace: null,
     name: '@AllEnvironments',
     signature: '@AllEnvironments',
     description: 'Returns the list of all environments configured in the instance.',
@@ -3453,6 +3619,7 @@ foreach $Env in @AllEnvironments
 `
   },
   "AllRoles": {
+    namespace: null,
     name: '@AllRoles',
     signature: '@AllRoles',
     description: 'Returns the list of all server roles configured in the instance.',
@@ -3470,6 +3637,7 @@ foreach $Role in @AllRoles
 `
   },
   "AllServers": {
+    namespace: null,
     name: '@AllServers',
     signature: '@AllServers([IncludeInactive])',
     snippet: "@AllServers",
@@ -3491,6 +3659,7 @@ foreach $Server in @AllServers
 `
   },
   "ServersInEnvironment": {
+    namespace: null,
     name: '@ServersInEnvironment',
     signature: '@ServersInEnvironment([EnvironmentName], [IncludeInactive])',
     snippet: "@ServersInEnvironment(\"${1:environmentName}\")",
@@ -3511,6 +3680,7 @@ foreach $server in @ServersInEnvironment("Production") {
 `
   },
   "ServersInRole": {
+    namespace: null,
     name: '@ServersInRole',
     signature: '@ServersInRole([RoleName], [IncludeInactive])',
     snippet: "@ServersInRole(\"${1:roleName}\")",
@@ -3531,6 +3701,7 @@ foreach $server in @ServersInRole("WebServer") {
 `
   },
   "ServersInRoleAndEnvironment": {
+    namespace: null,
     name: '@ServersInRoleAndEnvironment',
     signature: '@ServersInRoleAndEnvironment([RoleName], [EnvironmentName], [IncludeInactive])',
     snippet: "@ServersInRoleAndEnvironment(\"${1:roleName}\", \"${2:environmentName}\")",

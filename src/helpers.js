@@ -218,6 +218,13 @@ function validateDocs(label, docsTable) {
       errors.push(`${label}.${key} is missing required 'description'`);
     }
 
+    // Required Field: 'namespace' (present, but null is allowed)
+    if (!("namespace" in doc)) {
+      errors.push(`${label}.${key} is missing required 'namespace'`);
+    } else if (doc.namespace !== null && (typeof doc.namespace !== "string" || doc.namespace.trim() === "")) {
+      errors.push(`${label}.${key} 'namespace' must be null or a non-empty string`);
+    }
+
     // Optional Field: 'snippet'
     if (doc.snippet && typeof doc.snippet !== "string") {
       warnings.push(`${label}.${key} 'snippet' must be a string`);
