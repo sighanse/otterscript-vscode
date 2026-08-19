@@ -29,9 +29,9 @@
     "@types/vscode": "1.85.0",
     "@vscode/vsce": "^3.9.2",
     "eslint": "^10.8.1",
-    "globals": "^17.8.0",
+    "globals": "^17.11.0",
     "jsonc-parser": "^3.3.1",
-    "ovsx": "^1.0.2"
+    "ovsx": "^1.1.1"
   },
   "categories": [
     "Programming Languages",
