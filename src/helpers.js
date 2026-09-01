@@ -336,7 +336,7 @@ function createRegexPatterns(knownOperations) {
     operationCallRegex: () => /\b([A-Za-z][A-Za-z-]*)\b/g,
     scalarSignatureRegex: () => /\$([A-Za-z][A-Za-z0-9_]*)\s*\(([^()]*)$/,
     vectorSignatureRegex: () => /@([A-Za-z][A-Za-z0-9_]*)\s*\(([^()]*)$/,
-    operationSignatureRegex: () => /(?:^|\s)([A-Za-z][A-Za-z-]*)\s*\(([^()]*)$/,
+    operationSignatureRegex: () => /(?:^|\s)(?:[A-Za-z][\w-]*::)?([A-Za-z][A-Za-z-]*)\s*\(([^()]*)$/,
     operationRegex: () => buildWordRegex(knownOperations),
   };
 }
