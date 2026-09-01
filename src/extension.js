@@ -282,10 +282,11 @@ function activate(context) {
           return Object.entries(scalarFunctionDocs)
               .filter(([key]) => key.toLowerCase().startsWith(typed.toLowerCase()))
               .map(([_key, doc]) => {
+                  const isFunction = doc.signature?.includes("(") ?? false;
                   const snippet = doc.snippet
                     ? new vscode.SnippetString(doc.snippet.replace(/^\\\$/, ""))
                     : new vscode.SnippetString(doc.name.replace(/^\$/, ""));
-                  const item = buildCompletionItem(doc, vscode.CompletionItemKind.Function, '1_', snippet, true);
+                  const item = buildCompletionItem(doc, vscode.CompletionItemKind.Function, '1_', snippet, isFunction);
                   return item;
               });
         }
@@ -360,7 +361,7 @@ function activate(context) {
                       ? vscode.CompletionItemKind.Function
                       : vscode.CompletionItemKind.Variable;
                   const sortPrefix = isFunction ? '2_' : '1_';
-                  return buildCompletionItem(doc, kind, sortPrefix, insertText, true);
+                  return buildCompletionItem(doc, kind, sortPrefix, insertText, isFunction);
               });
         }
       },
