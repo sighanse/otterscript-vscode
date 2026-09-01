@@ -1,5 +1,26 @@
 # Changelog
 
+## [Unreleased] - 2026-09-01
+
+### Added
+
+- Preparation for namespace support in the language
+
+### Fixed
+
+- Fixed namespaced signature help in helpers
+- Fixed `isFunction` check in completion provider
+- Fixed newline snippet handling in language features
+- Removed `GetVariableValue` from language data until another completion/hover provider is added
+- Corrected operation and function signatures in language data, added 13 scalar functions
+
+### Changed
+
+- Bumped production dependencies
+- Bumped dev-dependencies group across 1 directory with 3 updates
+- Bumped eslint from 10.8.0 to 10.8.1 in dev-dependencies
+- Bumped eslint in dev-dependencies
+
 ## [0.2.5] - 2026-08-07
 
 ### Added
