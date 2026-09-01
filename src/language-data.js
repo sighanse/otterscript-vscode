@@ -3092,29 +3092,6 @@ $trimmed = $TrimEnd("hello   ");
 \`\`\`
 `
   },
-  "GetVariableValue": {
-    namespace: null,
-    name: "GetVariableValue",
-    signature: "GetVariableValue(VariableName, [VariableType])",
-    snippet: "GetVariableValue(\"${1:variableName}\")${0}",
-    description: "Returns the value of a variable if the specified variable name is available in the current context; otherwise returns null.",
-    documentation: `
-**Parameters:**
-- \`VariableName\` (required) - The name of the variable, without the \`$\`, \`@\`, or \`%\` sigil.
-- \`VariableType\` - (Optional) Must be one of: \`any\`, \`scalar\`, \`vector\`, \`map\`.
-
-**Returns:** The variable's value, or null if not defined.
-
-**Example:**
-\`\`\`otterscript
-$value = GetVariableValue("SomeDynamicallyNamedVariable");
-\`\`\`
-
-**Notes:**
-- Useful when a variable's name is itself computed at runtime.
-- Use \`$IsVariableDefined\` first if the variable may not exist.
-`
-  },
   "IsVariableDefined": {
     namespace: null,
     name: "$IsVariableDefined",
