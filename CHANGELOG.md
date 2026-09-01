@@ -12,14 +12,13 @@
 - Fixed `isFunction` check in completion provider
 - Fixed newline snippet handling in language features
 - Removed `GetVariableValue` from language data until another completion/hover provider is added
+- Removed duplicate workingdirectory
 - Corrected operation and function signatures in language data, added 13 scalar functions
 
 ### Changed
 
-- Bumped production dependencies
-- Bumped dev-dependencies group across 1 directory with 3 updates
-- Bumped eslint from 10.8.0 to 10.8.1 in dev-dependencies
-- Bumped eslint in dev-dependencies
+- Bumped eslint from 10.9.0 to 10.9.1 in devDependencies
+- Bumped globals from 17.11.0 to 17.12.0 in devDependencies
 
 ## [0.2.5] - 2026-08-07
 
