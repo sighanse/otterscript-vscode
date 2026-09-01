@@ -3181,7 +3181,7 @@ Log-Information $NextYear;
     namespace: null,
     name: "$NewLine",
     signature: "$NewLine([WindowsOrLinux])",
-    snippet: "\\$NewLine${1:}${0}",
+    snippet: "\\$NewLine(${1:WindowsOrLinux})${0}",
     description: "Returns the newline string for either the operating system of the current server in context, or specifically Windows or Linux.",
     documentation: `
 **Parameters:**
