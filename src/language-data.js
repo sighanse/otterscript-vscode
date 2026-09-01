@@ -2160,14 +2160,6 @@ const variableDocs = {
     name: "$WebBaseUrl",
     description: "The base URL of the ProGet web application.",
     documentation: PROGET_VAR_DOC
-  },
-  "WorkingDirectory": {
-    namespace: null,
-    name: "$WorkingDirectory",
-    description: "Returns the current working directory.",
-    documentation: `
-**Available in:** Otter
-`
   }
 };
 
