@@ -12,12 +12,15 @@ This extension started as a learning project while implementing [custom webhook 
 
 ## Features
 
-- Syntax highlighting for OtterScript constructs
-- Function signature help for built-in functions
-- Auto-completion for variables and functions
+- Syntax highlighting for OtterScript constructs, including namespaced operations (`ProGet::`, `Otter::`, `InedoCore::`)
+- Hover documentation, auto-completion, and signature help for built-in functions, operations, variables, and map/vector expressions
+- Diagnostics for common mistakes (missing `$`, unknown functions, invalid operators, `=` used in `if` conditions, duplicate map keys)
+- Quick‑fix code actions, plus a **Fix All Issues** command (`Ctrl+Shift+Alt+F`) that applies every available fix in the file
+- Go to Definition (F12) and Find All References (Shift+F12) for document-local module calls
+- Outline and breadcrumbs via document symbols
+- CodeLens reference counts above module declarations
+- Code folding via `#region` / `#endregion` and block structure
 - Code snippets for common patterns
-- Hover information with documentation
-- Quick‑fix code actions for selected diagnostics (e.g. missing `$`, invalid operators)
 
 ## Status
 
@@ -25,8 +28,7 @@ This extension is in active development and currently considered early-stage.
 Features may change as the extension evolves.
 
 **Testing scope:**
-This extension is primarily developed and tested against **ProGet** usage
-(particularly custom webhook action context).
+This extension is primarily developed and tested against **ProGet** usage.
 While OtterScript is shared across Otter, BuildMaster, and ProGet, not all
 constructs or product-specific behaviors have been tested equally.
 
@@ -38,7 +40,7 @@ See [CHANGELOG.md](https://github.com/sighanse/otterscript-vscode/blob/main/CHAN
 
 - It does not validate or execute OtterScript
 - It does not connect to Otter, ProGet, or other Inedo services
-- It does not provide a formatter or automatic code fixes (only explicit quick‑fix actions for selected errors)
+- It does not auto-fix on save or format your code; fixes are only applied when you explicitly invoke a quick‑fix or the **Fix All Issues** command
 - It does not attempt full semantic analysis
 
 ## Installation
@@ -53,6 +55,15 @@ See [CHANGELOG.md](https://github.com/sighanse/otterscript-vscode/blob/main/CHAN
 Open any `.otter` or `.oscript` file in VS Code to activate the extension.
 
 No additional configuration is required.
+
+## Settings
+
+All features are enabled by default and can be toggled individually:
+
+- `otterscript.completion.enable` — auto-completion suggestions
+- `otterscript.signatureHelp.enable` — signature help for functions and operations
+- `otterscript.hover.enable` — hover information for functions and operations
+- `otterscript.codeLens.enable` — CodeLens reference counts above module declarations
 
 ## Language Support Coverage
 
