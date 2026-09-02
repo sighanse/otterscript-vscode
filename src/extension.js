@@ -981,6 +981,13 @@ function activate(context) {
     // -- Run diagnostics when a new file is opened (handles files opened after activation)
     vscode.workspace.onDidOpenTextDocument(document => updateDiagnostics(document, diagnostics, diagnosticsContext)),
 
+    // -- Run diagnostics when a file is saved (Catches external changes, e.g., Git checkout or external editor)
+    vscode.workspace.onDidSaveTextDocument(document => {
+      if (document.languageId === "otterscript") {
+        updateDiagnostics(document, diagnostics, diagnosticsContext);
+      }
+    }),
+
     // -- Clean up diagnostics and module navigation cache when a file is closed.
     vscode.workspace.onDidCloseTextDocument(doc => {
       diagnostics.delete(doc.uri);
