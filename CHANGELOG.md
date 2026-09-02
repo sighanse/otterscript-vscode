@@ -5,7 +5,7 @@
 ### Added
 
 - Preparation for namespace support in the language
-- Re-run diagnostics when a document is saved, so externally-made changes (e.g. a Git checkout or an edit from another editor) are picked up
+- Re-run diagnostics when a document is saved, for an immediate refresh instead of waiting for the change-debounce
 - `npm run check:lang` script (and `npm run check`) that fails when the TextMate grammar's function/operation name lists drift out of sync with `src/language-data.js`; wired into the Sanity CI workflow as a blocking check
 
 ### Fixed

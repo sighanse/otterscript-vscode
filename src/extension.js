@@ -1013,7 +1013,9 @@ function activate(context) {
     // -- Run diagnostics when a new file is opened (handles files opened after activation)
     vscode.workspace.onDidOpenTextDocument(document => updateDiagnostics(document, diagnostics, diagnosticsContext)),
 
-    // -- Run diagnostics when a file is saved (Catches external changes, e.g., Git checkout or external editor)
+    // -- Re-run diagnostics on save. The onDidChangeTextDocument handler above is
+    // debounced, so this gives an immediate refresh on explicit/auto save and covers
+    // the case where a save reconciles the buffer with on-disk changes.
     vscode.workspace.onDidSaveTextDocument(document => {
       if (document.languageId === "otterscript") {
         updateDiagnostics(document, diagnostics, diagnosticsContext);

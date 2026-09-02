@@ -336,7 +336,12 @@ function createRegexPatterns(knownOperations) {
     operationCallRegex: () => /\b([A-Za-z][A-Za-z-]*)\b/g,
     scalarSignatureRegex: () => /\$([A-Za-z][A-Za-z0-9_]*)\s*\(([^()]*)$/,
     vectorSignatureRegex: () => /@([A-Za-z][A-Za-z0-9_]*)\s*\(([^()]*)$/,
-    operationSignatureRegex: () => /(?:^|\s)(?:[A-Za-z][\w-]*::)?([A-Za-z][A-Za-z-]*)\s*\(([^()]*)$/,
+    // Group 1: operation name. Group 2: argument text typed so far (cursor at end).
+    // The optional segment after the name allows one default/positional argument
+    // between the name and the "(" -- a quoted string or a single bare token --
+    // e.g. `ProGet::Create-Directory my/folder/path\n(`. It deliberately excludes
+    // whitespace and "=" so it cannot swallow an assignment like `set $x = (`.
+    operationSignatureRegex: () => /(?:^|\s)(?:[A-Za-z][\w-]*::)?([A-Za-z][A-Za-z-]*)(?:[ \t]+(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s(){};=]+))?\s*\(([^()]*)$/,
     operationRegex: () => buildWordRegex(knownOperations),
   };
 }
