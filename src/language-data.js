@@ -1345,7 +1345,7 @@ Otter::Set-Variable
     namespace: "InedoCore",
     name: "Exec",
     signature: "InedoCore::Exec([FileName: <text>], [Arguments: <text>], [WorkingDirectory: <text>], [OutputLogLevel: <integer>], [ErrorOutputLogLevel: <integer>], [SuccessExitCode: <text>], [ImportVariables: <true/false>], [WarnRegex: <text>], [DebugRegex: <text>], [LogArguments: <true/false>], [ReportProgressRegex: <text>], [OutputFilterRegex: <text>]);",
-    snippet: "Exec ${1:executablePath}\n(\n    Arguments: ${2:arguments}\n);$0",
+    snippet: "InedoCore::Exec ${1:executablePath}\n(\n    Arguments: ${2:arguments}\n);$0",
     description: "Executes a process, logs its output, and waits until it exits.",
     documentation: `
 **Script Usage:**
