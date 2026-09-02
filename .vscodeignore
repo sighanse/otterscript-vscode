@@ -8,6 +8,8 @@ test/
 .gitignore
 .DS_Store
 .markdownlint.jsonc
+.pre-commit-config.yaml
+scripts/
 *.vsix
 *.ps1
 *.log
