@@ -440,26 +440,36 @@ function activate(context) {
           }
 
           const lowerTyped = typed.toLowerCase();
+          const lowerNamespaceTyped = namespaceTyped.toLowerCase();
 
           // -- Replace only the identifier fragment after any "::". VS Code treats "::"
           // as a word boundary, so extending the range back over the namespace would
           // make VS Code filter the items out. Instead, when the user has already typed
-          // a "Namespace::" prefix, strip the matching prefix that namespaced operation
-          // snippets carry, so it does not double up ("ProGet::ProGet::Create-Directory").
+          // a "Namespace::" prefix, strip that exact prefix off the snippet so it does
+          // not double up ("ProGet::ProGet::Create-Directory"). Only strip the prefix
+          // the user actually typed -- never rewrite a different namespace.
           const replaceRange = new vscode.Range(
             new vscode.Position(position.line, cursor - typed.length),
             position
           );
-          const stripNamespacePrefix = (/** @type {string} */ text) =>
-            namespaceTyped ? text.replace(/^[A-Za-z][A-Za-z0-9]*::/, "") : text;
+          const stripTypedNamespace = (/** @type {string} */ text) =>
+            namespaceTyped
+              ? text.replace(new RegExp(`^${namespaceTyped}::`, "i"), "")
+              : text;
 
           const items = [];
 
           // -- Operations (priority 0_)
           for (const [name, doc] of Object.entries(operationDocs)) {
+              // -- When a "Namespace::" prefix is typed, only offer operations that
+              // belong to that namespace -- inserting a core/other-namespace operation
+              // after the prefix would produce invalid code ("ProGet::Log-Information").
+              if (namespaceTyped && (doc.namespace ?? "").toLowerCase() !== lowerNamespaceTyped) {
+                  continue;
+              }
               if (!typed || name.toLowerCase().startsWith(lowerTyped)) {
                   const snippetText = doc.snippet ?? `${name} "\${0}";`;
-                  const snippet = new vscode.SnippetString(stripNamespacePrefix(snippetText));
+                  const snippet = new vscode.SnippetString(stripTypedNamespace(snippetText));
                   const item = buildCompletionItem(doc, vscode.CompletionItemKind.Function, '0_', snippet, true);
                   item.range = replaceRange;
                   items.push(item);
