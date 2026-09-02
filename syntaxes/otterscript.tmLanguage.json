@@ -145,11 +145,11 @@
         },
         {
           "name": "support.function.variable.otterscript",
-          "match": "\\$(ToJson|FromJson|HtmlEncode|UrlEncode|Base64Encode|Base64Decode|ListCount|ListItem|PathCombine|Eval|Date|DateUtc|Trim|ToLower|ToUpper|Substring|Replace|Join|MatchesRegex|RegexReplace|Expr|Increment|Decrement|Abs|Ceiling|Floor|Compare|FileExists|DirectoryExists|ServerName|EnvironmentName)\\("
+          "match": "\\$(ToJson|FromJson|HtmlEncode|UrlEncode|Base64Encode|Base64Decode|ListCount|ListItem|PathCombine|Eval|Date|DateUtc|Trim|ToLower|ToUpper|Substring|Replace|Join|MatchesRegex|RegexReplace|Expr|Increment|Decrement|Abs|Ceiling|Floor|Compare|FileExists|DirectoryExists|ServerName|EnvironmentName|Coalesce|PadLeft|PadRight|TrimStart|TrimEnd|IsVariableDefined|JSEncode|SHEval|ListIndexOf|XmlEncode|NewLine|SpecialWindowsPath|ResolvePath|FileContents|EnvironmentVariable|EncodeBasicAuth|SecureCredentialProperty|SecureResourceProperty|PackageHash|PackageProperty)\\("
         },
         {
         "name": "support.function.vector.otterscript",
-        "match": "@(Split|ListConcat|ListInsert|ListRemove|ListSet|MapKeys|Range|RegexFind)\\("
+        "match": "@(Split|ListConcat|ListInsert|ListRemove|ListSet|MapKeys|Range|RegexFind|BuildIssues|FilesOnDisk|AcquiredServers|AllServers|ServersInEnvironment|ServersInRole|ServersInRoleAndEnvironment)\\("
         },
         {
           "name": "constant.language.otterscript",

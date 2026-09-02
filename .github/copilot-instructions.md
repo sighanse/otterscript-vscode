@@ -29,9 +29,13 @@ If priorities conflict, always follow the highest item in this list. Safety and 
 - Lint local: `npm run lint`
 - Lint strict (CI parity): `npm run lint:ci`
 - JS + JSDoc type check: `npm run check:js`
+- Grammar / language-data sync: `npm run check:lang`
+- JS type check + grammar sync: `npm run check`
 - Package extension: `npm run package`
 
 No dedicated `npm test` script exists; rely on lint/package/CI checks and manual Extension Host smoke tests.
+
+`npm run check:lang` (script: [scripts/check-language-sync.js](../scripts/check-language-sync.js)) fails when a scalar/vector function or operation is added to `src/language-data.js` without updating the matching regex alternation in `syntaxes/otterscript.tmLanguage.json` (or vice versa). It runs as a blocking step in the Sanity workflow.
 
 ## Architecture Map
 
@@ -84,14 +88,15 @@ Run these when applicable:
 
 1. `npm run lint`
 2. `npm run check:js`
-3. `npm run package` when behavior changes
-4. Manual smoke test (`F5`) when provider/grammar/snippet behavior changes:
+3. `npm run check:lang` when `language-data.js` or the grammar changed
+4. `npm run package` when behavior changes
+5. Manual smoke test (`F5`) when provider/grammar/snippet behavior changes:
    - `$` completion appears
    - `@` vector completion appears
    - Hover shows docs
    - `if condition =` warns about missing `$`
    - `>>` auto-closes swim string
-5. Confirm no unrelated files were modified
+6. Confirm no unrelated files were modified
 
 Before recommending or finalizing changes, require both `npm run lint` and `npm run check:js` to pass.
 

@@ -218,6 +218,13 @@ function validateDocs(label, docsTable) {
       errors.push(`${label}.${key} is missing required 'description'`);
     }
 
+    // Required Field: 'namespace' (present, but null is allowed)
+    if (!("namespace" in doc)) {
+      errors.push(`${label}.${key} is missing required 'namespace'`);
+    } else if (doc.namespace !== null && (typeof doc.namespace !== "string" || doc.namespace.trim() === "")) {
+      errors.push(`${label}.${key} 'namespace' must be null or a non-empty string`);
+    }
+
     // Optional Field: 'snippet'
     if (doc.snippet && typeof doc.snippet !== "string") {
       warnings.push(`${label}.${key} 'snippet' must be a string`);
@@ -329,7 +336,12 @@ function createRegexPatterns(knownOperations) {
     operationCallRegex: () => /\b([A-Za-z][A-Za-z-]*)\b/g,
     scalarSignatureRegex: () => /\$([A-Za-z][A-Za-z0-9_]*)\s*\(([^()]*)$/,
     vectorSignatureRegex: () => /@([A-Za-z][A-Za-z0-9_]*)\s*\(([^()]*)$/,
-    operationSignatureRegex: () => /(?:^|\s)([A-Za-z][A-Za-z-]*)\s*\(([^()]*)$/,
+    // Group 1: operation name. Group 2: argument text typed so far (cursor at end).
+    // The optional segment after the name allows one default/positional argument
+    // between the name and the "(" -- a quoted string or a single bare token --
+    // e.g. `ProGet::Create-Directory my/folder/path\n(`. It deliberately excludes
+    // whitespace and "=" so it cannot swallow an assignment like `set $x = (`.
+    operationSignatureRegex: () => /(?:^|\s)(?:[A-Za-z][\w-]*::)?([A-Za-z][A-Za-z-]*)(?:[ \t]+(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s(){};=]+))?\s*\(([^()]*)$/,
     operationRegex: () => buildWordRegex(knownOperations),
   };
 }
