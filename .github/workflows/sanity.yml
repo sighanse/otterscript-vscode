@@ -60,6 +60,11 @@ jobs:
         run: npm run check:js
         continue-on-error: true
 
+      - name: Grammar / language-data sync
+        id: langsync
+        run: npm run check:lang
+        continue-on-error: true
+
       - name: npm security audit
         id: audit
         continue-on-error: true
@@ -149,6 +154,13 @@ jobs:
             echo "⚠️ JS + JSDoc type check: issues found" >> "$GITHUB_STEP_SUMMARY"
           fi
 
+          # Grammar / language-data sync
+          if [ "${{ steps.langsync.outcome }}" == "success" ]; then
+            echo "✅ Grammar / language-data sync: passed" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ Grammar / language-data sync: drift detected" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
           # JSON
           if [ "${{ steps.json.outcome }}" == "success" ]; then
             echo "✅ JSON validation: passed" >> "$GITHUB_STEP_SUMMARY"
@@ -178,3 +190,14 @@ jobs:
           else
             echo "❌ Line endings: CRLF detected" >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      # Grammar / language-data drift is treated as a hard failure: highlighting
+      # silently breaks when the two fall out of sync, so block the PR on it.
+      - name: Enforce grammar / language-data sync
+        if: always()
+        run: |
+          if [ "${{ steps.langsync.outcome }}" != "success" ]; then
+            echo "::error::grammar and src/language-data.js are out of sync (see 'Grammar / language-data sync' step)"
+            exit 1
+          fi
+          echo "grammar / language-data sync: ok"
