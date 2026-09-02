@@ -1,24 +1,28 @@
 # Changelog
 
-## [Unreleased] - 2026-09-01
+## [0.2.6] - 2026-09-02
 
 ### Added
 
 - Preparation for namespace support in the language
+- Re-run diagnostics when a document is saved, so externally-made changes (e.g. a Git checkout or an edit from another editor) are picked up
+- `npm run check:lang` script (and `npm run check`) that fails when the TextMate grammar's function/operation name lists drift out of sync with `src/language-data.js`; wired into the Sanity CI workflow as a blocking check
 
 ### Fixed
 
 - Fixed namespaced signature help in helpers
 - Fixed `isFunction` check in completion provider
 - Fixed newline snippet handling in language features
+- Added missing syntax highlighting for `$EncodeBasicAuth`, `$SecureCredentialProperty`, `$SecureResourceProperty`, `$PackageHash`, `$PackageProperty`, `@BuildIssues`, `@FilesOnDisk`, `@AcquiredServers`, `@AllServers`, `@ServersInEnvironment`, `@ServersInRole`, and `@ServersInRoleAndEnvironment`
 - Removed `GetVariableValue` from language data until another completion/hover provider is added
-- Removed duplicate workingdirectory
+- Removed duplicate `WorkingDirectory` entry
 - Corrected operation and function signatures in language data, added 13 scalar functions
 
 ### Changed
 
-- Bumped eslint from 10.9.0 to 10.9.1 in devDependencies
-- Bumped globals from 17.11.0 to 17.12.0 in devDependencies
+- Bumped eslint from 10.8.0 to 10.9.1 in devDependencies
+- Bumped globals from 17.8.0 to 17.12.0 in devDependencies
+- Bumped ovsx from 1.0.2 to 1.1.1 in devDependencies
 
 ## [0.2.5] - 2026-08-07
 
