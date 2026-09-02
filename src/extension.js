@@ -425,10 +425,8 @@ function activate(context) {
           const prefix = line.slice(0, cursor);
 
           // -- Match the identifier fragment immediately before the cursor (letters +
-          // hyphens), plus an optional "Namespace::" prefix. Namespaced operation
-          // snippets carry their own prefix (e.g. "ProGet::Create-Directory"), so an
-          // already-typed prefix must be part of the replacement range or it doubles
-          // up ("ProGet::ProGet::Create-Directory").
+          // hyphens), plus an optional "Namespace::" prefix the user may have already
+          // typed (e.g. "ProGet::Cr").
           // Manual invoke (Ctrl+Space) should still return suggestions even when typed is empty.
           const match = prefix.match(/(?:([A-Za-z][A-Za-z0-9]*)::)?([A-Za-z][A-Za-z-]*)?$/);
           const namespaceTyped = match?.[1] ?? "";
@@ -442,36 +440,45 @@ function activate(context) {
           }
 
           const lowerTyped = typed.toLowerCase();
-          const consumed = typed.length + (namespaceTyped ? namespaceTyped.length + 2 : 0);
+
+          // -- Replace only the identifier fragment after any "::". VS Code treats "::"
+          // as a word boundary, so extending the range back over the namespace would
+          // make VS Code filter the items out. Instead, when the user has already typed
+          // a "Namespace::" prefix, strip the matching prefix that namespaced operation
+          // snippets carry, so it does not double up ("ProGet::ProGet::Create-Directory").
           const replaceRange = new vscode.Range(
-            new vscode.Position(position.line, cursor - consumed),
+            new vscode.Position(position.line, cursor - typed.length),
             position
           );
+          const stripNamespacePrefix = (/** @type {string} */ text) =>
+            namespaceTyped ? text.replace(/^[A-Za-z][A-Za-z0-9]*::/, "") : text;
 
           const items = [];
 
           // -- Operations (priority 0_)
           for (const [name, doc] of Object.entries(operationDocs)) {
               if (!typed || name.toLowerCase().startsWith(lowerTyped)) {
-                  const snippet = doc.snippet
-                    ? new vscode.SnippetString(doc.snippet)
-                    : new vscode.SnippetString(`${name} "\${0}";`);
+                  const snippetText = doc.snippet ?? `${name} "\${0}";`;
+                  const snippet = new vscode.SnippetString(stripNamespacePrefix(snippetText));
                   const item = buildCompletionItem(doc, vscode.CompletionItemKind.Function, '0_', snippet, true);
                   item.range = replaceRange;
                   items.push(item);
               }
           }
 
-          // -- Keywords (priority 1_)
-          for (const [name, doc] of Object.entries(keywordDocs)) {
-              if (!typed || name.toLowerCase().startsWith(lowerTyped)) {
-                  const snippet = doc.snippet
-                    ? new vscode.SnippetString(doc.snippet)
-                    : name;
-                  const item = buildCompletionItem(doc, vscode.CompletionItemKind.Keyword, '1_', snippet, false);
-                  item.range = replaceRange;
-                  items.push(item);
-              }
+          // -- Keywords (priority 1_). Skipped once a "Namespace::" prefix is typed --
+          // only operations are valid there.
+          if (!namespaceTyped) {
+            for (const [name, doc] of Object.entries(keywordDocs)) {
+                if (!typed || name.toLowerCase().startsWith(lowerTyped)) {
+                    const snippet = doc.snippet
+                      ? new vscode.SnippetString(doc.snippet)
+                      : name;
+                    const item = buildCompletionItem(doc, vscode.CompletionItemKind.Keyword, '1_', snippet, false);
+                    item.range = replaceRange;
+                    items.push(item);
+                }
+            }
           }
 
           return items;
