@@ -2345,7 +2345,7 @@ $trimmed = $Trim("  hello  ");
     namespace: null,
     name: "$Substring",
     signature: "$Substring(text, startIndex, length)",
-    snippet: "\\$Substring(${1:text}, ${2:startIndex}, ${3: length})",
+    snippet: "\\$Substring(${1:text}, ${2:startIndex}, ${3:length})",
     description: "Extracts a substring from a string.",
     documentation: `
 Extracts a substring from the specified string starting at the given index.
