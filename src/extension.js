@@ -282,11 +282,18 @@ function activate(context) {
           return Object.entries(scalarFunctionDocs)
               .filter(([key]) => key.toLowerCase().startsWith(typed.toLowerCase()))
               .map(([_key, doc]) => {
+                  // -- Some entries in scalarFunctionDocs are runtime variables,
+                  // not call-style functions (signature has no '('). Classify and
+                  // sort those as variables so they interleave with variableDocs.
                   const isFunction = doc.signature?.includes("(") ?? false;
                   const snippet = doc.snippet
                     ? new vscode.SnippetString(doc.snippet.replace(/^\\\$/, ""))
                     : new vscode.SnippetString(doc.name.replace(/^\$/, ""));
-                  const item = buildCompletionItem(doc, vscode.CompletionItemKind.Function, '1_', snippet, isFunction);
+                  const kind = isFunction
+                    ? vscode.CompletionItemKind.Function
+                    : vscode.CompletionItemKind.Variable;
+                  const sortPrefix = isFunction ? '1_' : '2_';
+                  const item = buildCompletionItem(doc, kind, sortPrefix, snippet, isFunction);
                   return item;
               });
         }
@@ -417,20 +424,27 @@ function activate(context) {
           const cursor = position.character;
           const prefix = line.slice(0, cursor);
 
-          // -- Match the identifier fragment immediately before cursor (letters + hyphens)
+          // -- Match the identifier fragment immediately before the cursor (letters +
+          // hyphens), plus an optional "Namespace::" prefix. Namespaced operation
+          // snippets carry their own prefix (e.g. "ProGet::Create-Directory"), so an
+          // already-typed prefix must be part of the replacement range or it doubles
+          // up ("ProGet::ProGet::Create-Directory").
           // Manual invoke (Ctrl+Space) should still return suggestions even when typed is empty.
-          const match = prefix.match(/([A-Za-z][A-Za-z-]*)$/);
-          const typed = match ? match[1] : "";
+          const match = prefix.match(/(?:([A-Za-z][A-Za-z0-9]*)::)?([A-Za-z][A-Za-z-]*)?$/);
+          const namespaceTyped = match?.[1] ?? "";
+          const typed = match?.[2] ?? "";
           const isManualInvoke = localContext.triggerKind === vscode.CompletionTriggerKind.Invoke;
 
-          // -- For auto-triggered suggestions, require at least 2 typed characters to avoid noise.
-          if (!isManualInvoke && typed.length < 2) {
+          // -- For auto-triggered suggestions, require at least 2 typed characters to
+          // avoid noise -- unless a "Namespace::" prefix was typed, which is signal enough.
+          if (!isManualInvoke && typed.length < 2 && !namespaceTyped) {
             return [];
           }
 
           const lowerTyped = typed.toLowerCase();
+          const consumed = typed.length + (namespaceTyped ? namespaceTyped.length + 2 : 0);
           const replaceRange = new vscode.Range(
-            new vscode.Position(position.line, cursor - typed.length),
+            new vscode.Position(position.line, cursor - consumed),
             position
           );
 

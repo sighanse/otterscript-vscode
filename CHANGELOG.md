@@ -13,6 +13,7 @@
 - Fixed namespaced signature help in helpers
 - Fixed `isFunction` check in completion provider
 - Fixed newline snippet handling in language features
+- Fixed scalar `$` completion classifying non-function entries (`$ExecutionId`, `$ExecutionState`, `$WorkingDirectory`, `$RoleName`) as functions and sorting them ahead of variables
 - Added missing syntax highlighting for `$EncodeBasicAuth`, `$SecureCredentialProperty`, `$SecureResourceProperty`, `$PackageHash`, `$PackageProperty`, `@BuildIssues`, `@FilesOnDisk`, `@AcquiredServers`, `@AllServers`, `@ServersInEnvironment`, `@ServersInRole`, and `@ServersInRoleAndEnvironment`
 - Removed `GetVariableValue` from language data until another completion/hover provider is added
 - Removed duplicate `WorkingDirectory` entry
