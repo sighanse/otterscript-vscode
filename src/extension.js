@@ -452,10 +452,11 @@ function activate(context) {
             new vscode.Position(position.line, cursor - typed.length),
             position
           );
+          const typedNamespacePrefixRegex = namespaceTyped
+            ? new RegExp(`^${namespaceTyped}::`, "i")
+            : null;
           const stripTypedNamespace = (/** @type {string} */ text) =>
-            namespaceTyped
-              ? text.replace(new RegExp(`^${namespaceTyped}::`, "i"), "")
-              : text;
+            typedNamespacePrefixRegex ? text.replace(typedNamespacePrefixRegex, "") : text;
 
           const items = [];
 

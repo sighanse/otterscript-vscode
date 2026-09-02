@@ -1081,7 +1081,7 @@ Apply-Template hdars
 `
   },
   "Copy-Files": {
-    namespace: null,
+    namespace: "Files",
     name: "Copy-Files",
     signature: "Copy-Files([Include: <@(text)>], [Exclude: <@(text)>], [From: <text>], To: <text>, [Verbose: <true/false>], [Overwrite: <true/false>], [RenameFrom: <text>], [RenameTo: <text>], [RenameRegex: <true/false>]);",
     snippet: "Copy-Files\n(\n    From: ${1:sourceDir},\n    To: ${2:destinationDir}\n);$0",
@@ -1174,7 +1174,7 @@ ProGet::Create-Directory my/folder/path
 `
   },
   "Create-File": {
-    namespace: null,
+    namespace: "Files",
     name: "Create-File",
     signature: "Create-File(Name: <text>, [Text: <text>], [Overwrite: <true/false>], [FileMode: <text>]);",
     snippet: "Create-File ${1:myFile.txt}\n(\n    Text: ${2:file contents}\n);$0",
@@ -1210,7 +1210,7 @@ Create-File(
 `
   },
   "Delete-Files": {
-    namespace: null,
+    namespace: "Files",
     name: "Delete-Files",
     signature: "Delete-Files(Include: <@(text)>, [Exclude: <@(text)>], [Directory: <text>], [Verbose: <true/false>]);",
     snippet: "Delete-Files ${1:*.tmp};$0",
@@ -1247,7 +1247,7 @@ Delete-Files(
 `
   },
   "Ensure-File": {
-    namespace: null,
+    namespace: "Files",
     name: "Ensure-File",
     signature: "Ensure-File([Text: <text>], [ReadOnly: <true/false>], Name: <text>, [Attributes: <integer>], [Exists: <true/false>], [Modified: <DateTime>]);",
     snippet: "Ensure-File ${1:myFile.txt}\n(\n    Exists: ${2:true}\n);$0",
