@@ -1134,7 +1134,7 @@ Copy-Files(
     namespace: "ProGet",
     name: "Create-Directory",
     signature: "ProGet::Create-Directory(Path: <text>, [Source: <text>], [Resource: <text>], [EndpointUrl: <text>], [ApiKey: <text>], [UserName: <text>], [Password: <text>]);",
-    snippet: "ProGet::Create-Directory ${1:my/folder/path}\n(\n    Resource: ${2:myAssetDirResource}\n);$0",
+    snippet: "ProGet::Create-Directory ${1:my/folder/path}\n(\n    Source: ${2:myAssetSource}\n);$0",
     description: "Ensures that a subdirectory exists in a ProGet Asset Directory.",
     documentation: `
 **Script Usage:**
