@@ -41,6 +41,7 @@ const {
   createForToForeachFix,
   createInvalidOperatorFix,
   createMissingDollarFix,
+  createUnknownNamespaceFix,
   getOutputChannel,
   getDiagnosticCode,
   getActiveParameterIndex,
@@ -125,6 +126,7 @@ function activate(context) {
   }
   // -- Extract each documentation category into its own variable.
   const {
+    NAMESPACES,
     operationDocs,
     syntaxDocs,
     keywordDocs,
@@ -191,15 +193,17 @@ function activate(context) {
           let fn = null;
           let args = null;
 
+          let isOperation = false;
+
           const candidates = [
-            { regex: scalarSignatureRegex,    table: scalarFunctionDocs }, // ($Func)
-            { regex: vectorSignatureRegex,    table: vectorFunctionDocs }, // (@Func)
-            { regex: operationSignatureRegex, table: operationDocs },      // (Log-Information etc...)
+            { regex: scalarSignatureRegex,    table: scalarFunctionDocs, operation: false }, // ($Func)
+            { regex: vectorSignatureRegex,    table: vectorFunctionDocs, operation: false }, // (@Func)
+            { regex: operationSignatureRegex, table: operationDocs,       operation: true  }, // (Log-Information etc...)
           ];
 
-          for (const { regex, table } of candidates) {
+          for (const { regex, table, operation } of candidates) {
             const m = textBeforeCursor.match(regex());
-            if (m && table[m[1]]) { match = m; fn = table[m[1]]; args = m[2]; break; }
+            if (m && table[m[1]]) { match = m; fn = table[m[1]]; args = m[2]; isOperation = operation; break; }
           }
 
           // -- Validate we have everything needed
@@ -218,7 +222,16 @@ function activate(context) {
           // Parse signature to extract individual parameters
           // Handles nested parentheses in signature (e.g., "Func(a, (b + c), d)")
 
-          const sig = new vscode.SignatureInformation(fn.signature, fn.documentation);
+          // -- Qualify the displayed signature with its namespace when it belongs
+          // to one and the stored signature string doesn't already spell it out.
+          // Operations only: "Namespace::Operation" is grammatically valid, whereas
+          // the syntax for namespaced $/@ functions is not surfaced here.
+          const signatureLabel =
+            isOperation && fn.namespace && !fn.signature.includes("::")
+              ? `${fn.namespace}::${fn.signature}`
+              : fn.signature;
+
+          const sig = new vscode.SignatureInformation(signatureLabel, fn.documentation);
 
           const paramMatch = fn.signature.match(/\(([\s\S]*)\)/);
           if (paramMatch) {
@@ -683,6 +696,7 @@ function activate(context) {
     "invalid-operator":        createInvalidOperatorFix,
     "assignment-in-condition": createAssignmentInConditionFix,
     "incorrect-for-usage":     createForToForeachFix,
+    "unknown-namespace":       createUnknownNamespaceFix,
   });
 
   // ============================================================
@@ -965,6 +979,7 @@ function activate(context) {
     knownScalarFunctions,
     knownVectorFunctions,
     knownOperations,
+    knownNamespaces: NAMESPACES,
     scalarCallRegex,
     vectorCallRegex,
     operationCallRegex,

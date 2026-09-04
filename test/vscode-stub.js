@@ -91,6 +91,75 @@ class FoldingRange {
   }
 }
 
+/**
+ * Mirrors the subset of `vscode.MarkdownString` that `buildHoverMarkdown` uses:
+ * a growable `value` string plus `appendMarkdown`, and the `isTrusted` flag.
+ */
+class MarkdownString {
+  constructor() {
+    this.value = "";
+    /** @type {boolean} */
+    this.isTrusted = false;
+  }
+
+  /**
+   * @param {string} text
+   * @returns {this}
+   */
+  appendMarkdown(text) {
+    this.value += text;
+    return this;
+  }
+}
+
+/** Mirrors `vscode.CodeActionKind` (only the members helpers.js references). */
+const CodeActionKind = Object.freeze({ QuickFix: "quickfix" });
+
+class CodeAction {
+  /**
+   * @param {string} title
+   * @param {string} [kind]
+   */
+  constructor(title, kind) {
+    this.title = title;
+    this.kind = kind;
+    /** @type {Diagnostic[]} */
+    this.diagnostics = [];
+    this.isPreferred = false;
+    /** @type {WorkspaceEdit | undefined} */
+    this.edit = undefined;
+  }
+}
+
+/**
+ * Mirrors the subset of `vscode.WorkspaceEdit` the fix factories use. Records
+ * edits as `[op, ...args]` tuples on `.edits` for assertions.
+ */
+class WorkspaceEdit {
+  constructor() {
+    /** @type {Array<[string, unknown, unknown, unknown]>} */
+    this.edits = [];
+  }
+
+  /**
+   * @param {unknown} uri
+   * @param {Range} range
+   * @param {string} newText
+   */
+  replace(uri, range, newText) {
+    this.edits.push(["replace", uri, range, newText]);
+  }
+
+  /**
+   * @param {unknown} uri
+   * @param {Position} position
+   * @param {string} newText
+   */
+  insert(uri, position, newText) {
+    this.edits.push(["insert", uri, position, newText]);
+  }
+}
+
 // Only `appendLine` is exercised (helpers.js `appendOutputLine`); extend if a
 // future test drives more of the logger.
 const outputChannel = {
@@ -105,6 +174,10 @@ const vscode = {
   DiagnosticSeverity,
   FoldingRange,
   FoldingRangeKind,
+  MarkdownString,
+  CodeAction,
+  CodeActionKind,
+  WorkspaceEdit,
   window: {
     createOutputChannel: () => outputChannel,
   },

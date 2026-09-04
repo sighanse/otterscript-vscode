@@ -10,6 +10,8 @@
  *   - checkMissingDollar
  *   - findDuplicateMapKeyDiagnosticsFromMasked (+ the findDuplicateMapKeyDiagnostics wrapper)
  *   - computeFoldingRanges
+ *   - buildHoverMarkdown (namespace provenance line)
+ *   - nearestNamespace / createUnknownNamespaceFix
  */
 
 require("../vscode-stub");
@@ -27,6 +29,9 @@ const {
   findDuplicateMapKeyDiagnostics,
   findDuplicateMapKeyDiagnosticsFromMasked,
   computeFoldingRanges,
+  buildHoverMarkdown,
+  nearestNamespace,
+  createUnknownNamespaceFix,
 } = require("../../src/helpers.js");
 
 const LITERALS = new Set(["true", "false", "null"]);
@@ -40,21 +45,30 @@ const LITERALS = new Set(["true", "false", "null"]);
  */
 function makeDoc(text) {
   const lines = text.split("\n");
+  /** @param {{ line: number, character: number }} p */
+  const offsetAt = (p) => {
+    let offset = 0;
+    for (let i = 0; i < p.line; i++) offset += lines[i].length + 1;
+    return offset + p.character;
+  };
+  /** @param {number} offset */
+  const positionAt = (offset) => {
+    let remaining = Math.max(0, offset);
+    let line = 0;
+    while (line < lines.length - 1 && remaining > lines[line].length) {
+      remaining -= lines[line].length + 1; // +1 for the '\n'
+      line++;
+    }
+    return new Position(line, remaining);
+  };
   return {
     lineCount: lines.length,
-    getText: () => text,
+    offsetAt,
+    positionAt,
+    /** @param {{ start: { line: number, character: number }, end: { line: number, character: number } }} [range] */
+    getText: (range) => (range ? text.slice(offsetAt(range.start), offsetAt(range.end)) : text),
     /** @param {number} i */
     lineAt: (i) => ({ text: lines[i], range: { start: new Position(i, 0), end: new Position(i, lines[i].length) } }),
-    /** @param {number} offset */
-    positionAt: (offset) => {
-      let remaining = Math.max(0, offset);
-      let line = 0;
-      while (line < lines.length - 1 && remaining > lines[line].length) {
-        remaining -= lines[line].length + 1; // +1 for the '\n'
-        line++;
-      }
-      return new Position(line, remaining);
-    },
   };
 }
 
@@ -235,5 +249,96 @@ describe("computeFoldingRanges", () => {
       [1, 3],
       [0, 4],
     ]);
+  });
+});
+
+// ============================================================
+// buildHoverMarkdown — namespace line
+// ============================================================
+
+describe("buildHoverMarkdown (namespace provenance)", () => {
+  it("adds a **Namespace:** line for an entry that has one", () => {
+    const md = buildHoverMarkdown({
+      name: "Create-Directory",
+      signature: "Create-Directory(Path: <text>)",
+      description: "Creates a subdirectory in an asset directory.",
+      namespace: "ProGet",
+    });
+    assert.match(md.value, /\*\*Namespace:\*\* `ProGet`/);
+  });
+
+  it("omits the line when namespace is null (language construct)", () => {
+    const md = buildHoverMarkdown({ name: "if", description: "Conditional.", namespace: null });
+    assert.doesNotMatch(md.value, /Namespace:/);
+  });
+
+  it("omits the line when namespace is absent", () => {
+    const md = buildHoverMarkdown({ name: "x", description: "y" });
+    assert.doesNotMatch(md.value, /Namespace:/);
+  });
+});
+
+// ============================================================
+// nearestNamespace
+// ============================================================
+
+describe("nearestNamespace", () => {
+  it("returns the canonical casing for a case-only mismatch", () => {
+    assert.equal(nearestNamespace("proget"), "ProGet");
+    assert.equal(nearestNamespace("WINDOWS"), "Windows");
+  });
+
+  it("corrects a small typo (insertion, substitution, transposition)", () => {
+    assert.equal(nearestNamespace("PowerShel"), "PowerShell");
+    assert.equal(nearestNamespace("Windoze"), "Windows");
+    assert.equal(nearestNamespace("Dokcer"), "Docker");
+    assert.equal(nearestNamespace("filez"), "Files");
+  });
+
+  it("returns null for a token that is not a plausible typo of any namespace", () => {
+    assert.equal(nearestNamespace("Frobnicate"), null);
+    assert.equal(nearestNamespace("Xyzzy"), null);
+  });
+});
+
+// ============================================================
+// createUnknownNamespaceFix
+// ============================================================
+
+describe("createUnknownNamespaceFix", () => {
+  /**
+   * @param {string} line
+   * @param {number} start
+   * @param {number} end
+   */
+  const fixFor = (line, start, end) => {
+    const doc = makeDoc(line);
+    const diagnostic = /** @type {any} */ ({
+      range: { start: new Position(0, start), end: new Position(0, end) },
+      code: "unknown-namespace",
+      source: "OtterScript",
+    });
+    return createUnknownNamespaceFix(doc, diagnostic);
+  };
+
+  it("replaces the token with the nearest known namespace", () => {
+    const fix = /** @type {any} */ (fixFor("Windoze::Sign-Exe (SubjectName: x);", 0, 7));
+    assert.ok(fix);
+    assert.equal(fix.title, "Change namespace to 'Windows'");
+    const [op, , range, newText] = fix.edit.edits[0];
+    assert.equal(op, "replace");
+    assert.equal(newText, "Windows");
+    assert.equal(range.start.character, 0);
+    assert.equal(range.end.character, 7);
+  });
+
+  it("fixes a case-only mismatch to canonical casing", () => {
+    const fix = fixFor("proget::Install-Package (Name: x);", 0, 6);
+    assert.ok(fix);
+    assert.equal(fix.title, "Change namespace to 'ProGet'");
+  });
+
+  it("returns null when nothing is close enough to suggest", () => {
+    assert.equal(fixFor("Frobnicate::Do-Thing x;", 0, 10), null);
   });
 });

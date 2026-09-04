@@ -600,11 +600,12 @@ function isInStringOrCommentDoc(document, position) {
  * This creates the formatted tooltip content shown when hovering over
  * symbols, keywords, operations, and syntax elements.
  *
- * @param {Readonly<{ name: string, signature?: string, description?: string, documentation?: string }>} doc
+ * @param {Readonly<{ name: string, signature?: string, description?: string, documentation?: string, namespace?: string | null }>} doc
  *   - name: Required - Display name (e.g., "$ToJson")
  *   - signature: Optional - Function signature (monospace formatted)
  *   - description: Optional - Short description
  *   - documentation: Optional - Extended Markdown documentation
+ *   - namespace: Optional - Owning OtterScript namespace (shown as provenance)
  * @param {boolean} [isTrusted=false] - Set true to allow command URIs in Markdown.
  * Currently unused; reserved for future use.
  * @returns {vscode.MarkdownString} - Formatted hover content
@@ -626,6 +627,12 @@ function buildHoverMarkdown(doc, isTrusted = false) {
   // Signature (monospace for code clarity)
   if (doc.signature) {
     md.appendMarkdown(`**Signature:** \`${doc.signature}\`\n\n`);
+  }
+
+  // Namespace provenance -- the extension/namespace this construct belongs to.
+  // Omitted for pure language constructs (keywords, syntax, Log-*) where it is null.
+  if (doc.namespace) {
+    md.appendMarkdown(`**Namespace:** \`${doc.namespace}\`\n\n`);
   }
 
   // Short description
@@ -977,6 +984,74 @@ function createForToForeachFix(document, diagnostic) {
 }
 
 /**
+ * Levenshtein edit distance between two short strings.
+ *
+ * @param {string} a
+ * @param {string} b
+ * @returns {number}
+ * @private
+ */
+function editDistance(a, b) {
+  const rows = a.length + 1;
+  const cols = b.length + 1;
+  /** @type {number[]} */
+  let prev = Array.from({ length: cols }, (_, i) => i);
+  for (let i = 1; i < rows; i++) {
+    const curr = [i];
+    for (let j = 1; j < cols; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
+    }
+    prev = curr;
+  }
+  return prev[cols - 1];
+}
+
+/**
+ * Picks the closest known namespace to `token`: an exact case-insensitive match
+ * wins (canonical casing), otherwise the smallest edit distance within a small
+ * threshold. Returns null when nothing is close enough to suggest.
+ *
+ * @param {string} token - The unrecognised namespace as written
+ * @returns {string | null}
+ */
+function nearestNamespace(token) {
+  const lower = token.toLowerCase();
+  /** @type {string | null} */
+  let best = null;
+  let bestDistance = Infinity;
+  for (const known of NAMESPACES) {
+    if (known.toLowerCase() === lower) return known;
+    const d = editDistance(lower, known.toLowerCase());
+    if (d < bestDistance) {
+      bestDistance = d;
+      best = known;
+    }
+  }
+  // Only suggest when it is a plausible typo, not an unrelated word.
+  return bestDistance <= Math.max(2, Math.ceil(token.length / 3)) ? best : null;
+}
+
+/**
+ * Creates a quick-fix that replaces an unknown namespace token with the closest
+ * known one (`Frobnicate::Op` -> `Firewall::Op`, `proget::Op` -> `ProGet::Op`).
+ *
+ * @param {vscode.TextDocument} document - The document containing the diagnostic
+ * @param {vscode.Diagnostic} diagnostic - The unknown-namespace diagnostic; its
+ *   range covers exactly the namespace token (no `::`)
+ * @returns {vscode.CodeAction | null} Code action, or null when nothing is close
+ */
+function createUnknownNamespaceFix(document, diagnostic) {
+  const token = document.getText(diagnostic.range);
+  const suggestion = nearestNamespace(token);
+  if (!suggestion || suggestion === token) return null;
+
+  return createCodeAction(`Change namespace to '${suggestion}'`, diagnostic, (edit) => {
+    edit.replace(document.uri, diagnostic.range, suggestion);
+  });
+}
+
+/**
  * Creates a diagnostic for unbalanced symbols.
  * @param {number} count - Current count (positive = unclosed, negative = extra closing)
  * @param {number} lastPos - Position of last unmatched symbol
@@ -1157,6 +1232,8 @@ module.exports = {
   createInvalidOperatorFix,
   createAssignmentInConditionFix,
   createForToForeachFix,
+  createUnknownNamespaceFix,
+  nearestNamespace,
 
   // -- Module navigation
   MODULE_NAME_TOKEN_REGEX,
