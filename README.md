@@ -14,10 +14,11 @@ This extension started as a learning project while implementing [custom webhook 
 
 - Syntax highlighting for OtterScript constructs, including namespaced operations (`ProGet::`, `Otter::`, `InedoCore::`)
 - Hover documentation, auto-completion, and signature help for built-in functions, operations, variables, and map/vector expressions
-- Diagnostics for common mistakes (missing `$`, unknown functions, invalid operators, `=` used in `if` conditions, duplicate map keys)
+- Diagnostics for common mistakes (missing `$`, unknown functions, invalid operators, `=` used in `if` conditions, duplicate map keys, unknown `Namespace::` prefixes)
 - Quick‑fix code actions, plus a **Fix All Issues** command (`Ctrl+Shift+Alt+F`) that applies every available fix in the file
 - Go to Definition (F12) and Find All References (Shift+F12) for document-local module calls
 - Outline and breadcrumbs via document symbols
+- Go to Symbol in Workspace (`Ctrl+T`) — jump to any `module` declaration across all OtterScript files
 - CodeLens reference counts above module declarations
 - Code folding via `#region` / `#endregion` and block structure
 - Code snippets for common patterns
@@ -64,6 +65,7 @@ All features are enabled by default and can be toggled individually:
 - `otterscript.signatureHelp.enable` — signature help for functions and operations
 - `otterscript.hover.enable` — hover information for functions and operations
 - `otterscript.codeLens.enable` — CodeLens reference counts above module declarations
+- `otterscript.workspaceSymbols.enable` — index module declarations for "Go to Symbol in Workspace" (`Ctrl+T`)
 
 ## Language Support Coverage
 

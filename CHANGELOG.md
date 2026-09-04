@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.3.0] - 2026-09-04
+
+### Added
+
+- Namespace metadata for every built-in operation and function whose owning extension could be verified against the Inedo source; the namespace now shows on hover
+- Signature help shows operations in their qualified `Namespace::Operation` form
+- `unknown-namespace` diagnostic for a `Namespace::` qualifier that is not a known OtterScript namespace, with a quick-fix to the closest match; a missing prefix is never flagged (it is optional)
+- Workspace symbol provider — `Ctrl+T` ("Go to Symbol in Workspace") lists every `module` declaration across all `.otter`/`.oscript` files, backed by an index kept fresh with a file-system watcher and from open documents
+- `otterscript.workspaceSymbols.enable` setting (default `true`)
+- Unit test suite (`node:test`), run by `npm test` and as a blocking step in the Sanity CI workflow; `npm run check` now runs it as well
+- `.vscode/launch.json` so F5 opens this repo as the Extension Development Host workspace
+
+### Changed
+
+- Namespace values in `src/language-data.js` are validated against a fixed allowlist by `validateDocs` and the `check:lang` gate
+- Extracted the vscode-free text-scanning primitives into `src/scanner.js` so they can be unit tested without a VS Code stub
+- Added `@types/node` to devDependencies (for the test suite)
+
+### Fixed
+
+- The "unknown operation" diagnostic no longer also fires on the operation half of a `Namespace::Operation` when the namespace itself is unknown
+
 ## [0.2.6] - 2026-09-02
 
 ### Added
