@@ -1,0 +1,13 @@
+{
+  "extends": "./jsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "maxNodeModuleJsDepth": 0
+  },
+  "include": [
+    "test/**/*.js"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}
