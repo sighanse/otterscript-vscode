@@ -32,6 +32,10 @@ const {
   isModuleCallContext,
 } = require("./scanner");
 
+// Namespace allowlist — the single source of truth lives with the data it
+// describes. Plain data module, no vscode dependency.
+const { NAMESPACES } = require("./language-data");
+
 // ============================================================
 // CONFIGURATION
 // ============================================================
@@ -240,11 +244,15 @@ function validateDocs(label, docsTable) {
       errors.push(`${label}.${key} is missing required 'description'`);
     }
 
-    // Required Field: 'namespace' (present, but null is allowed)
+    // Required Field: 'namespace' — must be present and either null or one of
+    // the known OtterScript namespace tokens (guards against typos / drift).
     if (!("namespace" in doc)) {
       errors.push(`${label}.${key} is missing required 'namespace'`);
-    } else if (doc.namespace !== null && (typeof doc.namespace !== "string" || doc.namespace.trim() === "")) {
-      errors.push(`${label}.${key} 'namespace' must be null or a non-empty string`);
+    } else if (doc.namespace !== null && !NAMESPACES.has(doc.namespace)) {
+      errors.push(
+        `${label}.${key} 'namespace' must be null or one of ` +
+        `${[...NAMESPACES].join(", ")} (got ${JSON.stringify(doc.namespace)})`
+      );
     }
 
     // Optional Field: 'snippet'
