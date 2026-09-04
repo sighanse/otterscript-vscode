@@ -22,7 +22,6 @@ const {
   advanceScanState,
   isInStringOrComment,
   getActiveParameterIndex,
-  stripStrings,
   MODULE_NAME_TOKEN_REGEX,
   MODULE_DECLARATION_REGEX,
   MODULE_CALL_TARGET_REGEX,
@@ -302,32 +301,6 @@ describe("getActiveParameterIndex", () => {
 
   it("handles an escaped quote inside a string without ending it", () => {
     assert.equal(getActiveParameterIndex('"a\\",b", c'), 1);
-  });
-});
-
-// ============================================================
-// stripStrings
-// ============================================================
-
-describe("stripStrings", () => {
-  it("empties a double-quoted string but keeps the quotes", () => {
-    assert.equal(stripStrings('$v = "Hello $name"'), '$v = ""');
-  });
-
-  it("empties a single-quoted string but keeps the quotes", () => {
-    assert.equal(stripStrings("$v = 'Hello $name'"), "$v = ''");
-  });
-
-  it("empties multiple strings on one line", () => {
-    assert.equal(stripStrings('a "one" b "two" c'), 'a "" b "" c');
-  });
-
-  it("handles escaped quotes inside a string", () => {
-    assert.equal(stripStrings('x = "a \\" b"'), 'x = ""');
-  });
-
-  it("leaves string-free lines untouched", () => {
-    assert.equal(stripStrings("set $x = 1 + 2;"), "set $x = 1 + 2;");
   });
 });
 

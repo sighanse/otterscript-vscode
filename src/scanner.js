@@ -8,7 +8,7 @@
  *
  * It owns the single source of truth for how the extension recognises non-code
  * spans — quoted strings, line comments, block comments, and swim-strings — plus
- * the small string helpers and module-name regexes that build on that scan.
+ * the argument-index helper and module-name regexes that build on that scan.
  * Everything here operates on plain strings, numbers, and the {@link CodeScanState}
  * plain object; nothing here constructs a `vscode.*` value.
  *
@@ -384,7 +384,7 @@ function isInStringOrComment(line, position, initialState) {
 }
 
 // ============================================================
-// ARGUMENT / STRING HELPERS
+// ARGUMENT HELPERS
 // ============================================================
 
 /**
@@ -438,34 +438,6 @@ function getActiveParameterIndex(argsText) {
   return activeParam;
 }
 
-/**
- * Replaces quoted string literals in a line with empty placeholders.
- *
- * This is used by diagnostics to avoid flagging symbols inside strings.
- * For example: $var = "Unknown $Function" -> $var = "" (no false positive)
- *
- * Handles:
- *   - Double-quoted strings with escaped characters: "hello \"world\""
- *   - Single-quoted strings with escaped characters: 'hello \'world\''
- *   - Empty strings: "" or ''
- *
- * @param {string} line - The line of code to process
- * @returns {string} The line with string contents removed (quotes preserved)
- *
- * @example
- * stripStrings('$var = "Hello $name"');  // Returns: '$var = ""'
- * stripStrings("$var = 'Hello $name'");  // Returns: '$var = \'\''
- */
-function stripStrings(line) {
-  return line
-    // Double-quoted strings: "anything here" becomes ""
-    // Handles escaped quotes: \", and escaped backslashes: \\
-    .replace(/"([^"\\]|\\.)*"/g, '""')
-    // Single-quoted strings: 'anything here' becomes ''
-    // Handles escaped quotes: \', and escaped backslashes: \\
-    .replace(/'([^'\\]|\\.)*'/g, "''");
-}
-
 // ============================================================
 // EXPORTS
 // ============================================================
@@ -483,9 +455,8 @@ module.exports = {
   // -- String & comment detection
   isInStringOrComment,
 
-  // -- Argument / string helpers
+  // -- Argument helpers
   getActiveParameterIndex,
-  stripStrings,
 
   // -- Module-name regexes & context predicates
   MODULE_NAME_TOKEN_REGEX,

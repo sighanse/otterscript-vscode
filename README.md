@@ -1,5 +1,9 @@
 # OtterScript Language Extension
 
+[![VS Marketplace](https://img.shields.io/badge/VS%20Marketplace-sighanse.otterscript--vscode-007ACC?logo=visualstudiocode&logoColor=white)](https://marketplace.visualstudio.com/items?itemName=sighanse.otterscript-vscode)
+[![Open VSX](https://img.shields.io/open-vsx/v/sighanse/otterscript-vscode?label=Open%20VSX)](https://open-vsx.org/extension/sighanse/otterscript-vscode)
+[![Build](https://github.com/sighanse/otterscript-vscode/actions/workflows/build.yml/badge.svg)](https://github.com/sighanse/otterscript-vscode/actions/workflows/build.yml)
+
 This extension provides syntax highlighting, code snippets, and function support for OtterScript used in Inedo products (Otter, BuildMaster, ProGet).
 
 Not affiliated with or endorsed by [Inedo](https://inedo.com/).

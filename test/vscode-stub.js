@@ -55,6 +55,20 @@ class Range {
   }
 }
 
+class Location {
+  /**
+   * @param {unknown} uri
+   * @param {Range | Position} rangeOrPosition
+   */
+  constructor(uri, rangeOrPosition) {
+    this.uri = uri;
+    this.range =
+      rangeOrPosition instanceof Position
+        ? new Range(rangeOrPosition, rangeOrPosition)
+        : rangeOrPosition;
+  }
+}
+
 /** Mirrors `vscode.DiagnosticSeverity`. */
 const DiagnosticSeverity = Object.freeze({ Error: 0, Warning: 1, Information: 2, Hint: 3 });
 
@@ -174,6 +188,7 @@ const vscode = {
   DiagnosticSeverity,
   FoldingRange,
   FoldingRangeKind,
+  Location,
   MarkdownString,
   CodeAction,
   CodeActionKind,

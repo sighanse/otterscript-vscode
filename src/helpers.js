@@ -24,9 +24,7 @@ const {
   advanceScanState,
   isInStringOrComment,
   getActiveParameterIndex,
-  stripStrings,
   MODULE_NAME_TOKEN_REGEX,
-  MODULE_DECLARATION_REGEX,
   MODULE_CALL_TARGET_GLOBAL_REGEX,
   isModuleDeclarationContext,
   isModuleCallContext,
@@ -424,27 +422,25 @@ function getModuleInfo(document) {
     return { declarations: cached.declarations, refsByName: cached.refsByName };
   }
 
+  // Declarations: reuse the shared pure scanner so the `module <Name>` scan
+  // lives in exactly one place ({@link module:scanner}.findModuleDeclarations).
   /** @type {ModuleDeclaration[]} */
-  const declarations = [];
+  const declarations = findModuleDeclarations(document.getText()).map(hit => ({
+    name: hit.name,
+    range: new vscode.Range(
+      new vscode.Position(hit.line, hit.character),
+      new vscode.Position(hit.line, hit.character + hit.name.length)
+    ),
+    lineRange: document.lineAt(hit.line).range,
+  }));
+
+  // Call references: a second length-preserving masked pass, line by line.
   /** @type {Map<string, vscode.Location[]>} */
   const refsByName = new Map();
   const scanState = createCodeScanState();
 
   for (let line = 0; line < document.lineCount; line++) {
-    const lineText = document.lineAt(line).text;
-    const maskedLineText = maskNonCodeSpans(lineText, scanState);
-
-    const declMatch = MODULE_DECLARATION_REGEX.exec(maskedLineText);
-    if (declMatch) {
-      const name = declMatch[1];
-      const nameStart = maskedLineText.indexOf(name, declMatch.index);
-      const range = new vscode.Range(
-        new vscode.Position(line, nameStart),
-        new vscode.Position(line, nameStart + name.length)
-      );
-
-      declarations.push({ name, range, lineRange: document.lineAt(line).range });
-    }
+    const maskedLineText = maskNonCodeSpans(document.lineAt(line).text, scanState);
 
     MODULE_CALL_TARGET_GLOBAL_REGEX.lastIndex = 0;
     for (const callMatch of maskedLineText.matchAll(MODULE_CALL_TARGET_GLOBAL_REGEX)) {
@@ -1086,10 +1082,10 @@ function createUnbalancedDiagnostic(count, lastPos, openChar, closeChar, name, d
 /**
  * Computes folding ranges for an OtterScript document.
  *
- * Reuses the same CodeScanState/scanLineState masking pass as diagnostics,
- * so folding respects strings, swim-strings, and block comments identically
- * to every other feature in the extension — braces inside a string or a
- * swim-string body are never treated as fold boundaries.
+ * Reuses the same `maskNonCodeSpans` pass as diagnostics, so folding respects
+ * strings, swim-strings, and block comments identically to every other feature
+ * in the extension — braces inside a string or a swim-string body are never
+ * treated as fold boundaries.
  *
  * @param {vscode.TextDocument} document
  * @returns {vscode.FoldingRange[]}
@@ -1217,7 +1213,6 @@ module.exports = {
   isInStringOrComment,
   isInStringOrCommentDoc,
   getActiveParameterIndex,
-  stripStrings,
   checkMissingDollar,
   findDuplicateMapKeyDiagnostics,
   findDuplicateMapKeyDiagnosticsFromMasked,

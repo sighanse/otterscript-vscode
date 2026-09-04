@@ -224,3 +224,23 @@ jobs:
             exit 1
           fi
           echo "unit tests: ok"
+
+      # Lint and type-check are hard failures too: the repo holds src, tests and
+      # scripts to zero ESLint warnings and a clean JSDoc type-check.
+      - name: Enforce ESLint
+        if: always()
+        run: |
+          if [ "${{ steps.eslint.outcome }}" != "success" ]; then
+            echo "::error::ESLint reported problems (see 'ESLint' step)"
+            exit 1
+          fi
+          echo "eslint: ok"
+
+      - name: Enforce JS + JSDoc type check
+        if: always()
+        run: |
+          if [ "${{ steps.jscheck.outcome }}" != "success" ]; then
+            echo "::error::JS + JSDoc type check failed (see 'JS + JSDoc type check' step)"
+            exit 1
+          fi
+          echo "type check: ok"

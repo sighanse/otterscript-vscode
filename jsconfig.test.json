@@ -5,7 +5,8 @@
     "maxNodeModuleJsDepth": 0
   },
   "include": [
-    "test/**/*.js"
+    "test/**/*.js",
+    "scripts/**/*.js"
   ],
   "exclude": [
     "node_modules"

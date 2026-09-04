@@ -1174,24 +1174,34 @@ function activate(context) {
       clearTimerForUri(diagnosticTimers, doc.uri);
     }),
 
-    // -- All providers are registered here for cleanup on deactivation
-    signatureHelpProvider,
+    // -- Providers, commands, and watchers (alphabetical). VS Code disposes
+    //    everything pushed here automatically on deactivation.
+    codeActionsProvider,
+    codeLensProvider,
+    definitionProvider,
+    documentSymbolProvider,
+    fixAllCommand,
+    foldingRangeProvider,
     functionCompletionProvider,
-    variableCompletionProvider,
-    vectorCompletionProvider,
+    hoverProvider,
     mapCompletionProvider,
     operationCompletionProvider,
-    hoverProvider,
-    codeActionsProvider,
-    definitionProvider,
-    referenceProvider,
-    documentSymbolProvider,
-    workspaceSymbolProvider,
     otterFileWatcher,
-    codeLensProvider,
-    fixAllCommand,
+    referenceProvider,
     refreshDiagnosticsCommand,
-    foldingRangeProvider
+    signatureHelpProvider,
+    variableCompletionProvider,
+    vectorCompletionProvider,
+    workspaceSymbolProvider,
+
+    // -- Cancel any pending workspace-index debounce timers on deactivation
+    //    (mirrors the diagnosticTimers cleanup in deactivate()).
+    {
+      dispose() {
+        for (const timer of workspaceIndexTimers.values()) clearTimeout(timer);
+        workspaceIndexTimers.clear();
+      }
+    }
   );
 }
 

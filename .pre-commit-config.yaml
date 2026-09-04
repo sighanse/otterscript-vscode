@@ -53,7 +53,7 @@ repos:
         name: ESLint
         entry: eslint --config eslint.config.cjs
         language: node
-        files: ^src/.*\.[jt]sx?$
+        files: ^(src|test|scripts)/.*\.[jt]sx?$
         additional_dependencies:
           - eslint@10.x
           - globals@17.x

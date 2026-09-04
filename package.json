@@ -166,7 +166,7 @@
     "check:js": "npx -y -p typescript@6.0.3 tsc -p jsconfig.json --noEmit && npx -y -p typescript@6.0.3 tsc -p jsconfig.test.json --noEmit",
     "check:lang": "node scripts/check-language-sync.js",
     "test": "node --test \"test/unit/*.test.js\"",
-    "check": "npm run check:js && npm run check:lang && npm test",
+    "check": "npm run lint:ci && npm run check:js && npm run check:lang && npm test",
     "package": "vsce package --no-yarn",
     "vscode:prepublish": "npm run lint:ci",
     "publish:vsce": "vsce publish",
