@@ -15,7 +15,7 @@ permissions:
 jobs:
   sanity:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
 
     steps:
       - uses: actions/checkout@v7
@@ -63,6 +63,11 @@ jobs:
       - name: Grammar / language-data sync
         id: langsync
         run: npm run check:lang
+        continue-on-error: true
+
+      - name: Unit tests
+        id: tests
+        run: npm test
         continue-on-error: true
 
       - name: npm security audit
@@ -161,6 +166,13 @@ jobs:
             echo "❌ Grammar / language-data sync: drift detected" >> "$GITHUB_STEP_SUMMARY"
           fi
 
+          # Unit tests
+          if [ "${{ steps.tests.outcome }}" == "success" ]; then
+            echo "✅ Unit tests: passed" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ Unit tests: failed" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
           # JSON
           if [ "${{ steps.json.outcome }}" == "success" ]; then
             echo "✅ JSON validation: passed" >> "$GITHUB_STEP_SUMMARY"
@@ -201,3 +213,14 @@ jobs:
             exit 1
           fi
           echo "grammar / language-data sync: ok"
+
+      # Unit tests are a hard failure: they guard the scanner / diagnostics
+      # logic that has repeatedly regressed, so block the PR on a red suite.
+      - name: Enforce unit tests
+        if: always()
+        run: |
+          if [ "${{ steps.tests.outcome }}" != "success" ]; then
+            echo "::error::unit tests failed (see 'Unit tests' step)"
+            exit 1
+          fi
+          echo "unit tests: ok"
