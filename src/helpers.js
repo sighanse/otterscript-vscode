@@ -1,14 +1,36 @@
 // @ts-check
 /**
- * @fileoverview Pure helper functions for OtterScript language extension.
+ * @fileoverview VS Code-facing helper functions for the OtterScript extension.
+ *
+ * The `vscode`-free text scanning primitives (non-code masking, string/comment
+ * detection, argument parsing, module-name regexes) live in {@link module:scanner}
+ * and are re-exported from here so existing `require("./helpers")` callers keep
+ * working. Everything defined directly in this file may touch the `vscode` API.
  *
  * Dependencies:
  * - vscode (required for OutputChannel, CompletionItem, etc.)
+ * - ./scanner (pure text primitives)
  *
  * @module helpers
  */
 
 const vscode = require("vscode");
+
+// Pure text-scanning primitives. Imported for internal use below and re-exported
+// from this module's `module.exports` for backward compatibility.
+const {
+  createCodeScanState,
+  maskNonCodeSpans,
+  advanceScanState,
+  isInStringOrComment,
+  getActiveParameterIndex,
+  stripStrings,
+  MODULE_NAME_TOKEN_REGEX,
+  MODULE_DECLARATION_REGEX,
+  MODULE_CALL_TARGET_GLOBAL_REGEX,
+  isModuleDeclarationContext,
+  isModuleCallContext,
+} = require("./scanner");
 
 // ============================================================
 // CONFIGURATION
@@ -347,20 +369,6 @@ function createRegexPatterns(knownOperations) {
 }
 
 /**
- * Token regex for module names used by word-range lookups.
- *
- * @readonly
- * @type {RegExp}
- */
-const MODULE_NAME_TOKEN_REGEX = /[A-Za-z][\w-]*/;
-
-const MODULE_DECLARATION_REGEX = /^\s*module\s+([A-Za-z][\w-]*)/;
-const MODULE_CALL_TARGET_REGEX = /\bcall\s+(?:[A-Za-z][\w-]*::)?([A-Za-z][\w-]*)\b/;
-const MODULE_CALL_TARGET_GLOBAL_REGEX = new RegExp(MODULE_CALL_TARGET_REGEX.source, "g");
-const MODULE_DECL_PREFIX_REGEX = /^\s*module\s+$/i;
-const MODULE_CALL_PREFIX_REGEX = /\bcall\s+(?:[A-Za-z][\w-]*::)?$/i;
-
-/**
  * @typedef {{ name: string, range: vscode.Range, lineRange: vscode.Range }} ModuleDeclaration
  */
 
@@ -376,52 +384,11 @@ const MODULE_CALL_PREFIX_REGEX = /\bcall\s+(?:[A-Za-z][\w-]*::)?$/i;
 const moduleInfoCache = new Map();
 
 /**
- * @typedef {{
- *   inString: boolean,
- *   quote: string | null,
- *   inBlockComment: boolean,
- *   swimDelimiter: string | null
- * }} CodeScanState
- */
-
-/**
- * Returns true when a quote at the given index is not escaped.
+ * Carried scanning state for cross-line constructs. Defined in {@link module:scanner};
+ * aliased here so JSDoc in this file can refer to it.
  *
- * @param {string} text
- * @param {number} index
- * @returns {boolean}
+ * @typedef {import("./scanner").CodeScanState} CodeScanState
  */
-function isUnescapedQuoteAt(text, index) {
-  let backslashCount = 0;
-  for (let i = index - 1; i >= 0 && text[i] === "\\"; i--) {
-    backslashCount++;
-  }
-  return backslashCount % 2 === 0;
-}
-
-/**
- * Returns true when the current word position is in a module declaration context.
- *
- * @param {string} lineText - Full source line text
- * @param {number} wordStart - Start index of the current word
- * @returns {boolean}
- */
-function isModuleDeclarationContext(lineText, wordStart) {
-  const beforeWord = lineText.slice(0, wordStart);
-  return MODULE_DECL_PREFIX_REGEX.test(beforeWord);
-}
-
-/**
- * Returns true when the current word position is in a module call context.
- *
- * @param {string} lineText - Full source line text
- * @param {number} wordStart - Start index of the current word
- * @returns {boolean}
- */
-function isModuleCallContext(lineText, wordStart) {
-  const beforeWord = lineText.slice(0, wordStart);
-  return MODULE_CALL_PREFIX_REGEX.test(beforeWord);
-}
 
 /**
  * Scans a document and returns all module declarations.
@@ -431,130 +398,6 @@ function isModuleCallContext(lineText, wordStart) {
  */
 function getModuleDeclarations(document) {
   return getModuleInfo(document).declarations;
-}
-
-/**
- * Creates a fresh code-scan state object.
- *
- * @returns {CodeScanState}
- */
-function createCodeScanState() {
-  return {
-    inString: false,
-    quote: null,
-    inBlockComment: false,
-    swimDelimiter: null,
-  };
-}
-
-/**
- * Core line scanner shared by {@link maskNonCodeSpans} and {@link advanceScanState}.
- *
- * Advances `state` by processing every character of `lineText`.  When `chars`
- * is non-null it is treated as a split-string output buffer: every character
- * that belongs to a non-code span is replaced with a space in that buffer.
- *
- * @param {string} lineText
- * @param {CodeScanState} state - Mutated in place.
- * @param {string[] | null} chars - Output buffer, or null for state-only mode.
- * @returns {void}
- * @private
- */
-function scanLineState(lineText, state, chars) {
-  for (let i = 0; i < lineText.length; i++) {
-    const ch = lineText[i];
-
-    if (state.inBlockComment) {
-      if (chars) chars[i] = " ";
-      if (ch === "*" && lineText[i + 1] === "/") {
-        if (chars) chars[i + 1] = " ";
-        state.inBlockComment = false;
-        i++;
-      }
-      continue;
-    }
-
-    if (state.swimDelimiter) {
-      if (chars) chars[i] = " ";
-      if (lineText.startsWith(state.swimDelimiter, i)) {
-        if (chars) {
-          for (let j = 0; j < state.swimDelimiter.length; j++) {
-            if (i + j < chars.length) chars[i + j] = " ";
-          }
-        }
-        i += state.swimDelimiter.length - 1;
-        state.swimDelimiter = null;
-      }
-      continue;
-    }
-
-    if (state.inString) {
-      if (chars) chars[i] = " ";
-      if (ch === state.quote && isUnescapedQuoteAt(lineText, i)) {
-        state.inString = false;
-        state.quote = null;
-      }
-      continue;
-    }
-
-    if (ch === "/" && lineText[i + 1] === "*") {
-      if (chars) {
-        chars[i] = " ";
-        if (i + 1 < chars.length) chars[i + 1] = " ";
-      }
-      state.inBlockComment = true;
-      i++;
-      continue;
-    }
-
-    if (ch === ">") {
-      const swimMatch = lineText.slice(i).match(/^>[^>]{0,5}>/);
-      if (swimMatch) {
-        const delimiter = swimMatch[0];
-        if (chars) {
-          for (let j = 0; j < delimiter.length; j++) {
-            if (i + j < chars.length) chars[i + j] = " ";
-          }
-        }
-        state.swimDelimiter = delimiter;
-        i += delimiter.length - 1;
-        continue;
-      }
-    }
-
-    if (ch === '"' || ch === "'") {
-      if (chars) chars[i] = " ";
-      state.inString = true;
-      state.quote = ch;
-      continue;
-    }
-
-    if (ch === "#") {
-      if (chars) { for (let j = i; j < chars.length; j++) chars[j] = " "; }
-      break;
-    }
-
-    if (ch === "/" && lineText[i + 1] === "/") {
-      if (chars) { for (let j = i; j < chars.length; j++) chars[j] = " "; }
-      break;
-    }
-  }
-}
-
-/**
- * Produces a length-preserving mask of non-code spans.
- *
- * Masked spans include strings, line comments, block comments, and swim-strings.
- * State is carried across lines for block comments, strings, and swim-strings.
- *
- * @param {string} lineText
- * @param {CodeScanState} state
- * @returns {string}
- */
-function maskNonCodeSpans(lineText, state) {
-  const chars = lineText.split("");
-  scanLineState(lineText, state, chars);
-  return chars.join("");
 }
 
 /**
@@ -709,108 +552,6 @@ function findModuleReferences(document, moduleName, includeDeclaration) {
 // ============================================================
 
 /**
- * Returns true if the given position is inside non-code text on the line.
- *
- * This includes quoted strings, line comments, block comments, and
- * swim-string spans that are detectable from the current line prefix.
- *
- * **Cross-line accuracy:** For block comments and swim-strings that span
- * multiple lines, pass a `CodeScanState` pre-seeded by scanning all preceding
- * lines via {@link maskNonCodeSpans}.  Without it, this function only detects
- * spans that opened on the same line as `position`.
- *
- * @param {string} line - The full line of text
- * @param {number} position - Character position within the line (0-indexed)
- * @param {CodeScanState} [initialState] - Optional scan state carried in from
- *   previous lines.  A shallow copy is taken so the caller's object is not
- *   mutated.  Defaults to a fresh state when omitted.
- * @returns {boolean} true if position is inside string/comment, false otherwise
- * @example
- * isInStringOrComment('if $x == 5', 5);        // false (code)
- * isInStringOrComment('# comment', 2);        // true (comment)
- * isInStringOrComment('"hello"', 3);          // true (inside string)
- *
- */
-function isInStringOrComment(line, position, initialState) {
-  const limit = Math.max(0, Math.min(position, line.length));
-  // Shallow-copy so callers that pass a carried state are not mutated.
-  const scanState = initialState ? { ...initialState } : createCodeScanState();
-
-  for (let i = 0; i < limit; i++) {
-    const ch = line[i];
-
-    if (scanState.inBlockComment) {
-      if (ch === "*" && line[i + 1] === "/") {
-        scanState.inBlockComment = false;
-        i++;
-      }
-      continue;
-    }
-
-    if (scanState.swimDelimiter) {
-      if (line.startsWith(scanState.swimDelimiter, i)) {
-        i += scanState.swimDelimiter.length - 1;
-        scanState.swimDelimiter = null;
-      }
-      continue;
-    }
-
-    if (scanState.inString) {
-      if (ch === scanState.quote && isUnescapedQuoteAt(line, i)) {
-        scanState.inString = false;
-        scanState.quote = null;
-      }
-      continue;
-    }
-
-    if (ch === "/" && line[i + 1] === "*") {
-      scanState.inBlockComment = true;
-      i++;
-      continue;
-    }
-
-    if (ch === ">") {
-      const swimMatch = line.slice(i).match(/^>[^>]{0,5}>/);
-      if (swimMatch) {
-        scanState.swimDelimiter = swimMatch[0];
-        i += scanState.swimDelimiter.length - 1;
-        continue;
-      }
-    }
-
-    if (ch === '"' || ch === "'") {
-      scanState.inString = true;
-      scanState.quote = ch;
-      continue;
-    }
-
-    if (ch === "#" || (ch === "/" && line[i + 1] === "/")) {
-      return true;
-    }
-  }
-
-  return scanState.inString || scanState.inBlockComment || scanState.swimDelimiter !== null;
-}
-
-/**
- * Advances a {@link CodeScanState} by processing one line of text without
- * producing any output string.
- *
- * This is the state-only sibling of {@link maskNonCodeSpans}.  Use it when
- * you need to accumulate cross-line comment/string state for lines whose
- * masked text is not required (e.g. the preceding-line scan in
- * {@link isInStringOrCommentDoc}).  Avoids the `split`/`join` allocation that
- * `maskNonCodeSpans` performs on every line.
- *
- * @param {string} lineText
- * @param {CodeScanState} state - Mutated in place.
- * @returns {void}
- */
-function advanceScanState(lineText, state) {
-  scanLineState(lineText, state, null);
-}
-
-/**
  * Document-aware version of {@link isInStringOrComment}.
  *
  * Scans from the beginning of the document with carried {@link CodeScanState}
@@ -839,85 +580,6 @@ function isInStringOrCommentDoc(document, position) {
     position.character,
     state
   );
-}
-
-/**
- * Counts the active parameter index from a partial argument string.
- *
- * The input should be the text between an opening `(` and the cursor.
- * Commas are only counted at top level (not inside nested (), [], {}, or strings).
- *
- * @param {string} argsText - Partial argument text from opening `(` to cursor
- * @returns {number} Zero-based active parameter index
- */
-function getActiveParameterIndex(argsText) {
-  let activeParam = 0;
-  let inString = false;
-  let quote = null;
-  let parenDepth = 0;
-  let bracketDepth = 0;
-  let curlyDepth = 0;
-
-  for (let i = 0; i < argsText.length; i++) {
-    const ch = argsText[i];
-
-    if ((ch === '"' || ch === "'") && !inString) {
-      inString = true;
-      quote = ch;
-      continue;
-    }
-
-    if (inString && ch === quote) {
-      if (isUnescapedQuoteAt(argsText, i)) {
-        inString = false;
-        quote = null;
-      }
-      continue;
-    }
-
-    if (inString) continue;
-
-    if (ch === "(") parenDepth++;
-    if (ch === ")") parenDepth--;
-    if (ch === "[") bracketDepth++;
-    if (ch === "]") bracketDepth--;
-    if (ch === "{") curlyDepth++;
-    if (ch === "}") curlyDepth--;
-
-    if (ch === "," && parenDepth === 0 && bracketDepth === 0 && curlyDepth === 0) {
-      activeParam++;
-    }
-  }
-
-  return activeParam;
-}
-
-/**
- * Replaces quoted string literals in a line with empty placeholders.
- *
- * This is used by diagnostics to avoid flagging symbols inside strings.
- * For example: $var = "Unknown $Function" -> $var = "" (no false positive)
- *
- * Handles:
- *   - Double-quoted strings with escaped characters: "hello \"world\""
- *   - Single-quoted strings with escaped characters: 'hello \'world\''
- *   - Empty strings: "" or ''
- *
- * @param {string} line - The line of code to process
- * @returns {string} The line with string contents removed (quotes preserved)
- *
- * @example
- * stripStrings('$var = "Hello $name"');  // Returns: '$var = ""'
- * stripStrings("$var = 'Hello $name'");  // Returns: '$var = \'\''
- */
-function stripStrings(line) {
-  return line
-    // Double-quoted strings: "anything here" becomes ""
-    // Handles escaped quotes: \", and escaped backslashes: \\
-    .replace(/"([^"\\]|\\.)*"/g, '""')
-    // Single-quoted strings: 'anything here' becomes ''
-    // Handles escaped quotes: \', and escaped backslashes: \\
-    .replace(/'([^'\\]|\\.)*'/g, "''");
 }
 
 // ============================================================
