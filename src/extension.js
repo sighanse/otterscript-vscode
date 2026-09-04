@@ -49,6 +49,7 @@ const {
   getModuleDeclarations,
   getModuleCallReferencesByName,
   findModuleDeclarationRange,
+  findModuleDeclarations,
   findModuleReferences,
   isModuleCallContext,
   isModuleDeclarationContext,
@@ -83,16 +84,16 @@ function activate(context) {
   log.info(`${extensionName} v${version} activated`);
 
   // -- Load initial configuration
-  let { completionEnabled, hoverEnabled, signatureHelpEnabled, codeLensEnabled } = loadConfig();
-  log.info(`Settings loaded: completion=${completionEnabled}, hover=${hoverEnabled}, signatureHelp=${signatureHelpEnabled}, codeLens=${codeLensEnabled}`);
+  let { completionEnabled, hoverEnabled, signatureHelpEnabled, codeLensEnabled, workspaceSymbolsEnabled } = loadConfig();
+  log.info(`Settings loaded: completion=${completionEnabled}, hover=${hoverEnabled}, signatureHelp=${signatureHelpEnabled}, codeLens=${codeLensEnabled}, workspaceSymbols=${workspaceSymbolsEnabled}`);
 
   // -- Watch for settings changes while extension is running
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
       // -- Only reload if OtterScript settings changed
       if (e.affectsConfiguration("otterscript")) {
-        ({ completionEnabled, hoverEnabled, signatureHelpEnabled, codeLensEnabled } = loadConfig());
-        log.info(`Settings reloaded: completion=${completionEnabled}, hover=${hoverEnabled}, signatureHelp=${signatureHelpEnabled}, codeLens=${codeLensEnabled}`);
+        ({ completionEnabled, hoverEnabled, signatureHelpEnabled, codeLensEnabled, workspaceSymbolsEnabled } = loadConfig());
+        log.info(`Settings reloaded: completion=${completionEnabled}, hover=${hoverEnabled}, signatureHelp=${signatureHelpEnabled}, codeLens=${codeLensEnabled}, workspaceSymbols=${workspaceSymbolsEnabled}`);
       }
     })
   );
@@ -901,6 +902,131 @@ function activate(context) {
   );
 
   // ============================================================
+  // WORKSPACE SYMBOL PROVIDER (module declarations across files)
+  // ============================================================
+  // Powers "Go to Symbol in Workspace" (Ctrl+T): every `module` declaration in
+  // every .otter/.oscript file in the workspace. Backed by an on-disk index
+  // (re)built on activation and kept fresh by a file-system watcher. The open
+  // editor's live/unsaved view is still served by the document symbol provider.
+
+  const OTTER_FILE_GLOB = "**/*.{otter,oscript}";
+
+  /**
+   * @typedef {{ uri: vscode.Uri, symbols: { name: string, range: vscode.Range }[] }} ModuleIndexEntry
+   */
+  /** @type {Map<string, ModuleIndexEntry>} keyed by uri.toString() */
+  const workspaceModuleIndex = new Map();
+  /** @type {Map<string, ReturnType<typeof setTimeout>>} */
+  const workspaceIndexTimers = new Map();
+
+  /**
+   * Applies (or clears, when it declares no modules) one file's module-index
+   * entry from its text.
+   *
+   * @param {vscode.Uri} uri
+   * @param {string} text
+   * @returns {void}
+   */
+  function setModuleIndexEntry(uri, text) {
+    const symbols = findModuleDeclarations(text).map(hit => ({
+      name: hit.name,
+      range: new vscode.Range(
+        hit.line, hit.character, hit.line, hit.character + hit.name.length
+      ),
+    }));
+
+    if (symbols.length > 0) {
+      workspaceModuleIndex.set(uri.toString(), { uri, symbols });
+    } else {
+      workspaceModuleIndex.delete(uri.toString());
+    }
+  }
+
+  /**
+   * Reads one file from disk and refreshes (or removes) its module-index entry.
+   *
+   * @param {vscode.Uri} uri
+   * @returns {Promise<void>}
+   */
+  async function indexModuleFile(uri) {
+    try {
+      const bytes = await vscode.workspace.fs.readFile(uri);
+      setModuleIndexEntry(uri, new TextDecoder("utf-8").decode(bytes));
+    } catch {
+      // Gone or unreadable -- drop it.
+      workspaceModuleIndex.delete(uri.toString());
+    }
+  }
+
+  /**
+   * Rescans every OtterScript file in the workspace from scratch.
+   *
+   * @returns {Promise<void>}
+   */
+  async function rebuildWorkspaceModuleIndex() {
+    workspaceModuleIndex.clear();
+    const files = await vscode.workspace.findFiles(OTTER_FILE_GLOB, undefined, 5000);
+    await Promise.all(files.map(indexModuleFile));
+
+    // Also cover already-open OtterScript documents. This is what makes the
+    // provider work for loose files and for a window with no folder open, where
+    // findFiles returns nothing.
+    for (const doc of vscode.workspace.textDocuments) {
+      if (doc.languageId === "otterscript") setModuleIndexEntry(doc.uri, doc.getText());
+    }
+
+    const moduleCount = [...workspaceModuleIndex.values()].reduce((n, e) => n + e.symbols.length, 0);
+    log.info(
+      `Workspace module index: ${moduleCount} module(s) in ${workspaceModuleIndex.size} file(s) ` +
+      `(${files.length} on disk)`
+    );
+  }
+
+  // Kick off the initial scan; the provider awaits this so the first Ctrl+T
+  // after activation returns a complete result.
+  const workspaceIndexReady = rebuildWorkspaceModuleIndex().catch(err => {
+    log.error("Failed to build workspace module index", err);
+  });
+
+  const workspaceSymbolProvider = vscode.languages.registerWorkspaceSymbolProvider({
+    /**
+     * @param {string} query
+     * @returns {Promise<vscode.SymbolInformation[]>}
+     */
+    async provideWorkspaceSymbols(query) {
+      if (!workspaceSymbolsEnabled) return [];
+      await workspaceIndexReady;
+
+      const needle = query.toLowerCase();
+      /** @type {vscode.SymbolInformation[]} */
+      const results = [];
+      for (const { uri, symbols } of workspaceModuleIndex.values()) {
+        for (const { name, range } of symbols) {
+          if (needle && !name.toLowerCase().includes(needle)) continue;
+          results.push(new vscode.SymbolInformation(
+            name,
+            vscode.SymbolKind.Module,
+            "",
+            new vscode.Location(uri, range)
+          ));
+        }
+      }
+      return results;
+    }
+  });
+
+  const otterFileWatcher = vscode.workspace.createFileSystemWatcher(OTTER_FILE_GLOB);
+  otterFileWatcher.onDidCreate(uri => { void indexModuleFile(uri); });
+  otterFileWatcher.onDidDelete(uri => {
+    workspaceModuleIndex.delete(uri.toString());
+    clearTimerForUri(workspaceIndexTimers, uri);
+  });
+  otterFileWatcher.onDidChange(uri => {
+    // Debounced -- a save can arrive alongside editor change events.
+    scheduleTimerForUri(workspaceIndexTimers, uri, 400, () => { void indexModuleFile(uri); });
+  });
+
+  // ============================================================
   // CODE LENS PROVIDER (Module References)
   // ============================================================
   // Shows reference counts above module declarations and links to
@@ -1026,7 +1152,10 @@ function activate(context) {
       });
     }),
     // -- Run diagnostics when a new file is opened (handles files opened after activation)
-    vscode.workspace.onDidOpenTextDocument(document => updateDiagnostics(document, diagnostics, diagnosticsContext)),
+    vscode.workspace.onDidOpenTextDocument(document => {
+      updateDiagnostics(document, diagnostics, diagnosticsContext);
+      if (document.languageId === "otterscript") setModuleIndexEntry(document.uri, document.getText());
+    }),
 
     // -- Re-run diagnostics on save. The onDidChangeTextDocument handler above is
     // debounced, so this gives an immediate refresh on explicit/auto save and covers
@@ -1034,6 +1163,7 @@ function activate(context) {
     vscode.workspace.onDidSaveTextDocument(document => {
       if (document.languageId === "otterscript") {
         updateDiagnostics(document, diagnostics, diagnosticsContext);
+        setModuleIndexEntry(document.uri, document.getText());
       }
     }),
 
@@ -1056,6 +1186,8 @@ function activate(context) {
     definitionProvider,
     referenceProvider,
     documentSymbolProvider,
+    workspaceSymbolProvider,
+    otterFileWatcher,
     codeLensProvider,
     fixAllCommand,
     refreshDiagnosticsCommand,

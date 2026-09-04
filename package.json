@@ -101,6 +101,11 @@
           "type": "boolean",
           "default": true,
           "description": "Enable CodeLens reference counts above module declarations"
+        },
+        "otterscript.workspaceSymbols.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Index module declarations across .otter/.oscript files for 'Go to Symbol in Workspace' (Ctrl+T)"
         }
       }
     },

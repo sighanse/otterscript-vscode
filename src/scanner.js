@@ -257,6 +257,44 @@ function advanceScanState(lineText, state) {
   scanLineState(lineText, state, null);
 }
 
+/**
+ * @typedef {{ name: string, line: number, character: number }} ModuleDeclarationHit
+ *   `line` and `character` are 0-based; `character` is the column where the
+ *   module name starts.
+ */
+
+/**
+ * Finds every `module <Name>` declaration in a whole source string, ignoring
+ * matches inside strings, comments, and swim-strings. At most one declaration is
+ * reported per line (the grammar allows only one). Line endings may be LF or
+ * CRLF -- suitable for scanning raw file contents read from disk.
+ *
+ * Pure counterpart of the declaration scan in `helpers.getModuleInfo`, for
+ * callers (e.g. a workspace-symbol index) that only have text and want plain
+ * data rather than `vscode` ranges.
+ *
+ * @param {string} text - Full document / file text
+ * @returns {ModuleDeclarationHit[]}
+ */
+function findModuleDeclarations(text) {
+  const state = createCodeScanState();
+  /** @type {ModuleDeclarationHit[]} */
+  const hits = [];
+  const lines = text.split(/\r?\n/);
+
+  for (let line = 0; line < lines.length; line++) {
+    const masked = maskNonCodeSpans(lines[line], state);
+    const match = MODULE_DECLARATION_REGEX.exec(masked);
+    if (match) {
+      const name = match[1];
+      const character = masked.indexOf(name, match.index);
+      hits.push({ name, line, character });
+    }
+  }
+
+  return hits;
+}
+
 // ============================================================
 // STRING & COMMENT DETECTION
 // ============================================================
@@ -458,4 +496,5 @@ module.exports = {
   MODULE_CALL_PREFIX_REGEX,
   isModuleDeclarationContext,
   isModuleCallContext,
+  findModuleDeclarations,
 };

@@ -29,6 +29,7 @@ const {
   MODULE_CALL_TARGET_GLOBAL_REGEX,
   isModuleDeclarationContext,
   isModuleCallContext,
+  findModuleDeclarations,
 } = require("../../src/scanner.js");
 
 // ============================================================
@@ -387,5 +388,58 @@ describe("isModuleCallContext", () => {
   it("is false mid-identifier", () => {
     const line = "call Dep";
     assert.equal(isModuleCallContext(line, line.length), false);
+  });
+});
+
+// ============================================================
+// findModuleDeclarations
+// ============================================================
+
+describe("findModuleDeclarations", () => {
+  it("finds every module declaration with its 0-based line and column", () => {
+    const text = [
+      "Log-Information 'start';",
+      "module DeployApp {",
+      "  call Helper;",
+      "}",
+      "  module  Indented-One <out $x=\"\"> {",
+      "}",
+    ].join("\n");
+    assert.deepEqual(findModuleDeclarations(text), [
+      { name: "DeployApp", line: 1, character: 7 },
+      { name: "Indented-One", line: 4, character: 10 },
+    ]);
+  });
+
+  it("returns an empty array when there are no declarations", () => {
+    assert.deepEqual(findModuleDeclarations("call DeployApp;\nLog-Error 'x';"), []);
+  });
+
+  it("handles CRLF line endings (raw file reads)", () => {
+    const hits = findModuleDeclarations("module A {\r\n}\r\nmodule B {\r\n}\r\n");
+    assert.deepEqual(hits.map((h) => [h.name, h.line]), [["A", 0], ["B", 2]]);
+  });
+
+  it("ignores 'module' text inside strings, comments and swim-strings", () => {
+    const text = [
+      "$s = \"module NotReal\";",
+      "# module AlsoNotReal",
+      "/* module StillNo",
+      "   module NopeEither */",
+      "$doc = >>module InSwim>>;",
+      "module TheRealOne {",
+    ].join("\n");
+    assert.deepEqual(findModuleDeclarations(text), [
+      { name: "TheRealOne", line: 5, character: 7 },
+    ]);
+  });
+
+  it("reports at most one declaration per line", () => {
+    const hits = findModuleDeclarations("module First module Second");
+    assert.deepEqual(hits, [{ name: "First", line: 0, character: 7 }]);
+  });
+
+  it("does not match a bare 'module' keyword with no name", () => {
+    assert.deepEqual(findModuleDeclarations("module\nmodule "), []);
   });
 });

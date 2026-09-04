@@ -30,6 +30,7 @@ const {
   MODULE_CALL_TARGET_GLOBAL_REGEX,
   isModuleDeclarationContext,
   isModuleCallContext,
+  findModuleDeclarations,
 } = require("./scanner");
 
 // Namespace allowlist — the single source of truth lives with the data it
@@ -50,7 +51,8 @@ const { NAMESPACES } = require("./language-data");
  *   completionEnabled: boolean,
  *   hoverEnabled: boolean,
  *   signatureHelpEnabled: boolean,
- *   codeLensEnabled: boolean
+ *   codeLensEnabled: boolean,
+ *   workspaceSymbolsEnabled: boolean
  * }}
  *
  * @example
@@ -67,7 +69,8 @@ function loadConfig() {
     completionEnabled: config.get("completion.enable", true),
     hoverEnabled: config.get("hover.enable", true),
     signatureHelpEnabled: config.get("signatureHelp.enable", true),
-    codeLensEnabled: config.get("codeLens.enable", true)
+    codeLensEnabled: config.get("codeLens.enable", true),
+    workspaceSymbolsEnabled: config.get("workspaceSymbols.enable", true)
   };
 }
 
@@ -1240,6 +1243,7 @@ module.exports = {
   isModuleDeclarationContext,
   isModuleCallContext,
   getModuleDeclarations,
+  findModuleDeclarations,
   createCodeScanState,
   maskNonCodeSpans,
   findModuleDeclarationRange,
