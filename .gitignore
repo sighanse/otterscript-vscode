@@ -4,6 +4,7 @@ node_modules/
 *.tgz
 .vscode/*
 !.vscode/settings.json
+!.vscode/launch.json
 *.log
 *.tmp
 *.ps1

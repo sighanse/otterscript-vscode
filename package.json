@@ -19,13 +19,14 @@
   "homepage": "https://github.com/sighanse/otterscript-vscode#readme",
   "markdown": "github",
   "license": "MIT",
-  "version": "0.2.6",
+  "version": "0.3.0",
   "icon": "images/logo.png",
   "engines": {
     "vscode": "^1.85.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/node": "^24.13.3",
     "@types/vscode": "1.85.0",
     "@vscode/vsce": "^3.9.2",
     "eslint": "^10.9.1",
@@ -100,6 +101,11 @@
           "type": "boolean",
           "default": true,
           "description": "Enable CodeLens reference counts above module declarations"
+        },
+        "otterscript.workspaceSymbols.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Index module declarations across .otter/.oscript files for 'Go to Symbol in Workspace' (Ctrl+T)"
         }
       }
     },
@@ -157,9 +163,10 @@
     "lint": "eslint . --cache",
     "lint:fix": "eslint . --fix --cache",
     "lint:ci": "eslint . --max-warnings=0 --cache",
-    "check:js": "npx -y -p typescript@6.0.3 tsc -p jsconfig.json --noEmit",
+    "check:js": "npx -y -p typescript@6.0.3 tsc -p jsconfig.json --noEmit && npx -y -p typescript@6.0.3 tsc -p jsconfig.test.json --noEmit",
     "check:lang": "node scripts/check-language-sync.js",
-    "check": "npm run check:js && npm run check:lang",
+    "test": "node --test \"test/unit/*.test.js\"",
+    "check": "npm run lint:ci && npm run check:js && npm run check:lang && npm test",
     "package": "vsce package --no-yarn",
     "vscode:prepublish": "npm run lint:ci",
     "publish:vsce": "vsce publish",

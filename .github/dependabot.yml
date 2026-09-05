@@ -41,22 +41,13 @@ updates:
       - dependencies
       - npm
     groups:
-      # Group all development dependencies together
       dev-dependencies:
         dependency-type: development
         update-types:
           - minor
           - patch
-      # Group ESLint and linting packages
-      linting:
-        patterns:
-          - "eslint"
-          - "eslint-*"
-          - "@eslint/*"
-        update-types:
-          - minor
-          - patch
     ignore:
+      # Pinned to the engines.vscode floor (^1.85.0); bump both together, by hand.
       - dependency-name: "@types/vscode"
         versions:
           - ">=1.85.0"

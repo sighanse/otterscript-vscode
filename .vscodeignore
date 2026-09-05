@@ -21,6 +21,7 @@ eslint.config.cjs
 package-lock.json
 SECURITY.md
 jsconfig.json
+jsconfig.test.json
 # Exclude source etc.
 !src/
 !src/**/*.js

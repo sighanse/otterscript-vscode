@@ -15,6 +15,11 @@ module.exports = [
   {
     files: ["**/*.js"],
 
+    linterOptions: {
+      // Fail on `// eslint-disable*` comments that no longer suppress anything.
+      reportUnusedDisableDirectives: "error"
+    },
+
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "commonjs",

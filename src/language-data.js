@@ -37,15 +37,65 @@
  * @typedef {Object} DocEntry
  * @property {string} name Human-readable name shown in completion and hover
  * @property {string} description Short summary shown in IntelliSense
- * @property {string | null} namespace The extension/product namespace this construct
- *   belongs to (e.g. "ProGet", "Otter", "InedoCore"), or null for core OtterScript
- *   language constructs that require no namespace prefix.
+ * @property {string | null} namespace The namespace a user would type before `::`
+ *   to qualify this construct. It is the operation/function's `[ScriptNamespace]`
+ *   value when it declares one (e.g. "Files", "HTTP", "ProGet"), otherwise the
+ *   name of the extension that defines it (e.g. "InedoCore", "Windows"). It is
+ *   `null` for pure OtterScript language constructs — every keyword and syntax
+ *   form, plus the `Log-*` statements — which are never namespace-qualified, and
+ *   also (for now) for entries whose owning extension has not yet been verified
+ *   against Inedo source. Non-null values must be a member of {@link NAMESPACES}.
  * @property {string=} signature Usage syntax
  * @property {string=} snippet VS Code snippet insertion text
  * @property {string=} documentation Extended Markdown documentation
  */
 
 /** @typedef {Record<string, DocEntry>} DocsTable */
+
+/**
+ * The set of valid OtterScript namespace tokens: every first-party Inedo
+ * namespace we can attest, so a value here is never a typo and the eventual
+ * "unknown namespace" diagnostic never flags a legitimate one. It combines
+ *
+ *   - declared `[ScriptNamespace("…")]` values and each extension's
+ *     `Namespaces` constants (Files, HTTP, ProGet, DotNet, Docker, Pip, …), and
+ *   - the extension name itself (InedoCore, Windows, Git, Python, Scripting, …),
+ *     which is the namespace for that extension's operations/functions that
+ *     declare no `[ScriptNamespace]`.
+ *
+ * A `DocEntry.namespace` is either `null` or one of these. Single source of
+ * truth for `validateDocs`, the grammar/language-data sync check, and any
+ * namespace-aware editor feature. Third-party extensions can define their own
+ * namespaces; extend this list as those become relevant to the docs tables.
+ *
+ * @type {ReadonlySet<string>}
+ */
+const NAMESPACES = Object.freeze(
+  new Set([
+    // -- InedoCore extension (name + its declared namespaces)
+    "InedoCore",
+    "Files",
+    "HTTP",
+    "Network",
+    "ProGet",
+    "UPack",
+    "Otter",
+    // -- Windows extension (name + its declared namespaces)
+    "Windows",
+    "IIS",
+    "Firewall",
+    "DotNet",
+    // -- Scripting extension (name + its declared namespaces)
+    "Scripting",
+    "PowerShell",
+    "Linux",
+    // -- Other first-party extensions (extension name + declared namespaces)
+    "Docker",
+    "Python",
+    "Pip",
+    "Git",
+  ])
+);
 
 // ============================================================
 // OPERATION DOCS
@@ -126,7 +176,7 @@ Log-Error "Failed to connect to server";
 `
   },
   "Post-Http": {
-    namespace: null,
+    namespace: "HTTP",
     name: 'Post-Http',
     signature: 'Post-Http(Url: string, [options...])',
     snippet: 'Post-Http(\n    Url: "${1:https://example.com}",\n    ${2:ContentType: "application/json",}\n    ${3:TextData: "${4:request body}"},\n    ${5:FormData: %(\n        ${6:key}: "${7:value}"\n    )},\n    ${8:LogResponseBody: true}\n);',
@@ -176,7 +226,7 @@ Post-Http(
 `
   },
   "Download-Http": {
-    namespace: null,
+    namespace: "HTTP",
     name: "Download-Http",
     signature: "Download-Http(FileName: <text>, Url: <text>, [LogResponseBody: <true/false>], [ErrorStatusCodes: <text>], [ResponseBody: <text>], [RequestHeaders: <%(key1: value1, ...)>], [MaxResponseLength: <integer>], [ProxyRequest: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [IgnoreSslErrors: <true/false>]);",
     snippet: "Download-Http ${1:https://example.com/file.zip}\n(\n    FileName: ${2:artifact.zip},\n    LogResponseBody: ${3:false}\n);$0",
@@ -224,7 +274,7 @@ Download-Http https://downloadurl.local
 `
   },
   "Upload-Http": {
-    namespace: null,
+    namespace: "HTTP",
     name: "Upload-Http",
     signature: "Upload-Http([Method: <integer>], FileName: <text>, Url: <text>, [LogResponseBody: <true/false>], [ErrorStatusCodes: <text>], [ResponseBody: <text>], [RequestHeaders: <%(key1: value1, ...)>], [MaxResponseLength: <integer>], [ProxyRequest: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [IgnoreSslErrors: <true/false>]);",
     snippet: "Upload-Http ${1:file.txt}\n(\n    Method: ${2:POST},\n    Url: ${3:url.local}\n);$0",
@@ -273,7 +323,7 @@ Upload-Http file.txt
 `
   },
   "Execute-PowerShell": {
-    namespace: null,
+    namespace: "PowerShell",
     name: "Execute-PowerShell",
     signature: "Execute-PowerShell(Text: <text>, [Debug: <true/false>], [Verbose: <true/false>], [RunOnSimulation: <true/false>], [Isolated: <true/false>], [SuccessExitCode: <text>], [PreferWindowsPowerShell: <text>]);",
     snippet: "Execute-PowerShell >>\n    ${1:Get-Service | Where-Object { $_.Status -eq \"Running\" } | Out-String}\n>> (\n    Verbose: ${2:false},\n    Debug: ${3:false},\n    RunOnSimulation: ${4:false}\n);$0",
@@ -313,7 +363,7 @@ Execute-PowerShell >>
 `
   },
   "Ensure-Service": {
-    namespace: null,
+    namespace: "Windows",
     name: "Ensure-Service",
     signature: "Ensure-Service(Name: <text>, [DisplayName: <text>], [Description: <text>], [Status: <integer>], [Exists: <true/false>], Path: <text>, [Startup: <integer>], [DelayedStart: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [FirstFailure: <integer>], [SecondFailure: <integer>], [SubsequentFailures: <integer>], [RestartDelay: <integer>], [OnFailureProgramPath: <text>], [RebootMessage: <text>], [Dependencies: <@(text)>], [StatusChangeTimeout: <TimeSpan>]);",
     snippet: "Ensure-Service(\n    Name: ${1:myName},\n    DisplayName: ${2:myDisplayName},\n    Status: ${3:Running},\n    Path: ${4:c:\\\\myservice.exe}\n);$0",
@@ -366,7 +416,7 @@ Ensure-Service
 `
   },
   "Ensure-Directory": {
-    namespace: null,
+    namespace: "Files",
     name: "Ensure-Directory",
     signature: "Ensure-Directory(Name: <text>, [Exists: <true/false>]);",
     snippet: "Ensure-Directory ${1:myFolderName}\n(\n    Exists: ${2:true}\n);$0",
@@ -470,7 +520,7 @@ Ensure-Asset
 `
   },
   "Ensure-PsModule": {
-    namespace: null,
+    namespace: "PowerShell",
     name: "Ensure-PsModule",
     signature: "Ensure-PsModule(Module: <text>, [Version: <text>], [MinimumVersion: <text>], [Force: <true/false>], [Repository: <text>], [Scope: <text>], [Exists: <true/false>], [AllowClobber: <true/false>], [AllowPrerelease: <true/false>], [AcceptLicense: <true/false>], [AllVersions: <true/false>], [Parameters: <%(key1: value1, ...)>], [Verbose: <true/false>], [DebugLogging: <true/false>], [PreferWindowsPowerShell: <text>]);",
     snippet: "Ensure-PsModule\n(\n    Exists: ${1:true},\n    Module: ${2:PackageManagement},\n    MinimumVersion: ${3:1.4.6},\n    Repository: ${4:internal-powershell}\n);$0",
@@ -499,7 +549,7 @@ Ensure-PsModule(
 `
   },
   "Ensure-HostsEntry": {
-    namespace: null,
+    namespace: "Network",
     name: "Ensure-HostsEntry",
     signature: "Ensure-HostsEntry(Host: <text>, IP: <text>, [Exists: <true/false>]);",
     snippet: "Ensure-HostsEntry ${1:myHostName}\n(\n    Exists: ${2:true},\n    IP: ${3:127.0.0.1}\n);$0",
@@ -533,7 +583,7 @@ Acquire-Server(
 `
   },
   "Get-Http": {
-    namespace: null,
+    namespace: "HTTP",
     name: "Get-Http",
     signature: "Get-Http([Method: <integer>], Url: <text>, [LogResponseBody: <true/false>], [ErrorStatusCodes: <text>], [ResponseBody: <text>], [RequestHeaders: <%(key1: value1, ...)>], [MaxResponseLength: <integer>], [ProxyRequest: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [IgnoreSslErrors: <true/false>]);",
     snippet: "Get-Http ${1:https://myurl.local}\n(\n    Method: ${2:GET}\n);$0",
@@ -559,7 +609,7 @@ Get-Http(
 `
   },
   "Install-Package": {
-    namespace: null,
+    namespace: "ProGet",
     name: "Install-Package",
     signature: "Install-Package([PackageSource: <text>], Name: <text>, [Version: <text>], [To: <text>], [ClearTarget: <true/false>], [LocalRegistry: <integer>], [LocalCache: <true/false>], [DirectDownload: <true/false>], [Feed: <text>], [EndpointUrl: <text>], [UserName: <text>], [Password: <text>], [ApiKey: <text>], [FeedUrl: <text>]);",
     snippet: "Install-Package\n(\n    PackageSource: ${1:MyPackageSource},\n    Name: ${2:MyAppPackage},\n    Version: ${3:3.4.2},\n    To: ${4:C:\\\\MyApps\\\\MyApp}\n);$0",
@@ -615,7 +665,7 @@ Install-Package
 `
   },
   "Ensure-Package": {
-    namespace: null,
+    namespace: "ProGet",
     name: "Ensure-Package",
     signature: "Ensure-Package([PackageSource: <text>], Name: <text>, [Version: <text>], [To: <text>], [ClearTarget: <true/false>], [Exists: <true/false>], [LocalRegistry: <integer>], [LocalCache: <true/false>], [FileCompare: <integer>], [Ignore: <@(text)>], [DirectDownload: <true/false>], [Feed: <text>], [EndpointUrl: <text>], [UserName: <text>], [Password: <text>], [ApiKey: <text>], [FeedUrl: <text>]);",
     snippet: "Ensure-Package\n(\n    PackageSource: ${1:MyPackageSource},\n    Name: ${2:FooBarApp},\n    Version: ${3:\\$FooBarVersion},\n    To: ${4:D:\\\\WebApps\\\\FooBar.App},\n    Ignore: ${5:web.config}\n);$0",
@@ -681,7 +731,7 @@ Ensure-Package
 `
   },
   "Query-Package": {
-    namespace: null,
+    namespace: "UPack",
     name: "Query-Package",
     signature: "Query-Package([From: <text>], Name: <text>, Version: <text>, NewVersion: <text>, [Reason: <text>], [PackageFile: <text>], [Feed: <text>], [EndpointUrl: <text>], [UserName: <text>], [Password: <text>], [ApiKey: <text>], [Exists: <true/false>], [Metadata: <%(key1: value1, ...)>], [FeedUrl: <text>]);",
     snippet: "Query-Package\n(\n    From: ${1:MyPackageSource},\n    Name: ${2:Group/Package},\n    Version: ${3:1.0.0},\n    NewVersion: ${4:1.0.1},\n    Exists => ${5:\\$exists},\n    Metadata => ${6:%packageData}\n);$0",
@@ -754,7 +804,7 @@ Query-Package
 `
   },
   "Push-PackageFile": {
-    namespace: null,
+    namespace: "ProGet",
     name: "Push-PackageFile",
     signature: "Push-PackageFile(FilePath: <text>, [To: <text>], [Feed: <text>], [EndpointUrl: <text>], [UserName: <text>], [Password: <text>], [ApiKey: <text>], [FeedUrl: <text>]);",
     snippet: "Push-PackageFile ${1:MyPackage.1.0.0.upack}\n(\n    To: ${2:InternalFeed}\n);$0",
@@ -795,7 +845,7 @@ Push-PackageFile MyPackage.1.0.0.upack
 `
   },
   "Concatenate-Files": {
-    namespace: null,
+    namespace: "Files",
     name: "Concatenate-Files",
     signature: "Concatenate-Files(File: <text>, [Directory: <text>], [Include: <@(text)>], [Exclude: <@(text)>], [Encoding: <text>], [Separator: <text>]);",
     snippet: "Concatenate-Files\n(\n    File: ${1:myoutputfile.txt}\n);$0",
@@ -815,7 +865,7 @@ Concatenate-Files(
 `
   },
   "Create-ZipFile": {
-    namespace: null,
+    namespace: "Files",
     name: "Create-ZipFile",
     signature: "Create-ZipFile(Name: <text>, Directory: <text>, [Overwrite: <true/false>]);",
     snippet: "Create-ZipFile\n(\n    Overwrite: ${1:true},\n    Name: ${2:myZipFileName.zip},\n    Directory: ${3:c:\\\\sourceDir}\n);$0",
@@ -832,7 +882,7 @@ Create-ZipFile(
 `
   },
   "Rename-File": {
-    namespace: null,
+    namespace: "Files",
     name: "Rename-File",
     signature: "Rename-File(From: <text>, To: <text>, [Overwrite: <true/false>]);",
     snippet: "Rename-File\n(\n    Overwrite: ${1:true},\n    From: ${2:mySourceFile.txt},\n    To: ${3:myDestFile.txt}\n);$0",
@@ -849,7 +899,7 @@ Rename-File(
 `
   },
   "Transfer-Files": {
-    namespace: null,
+    namespace: "Files",
     name: "Transfer-Files",
     signature: "Transfer-Files([Include: <@(text)>], [Exclude: <@(text)>], [FromDirectory: <text>], [FromServer: <text>], ToDirectory: <text>, [ToServer: <text>], [DeleteTarget: <true/false>], [SetLastModifiedDate: <true/false>], [BatchSize: <integer>], [Verbose: <true/false>]);",
     snippet: "Transfer-Files\n(\n    DeleteTarget: ${1:true},\n    ToDirectory: ${2:c:\\\\targetDir}\n);$0",
@@ -873,7 +923,7 @@ Transfer-Files(
 `
   },
   "Sign-Exe": {
-    namespace: null,
+    namespace: "Windows",
     name: "Sign-Exe",
     signature: "Sign-Exe(SubjectName: <text>, [TimestampServer: <text>], [ContentDescription: <text>], [ContentUrl: <text>], Include: <@(text)>, [Exclude: <@(text)>], [SignToolPath: <text>], [SourceDirectory: <text>]);",
     snippet: "Sign-Exe IncludeText\n(\n    SubjectName: ${1:mySubjectOfCertificate}\n);$0",
@@ -908,7 +958,7 @@ Collect-RpmPackages [DefaultArgument] ();
 `
   },
   "Sleep": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "Sleep",
     signature: "Sleep <integer>;",
     snippet: "Sleep ${1:seconds};$0",
@@ -1030,7 +1080,7 @@ Release-Server(
 `
   },
   "Apply-Template": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "Apply-Template",
     signature: "Apply-Template([Asset: <text>], [OutputVariable: <text>], [OutputFile: <text>], [Literal: <text>], [InputFile: <text>], [AdditionalVariables: <%(key1: value1, ...)>], [NewLines: <integer>]);",
     snippet: "Apply-Template(\n    Literal: >>${1:template text}>>,\n    OutputVariable => ${2:\\$text},\n    AdditionalVariables: %(\n        ${3:key}: ${4:value}\n    ),\n    NewLines: ${5:newLines}\n);$0",
@@ -1133,7 +1183,7 @@ Copy-Files(
   "Create-Directory": {
     namespace: "ProGet",
     name: "Create-Directory",
-    signature: "ProGet::Create-Directory(Path: <text>, [Source: <text>], [Resource: <text>], [EndpointUrl: <text>], [ApiKey: <text>], [UserName: <text>], [Password: <text>]);",
+    signature: "Create-Directory(Path: <text>, [Source: <text>], [Resource: <text>], [EndpointUrl: <text>], [ApiKey: <text>], [UserName: <text>], [Password: <text>]);",
     snippet: "ProGet::Create-Directory ${1:my/folder/path}\n(\n    Source: ${2:myAssetSource}\n);$0",
     description: "Ensures that a subdirectory exists in a ProGet Asset Directory.",
     documentation: `
@@ -1293,7 +1343,7 @@ Otter is a common name for a carnivorous mammal in the subfamily Lutrinae.
   "Set-Variable": {
     namespace: "Otter",
     name: "Set-Variable",
-    signature: "Otter::Set-Variable([Credentials: <text>], Name: <text>, Value: <text>, [Server: <text>], [Role: <text>], [Environment: <text>], [Sensitive: <true/false>], [Host: <text>], [ApiKey: <SecureString>]);",
+    signature: "Set-Variable([Credentials: <text>], Name: <text>, Value: <text>, [Server: <text>], [Role: <text>], [Environment: <text>], [Sensitive: <true/false>], [Host: <text>], [ApiKey: <SecureString>]);",
     snippet: "Otter::Set-Variable\n(\n    Name: ${1:variableName},\n    Value: ${2:value}\n);$0",
     description: "Creates or assigns a configuration variable in Otter.",
     documentation: `
@@ -1344,7 +1394,7 @@ Otter::Set-Variable
   "Exec": {
     namespace: "InedoCore",
     name: "Exec",
-    signature: "InedoCore::Exec([FileName: <text>], [Arguments: <text>], [WorkingDirectory: <text>], [OutputLogLevel: <integer>], [ErrorOutputLogLevel: <integer>], [SuccessExitCode: <text>], [ImportVariables: <true/false>], [WarnRegex: <text>], [DebugRegex: <text>], [LogArguments: <true/false>], [ReportProgressRegex: <text>], [OutputFilterRegex: <text>]);",
+    signature: "Exec([FileName: <text>], [Arguments: <text>], [WorkingDirectory: <text>], [OutputLogLevel: <integer>], [ErrorOutputLogLevel: <integer>], [SuccessExitCode: <text>], [ImportVariables: <true/false>], [WarnRegex: <text>], [DebugRegex: <text>], [LogArguments: <true/false>], [ReportProgressRegex: <text>], [OutputFilterRegex: <text>]);",
     snippet: "InedoCore::Exec ${1:executablePath}\n(\n    Arguments: ${2:arguments}\n);$0",
     description: "Executes a process, logs its output, and waits until it exits.",
     documentation: `
@@ -2170,7 +2220,7 @@ const variableDocs = {
 /** @type {DocsTable} */
 const scalarFunctionDocs = {
   "ToJson": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$ToJson",
     signature: "$ToJson(data)",
     snippet: '\\$ToJson(${1:data})${0}',
@@ -2205,7 +2255,7 @@ $json = $ToJson(%(
 `,
   },
   "HtmlEncode": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$HtmlEncode",
     signature: "$HtmlEncode(text)",
     snippet: "\\$HtmlEncode(${1:text})",
@@ -2224,7 +2274,7 @@ $encoded = $HtmlEncode("<script>alert('xss')</script>");
 `,
   },
   "UrlEncode": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$UrlEncode",
     signature: "$UrlEncode(text)",
     snippet: "\\$UrlEncode(${1:text})",
@@ -2242,7 +2292,7 @@ $url = "https://example.com/search?q=" + $UrlEncode($query);
 `,
   },
   "PathCombine": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$PathCombine",
     signature: "$PathCombine(path1, path2, ...)",
     snippet: "\\$PathCombine(${1:path1}, ${2:path2})",
@@ -2263,7 +2313,7 @@ $fullPath = $PathCombine("C:\\Websites", "MyApp", "web.config");
 `,
   },
   "Eval": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$Eval",
     signature: "$Eval(expression)",
     snippet: "\\$Eval(${1:expression})",
@@ -2283,7 +2333,7 @@ $result = $Eval($template);  # Expands $name
   },
   // String Manipulation Functions
   "ToLower": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$ToLower",
     signature: "$ToLower(text)",
     snippet: "\\$ToLower(${1:text})",
@@ -2302,7 +2352,7 @@ $lower = $ToLower("Hello World");
 `,
   },
   "ToUpper": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$ToUpper",
     signature: "$ToUpper(text)",
     snippet: "\\$ToUpper(${1:text})",
@@ -2321,7 +2371,7 @@ $upper = $ToUpper("Hello World");
 `,
   },
   "Trim": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$Trim",
     signature: "$Trim(text)",
     snippet: "\\$Trim(${1:text})",
@@ -2342,7 +2392,7 @@ $trimmed = $Trim("  hello  ");
 `,
   },
   "Substring": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$Substring",
     signature: "$Substring(text, startIndex, length)",
     snippet: "\\$Substring(${1:text}, ${2:startIndex}, ${3:length})",
@@ -2365,7 +2415,7 @@ $sub = $Substring("Hello World", 6, 5);
 `,
   },
   "Replace": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$Replace",
     signature: "$Replace(text, oldValue, newValue, [ignoreCase])",
     snippet: "\\$Replace(${1:text}, ${2:oldValue}, ${3:newValue}, ${4|false,true|})",
@@ -2389,7 +2439,7 @@ $result = $Replace("Hello World", "World", "Otter");
 `,
   },
   "Join": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$Join",
     signature: "$Join(separator, vector)",
     snippet: '\\$Join("${1:, }", @${2:vector})',
@@ -2412,7 +2462,7 @@ $joined = $Join(", ", @("apple", "banana", "cherry"));
   },
   // Date and Time Functions
   "Date": {
-    namespace: null,
+    namespace: "InedoCore",
     name: '$Date',
     signature: "$Date([format])",
     snippet: "\\$Date(${1:format})",
@@ -2442,7 +2492,7 @@ $sortable = $Date("s");
 `
   },
   "DateUtc": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$DateUtc",
     signature: "$DateUtc([format])",
     snippet: "\\$DateUtc(${1:format})",
@@ -2511,7 +2561,7 @@ $decoded = $Base64Decode("SGVsbG8gV29ybGQ=");
   },
   // JSON Functions
   "FromJson": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$FromJson",
     signature: "$FromJson(jsonString)",
     snippet: '\\$FromJson("${1:jsonString}");$0',
@@ -2534,7 +2584,7 @@ $name = $data[name];
   },
   // File System Functions
   "FileExists": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$FileExists",
     signature: "$FileExists(filePath)",
     snippet: '\\$FileExists("${1:filePath}");$0',
@@ -2556,7 +2606,7 @@ if $FileExists("C:\\config\\app.config") {
 `,
   },
   "DirectoryExists": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$DirectoryExists",
     signature: "$DirectoryExists(directoryPath)",
     snippet: '\\$DirectoryExists("${1:directoryPath}");$0',
@@ -2579,7 +2629,7 @@ if $DirectoryExists("C:\\Websites") {
   },
   // Math Functions
   "Expr": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$Expr",
     signature: "$Expr(expression)",
     snippet: "\\$Expr(\"${1:expression}\")",
@@ -2600,7 +2650,7 @@ $result = $Expr("(5 + 3) * 2");
 `,
   },
   "Increment": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$Increment",
     signature: "$Increment(value)",
     snippet: "\\$Increment(${1:variable})",
@@ -2622,7 +2672,7 @@ $count = $Increment($count);
 `,
   },
   "Decrement": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$Decrement",
     signature: "$Decrement(value)",
     snippet: "\\$Decrement(${1:variable})",
@@ -2644,7 +2694,7 @@ $count = $Decrement($count);
 `,
   },
   "Abs": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$Abs",
     signature: "$Abs(value)",
     snippet: "\\$Abs(${1:value})",
@@ -2665,7 +2715,7 @@ $result = $Abs(-10);
 `,
   },
   "Ceiling": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$Ceiling",
     signature: "$Ceiling(value)",
     snippet: "\\$Ceiling(${1:value})",
@@ -2686,7 +2736,7 @@ $result = $Ceiling(3.2);
 `,
   },
   "Floor": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$Floor",
     signature: "$Floor(value)",
     snippet: "\\$Floor(${1:value})",
@@ -2707,7 +2757,7 @@ $result = $Floor(3.8);
 `,
   },
   "Compare": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$Compare",
     signature: "$Compare(arg1, operator, arg2, [asNumber])",
     snippet: "\\$Compare(${1:value1}, ${2|<,>,<=,>=,=,!=|}, ${3:value2}${4:, true})",
@@ -2740,7 +2790,7 @@ $Compare("07", >, "6", true)
   },
   // Regular Expression Functions
   "MatchesRegex": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$MatchesRegex",
     signature: "$MatchesRegex(text, pattern)",
     snippet: "\\$MatchesRegex(${1:text}, \"${2:pattern}\")",
@@ -2763,7 +2813,7 @@ if $MatchesRegex($email, "^[\\w\\.]+@[\\w\\.]+\\.\\w+$") {
 `,
   },
   "RegexReplace": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$RegexReplace",
     signature: "$RegexReplace(text, pattern, replacement)",
     snippet: "\\$RegexReplace(${1:text}, \"${2:pattern}\", \"${3:replacement}\")",
@@ -2787,7 +2837,7 @@ $result = $RegexReplace("Hello 123 World", "\\d+", "XXX");
   },
   // Server/Environment Information Functions
   "ServerName": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$ServerName",
     signature: "$ServerName()",
     snippet: "\\$ServerName()",
@@ -2824,7 +2874,7 @@ if $EnvironmentName == "Production" {
   },
   // List/Vector Functions
   "ListCount": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$ListCount",
     signature: "$ListCount(vector)",
     snippet: "\\$ListCount(${1:vector})",
@@ -2846,7 +2896,7 @@ $count = $ListCount($items);
 `,
   },
   "ListItem": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$ListItem",
     signature: "$ListItem(vector, index)",
     snippet: "\\$ListItem(${1:vector}, ${2:index})",
@@ -2985,7 +3035,7 @@ $description = $PackageProperty("myPropertyName", "No property defined");
 `
   },
   "Coalesce": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$Coalesce",
     signature: "$Coalesce(value1, value2, ...)",
     snippet: "\\$Coalesce(${1:value1}, ${2:value2})${0}",
@@ -3003,7 +3053,7 @@ $name = $Coalesce($OverrideName, $DefaultName, "unnamed");
 `
   },
   "PadLeft": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$PadLeft",
     signature: "$PadLeft(Text, Length, [PadCharacter])",
     snippet: "\\$PadLeft(${1:Text}, ${2:Length})${0}",
@@ -3024,7 +3074,7 @@ $padded = $PadLeft("7", 3, "0");
 `
   },
   "PadRight": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$PadRight",
     signature: "$PadRight(Text, Length, [PadCharacter])",
     snippet: "\\$PadRight(${1:Text}, ${2:Length})${0}",
@@ -3045,7 +3095,7 @@ $padded = $PadRight("Name", 10, ".");
 `
   },
   "TrimStart": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$TrimStart",
     signature: "$TrimStart(Text, ...)",
     snippet: "\\$TrimStart(${1:Text})${0}",
@@ -3065,7 +3115,7 @@ $trimmed = $TrimStart("   hello");
 `
   },
   "TrimEnd": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$TrimEnd",
     signature: "$TrimEnd(Text, ...)",
     snippet: "\\$TrimEnd(${1:Text})${0}",
@@ -3085,7 +3135,7 @@ $trimmed = $TrimEnd("hello   ");
 `
   },
   "IsVariableDefined": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$IsVariableDefined",
     signature: "$IsVariableDefined(VariableName, [VariableType])",
     snippet: "\\$IsVariableDefined(\"${1:variableName}\")${0}",
@@ -3107,7 +3157,7 @@ if $IsVariableDefined("OptionalSetting")
 `
   },
   "JSEncode": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$JSEncode",
     signature: "$JSEncode(Text)",
     snippet: "\\$JSEncode(${1:Text})${0}",
@@ -3143,7 +3193,7 @@ Log-Information $NextYear;
 `
   },
   "ListIndexOf": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$ListIndexOf",
     signature: "$ListIndexOf(List, Item)",
     snippet: "\\$ListIndexOf(${1:List}, ${2:Item})${0}",
@@ -3157,7 +3207,7 @@ Log-Information $NextYear;
 `
   },
   "XmlEncode": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$XmlEncode",
     signature: "$XmlEncode(Text)",
     snippet: "\\$XmlEncode(${1:Text})${0}",
@@ -3170,7 +3220,7 @@ Log-Information $NextYear;
 `
   },
   "NewLine": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$NewLine",
     signature: "$NewLine([WindowsOrLinux])",
     snippet: "\\$NewLine(${1:WindowsOrLinux})${0}",
@@ -3183,7 +3233,7 @@ Log-Information $NextYear;
 `
   },
   "ExecutionId": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$ExecutionId",
     signature: "$ExecutionId",
     description: "Returns the current execution ID.",
@@ -3192,7 +3242,7 @@ Log-Information $NextYear;
 `
   },
   "ExecutionState": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$ExecutionState",
     signature: "$ExecutionState",
     description: "Returns the current state of the execution (normal, warning, or error).",
@@ -3201,7 +3251,7 @@ Log-Information $NextYear;
 `
   },
   "WorkingDirectory": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$WorkingDirectory",
     signature: "$WorkingDirectory",
     description: "Returns the current working directory.",
@@ -3210,7 +3260,7 @@ Log-Information $NextYear;
 `
   },
   "SpecialWindowsPath": {
-    namespace: null,
+    namespace: "Windows",
     name: "$SpecialWindowsPath",
     signature: "$SpecialWindowsPath(Name)",
     snippet: "\\$SpecialWindowsPath(${1:Name})${0}",
@@ -3223,7 +3273,7 @@ Log-Information $NextYear;
 `
   },
   "ResolvePath": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$ResolvePath",
     signature: "$ResolvePath(Path)",
     snippet: "\\$ResolvePath(${1:Path})${0}",
@@ -3245,7 +3295,7 @@ $ResolvePath(~\\path)                      # -> {ExecutionDirectory}\\path
 `
   },
   "FileContents": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$FileContents",
     signature: "$FileContents(Name, [MaxLength])",
     snippet: "\\$FileContents(${1:Name})${0}",
@@ -3259,7 +3309,7 @@ $ResolvePath(~\\path)                      # -> {ExecutionDirectory}\\path
 `
   },
   "EnvironmentVariable": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$EnvironmentVariable",
     signature: "$EnvironmentVariable(EnvironmentVariableName)",
     snippet: "\\$EnvironmentVariable(${1:EnvironmentVariableName})${0}",
@@ -3279,7 +3329,7 @@ Log-Information $Path;
 `
   },
   "RoleName": {
-    namespace: null,
+    namespace: "InedoCore",
     name: "$RoleName",
     signature: "$RoleName",
     description: "Name of the current server role in context.",
@@ -3296,7 +3346,7 @@ Log-Information $Path;
 /** @type {DocsTable} */
 const vectorFunctionDocs = {
   "Split": {
-    namespace: null,
+    namespace: "InedoCore",
     name: '@Split',
     signature: '@Split(Text, Separator, [Count])',
     snippet: "@Split(\"${1:text}\", \"${2:,}\"${3:, ${4:count}})",
@@ -3320,7 +3370,7 @@ const vectorFunctionDocs = {
 `
   },
   "ListConcat": {
-    namespace: null,
+    namespace: "InedoCore",
     name: '@ListConcat',
     signature: '@ListConcat(list1, list2, ...)',
     snippet: "@ListConcat(${1:@list1}, ${2:@list2})",
@@ -3339,7 +3389,7 @@ const vectorFunctionDocs = {
 `
   },
   "ListInsert": {
-    namespace: null,
+    namespace: "InedoCore",
     name: '@ListInsert',
     signature: '@ListInsert(list, item, index)',
     snippet: "@ListInsert(${1:@list}, \"${2:item}\", ${3:index})",
@@ -3361,7 +3411,7 @@ const vectorFunctionDocs = {
 `
   },
   "ListRemove": {
-    namespace: null,
+    namespace: "InedoCore",
     name: '@ListRemove',
     signature: '@ListRemove(list, index)',
     snippet: "@ListRemove(${1:@list}, ${2:index})",
@@ -3382,7 +3432,7 @@ const vectorFunctionDocs = {
 `
   },
   "ListSet": {
-    namespace: null,
+    namespace: "InedoCore",
     name: '@ListSet',
     signature: '@ListSet(list, index, item)',
     snippet: "@ListSet(${1:@list}, ${2:index}, \"${3:item}\")",
@@ -3404,7 +3454,7 @@ const vectorFunctionDocs = {
 `
   },
   "MapKeys": {
-    namespace: null,
+    namespace: "InedoCore",
     name: '@MapKeys',
     signature: '@MapKeys(map)',
     snippet: "@MapKeys(${1:@map})",
@@ -3424,7 +3474,7 @@ const vectorFunctionDocs = {
 `
   },
   "Range": {
-    namespace: null,
+    namespace: "InedoCore",
     name: '@Range',
     signature: '@Range(start, count)',
     snippet: "@Range(${1:start}, ${2:count})",
@@ -3444,7 +3494,7 @@ const vectorFunctionDocs = {
 `
   },
   "RegexFind": {
-    namespace: null,
+    namespace: "InedoCore",
     name: '@RegexFind',
     signature: '@RegexFind(text, matchExpression, [matchGroup])',
     snippet: "@RegexFind(${1:text}, ${2:matchExpression}${3:, ${4:matchGroup}})",
@@ -3570,7 +3620,7 @@ foreach $server in @AcquiredServers("WebServer") {
 `
   },
   "AllEnvironments": {
-    namespace: null,
+    namespace: "InedoCore",
     name: '@AllEnvironments',
     signature: '@AllEnvironments',
     description: 'Returns the list of all environments configured in the instance.',
@@ -3588,7 +3638,7 @@ foreach $Env in @AllEnvironments
 `
   },
   "AllRoles": {
-    namespace: null,
+    namespace: "InedoCore",
     name: '@AllRoles',
     signature: '@AllRoles',
     description: 'Returns the list of all server roles configured in the instance.',
@@ -3606,7 +3656,7 @@ foreach $Role in @AllRoles
 `
   },
   "AllServers": {
-    namespace: null,
+    namespace: "InedoCore",
     name: '@AllServers',
     signature: '@AllServers([IncludeInactive])',
     snippet: "@AllServers",
@@ -3628,7 +3678,7 @@ foreach $Server in @AllServers
 `
   },
   "ServersInEnvironment": {
-    namespace: null,
+    namespace: "InedoCore",
     name: '@ServersInEnvironment',
     signature: '@ServersInEnvironment([EnvironmentName], [IncludeInactive])',
     snippet: "@ServersInEnvironment(\"${1:environmentName}\")",
@@ -3649,7 +3699,7 @@ foreach $server in @ServersInEnvironment("Production") {
 `
   },
   "ServersInRole": {
-    namespace: null,
+    namespace: "InedoCore",
     name: '@ServersInRole',
     signature: '@ServersInRole([RoleName], [IncludeInactive])',
     snippet: "@ServersInRole(\"${1:roleName}\")",
@@ -3670,7 +3720,7 @@ foreach $server in @ServersInRole("WebServer") {
 `
   },
   "ServersInRoleAndEnvironment": {
-    namespace: null,
+    namespace: "InedoCore",
     name: '@ServersInRoleAndEnvironment',
     signature: '@ServersInRoleAndEnvironment([RoleName], [EnvironmentName], [IncludeInactive])',
     snippet: "@ServersInRoleAndEnvironment(\"${1:roleName}\", \"${2:environmentName}\")",
@@ -3703,6 +3753,7 @@ Object.freeze(vectorFunctionDocs);
 
 // Export
 module.exports = {
+  NAMESPACES,
   operationDocs,
   syntaxDocs,
   keywordDocs,
