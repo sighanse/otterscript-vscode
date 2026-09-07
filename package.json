@@ -172,5 +172,8 @@
     "vscode:prepublish": "npm run lint:ci",
     "publish:vsce": "vsce publish",
     "publish:ovsx": "ovsx publish --no-dependencies"
+  },
+  "allowScripts": {
+    "@vscode/vsce-sign": true
   }
 }
