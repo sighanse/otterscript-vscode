@@ -906,13 +906,16 @@ function activate(context) {
   // WORKSPACE SYMBOL PROVIDER (module declarations across files)
   // ============================================================
   // Powers "Go to Symbol in Workspace" (Ctrl+T): every `module` declaration in
-  // every .otter/.oscript file in the workspace. Backed by an on-disk index
-  // (re)built on activation and kept fresh by a file-system watcher. The open
-  // editor's live/unsaved view is still served by the document symbol provider.
+  // every .otter/.oscript file in the workspace. Backed by an in-memory index
+  // and kept fresh by a file-system watcher. The open editor's live/unsaved view
+  // is still served by the document symbol provider.
   //
-  // All index work is gated on `otterscript.workspaceSymbols.enable`: when it is
-  // off, no scanning, disk reads, or index mutations happen. Toggling it on at
-  // runtime triggers a rebuild (see the dedicated config listener below).
+  // The index is built lazily: activation does NO disk I/O for it. The first
+  // Ctrl+T (provideWorkspaceSymbols) triggers the one-time scan; the watcher
+  // then keeps it current. Workspaces that never use Ctrl+T never pay for it.
+  //
+  // All index work is also gated on `otterscript.workspaceSymbols.enable`: when
+  // it is off, no scanning, disk reads, or index mutations happen.
 
   const OTTER_FILE_GLOB = "**/*.{otter,oscript}";
   // Cap on the workspace scan: files matched, and concurrent reads in flight.
@@ -997,12 +1000,29 @@ function activate(context) {
     );
   }
 
-  // Kick off the initial scan; the provider awaits this so the first Ctrl+T
-  // after activation returns a complete result. Reassigned when the setting is
-  // toggled on at runtime (see the config listener below).
-  let workspaceIndexReady = rebuildWorkspaceModuleIndex().catch(err => {
-    log.error("Failed to build workspace module index", err);
-  });
+  // Lazily-built index. `null` until the first workspace-symbol query (or a
+  // watcher event once a build has happened) kicks off rebuildWorkspaceModuleIndex.
+  // Reset to `null` on failure so the next query retries, and when the enable
+  // setting is toggled (see the config listener below).
+  /** @type {Promise<void> | null} */
+  let workspaceIndexReady = null;
+
+  /**
+   * Ensures the workspace module index has been built (once), returning the
+   * in-flight or settled build promise. Callers await this before reading
+   * `workspaceModuleIndex`.
+   *
+   * @returns {Promise<void>}
+   */
+  function ensureWorkspaceIndex() {
+    if (!workspaceIndexReady) {
+      workspaceIndexReady = rebuildWorkspaceModuleIndex().catch(err => {
+        log.error("Failed to build workspace module index", err);
+        workspaceIndexReady = null; // let the next query retry
+      });
+    }
+    return workspaceIndexReady;
+  }
 
   const workspaceSymbolProvider = vscode.languages.registerWorkspaceSymbolProvider({
     /**
@@ -1011,7 +1031,7 @@ function activate(context) {
      */
     async provideWorkspaceSymbols(query) {
       if (!workspaceSymbolsEnabled) return [];
-      await workspaceIndexReady;
+      await ensureWorkspaceIndex();
 
       const needle = query.toLowerCase();
       /** @type {vscode.SymbolInformation[]} */
@@ -1031,9 +1051,13 @@ function activate(context) {
     }
   });
 
+  // Watcher events only matter once the index has actually been built: before
+  // the first Ctrl+T there is nothing to keep fresh, and touching it here would
+  // leave a misleading partial index. `!workspaceIndexReady` covers both "never
+  // built" and "last build failed"; the next query rebuilds from scratch anyway.
   const otterFileWatcher = vscode.workspace.createFileSystemWatcher(OTTER_FILE_GLOB);
   otterFileWatcher.onDidCreate(uri => {
-    if (!workspaceSymbolsEnabled) return;
+    if (!workspaceSymbolsEnabled || !workspaceIndexReady) return;
     void indexModuleFile(uri);
   });
   otterFileWatcher.onDidDelete(uri => {
@@ -1041,31 +1065,28 @@ function activate(context) {
     clearTimerForUri(workspaceIndexTimers, uri);
   });
   otterFileWatcher.onDidChange(uri => {
-    // Gated like every other index path: when the feature is off we schedule
-    // nothing, so no debounce timers accumulate in workspaceIndexTimers.
-    if (!workspaceSymbolsEnabled) return;
+    // Gated so no debounce timers accumulate in workspaceIndexTimers when the
+    // feature is off or the index has not been built yet.
+    if (!workspaceSymbolsEnabled || !workspaceIndexReady) return;
     // Debounced -- a save can arrive alongside editor change events.
     scheduleTimerForUri(workspaceIndexTimers, uri, 400, () => { void indexModuleFile(uri); });
   });
 
-  // -- React to `otterscript.workspaceSymbols.enable` flipping at runtime: build
-  //    the index that activation skipped, or drop it when turned off. Reads the
-  //    setting here so it does not depend on any other listener's ordering.
+  // -- React to `otterscript.workspaceSymbols.enable` flipping at runtime.
+  //    Either way we just reset the lazy state: enabling does NOT eagerly scan
+  //    (the next Ctrl+T builds it, like a fresh activation); disabling drops the
+  //    index and any pending debounce timers. Reads the setting here so it does
+  //    not depend on any other listener's ordering.
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
       if (!e.affectsConfiguration("otterscript.workspaceSymbols.enable")) return;
       workspaceSymbolsEnabled = vscode.workspace
         .getConfiguration("otterscript")
         .get("workspaceSymbols.enable", true);
-      if (workspaceSymbolsEnabled) {
-        workspaceIndexReady = rebuildWorkspaceModuleIndex().catch(err => {
-          log.error("Failed to build workspace module index", err);
-        });
-      } else {
-        workspaceModuleIndex.clear();
-        for (const timer of workspaceIndexTimers.values()) clearTimeout(timer);
-        workspaceIndexTimers.clear();
-      }
+      workspaceModuleIndex.clear();
+      for (const timer of workspaceIndexTimers.values()) clearTimeout(timer);
+      workspaceIndexTimers.clear();
+      workspaceIndexReady = null;
     })
   );
 
