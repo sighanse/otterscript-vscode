@@ -126,6 +126,32 @@ class MarkdownString {
   }
 }
 
+/**
+ * Mirrors the subset of `vscode.CompletionItem` that `buildCompletionItem`
+ * touches: a `label` (string or `{ label, description }`) + `kind`, then the
+ * fields it assigns afterwards.
+ */
+class CompletionItem {
+  /**
+   * @param {string | { label: string, description?: string }} label
+   * @param {unknown} [kind]
+   */
+  constructor(label, kind) {
+    this.label = label;
+    this.kind = kind;
+    /** @type {unknown} */
+    this.insertText = undefined;
+    /** @type {string | undefined} */
+    this.detail = undefined;
+    /** @type {unknown} */
+    this.documentation = undefined;
+    /** @type {string | undefined} */
+    this.sortText = undefined;
+    /** @type {{ command: string, title: string } | undefined} */
+    this.command = undefined;
+  }
+}
+
 /** Mirrors `vscode.CodeActionKind` (only the members helpers.js references). */
 const CodeActionKind = Object.freeze({ QuickFix: "quickfix" });
 
@@ -190,6 +216,7 @@ const vscode = {
   FoldingRangeKind,
   Location,
   MarkdownString,
+  CompletionItem,
   CodeAction,
   CodeActionKind,
   WorkspaceEdit,

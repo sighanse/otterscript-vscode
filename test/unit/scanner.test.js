@@ -270,6 +270,26 @@ describe("isInStringOrComment", () => {
   it("reports an unterminated string at end of line via the trailing state check", () => {
     assert.equal(isInStringOrComment('x = "open', 9), true);
   });
+
+  it("detects a block comment that opens on the same line", () => {
+    assert.equal(isInStringOrComment("code /* note here", 10), true);
+  });
+
+  it("detects a swim-string that opens on the same line", () => {
+    assert.equal(isInStringOrComment("code >END> body", 12), true);
+  });
+
+  it("honours a carried swim-string that is still open at the position", () => {
+    const carried = createCodeScanState();
+    carried.swimDelimiter = ">END>";
+    assert.equal(isInStringOrComment("still inside the swim", 8, carried), true);
+  });
+
+  it("sees a carried swim-string close before the position", () => {
+    const carried = createCodeScanState();
+    carried.swimDelimiter = ">END>";
+    assert.equal(isInStringOrComment("body >END> then code", 16, carried), false);
+  });
 });
 
 // ============================================================
