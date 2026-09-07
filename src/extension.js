@@ -1032,12 +1032,18 @@ function activate(context) {
   });
 
   const otterFileWatcher = vscode.workspace.createFileSystemWatcher(OTTER_FILE_GLOB);
-  otterFileWatcher.onDidCreate(uri => { void indexModuleFile(uri); });
+  otterFileWatcher.onDidCreate(uri => {
+    if (!workspaceSymbolsEnabled) return;
+    void indexModuleFile(uri);
+  });
   otterFileWatcher.onDidDelete(uri => {
     workspaceModuleIndex.delete(uri.toString());
     clearTimerForUri(workspaceIndexTimers, uri);
   });
   otterFileWatcher.onDidChange(uri => {
+    // Gated like every other index path: when the feature is off we schedule
+    // nothing, so no debounce timers accumulate in workspaceIndexTimers.
+    if (!workspaceSymbolsEnabled) return;
     // Debounced -- a save can arrive alongside editor change events.
     scheduleTimerForUri(workspaceIndexTimers, uri, 400, () => { void indexModuleFile(uri); });
   });
@@ -1057,6 +1063,8 @@ function activate(context) {
         });
       } else {
         workspaceModuleIndex.clear();
+        for (const timer of workspaceIndexTimers.values()) clearTimeout(timer);
+        workspaceIndexTimers.clear();
       }
     })
   );
