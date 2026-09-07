@@ -61,6 +61,7 @@ const {
   MODULE_NAME_TOKEN_REGEX,
   validateDocs,
   scheduleTimerForUri,
+  mapWithConcurrency,
   createRegexPatterns,
   computeFoldingRanges
 } = require('./helpers');
@@ -914,6 +915,9 @@ function activate(context) {
   // runtime triggers a rebuild (see the dedicated config listener below).
 
   const OTTER_FILE_GLOB = "**/*.{otter,oscript}";
+  // Cap on the workspace scan: files matched, and concurrent reads in flight.
+  const WORKSPACE_SCAN_FILE_LIMIT = 5000;
+  const WORKSPACE_SCAN_CONCURRENCY = 20;
 
   /**
    * @typedef {{ uri: vscode.Uri, symbols: { name: string, range: vscode.Range }[] }} ModuleIndexEntry
@@ -973,8 +977,11 @@ function activate(context) {
     workspaceModuleIndex.clear();
     if (!workspaceSymbolsEnabled) return;
 
-    const files = await vscode.workspace.findFiles(OTTER_FILE_GLOB, undefined, 5000);
-    await Promise.all(files.map(indexModuleFile));
+    const files = await vscode.workspace.findFiles(
+      OTTER_FILE_GLOB, undefined, WORKSPACE_SCAN_FILE_LIMIT
+    );
+    // Bounded concurrency -- avoid firing thousands of fs.readFile at once.
+    await mapWithConcurrency(files, WORKSPACE_SCAN_CONCURRENCY, indexModuleFile);
 
     // Also cover already-open OtterScript documents. This is what makes the
     // provider work for loose files and for a window with no folder open, where
@@ -1036,11 +1043,14 @@ function activate(context) {
   });
 
   // -- React to `otterscript.workspaceSymbols.enable` flipping at runtime: build
-  //    the index that activation skipped, or drop it when turned off. The
-  //    line-92 listener runs first, so `workspaceSymbolsEnabled` is already fresh.
+  //    the index that activation skipped, or drop it when turned off. Reads the
+  //    setting here so it does not depend on any other listener's ordering.
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
       if (!e.affectsConfiguration("otterscript.workspaceSymbols.enable")) return;
+      workspaceSymbolsEnabled = vscode.workspace
+        .getConfiguration("otterscript")
+        .get("workspaceSymbols.enable", true);
       if (workspaceSymbolsEnabled) {
         workspaceIndexReady = rebuildWorkspaceModuleIndex().catch(err => {
           log.error("Failed to build workspace module index", err);

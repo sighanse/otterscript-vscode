@@ -12,6 +12,7 @@
  *   - computeFoldingRanges
  *   - buildHoverMarkdown (namespace provenance line)
  *   - nearestNamespace / createUnknownNamespaceFix
+ *   - mapWithConcurrency
  */
 
 require("../vscode-stub");
@@ -32,6 +33,7 @@ const {
   buildHoverMarkdown,
   nearestNamespace,
   createUnknownNamespaceFix,
+  mapWithConcurrency,
 } = require("../../src/helpers.js");
 
 const LITERALS = new Set(["true", "false", "null"]);
@@ -340,5 +342,69 @@ describe("createUnknownNamespaceFix", () => {
 
   it("returns null when nothing is close enough to suggest", () => {
     assert.equal(fixFor("Frobnicate::Do-Thing x;", 0, 10), null);
+  });
+});
+
+// ============================================================
+// mapWithConcurrency
+// ============================================================
+
+describe("mapWithConcurrency", () => {
+  it("visits every item exactly once", async () => {
+    /** @type {number[]} */
+    const seen = [];
+    await mapWithConcurrency([1, 2, 3, 4, 5], 2, async (n) => { seen.push(n); });
+    assert.deepEqual(seen.sort((a, b) => a - b), [1, 2, 3, 4, 5]);
+  });
+
+  it("never runs more than `limit` workers at once", async () => {
+    let inFlight = 0;
+    let peak = 0;
+    await mapWithConcurrency(Array.from({ length: 20 }, (_, i) => i), 4, async () => {
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 1));
+      inFlight--;
+    });
+    assert.equal(peak, 4);
+  });
+
+  it("is a no-op for an empty list", async () => {
+    let calls = 0;
+    await mapWithConcurrency([], 8, async () => { calls++; });
+    assert.equal(calls, 0);
+  });
+
+  it("clamps a limit below 1 up to 1", async () => {
+    let inFlight = 0;
+    let peak = 0;
+    await mapWithConcurrency([1, 2, 3], 0, async () => {
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 1));
+      inFlight--;
+    });
+    assert.equal(peak, 1);
+  });
+
+  it("caps workers at the item count when limit exceeds it", async () => {
+    let peak = 0;
+    let inFlight = 0;
+    await mapWithConcurrency([1, 2], 50, async () => {
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 1));
+      inFlight--;
+    });
+    assert.equal(peak, 2);
+  });
+
+  it("rejects when a worker rejects", async () => {
+    await assert.rejects(
+      mapWithConcurrency([1, 2, 3], 2, async (n) => {
+        if (n === 2) throw new Error("boom");
+      }),
+      /boom/
+    );
   });
 });

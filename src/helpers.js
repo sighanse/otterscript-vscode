@@ -172,6 +172,31 @@ function scheduleTimerForUri(timerMap, uri, delayMs, onFire) {
 }
 
 /**
+ * Awaits `worker(item)` for every item, keeping at most `limit` in flight.
+ *
+ * Used to bound concurrent `workspace.fs.readFile` calls when scanning a large
+ * workspace, so it can't fire thousands of reads at once. Items are consumed in
+ * order; completion order is not guaranteed. A rejecting worker rejects the
+ * whole call (callers that must not abort should catch inside the worker).
+ *
+ * @template T
+ * @param {readonly T[]} items
+ * @param {number} limit - Max concurrent workers; values < 1 are treated as 1.
+ * @param {(item: T) => Promise<unknown>} worker
+ * @returns {Promise<void>}
+ */
+async function mapWithConcurrency(items, limit, worker) {
+  let next = 0;
+  const run = async () => {
+    while (next < items.length) {
+      await worker(items[next++]);
+    }
+  };
+  const size = Math.min(Math.max(1, Math.floor(limit)), items.length);
+  await Promise.all(Array.from({ length: size }, run));
+}
+
+/**
  * Centralized logger for OtterScript Language extension.
  *
  * @example
@@ -1248,5 +1273,6 @@ module.exports = {
 
   // -- Regex
   createRegexPatterns,
-  scheduleTimerForUri
+  scheduleTimerForUri,
+  mapWithConcurrency
 };
