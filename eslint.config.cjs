@@ -76,6 +76,7 @@ module.exports = [
       "no-useless-return": "warn",
       "no-misleading-character-class": "error",
       "no-async-promise-executor": "error",
+      "no-debugger": "error",
       "default-case": "warn",
       "no-else-return": "warn",
       "no-lonely-if": "warn",
@@ -85,7 +86,6 @@ module.exports = [
        */
 
       "no-console": "off",
-      "no-debugger": "off",
       "no-invalid-this": "off",
 
       "no-restricted-globals": ["error",

@@ -28,8 +28,6 @@ repos:
       - id: forbid-new-submodules
       - id: check-json
         exclude: ^(\.vscode/|snippets/otterscript\.json)
-      - id: check-ast
-      - id: debug-statements
       - id: check-shebang-scripts-are-executable
         files: \.(sh|py)$
 
@@ -45,16 +43,26 @@ repos:
         files: \.md$
 
   # ---------------------------------------------------------------------------
-  # JAVASCRIPT/TYPESCRIPT - ESLINT
+  # PROJECT GATES - run the repo's own tooling so pre-commit and CI never diverge
   # ---------------------------------------------------------------------------
   - repo: local
     hooks:
+      # Same ESLint, config, cache, and --max-warnings=0 as `npm run lint:ci`.
+      # `--no-install` fails loudly if node_modules is stale instead of pulling
+      # a different ESLint into an isolated env.
       - id: eslint
         name: ESLint
-        entry: eslint --config eslint.config.cjs
-        language: node
-        files: ^(src|test|scripts)/.*\.[jt]sx?$
-        additional_dependencies:
-          - eslint@10.x
-          - globals@17.x
-          - "@eslint/js@10.x"
+        entry: npx --no-install eslint --cache --max-warnings=0 --config eslint.config.cjs
+        language: system
+        files: ^(src|test|scripts)/.*\.js$
+        pass_filenames: true
+
+      # Grammar alternations in syntaxes/otterscript.tmLanguage.json vs the
+      # authoritative tables in src/language-data.js (+ the namespace allowlist).
+      # Cheap, and guards the drift the sync script exists to catch.
+      - id: check-lang-sync
+        name: Grammar / language-data sync
+        entry: node scripts/check-language-sync.js
+        language: system
+        pass_filenames: false
+        files: ^(src/language-data\.js|syntaxes/otterscript\.tmLanguage\.json)$
