@@ -4,7 +4,7 @@
 
 ### Added
 
-- Namespace metadata for every built-in operation and function whose owning extension could be verified against the Inedo source; the namespace now shows on hover
+- Namespace metadata for operations and functions that declare a `[ScriptNamespace]` in the Inedo extension source (e.g. `Files`, `HTTP`, `Windows`, `Linux`); the namespace shows on hover. Core engine built-ins (`$ToJson`, `@Split`, `Exec`, …) carry no namespace — they are the optional `Core::` namespace and there is no `InedoCore::` prefix
 - Signature help shows operations in their qualified `Namespace::Operation` form
 - `unknown-namespace` diagnostic for a `Namespace::` qualifier that is not a known OtterScript namespace, with a quick-fix to the closest match; a missing prefix is never flagged (it is optional)
 - Workspace symbol provider — `Ctrl+T` ("Go to Symbol in Workspace") lists every `module` declaration across all `.otter`/`.oscript` files, backed by an index kept fresh with a file-system watcher and from open documents

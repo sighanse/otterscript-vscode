@@ -37,14 +37,14 @@
  * @typedef {Object} DocEntry
  * @property {string} name Human-readable name shown in completion and hover
  * @property {string} description Short summary shown in IntelliSense
- * @property {string | null} namespace The namespace a user would type before `::`
- *   to qualify this construct. It is the operation/function's `[ScriptNamespace]`
- *   value when it declares one (e.g. "Files", "HTTP", "ProGet"), otherwise the
- *   name of the extension that defines it (e.g. "InedoCore", "Windows"). It is
- *   `null` for pure OtterScript language constructs — every keyword and syntax
- *   form, plus the `Log-*` statements — which are never namespace-qualified, and
- *   also (for now) for entries whose owning extension has not yet been verified
- *   against Inedo source. Non-null values must be a member of {@link NAMESPACES}.
+ * @property {string | null} namespace The `[ScriptNamespace]` token declared on
+ *   the construct's class (or its extension assembly) in Inedo source, e.g.
+ *   "Files", "HTTP", "Windows", "Scripting". `null` when no `[ScriptNamespace]`
+ *   is declared — the common case: keywords, syntax, the `Log-*` statements, and
+ *   every core engine built-in (`$ToJson`, `@Split`, `Exec`, …). Such constructs
+ *   are optionally writable as `Core::Name` but are shown without a namespace.
+ *   The extension *name* is never used as a fallback. Non-null values must be a
+ *   member of {@link NAMESPACES}.
  * @property {string=} signature Usage syntax shown in hover and signature help.
  *   House style, by construct kind:
  *   - Operations (named arguments): `Operation-Name(RequiredArg: <type>, [OptionalArg: <type>]);`
@@ -64,43 +64,46 @@
 /** @typedef {Record<string, DocEntry>} DocsTable */
 
 /**
- * The set of valid OtterScript namespace tokens: every first-party Inedo
- * namespace we can attest, so a value here is never a typo and the eventual
- * "unknown namespace" diagnostic never flags a legitimate one. It combines
+ * The set of valid OtterScript namespace prefixes: `Core` (the built-in engine
+ * namespace — every unqualified operation/function may optionally be written as
+ * `Core::Name`) plus every first-party extension's declared `[ScriptNamespace]`
+ * token, verified against Inedo source (github.com/Inedo/inedox-*). A value here
+ * is never a typo, so the `unknown-namespace` diagnostic never flags a
+ * legitimate prefix.
  *
- *   - declared `[ScriptNamespace("…")]` values and each extension's
- *     `Namespaces` constants (Files, HTTP, ProGet, DotNet, Docker, Pip, …), and
- *   - the extension name itself (InedoCore, Windows, Git, Python, Scripting, …),
- *     which is the namespace for that extension's operations/functions that
- *     declare no `[ScriptNamespace]`.
+ * A `DocEntry.namespace` is either `null` (no `[ScriptNamespace]` on the class
+ * or its assembly — the common case; such constructs are `Core::` built-ins and
+ * are shown without a namespace) or one of the tokens below. NOTE: the extension
+ * *name* is not a namespace — e.g. the InedoCore extension declares only
+ * `Files`, `HTTP`, `Network`, `ProGet`, `UPack`, `Otter`; there is no
+ * `InedoCore::` prefix.
  *
- * A `DocEntry.namespace` is either `null` or one of these. Single source of
- * truth for `validateDocs`, the grammar/language-data sync check, and any
- * namespace-aware editor feature. Third-party extensions can define their own
- * namespaces; extend this list as those become relevant to the docs tables.
+ * Single source of truth for `validateDocs`, the grammar/language-data sync
+ * check, and any namespace-aware editor feature.
  *
  * @type {ReadonlySet<string>}
  */
 const NAMESPACES = Object.freeze(
   new Set([
-    // -- InedoCore extension (name + its declared namespaces)
-    "InedoCore",
+    // -- Built-in engine namespace (optional prefix for any unqualified name)
+    "Core",
+    // -- InedoCore extension's declared [ScriptNamespace] tokens
     "Files",
     "HTTP",
     "Network",
     "ProGet",
     "UPack",
     "Otter",
-    // -- Windows extension (name + its declared namespaces)
+    // -- Windows extension
     "Windows",
     "IIS",
     "Firewall",
     "DotNet",
-    // -- Scripting extension (name + its declared namespaces)
+    // -- Scripting extension (assembly-level [ScriptNamespace("Scripting")])
     "Scripting",
     "PowerShell",
     "Linux",
-    // -- Other first-party extensions (extension name + declared namespaces)
+    // -- Other first-party extensions
     "Docker",
     "Python",
     "Pip",
@@ -453,7 +456,7 @@ Ensure-Directory myFolderName
 `
   },
   "Ensure-Server": {
-    namespace: null,
+    namespace: "Otter",
     name: "Ensure-Server",
     signature: "Ensure-Server(Name: <text>, [Exists: <true/false>], [Roles: <@(text)>], [Environments: <@(text)>], [RoutineExecutionType: <text>], [AgentConfigurationXml: <text>]);",
     snippet: "Ensure-Server ${1:myServerName}\n(\n    Exists: ${2:true}\n);$0",
@@ -952,7 +955,7 @@ Sign-Exe(
 `
   },
   "Collect-RpmPackages": {
-    namespace: null,
+    namespace: "Linux",
     name: "Collect-RpmPackages",
     signature: "Collect-RpmPackages();",
     snippet: "Collect-RpmPackages();$0",
@@ -965,7 +968,7 @@ Collect-RpmPackages();
 `
   },
   "Sleep": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "Sleep",
     signature: "Sleep <integer>;",
     snippet: "Sleep ${1:seconds};$0",
@@ -1087,7 +1090,7 @@ Release-Server(
 `
   },
   "Apply-Template": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "Apply-Template",
     signature: "Apply-Template([Asset: <text>], [OutputVariable: <text>], [OutputFile: <text>], [Literal: <text>], [InputFile: <text>], [AdditionalVariables: <%(key1: value1, ...)>], [NewLines: <integer>]);",
     snippet: "Apply-Template(\n    Literal: >>${1:template text}>>,\n    OutputVariable => ${2:\\$text},\n    AdditionalVariables: %(\n        ${3:key}: ${4:value}\n    ),\n    NewLines: ${5:newLines}\n);$0",
@@ -1399,7 +1402,7 @@ Otter::Set-Variable
 `
   },
   "Exec": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "Exec",
     signature: "Exec([FileName: <text>], [Arguments: <text>], [WorkingDirectory: <text>], [OutputLogLevel: <integer>], [ErrorOutputLogLevel: <integer>], [SuccessExitCode: <text>], [ImportVariables: <true/false>], [WarnRegex: <text>], [DebugRegex: <text>], [LogArguments: <true/false>], [ReportProgressRegex: <text>], [OutputFilterRegex: <text>]);",
     snippet: "InedoCore::Exec ${1:executablePath}\n(\n    Arguments: ${2:arguments}\n);$0",
@@ -2227,7 +2230,7 @@ const variableDocs = {
 /** @type {DocsTable} */
 const scalarFunctionDocs = {
   "ToJson": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$ToJson",
     signature: "$ToJson(data)",
     snippet: '\\$ToJson(${1:data})${0}',
@@ -2262,7 +2265,7 @@ $json = $ToJson(%(
 `,
   },
   "HtmlEncode": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$HtmlEncode",
     signature: "$HtmlEncode(text)",
     snippet: "\\$HtmlEncode(${1:text})",
@@ -2281,7 +2284,7 @@ $encoded = $HtmlEncode("<script>alert('xss')</script>");
 `,
   },
   "UrlEncode": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$UrlEncode",
     signature: "$UrlEncode(text)",
     snippet: "\\$UrlEncode(${1:text})",
@@ -2299,7 +2302,7 @@ $url = "https://example.com/search?q=" + $UrlEncode($query);
 `,
   },
   "PathCombine": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$PathCombine",
     signature: "$PathCombine(path1, path2, ...)",
     snippet: "\\$PathCombine(${1:path1}, ${2:path2})",
@@ -2320,7 +2323,7 @@ $fullPath = $PathCombine("C:\\Websites", "MyApp", "web.config");
 `,
   },
   "Eval": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$Eval",
     signature: "$Eval(expression)",
     snippet: "\\$Eval(${1:expression})",
@@ -2340,7 +2343,7 @@ $result = $Eval($template);  # Expands $name
   },
   // String Manipulation Functions
   "ToLower": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$ToLower",
     signature: "$ToLower(text)",
     snippet: "\\$ToLower(${1:text})",
@@ -2359,7 +2362,7 @@ $lower = $ToLower("Hello World");
 `,
   },
   "ToUpper": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$ToUpper",
     signature: "$ToUpper(text)",
     snippet: "\\$ToUpper(${1:text})",
@@ -2378,7 +2381,7 @@ $upper = $ToUpper("Hello World");
 `,
   },
   "Trim": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$Trim",
     signature: "$Trim(text)",
     snippet: "\\$Trim(${1:text})",
@@ -2399,7 +2402,7 @@ $trimmed = $Trim("  hello  ");
 `,
   },
   "Substring": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$Substring",
     signature: "$Substring(text, startIndex, length)",
     snippet: "\\$Substring(${1:text}, ${2:startIndex}, ${3:length})",
@@ -2422,7 +2425,7 @@ $sub = $Substring("Hello World", 6, 5);
 `,
   },
   "Replace": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$Replace",
     signature: "$Replace(text, oldValue, newValue, [ignoreCase])",
     snippet: "\\$Replace(${1:text}, ${2:oldValue}, ${3:newValue}, ${4|false,true|})",
@@ -2446,7 +2449,7 @@ $result = $Replace("Hello World", "World", "Otter");
 `,
   },
   "Join": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$Join",
     signature: "$Join(separator, vector)",
     snippet: '\\$Join("${1:, }", @${2:vector})',
@@ -2469,7 +2472,7 @@ $joined = $Join(", ", @("apple", "banana", "cherry"));
   },
   // Date and Time Functions
   "Date": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$Date",
     signature: "$Date([format])",
     snippet: "\\$Date(${1:format})",
@@ -2499,7 +2502,7 @@ $sortable = $Date("s");
 `
   },
   "DateUtc": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$DateUtc",
     signature: "$DateUtc([format])",
     snippet: "\\$DateUtc(${1:format})",
@@ -2568,7 +2571,7 @@ $decoded = $Base64Decode("SGVsbG8gV29ybGQ=");
   },
   // JSON Functions
   "FromJson": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$FromJson",
     signature: "$FromJson(jsonString)",
     snippet: '\\$FromJson("${1:jsonString}");$0',
@@ -2591,7 +2594,7 @@ $name = $data[name];
   },
   // File System Functions
   "FileExists": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$FileExists",
     signature: "$FileExists(filePath)",
     snippet: '\\$FileExists("${1:filePath}");$0',
@@ -2613,7 +2616,7 @@ if $FileExists("C:\\config\\app.config") {
 `,
   },
   "DirectoryExists": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$DirectoryExists",
     signature: "$DirectoryExists(directoryPath)",
     snippet: '\\$DirectoryExists("${1:directoryPath}");$0',
@@ -2636,7 +2639,7 @@ if $DirectoryExists("C:\\Websites") {
   },
   // Math Functions
   "Expr": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$Expr",
     signature: "$Expr(expression)",
     snippet: "\\$Expr(\"${1:expression}\")",
@@ -2657,7 +2660,7 @@ $result = $Expr("(5 + 3) * 2");
 `,
   },
   "Increment": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$Increment",
     signature: "$Increment(value)",
     snippet: "\\$Increment(${1:variable})",
@@ -2679,7 +2682,7 @@ $count = $Increment($count);
 `,
   },
   "Decrement": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$Decrement",
     signature: "$Decrement(value)",
     snippet: "\\$Decrement(${1:variable})",
@@ -2701,7 +2704,7 @@ $count = $Decrement($count);
 `,
   },
   "Abs": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$Abs",
     signature: "$Abs(value)",
     snippet: "\\$Abs(${1:value})",
@@ -2722,7 +2725,7 @@ $result = $Abs(-10);
 `,
   },
   "Ceiling": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$Ceiling",
     signature: "$Ceiling(value)",
     snippet: "\\$Ceiling(${1:value})",
@@ -2743,7 +2746,7 @@ $result = $Ceiling(3.2);
 `,
   },
   "Floor": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$Floor",
     signature: "$Floor(value)",
     snippet: "\\$Floor(${1:value})",
@@ -2764,7 +2767,7 @@ $result = $Floor(3.8);
 `,
   },
   "Compare": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$Compare",
     signature: "$Compare(arg1, operator, arg2, [asNumber])",
     snippet: "\\$Compare(${1:value1}, ${2|<,>,<=,>=,=,!=|}, ${3:value2}${4:, true})",
@@ -2797,7 +2800,7 @@ $Compare("07", >, "6", true)
   },
   // Regular Expression Functions
   "MatchesRegex": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$MatchesRegex",
     signature: "$MatchesRegex(text, pattern)",
     snippet: "\\$MatchesRegex(${1:text}, \"${2:pattern}\")",
@@ -2820,7 +2823,7 @@ if $MatchesRegex($email, "^[\\w\\.]+@[\\w\\.]+\\.\\w+$") {
 `,
   },
   "RegexReplace": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$RegexReplace",
     signature: "$RegexReplace(text, pattern, replacement)",
     snippet: "\\$RegexReplace(${1:text}, \"${2:pattern}\", \"${3:replacement}\")",
@@ -2844,7 +2847,7 @@ $result = $RegexReplace("Hello 123 World", "\\d+", "XXX");
   },
   // Server/Environment Information Functions
   "ServerName": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$ServerName",
     signature: "$ServerName()",
     snippet: "\\$ServerName()",
@@ -2881,7 +2884,7 @@ if $EnvironmentName == "Production" {
   },
   // List/Vector Functions
   "ListCount": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$ListCount",
     signature: "$ListCount(vector)",
     snippet: "\\$ListCount(${1:vector})",
@@ -2903,7 +2906,7 @@ $count = $ListCount($items);
 `,
   },
   "ListItem": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$ListItem",
     signature: "$ListItem(vector, index)",
     snippet: "\\$ListItem(${1:vector}, ${2:index})",
@@ -3040,7 +3043,7 @@ $description = $PackageProperty("myPropertyName", "No property defined");
 `
   },
   "Coalesce": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$Coalesce",
     signature: "$Coalesce(value1, value2, ...)",
     snippet: "\\$Coalesce(${1:value1}, ${2:value2})${0}",
@@ -3058,7 +3061,7 @@ $name = $Coalesce($OverrideName, $DefaultName, "unnamed");
 `
   },
   "PadLeft": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$PadLeft",
     signature: "$PadLeft(text, length, [padCharacter])",
     snippet: "\\$PadLeft(${1:Text}, ${2:Length})${0}",
@@ -3079,7 +3082,7 @@ $padded = $PadLeft("7", 3, "0");
 `
   },
   "PadRight": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$PadRight",
     signature: "$PadRight(text, length, [padCharacter])",
     snippet: "\\$PadRight(${1:Text}, ${2:Length})${0}",
@@ -3100,7 +3103,7 @@ $padded = $PadRight("Name", 10, ".");
 `
   },
   "TrimStart": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$TrimStart",
     signature: "$TrimStart(text, ...)",
     snippet: "\\$TrimStart(${1:Text})${0}",
@@ -3120,7 +3123,7 @@ $trimmed = $TrimStart("   hello");
 `
   },
   "TrimEnd": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$TrimEnd",
     signature: "$TrimEnd(text, ...)",
     snippet: "\\$TrimEnd(${1:Text})${0}",
@@ -3140,7 +3143,7 @@ $trimmed = $TrimEnd("hello   ");
 `
   },
   "IsVariableDefined": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$IsVariableDefined",
     signature: "$IsVariableDefined(variableName, [variableType])",
     snippet: "\\$IsVariableDefined(\"${1:variableName}\")${0}",
@@ -3162,7 +3165,7 @@ if $IsVariableDefined("OptionalSetting")
 `
   },
   "JSEncode": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$JSEncode",
     signature: "$JSEncode(text)",
     snippet: "\\$JSEncode(${1:Text})${0}",
@@ -3175,7 +3178,7 @@ if $IsVariableDefined("OptionalSetting")
 `
   },
   "SHEval": {
-    namespace: null,
+    namespace: "Scripting",
     name: "$SHEval",
     signature: "$SHEval(scriptText)",
     snippet: "\\$SHEval(${1:ScriptText})${0}",
@@ -3198,7 +3201,7 @@ Log-Information $NextYear;
 `
   },
   "ListIndexOf": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$ListIndexOf",
     signature: "$ListIndexOf(list, item)",
     snippet: "\\$ListIndexOf(${1:List}, ${2:Item})${0}",
@@ -3212,7 +3215,7 @@ Log-Information $NextYear;
 `
   },
   "XmlEncode": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$XmlEncode",
     signature: "$XmlEncode(text)",
     snippet: "\\$XmlEncode(${1:Text})${0}",
@@ -3225,7 +3228,7 @@ Log-Information $NextYear;
 `
   },
   "NewLine": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$NewLine",
     signature: "$NewLine([windowsOrLinux])",
     snippet: "\\$NewLine(${1:WindowsOrLinux})${0}",
@@ -3238,7 +3241,7 @@ Log-Information $NextYear;
 `
   },
   "ExecutionId": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$ExecutionId",
     signature: "$ExecutionId",
     description: "Returns the current execution ID.",
@@ -3247,7 +3250,7 @@ Log-Information $NextYear;
 `
   },
   "ExecutionState": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$ExecutionState",
     signature: "$ExecutionState",
     description: "Returns the current state of the execution (normal, warning, or error).",
@@ -3256,7 +3259,7 @@ Log-Information $NextYear;
 `
   },
   "WorkingDirectory": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$WorkingDirectory",
     signature: "$WorkingDirectory",
     description: "Returns the current working directory.",
@@ -3265,7 +3268,7 @@ Log-Information $NextYear;
 `
   },
   "SpecialWindowsPath": {
-    namespace: "Windows",
+    namespace: null,
     name: "$SpecialWindowsPath",
     signature: "$SpecialWindowsPath(name)",
     snippet: "\\$SpecialWindowsPath(${1:Name})${0}",
@@ -3278,7 +3281,7 @@ Log-Information $NextYear;
 `
   },
   "ResolvePath": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$ResolvePath",
     signature: "$ResolvePath(path)",
     snippet: "\\$ResolvePath(${1:Path})${0}",
@@ -3300,7 +3303,7 @@ $ResolvePath(~\\path)                      # -> {ExecutionDirectory}\\path
 `
   },
   "FileContents": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$FileContents",
     signature: "$FileContents(name, [maxLength])",
     snippet: "\\$FileContents(${1:Name})${0}",
@@ -3314,7 +3317,7 @@ $ResolvePath(~\\path)                      # -> {ExecutionDirectory}\\path
 `
   },
   "EnvironmentVariable": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$EnvironmentVariable",
     signature: "$EnvironmentVariable(environmentVariableName)",
     snippet: "\\$EnvironmentVariable(${1:EnvironmentVariableName})${0}",
@@ -3334,7 +3337,7 @@ Log-Information $Path;
 `
   },
   "RoleName": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "$RoleName",
     signature: "$RoleName",
     description: "Name of the current server role in context.",
@@ -3351,7 +3354,7 @@ Log-Information $Path;
 /** @type {DocsTable} */
 const vectorFunctionDocs = {
   "Split": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "@Split",
     signature: '@Split(text, separator, [count])',
     snippet: "@Split(\"${1:text}\", \"${2:,}\"${3:, ${4:count}})",
@@ -3375,7 +3378,7 @@ const vectorFunctionDocs = {
 `
   },
   "ListConcat": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "@ListConcat",
     signature: '@ListConcat(list1, list2, ...)',
     snippet: "@ListConcat(${1:@list1}, ${2:@list2})",
@@ -3394,7 +3397,7 @@ const vectorFunctionDocs = {
 `
   },
   "ListInsert": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "@ListInsert",
     signature: '@ListInsert(list, item, index)',
     snippet: "@ListInsert(${1:@list}, \"${2:item}\", ${3:index})",
@@ -3416,7 +3419,7 @@ const vectorFunctionDocs = {
 `
   },
   "ListRemove": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "@ListRemove",
     signature: '@ListRemove(list, index)',
     snippet: "@ListRemove(${1:@list}, ${2:index})",
@@ -3437,7 +3440,7 @@ const vectorFunctionDocs = {
 `
   },
   "ListSet": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "@ListSet",
     signature: '@ListSet(list, index, item)',
     snippet: "@ListSet(${1:@list}, ${2:index}, \"${3:item}\")",
@@ -3459,7 +3462,7 @@ const vectorFunctionDocs = {
 `
   },
   "MapKeys": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "@MapKeys",
     signature: '@MapKeys(map)',
     snippet: "@MapKeys(${1:@map})",
@@ -3479,7 +3482,7 @@ const vectorFunctionDocs = {
 `
   },
   "Range": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "@Range",
     signature: '@Range(start, count)',
     snippet: "@Range(${1:start}, ${2:count})",
@@ -3499,7 +3502,7 @@ const vectorFunctionDocs = {
 `
   },
   "RegexFind": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "@RegexFind",
     signature: '@RegexFind(text, matchExpression, [matchGroup])',
     snippet: "@RegexFind(${1:text}, ${2:matchExpression}${3:, ${4:matchGroup}})",
@@ -3625,7 +3628,7 @@ foreach $server in @AcquiredServers("WebServer") {
 `
   },
   "AllEnvironments": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "@AllEnvironments",
     signature: '@AllEnvironments',
     description: 'Returns the list of all environments configured in the instance.',
@@ -3643,7 +3646,7 @@ foreach $Env in @AllEnvironments
 `
   },
   "AllRoles": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "@AllRoles",
     signature: '@AllRoles',
     description: 'Returns the list of all server roles configured in the instance.',
@@ -3661,7 +3664,7 @@ foreach $Role in @AllRoles
 `
   },
   "AllServers": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "@AllServers",
     signature: '@AllServers([includeInactive])',
     snippet: "@AllServers",
@@ -3683,7 +3686,7 @@ foreach $Server in @AllServers
 `
   },
   "ServersInEnvironment": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "@ServersInEnvironment",
     signature: '@ServersInEnvironment([environmentName], [includeInactive])',
     snippet: "@ServersInEnvironment(\"${1:environmentName}\")",
@@ -3704,7 +3707,7 @@ foreach $server in @ServersInEnvironment("Production") {
 `
   },
   "ServersInRole": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "@ServersInRole",
     signature: '@ServersInRole([roleName], [includeInactive])',
     snippet: "@ServersInRole(\"${1:roleName}\")",
@@ -3725,7 +3728,7 @@ foreach $server in @ServersInRole("WebServer") {
 `
   },
   "ServersInRoleAndEnvironment": {
-    namespace: "InedoCore",
+    namespace: null,
     name: "@ServersInRoleAndEnvironment",
     signature: '@ServersInRoleAndEnvironment([roleName], [environmentName], [includeInactive])',
     snippet: "@ServersInRoleAndEnvironment(\"${1:roleName}\", \"${2:environmentName}\")",
