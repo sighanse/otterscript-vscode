@@ -520,7 +520,7 @@ function activate(context) {
   // Shows documentation when user hovers over code elements.
   // Triggered by mouse hover or Ctrl+K Ctrl+I (keyboard).
   //
-  // Hover resolution order matter (MOST specific FIRST)
+  // Hover resolution order matters (MOST specific FIRST)
 
   const hoverProvider = vscode.languages.registerHoverProvider(
     "otterscript",
@@ -746,9 +746,7 @@ function activate(context) {
    *
    * Triggered by: Command Palette or Ctrl+Shift+Alt+F
    *
-   * @see createMissingDollarFix
-   * @see createInvalidOperatorFix
-   * @see createForToForeachFix
+   * @see FIX_FACTORIES - the diagnostic-code -> fix-factory dispatch table
    */
   const fixAllCommand = vscode.commands.registerCommand(
     'otterscript.fixAll',

@@ -463,8 +463,6 @@ module.exports = {
   MODULE_DECLARATION_REGEX,
   MODULE_CALL_TARGET_REGEX,
   MODULE_CALL_TARGET_GLOBAL_REGEX,
-  MODULE_DECL_PREFIX_REGEX,
-  MODULE_CALL_PREFIX_REGEX,
   isModuleDeclarationContext,
   isModuleCallContext,
   findModuleDeclarations,

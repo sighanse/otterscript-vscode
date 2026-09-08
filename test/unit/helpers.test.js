@@ -8,7 +8,7 @@
  *
  * Covered:
  *   - checkMissingDollar
- *   - findDuplicateMapKeyDiagnosticsFromMasked (+ the findDuplicateMapKeyDiagnostics wrapper)
+ *   - findDuplicateMapKeyDiagnosticsFromMasked
  *   - computeFoldingRanges
  *   - buildHoverMarkdown / buildCompletionItem
  *   - nearestNamespace / createUnknownNamespaceFix
@@ -32,7 +32,6 @@ const {
 const stub = require("../vscode-stub");
 const {
   checkMissingDollar,
-  findDuplicateMapKeyDiagnostics,
   findDuplicateMapKeyDiagnosticsFromMasked,
   computeFoldingRanges,
   buildHoverMarkdown,
@@ -207,19 +206,6 @@ describe("findDuplicateMapKeyDiagnosticsFromMasked", () => {
 
   it("does not crash on an unclosed '%(' (no matching ')')", () => {
     assert.deepEqual(run("$m = %( a: 1, a: 2"), []);
-  });
-});
-
-describe("findDuplicateMapKeyDiagnostics (wrapper)", () => {
-  it("masks the source itself before scanning, so map-shaped text in a comment is ignored", () => {
-    const doc = makeDoc('%( a: 1, a: 2 ) # note: a: 3, a: 4 not real keys');
-    const diags = findDuplicateMapKeyDiagnostics(doc);
-    assert.equal(diags.length, 1, "only the real duplicate in the map counts");
-  });
-
-  it("defaults its source argument to document.getText()", () => {
-    const diags = findDuplicateMapKeyDiagnostics(makeDoc("%( k: 1, k: 2 )"));
-    assert.equal(diags.length, 1);
   });
 });
 
