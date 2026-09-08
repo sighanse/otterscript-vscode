@@ -45,9 +45,20 @@
  *   form, plus the `Log-*` statements — which are never namespace-qualified, and
  *   also (for now) for entries whose owning extension has not yet been verified
  *   against Inedo source. Non-null values must be a member of {@link NAMESPACES}.
- * @property {string=} signature Usage syntax
+ * @property {string=} signature Usage syntax shown in hover and signature help.
+ *   House style, by construct kind:
+ *   - Operations (named arguments): `Operation-Name(RequiredArg: <type>, [OptionalArg: <type>]);`
+ *     Types are angle-bracketed (`<text>`, `<integer>`, `<true/false>`, `<@(text)>`,
+ *     `<%(key1: value1, ...)>`); optional arguments are wrapped in `[ ]`; the
+ *     statement terminator `;` is kept. Single positional-argument statements
+ *     take no parentheses (`Log-Information "message";`, `Sleep <integer>;`).
+ *   - `$`/`@` functions (positional arguments): `$FunctionName(paramName, [optionalParam], ...)`.
+ *     Parameter names are lowerCamelCase descriptive labels, no type tokens, no
+ *     trailing `;`; `...` marks a repeating tail argument.
+ *   - Runtime values with no call syntax (`$WorkingDirectory`, `@AllRoles`): bare name.
  * @property {string=} snippet VS Code snippet insertion text
- * @property {string=} documentation Extended Markdown documentation
+ * @property {string=} documentation Extended Markdown documentation. Do not repeat
+ *   `description` verbatim as the first line — hover renders both.
  */
 
 /** @typedef {Record<string, DocEntry>} DocsTable */
@@ -177,8 +188,8 @@ Log-Error "Failed to connect to server";
   },
   "Post-Http": {
     namespace: "HTTP",
-    name: 'Post-Http',
-    signature: 'Post-Http(Url: string, [options...])',
+    name: "Post-Http",
+    signature: 'Post-Http(Url: <text>, [Method: <integer>], [ContentType: <text>], [TextData: <text>], [FormData: <%(key1: value1, ...)>], [LogRequestData: <true/false>], [LogResponseBody: <true/false>], [ResponseBody: <text>], [ErrorStatusCodes: <text>], [RequestHeaders: <%(key1: value1, ...)>], [MaxResponseLength: <integer>], [ProxyRequest: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [IgnoreSslErrors: <true/false>]);',
     snippet: 'Post-Http(\n    Url: "${1:https://example.com}",\n    ${2:ContentType: "application/json",}\n    ${3:TextData: "${4:request body}"},\n    ${5:FormData: %(\n        ${6:key}: "${7:value}"\n    )},\n    ${8:LogResponseBody: true}\n);',
     description: 'Executes an HTTP POST/PUT/PATCH request to a URL, typically used for RESTful operations.',
     documentation: `
@@ -232,8 +243,6 @@ Post-Http(
     snippet: "Download-Http ${1:https://example.com/file.zip}\n(\n    FileName: ${2:artifact.zip},\n    LogResponseBody: ${3:false}\n);$0",
     description: "Downloads a file from a specified URL using an HTTP GET.",
     documentation: `
-Downloads a file from a specified URL using an HTTP GET.
-
 **Script Usage:**
 \`\`\`otterscript
 Download-Http(
@@ -810,8 +819,6 @@ Query-Package
     snippet: "Push-PackageFile ${1:MyPackage.1.0.0.upack}\n(\n    To: ${2:InternalFeed}\n);$0",
     description: "Uploads a universal package file to a package source.",
     documentation: `
-Uploads a universal package file to a package source.
-
 **Script Usage:**
 \`\`\`otterscript
 Push-PackageFile(
@@ -947,13 +954,13 @@ Sign-Exe(
   "Collect-RpmPackages": {
     namespace: null,
     name: "Collect-RpmPackages",
-    signature: "Collect-RpmPackages [DefaultArgument] ();",
+    signature: "Collect-RpmPackages();",
     snippet: "Collect-RpmPackages();$0",
     description: "Collects the names and versions of .rpm packages installed on a server.",
     documentation: `
 **Script Usage:**
 \`\`\`otterscript
-Collect-RpmPackages [DefaultArgument] ();
+Collect-RpmPackages();
 \`\`\`
 `
   },
@@ -1633,7 +1640,7 @@ If break is used outside of an iteration block, a warning will be written to the
   },
   "foreach": {
     namespace: null,
-    name: 'foreach',
+    name: "foreach",
     description: 'Iterates over items in a vector. Works in both OtterScript code and template tags.',
     documentation: `
 Can be used in two contexts:
@@ -2463,7 +2470,7 @@ $joined = $Join(", ", @("apple", "banana", "cherry"));
   // Date and Time Functions
   "Date": {
     namespace: "InedoCore",
-    name: '$Date',
+    name: "$Date",
     signature: "$Date([format])",
     snippet: "\\$Date(${1:format})",
     description: 'Returns the current date and time of the local timezone.',
@@ -2926,8 +2933,6 @@ $second = $ListItem($items, 1);
     snippet: "\\$EncodeBasicAuth(\"${1:userName}\", \"${2:password}\")",
     description: "Returns the base64-encoded token used for HTTP basic auth requests.",
     documentation: `
-Returns the base64-encoded token used for HTTP basic auth requests.
-
 **Parameters:**
 - \`userName\` - The username to encode
 - \`password\` - The password to encode
@@ -3055,7 +3060,7 @@ $name = $Coalesce($OverrideName, $DefaultName, "unnamed");
   "PadLeft": {
     namespace: "InedoCore",
     name: "$PadLeft",
-    signature: "$PadLeft(Text, Length, [PadCharacter])",
+    signature: "$PadLeft(text, length, [padCharacter])",
     snippet: "\\$PadLeft(${1:Text}, ${2:Length})${0}",
     description: "Returns a new string that right-aligns the characters by padding them on the left with a specified character, for a specified total length.",
     documentation: `
@@ -3076,7 +3081,7 @@ $padded = $PadLeft("7", 3, "0");
   "PadRight": {
     namespace: "InedoCore",
     name: "$PadRight",
-    signature: "$PadRight(Text, Length, [PadCharacter])",
+    signature: "$PadRight(text, length, [padCharacter])",
     snippet: "\\$PadRight(${1:Text}, ${2:Length})${0}",
     description: "Returns a new string that left-aligns the characters by padding them on the right with a specified character, for a specified total length.",
     documentation: `
@@ -3097,7 +3102,7 @@ $padded = $PadRight("Name", 10, ".");
   "TrimStart": {
     namespace: "InedoCore",
     name: "$TrimStart",
-    signature: "$TrimStart(Text, ...)",
+    signature: "$TrimStart(text, ...)",
     snippet: "\\$TrimStart(${1:Text})${0}",
     description: "Returns a string with all leading whitespace characters removed, or optionally a set of specified characters.",
     documentation: `
@@ -3117,7 +3122,7 @@ $trimmed = $TrimStart("   hello");
   "TrimEnd": {
     namespace: "InedoCore",
     name: "$TrimEnd",
-    signature: "$TrimEnd(Text, ...)",
+    signature: "$TrimEnd(text, ...)",
     snippet: "\\$TrimEnd(${1:Text})${0}",
     description: "Returns a string with all trailing whitespace characters removed, or optionally a set of specified characters.",
     documentation: `
@@ -3137,7 +3142,7 @@ $trimmed = $TrimEnd("hello   ");
   "IsVariableDefined": {
     namespace: "InedoCore",
     name: "$IsVariableDefined",
-    signature: "$IsVariableDefined(VariableName, [VariableType])",
+    signature: "$IsVariableDefined(variableName, [variableType])",
     snippet: "\\$IsVariableDefined(\"${1:variableName}\")${0}",
     description: "Returns true if the specified variable name is available in the current context; otherwise returns false.",
     documentation: `
@@ -3159,7 +3164,7 @@ if $IsVariableDefined("OptionalSetting")
   "JSEncode": {
     namespace: "InedoCore",
     name: "$JSEncode",
-    signature: "$JSEncode(Text)",
+    signature: "$JSEncode(text)",
     snippet: "\\$JSEncode(${1:Text})${0}",
     description: "Encodes a string for use in a JavaScript string literal.",
     documentation: `
@@ -3172,7 +3177,7 @@ if $IsVariableDefined("OptionalSetting")
   "SHEval": {
     namespace: null,
     name: "$SHEval",
-    signature: "$SHEval(ScriptText)",
+    signature: "$SHEval(scriptText)",
     snippet: "\\$SHEval(${1:ScriptText})${0}",
     description: "Returns the output of a shell script.",
     documentation: `
@@ -3195,7 +3200,7 @@ Log-Information $NextYear;
   "ListIndexOf": {
     namespace: "InedoCore",
     name: "$ListIndexOf",
-    signature: "$ListIndexOf(List, Item)",
+    signature: "$ListIndexOf(list, item)",
     snippet: "\\$ListIndexOf(${1:List}, ${2:Item})${0}",
     description: "Finds the index of an item in a list.",
     documentation: `
@@ -3209,7 +3214,7 @@ Log-Information $NextYear;
   "XmlEncode": {
     namespace: "InedoCore",
     name: "$XmlEncode",
-    signature: "$XmlEncode(Text)",
+    signature: "$XmlEncode(text)",
     snippet: "\\$XmlEncode(${1:Text})${0}",
     description: "Encodes a string for use in an XML element.",
     documentation: `
@@ -3222,7 +3227,7 @@ Log-Information $NextYear;
   "NewLine": {
     namespace: "InedoCore",
     name: "$NewLine",
-    signature: "$NewLine([WindowsOrLinux])",
+    signature: "$NewLine([windowsOrLinux])",
     snippet: "\\$NewLine(${1:WindowsOrLinux})${0}",
     description: "Returns the newline string for either the operating system of the current server in context, or specifically Windows or Linux.",
     documentation: `
@@ -3262,7 +3267,7 @@ Log-Information $NextYear;
   "SpecialWindowsPath": {
     namespace: "Windows",
     name: "$SpecialWindowsPath",
-    signature: "$SpecialWindowsPath(Name)",
+    signature: "$SpecialWindowsPath(name)",
     snippet: "\\$SpecialWindowsPath(${1:Name})${0}",
     description: "Returns the full path of a special directory on a Windows system.",
     documentation: `
@@ -3275,7 +3280,7 @@ Log-Information $NextYear;
   "ResolvePath": {
     namespace: "InedoCore",
     name: "$ResolvePath",
-    signature: "$ResolvePath(Path)",
+    signature: "$ResolvePath(path)",
     snippet: "\\$ResolvePath(${1:Path})${0}",
     description: "Provides an absolute path (terminated with a directory separator) based on a relative path and the current working directory.",
     documentation: `
@@ -3297,7 +3302,7 @@ $ResolvePath(~\\path)                      # -> {ExecutionDirectory}\\path
   "FileContents": {
     namespace: "InedoCore",
     name: "$FileContents",
-    signature: "$FileContents(Name, [MaxLength])",
+    signature: "$FileContents(name, [maxLength])",
     snippet: "\\$FileContents(${1:Name})${0}",
     description: "Returns the contents of a file on the current server.",
     documentation: `
@@ -3311,7 +3316,7 @@ $ResolvePath(~\\path)                      # -> {ExecutionDirectory}\\path
   "EnvironmentVariable": {
     namespace: "InedoCore",
     name: "$EnvironmentVariable",
-    signature: "$EnvironmentVariable(EnvironmentVariableName)",
+    signature: "$EnvironmentVariable(environmentVariableName)",
     snippet: "\\$EnvironmentVariable(${1:EnvironmentVariableName})${0}",
     description: "Returns the value of the specified environment variable on the current server.",
     documentation: `
@@ -3347,8 +3352,8 @@ Log-Information $Path;
 const vectorFunctionDocs = {
   "Split": {
     namespace: "InedoCore",
-    name: '@Split',
-    signature: '@Split(Text, Separator, [Count])',
+    name: "@Split",
+    signature: '@Split(text, separator, [count])',
     snippet: "@Split(\"${1:text}\", \"${2:,}\"${3:, ${4:count}})",
     description: 'Splits a string into substrings based on a specified separator.',
     documentation: `
@@ -3371,7 +3376,7 @@ const vectorFunctionDocs = {
   },
   "ListConcat": {
     namespace: "InedoCore",
-    name: '@ListConcat',
+    name: "@ListConcat",
     signature: '@ListConcat(list1, list2, ...)',
     snippet: "@ListConcat(${1:@list1}, ${2:@list2})",
     description: 'Creates a list containing the contents of each list in sequence.',
@@ -3390,7 +3395,7 @@ const vectorFunctionDocs = {
   },
   "ListInsert": {
     namespace: "InedoCore",
-    name: '@ListInsert',
+    name: "@ListInsert",
     signature: '@ListInsert(list, item, index)',
     snippet: "@ListInsert(${1:@list}, \"${2:item}\", ${3:index})",
     description: 'Inserts an item into a list at the specified index.',
@@ -3412,7 +3417,7 @@ const vectorFunctionDocs = {
   },
   "ListRemove": {
     namespace: "InedoCore",
-    name: '@ListRemove',
+    name: "@ListRemove",
     signature: '@ListRemove(list, index)',
     snippet: "@ListRemove(${1:@list}, ${2:index})",
     description: 'Removes an item from a list at the specified index.',
@@ -3433,7 +3438,7 @@ const vectorFunctionDocs = {
   },
   "ListSet": {
     namespace: "InedoCore",
-    name: '@ListSet',
+    name: "@ListSet",
     signature: '@ListSet(list, index, item)',
     snippet: "@ListSet(${1:@list}, ${2:index}, \"${3:item}\")",
     description: 'Updates the value at a given position in the list to a new value.',
@@ -3455,7 +3460,7 @@ const vectorFunctionDocs = {
   },
   "MapKeys": {
     namespace: "InedoCore",
-    name: '@MapKeys',
+    name: "@MapKeys",
     signature: '@MapKeys(map)',
     snippet: "@MapKeys(${1:@map})",
     description: 'Lists the keys of a map as a vector.',
@@ -3475,7 +3480,7 @@ const vectorFunctionDocs = {
   },
   "Range": {
     namespace: "InedoCore",
-    name: '@Range',
+    name: "@Range",
     signature: '@Range(start, count)',
     snippet: "@Range(${1:start}, ${2:count})",
     description: 'Returns a range of integers starting from a specified value.',
@@ -3495,7 +3500,7 @@ const vectorFunctionDocs = {
   },
   "RegexFind": {
     namespace: "InedoCore",
-    name: '@RegexFind',
+    name: "@RegexFind",
     signature: '@RegexFind(text, matchExpression, [matchGroup])',
     snippet: "@RegexFind(${1:text}, ${2:matchExpression}${3:, ${4:matchGroup}})",
     description: 'Finds all matches of a regular expression in a string, optionally returning only a matched group.',
@@ -3517,7 +3522,7 @@ const vectorFunctionDocs = {
   // Vector Variables (ProGet)
   "AffectedPackages": {
     namespace: null,
-    name: '@AffectedPackages',
+    name: "@AffectedPackages",
     signature: '@AffectedPackages',
     description: 'Returns a list of packages affected by the vulnerability in the current scope.',
     documentation: `
@@ -3535,7 +3540,7 @@ const vectorFunctionDocs = {
   },
   "ApiKeys": {
     namespace: null,
-    name: '@ApiKeys',
+    name: "@ApiKeys",
     signature: '@ApiKeys',
     description: 'Returns a list of API Keys in the current scope.',
     documentation: `
@@ -3556,7 +3561,7 @@ foreach $key in @ApiKeys {
   },
   "BuildIssues": {
     namespace: null,
-    name: '@BuildIssues',
+    name: "@BuildIssues",
     signature: '@BuildIssues(includeClosed)',
     description: 'Returns a list of issues on the build in the current scope.',
     documentation: `
@@ -3577,7 +3582,7 @@ foreach $issue in @BuildIssues(true) {
   },
   "FilesOnDisk": {
     namespace: null,
-    name: '@FilesOnDisk',
+    name: "@FilesOnDisk",
     signature: '@FilesOnDisk(includes, [excludes], [directory])',
     snippet: "@FilesOnDisk(\"${1:*.txt}\")",
     description: 'Returns a list of files matching the mask on the current server.',
@@ -3598,8 +3603,8 @@ set @ProjectFiles = @FilesOnDisk(*.csproj);
   },
   "AcquiredServers": {
     namespace: null,
-    name: '@AcquiredServers',
-    signature: '@AcquiredServers(Role)',
+    name: "@AcquiredServers",
+    signature: '@AcquiredServers(role)',
     snippet: "@AcquiredServers(\"${1:roleName}\")",
     description: 'Returns the list of all servers acquired for a specified role.',
     documentation: `
@@ -3621,7 +3626,7 @@ foreach $server in @AcquiredServers("WebServer") {
   },
   "AllEnvironments": {
     namespace: "InedoCore",
-    name: '@AllEnvironments',
+    name: "@AllEnvironments",
     signature: '@AllEnvironments',
     description: 'Returns the list of all environments configured in the instance.',
     documentation: `
@@ -3639,7 +3644,7 @@ foreach $Env in @AllEnvironments
   },
   "AllRoles": {
     namespace: "InedoCore",
-    name: '@AllRoles',
+    name: "@AllRoles",
     signature: '@AllRoles',
     description: 'Returns the list of all server roles configured in the instance.',
     documentation: `
@@ -3657,8 +3662,8 @@ foreach $Role in @AllRoles
   },
   "AllServers": {
     namespace: "InedoCore",
-    name: '@AllServers',
-    signature: '@AllServers([IncludeInactive])',
+    name: "@AllServers",
+    signature: '@AllServers([includeInactive])',
     snippet: "@AllServers",
     description: 'Returns the list of all servers configured in the instance.',
     documentation: `
@@ -3679,8 +3684,8 @@ foreach $Server in @AllServers
   },
   "ServersInEnvironment": {
     namespace: "InedoCore",
-    name: '@ServersInEnvironment',
-    signature: '@ServersInEnvironment([EnvironmentName], [IncludeInactive])',
+    name: "@ServersInEnvironment",
+    signature: '@ServersInEnvironment([environmentName], [includeInactive])',
     snippet: "@ServersInEnvironment(\"${1:environmentName}\")",
     description: 'Returns the list of all the servers in the specified environment name.',
     documentation: `
@@ -3700,8 +3705,8 @@ foreach $server in @ServersInEnvironment("Production") {
   },
   "ServersInRole": {
     namespace: "InedoCore",
-    name: '@ServersInRole',
-    signature: '@ServersInRole([RoleName], [IncludeInactive])',
+    name: "@ServersInRole",
+    signature: '@ServersInRole([roleName], [includeInactive])',
     snippet: "@ServersInRole(\"${1:roleName}\")",
     description: 'Returns the list of servers in the specified role.',
     documentation: `
@@ -3721,8 +3726,8 @@ foreach $server in @ServersInRole("WebServer") {
   },
   "ServersInRoleAndEnvironment": {
     namespace: "InedoCore",
-    name: '@ServersInRoleAndEnvironment',
-    signature: '@ServersInRoleAndEnvironment([RoleName], [EnvironmentName], [IncludeInactive])',
+    name: "@ServersInRoleAndEnvironment",
+    signature: '@ServersInRoleAndEnvironment([roleName], [environmentName], [includeInactive])',
     snippet: "@ServersInRoleAndEnvironment(\"${1:roleName}\", \"${2:environmentName}\")",
     description: 'Returns the list of all the servers in the specified role and environment name.',
     documentation: `
