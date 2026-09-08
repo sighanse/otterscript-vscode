@@ -40,6 +40,12 @@
   // IMPORTANT: Keep this ON for documentation quality
   "fenced-code-language": true,
 
+  // MD060: Table column style
+  // Disabled because:
+  // - wide reference tables (docs/milestones/*) can't be aligned without
+  //   unreadable source padding, and GitHub renders unaligned pipe tables fine
+  "table-column-style": false,
+
   // MD046: Code block style
   // Enforce triple-backtick style consistently
   "code-block-style": {
