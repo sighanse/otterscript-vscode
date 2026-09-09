@@ -20,8 +20,11 @@ const vscode = require("vscode");
 // from this module's `module.exports` for backward compatibility.
 const {
   createCodeScanState,
+  createTemplateScanState,
   maskNonCodeSpans,
   advanceScanState,
+  maskOutsideTemplateTags,
+  documentUsesTemplateTags,
   isInStringOrComment,
   getActiveParameterIndex,
   MODULE_NAME_TOKEN_REGEX,
@@ -982,6 +985,21 @@ function createForToForeachFix(document, diagnostic) {
 }
 
 /**
+ * Creates a quick-fix that replaces a template block terminator keyword
+ * (`<% end %>`, `<% endforeach %>`, ...) with `}`, so it becomes `<% } %>`.
+ * The diagnostic range covers exactly the keyword token.
+ *
+ * @param {vscode.TextDocument} document - The document containing the diagnostic
+ * @param {vscode.Diagnostic} diagnostic - The `template-end-keyword` diagnostic
+ * @returns {vscode.CodeAction} A code action that replaces the keyword with `}`
+ */
+function createTemplateEndFix(document, diagnostic) {
+  return createCodeAction("Replace with '}'", diagnostic, (edit) => {
+    edit.replace(document.uri, diagnostic.range, "}");
+  });
+}
+
+/**
  * Levenshtein edit distance between two short strings.
  *
  * @param {string} a
@@ -1229,6 +1247,7 @@ module.exports = {
   createAssignmentInConditionFix,
   createForToForeachFix,
   createUnknownNamespaceFix,
+  createTemplateEndFix,
   nearestNamespace,
 
   // -- Module navigation
@@ -1238,7 +1257,10 @@ module.exports = {
   getModuleDeclarations,
   findModuleDeclarations,
   createCodeScanState,
+  createTemplateScanState,
   maskNonCodeSpans,
+  maskOutsideTemplateTags,
+  documentUsesTemplateTags,
   findModuleDeclarationRange,
   getModuleCallReferencesByName,
   clearModuleInfoCache,

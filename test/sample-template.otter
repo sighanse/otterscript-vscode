@@ -1,0 +1,40 @@
+# SAMPLE-TEMPLATE.OTTER
+#
+# Manual-review corpus for the Phase 1 text-template (<% ... %>) diagnostics.
+# The whole file is one OtterScript text template: literal output text plus
+# <% ... %> code blocks. Every `# EXPECT:` note marks a line that must raise
+# exactly the named diagnostic; the literal JSON between tags must raise NOTHING
+# (the template-aware pass blanks it).
+#
+# NOTE: inside template literal text `#` is not a comment, it is output — the
+# notes below are harmless annotation only.
+#
+# Expected total: 6 diagnostics —
+#   template-missing-brace x2, template-end-keyword x2,
+#   "Unexpected '%>'" x1, "Unclosed template tag '<%'" x1.
+# Everything else (valid tags, literal JSON) must be clean.
+
+{
+  "items": [
+<% foreach $p in @AffectedPackages { %>
+    { "type": "TextBlock", "text": $ToJson("- " + $p.Name) },
+<% if !$p.Last %>
+    "separator"                                  # EXPECT on the line above: template-missing-brace
+<% end %>                                        # EXPECT: template-end-keyword
+<% } %>
+  ]
+}
+
+<% endforeach %>                                 # EXPECT: template-end-keyword
+<% while $keepGoing %>                           # EXPECT: template-missing-brace
+
+then %>                                          # EXPECT: Unexpected '%>' - no matching '<%'
+
+# --- must NOT flag ------------------------------------------------------------
+<% foreach $s in @AllServers() { %>
+    $ToJson($s.Name)
+<% } %>
+<% if $ok { %>ok<% } else { %>no<% } %>
+
+# --- unclosed tag: keep LAST (everything after it is treated as tag code) ----
+<% foreach $x in @y {

@@ -391,3 +391,76 @@ describe("updateDiagnostics — unknown namespace", () => {
     assert.ok(!codes.includes("unknown-namespace"));
   });
 });
+
+// ============================================================
+// text-template (<% ... %>) structural checks  (phase 1)
+// ============================================================
+
+describe("updateDiagnostics - template <% %> structural checks", () => {
+  /** @param {string} src */
+  const msgs = (src) => diagnose(src).map((d) => d.message);
+  /** @param {string} src */
+  const codes = (src) => diagnose(src).map((d) => d.code);
+
+  it("does not run any template check on a document with no tags", () => {
+    // `<% ... %>` only inside a string -> not template-aware -> plain scan.
+    assert.deepEqual(diagnose('set $t = "<% foreach $x in @y { %>";'), []);
+  });
+
+  it("blanks the literal text between tags (no false unknown-function / brace noise)", () => {
+    const src = [
+      "{",
+      '  "items": [',
+      "    <% foreach $p in @AffectedPackages { %>",
+      '    { "type": "TextBlock", "text": $ToJson("- " + $p.Name) }',
+      "    <% } %>",
+      "  ]",
+      "}",
+    ].join("\n");
+    assert.deepEqual(diagnose(src), []);
+  });
+
+  it("flags <% end %> and offers the } quick-fix code", () => {
+    const ds = diagnose("<% foreach $p in @x { %>a<% end %>");
+    const end = ds.find((d) => d.code === "template-end-keyword");
+    assert.ok(end);
+    assert.match(end.message, /<% end %>/);
+    assert.equal(end.severity, DiagnosticSeverity.Warning);
+  });
+
+  it("flags every <% endfoo %> spelling", () => {
+    for (const kw of ["end", "endif", "endfor", "endforeach", "endwhile", "ENDIF"]) {
+      assert.ok(
+        diagnose(`<% if $x { %>a<% ${kw} %>`).some((d) => d.code === "template-end-keyword"),
+        kw
+      );
+    }
+  });
+
+  it("flags a block opener with no brace", () => {
+    assert.ok(diagnose("<% if !$p.Last %>,<% } %>").some((d) => d.code === "template-missing-brace"));
+    assert.ok(diagnose("<% foreach $p in @x %>").some((d) => d.code === "template-missing-brace"));
+  });
+
+  it("does not flag a well-formed block opener or closer", () => {
+    assert.equal(codes("<% foreach $p in @x { %>").filter((c) => c === "template-missing-brace").length, 0);
+    assert.equal(codes("<% if $x { %>").filter((c) => c === "template-missing-brace").length, 0);
+    assert.equal(codes("<% } %>").filter((c) => c === "template-missing-brace").length, 0);
+    assert.equal(codes("<% } else { %>").filter((c) => c === "template-missing-brace").length, 0);
+  });
+
+  it("flags a stray %> with no matching <%", () => {
+    // needs a real tag elsewhere so the doc is template-aware
+    assert.ok(msgs("oops %> then <% $x %>").some((m) => /Unexpected '%>'/.test(m)));
+  });
+
+  it("flags an unclosed <% among complete tags", () => {
+    const ds = diagnose(["<% if $x { %>", "text", "<% foreach $p in @y {"].join("\n"));
+    assert.ok(ds.some((d) => /Unclosed template tag/.test(d.message)));
+  });
+
+  it("still runs the ordinary code checks inside a tag body", () => {
+    // missing '$' in a template-embedded if condition
+    assert.ok(diagnose("<% if count == 5 { %>x<% } %>").some((d) => d.code === "missing-dollar"));
+  });
+});

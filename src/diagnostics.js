@@ -10,9 +10,12 @@ const vscode = require("vscode");
 const {
   checkMissingDollar,
   createCodeScanState,
+  createTemplateScanState,
   createUnbalancedDiagnostic,
   findDuplicateMapKeyDiagnosticsFromMasked,
   maskNonCodeSpans,
+  maskOutsideTemplateTags,
+  documentUsesTemplateTags,
 } = require("./helpers");
 
 /**
@@ -37,6 +40,95 @@ const {
  * @type {RegExp}
  */
 const NAMESPACE_QUALIFIER_REGEX = /(^|[^A-Za-z0-9_$@:])([A-Za-z][A-Za-z0-9]*)::(?=[A-Za-z])/g;
+
+// -- Text-template (`<% ... %>`) structural checks --------------------------
+/** One complete single-line template tag; group 1 is the body. @type {RegExp} */
+const TEMPLATE_TAG_REGEX = /<%(.*?)%>/g;
+/** Tag body that is only a block-terminator keyword (`end`, `endforeach`, ...). @type {RegExp} */
+const TEMPLATE_END_KEYWORD_REGEX = /^\s*(end(?:if|for|foreach|while)?)\s*$/i;
+/** Tag body that opens a block (`if` / `foreach` / `while`, optionally after `}`/`else`). @type {RegExp} */
+const TEMPLATE_BLOCK_OPENER_REGEX = /^\s*(?:\}\s*)?(?:else\s+)?(?:if|foreach|while)\b/i;
+
+/**
+ * Emits the Phase 1 `<% %>` structural diagnostics for one line of a
+ * template-aware document. Consumes the string/comment-masked line (delimiters
+ * still visible); pushes onto `issues` and advances the cross-line `tagBalance`.
+ *
+ * @param {string} tagView - `maskNonCodeSpans` output for the raw line
+ * @param {number} lineIndex
+ * @param {vscode.Diagnostic[]} issues
+ * @param {{ count: number, lastLine: number, lastCol: number }} tagBalance
+ * @returns {void}
+ */
+function checkTemplateTags(tagView, lineIndex, issues, tagBalance) {
+  // Check 1: `<%` / `%>` balance (mirrors the brace/paren/bracket balance loop).
+  for (let col = 0; col < tagView.length - 1; col++) {
+    if (tagView[col] === "<" && tagView[col + 1] === "%") {
+      if (tagBalance.count === 0) {
+        tagBalance.lastLine = lineIndex;
+        tagBalance.lastCol = col;
+      }
+      tagBalance.count++;
+      col++;
+    } else if (tagView[col] === "%" && tagView[col + 1] === ">") {
+      if (tagBalance.count === 0) {
+        const d = new vscode.Diagnostic(
+          new vscode.Range(
+            new vscode.Position(lineIndex, col),
+            new vscode.Position(lineIndex, col + 2)
+          ),
+          "Unexpected '%>' - no matching '<%'",
+          vscode.DiagnosticSeverity.Error
+        );
+        d.source = "OtterScript";
+        issues.push(d);
+      } else {
+        tagBalance.count--;
+      }
+      col++;
+    }
+  }
+
+  // Checks 2 & 3: inspect each complete single-line `<% ... %>` tag body.
+  for (const m of tagView.matchAll(TEMPLATE_TAG_REGEX)) {
+    const body = m[1];
+    const bodyStart = /** @type {number} */ (m.index) + 2;
+
+    const endKw = body.match(TEMPLATE_END_KEYWORD_REGEX);
+    if (endKw) {
+      const kw = endKw[1];
+      const kwStart = bodyStart + body.indexOf(kw);
+      const d = new vscode.Diagnostic(
+        new vscode.Range(
+          new vscode.Position(lineIndex, kwStart),
+          new vscode.Position(lineIndex, kwStart + kw.length)
+        ),
+        `'<% ${kw} %>' is not OtterScript - close a template block with '<% } %>'`,
+        vscode.DiagnosticSeverity.Warning
+      );
+      d.code = "template-end-keyword";
+      d.source = "OtterScript";
+      issues.push(d);
+      continue; // a terminator tag is never also a block opener
+    }
+
+    if (!body.includes("{") && TEMPLATE_BLOCK_OPENER_REGEX.test(body)) {
+      const kwMatch = /** @type {RegExpMatchArray} */ (body.match(/\b(?:if|foreach|while)\b/i));
+      const kwStart = bodyStart + /** @type {number} */ (kwMatch.index);
+      const d = new vscode.Diagnostic(
+        new vscode.Range(
+          new vscode.Position(lineIndex, kwStart),
+          new vscode.Position(lineIndex, kwStart + kwMatch[0].length)
+        ),
+        `'<% ${kwMatch[0]} ... %>' must open a block - add '{' before '%>'`,
+        vscode.DiagnosticSeverity.Warning
+      );
+      d.code = "template-missing-brace";
+      d.source = "OtterScript";
+      issues.push(d);
+    }
+  }
+}
 
 /**
  * Updates diagnostics for an OtterScript document.
@@ -78,13 +170,30 @@ function updateDiagnostics(document, collection, ctx) {
   /** @type {vscode.Diagnostic[]} */
   const issues = [];
 
+  // -- Text-template mode: when the document uses `<% ... %>` tags, the literal
+  //    output text (JSON, Markdown, ...) between tags is NOT OtterScript. Blank
+  //    it before the code checks run, and separately run the `<% %>` structural
+  //    checks on a view where the delimiters are still visible.
+  const templateAware = documentUsesTemplateTags(text);
+  const tplState = createTemplateScanState();
+  const tagScanState = createCodeScanState();
+  const tagBalance = { count: 0, lastLine: -1, lastCol: -1 };
+
   // -- Split into lines for line-by-line processing
   const lines = text.split("\n");
 
   // -- Process all lines
   const maskedLines = [];
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-    const line = maskNonCodeSpans(lines[lineIndex], scanState);
+    const raw = lines[lineIndex];
+
+    if (templateAware) {
+      checkTemplateTags(maskNonCodeSpans(raw, tagScanState), lineIndex, issues, tagBalance);
+    }
+
+    const line = templateAware
+      ? maskNonCodeSpans(maskOutsideTemplateTags(raw, tplState), scanState)
+      : maskNonCodeSpans(raw, scanState);
     maskedLines.push(line);
 
     // ------------------------------------------------------------
@@ -300,6 +409,20 @@ function updateDiagnostics(document, collection, ctx) {
       const diag = createUnbalancedDiagnostic(sym.count, sym.lastPos, sym.open, sym.close, sym.name, document);
       if (diag) issues.push(diag);
     }
+  }
+
+  // -- Unclosed `<%` template tag (mirrors the unbalanced-symbol report above)
+  if (templateAware && tagBalance.count > 0) {
+    const d = new vscode.Diagnostic(
+      new vscode.Range(
+        new vscode.Position(tagBalance.lastLine, tagBalance.lastCol),
+        new vscode.Position(tagBalance.lastLine, tagBalance.lastCol + 2)
+      ),
+      `Unclosed template tag: '<%' at line ${tagBalance.lastLine + 1}, col ${tagBalance.lastCol + 1} not closed`,
+      vscode.DiagnosticSeverity.Error
+    );
+    d.source = "OtterScript";
+    issues.push(d);
   }
 
   // -- Detect duplicate keys inside map expressions: %( key: value, key: value )
