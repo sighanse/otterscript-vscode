@@ -549,7 +549,7 @@ describe("buildCompletionItem", () => {
     description: "to JSON",
     signature: "$ToJson(data)",
     documentation: "more",
-    namespace: "InedoCore",
+    namespace: null,
   };
   const KIND = /** @type {any} */ ("kind-sentinel");
 

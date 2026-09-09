@@ -16,7 +16,7 @@ This extension started as a learning project while implementing [custom webhook 
 
 ## Features
 
-- Syntax highlighting for OtterScript constructs, including namespaced operations (`ProGet::`, `Otter::`, `InedoCore::`)
+- Syntax highlighting for OtterScript constructs, including namespaced operations (`ProGet::`, `Otter::`, `Windows::`)
 - Hover documentation, auto-completion, and signature help for built-in functions, operations, variables, and map/vector expressions
 - Diagnostics for common mistakes (missing `$`, unknown functions, invalid operators, `=` used in `if` conditions, duplicate map keys, unknown `Namespace::` prefixes)
 - Quick‑fix code actions, plus a **Fix All Issues** command (`Ctrl+Shift+Alt+F`) that applies every available fix in the file

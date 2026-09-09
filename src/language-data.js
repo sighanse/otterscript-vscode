@@ -1100,7 +1100,7 @@ Applies full template transformation on a literal, a file, or a template asset.
 
 **Script Usage:**
 \`\`\`otterscript
-InedoCore::Apply-Template(
+Apply-Template(
   [Asset: <text>],
   [OutputVariable: <text>],
   [OutputFile: <text>],
@@ -1405,12 +1405,12 @@ Otter::Set-Variable
     namespace: null,
     name: "Exec",
     signature: "Exec([FileName: <text>], [Arguments: <text>], [WorkingDirectory: <text>], [OutputLogLevel: <integer>], [ErrorOutputLogLevel: <integer>], [SuccessExitCode: <text>], [ImportVariables: <true/false>], [WarnRegex: <text>], [DebugRegex: <text>], [LogArguments: <true/false>], [ReportProgressRegex: <text>], [OutputFilterRegex: <text>]);",
-    snippet: "InedoCore::Exec ${1:executablePath}\n(\n    Arguments: ${2:arguments}\n);$0",
+    snippet: "Exec ${1:executablePath}\n(\n    Arguments: ${2:arguments}\n);$0",
     description: "Executes a process, logs its output, and waits until it exits.",
     documentation: `
 **Script Usage:**
 \`\`\`otterscript
-InedoCore::Exec(
+Exec(
     [FileName: <text>],
     [Arguments: <text>],
     [WorkingDirectory: <text>],
