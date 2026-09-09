@@ -16,10 +16,13 @@ const assert = require("node:assert/strict");
 
 const {
   createCodeScanState,
+  createTemplateScanState,
   isUnescapedQuoteAt,
   scanLineState,
   maskNonCodeSpans,
   advanceScanState,
+  maskOutsideTemplateTags,
+  documentUsesTemplateTags,
   isInStringOrComment,
   getActiveParameterIndex,
   MODULE_NAME_TOKEN_REGEX,
@@ -434,5 +437,89 @@ describe("findModuleDeclarations", () => {
 
   it("does not match a bare 'module' keyword with no name", () => {
     assert.deepEqual(findModuleDeclarations("module\nmodule "), []);
+  });
+});
+
+// ============================================================
+// maskOutsideTemplateTags — <% ... %> spans
+// ============================================================
+
+describe("maskOutsideTemplateTags", () => {
+  /** @param {string} line @param {ReturnType<typeof createTemplateScanState>} [st] */
+  const mask = (line, st = createTemplateScanState()) => maskOutsideTemplateTags(line, st);
+
+  it("keeps only the tag body on a single-line tag; blanks text and delimiters", () => {
+    const out = mask('text <% code %> more');
+    assert.equal(out.length, 'text <% code %> more'.length);
+    assert.equal(out.trimEnd().trimStart(), "code");
+    assert.ok(!out.includes("<%") && !out.includes("%>"));
+    assert.ok(!out.includes("text") && !out.includes("more"));
+  });
+
+  it("blanks the whole line when there is no tag and no carried state", () => {
+    assert.equal(mask('  "type": "TextBlock",  ').trim(), "");
+  });
+
+  it("carries an open tag across lines", () => {
+    const st = createTemplateScanState();
+    const a = maskOutsideTemplateTags('foo <% if $x {', st);
+    assert.equal(st.inTemplateTag, true);
+    assert.equal(a.trim(), "if $x {");
+    const b = maskOutsideTemplateTags('  set $y = 1', st);
+    assert.equal(b.trim(), "set $y = 1"); // still inside the tag
+    const c = maskOutsideTemplateTags('} %> trailing text', st);
+    assert.equal(st.inTemplateTag, false);
+    assert.equal(c.trim(), "}");
+    assert.ok(!c.includes("trailing"));
+  });
+
+  it("does not let a '%>' inside a tag-body string close the tag", () => {
+    const out = mask('<% Log-Information "a %> b" %> X');
+    assert.ok(out.includes('"a %> b"'), out);
+    assert.ok(!out.includes("X"));
+  });
+
+  it("handles two tags on one line", () => {
+    const out = mask('a <% one %> b <% two %> c');
+    assert.equal(out.replace(/\s+/g, " ").trim(), "one two");
+  });
+
+  it("is length-preserving", () => {
+    for (const line of ['', '<%%>', 'plain', '<% x', 'y %>', '<% a %> <% b %>']) {
+      assert.equal(mask(line).length, line.length, JSON.stringify(line));
+    }
+  });
+});
+
+// ============================================================
+// documentUsesTemplateTags
+// ============================================================
+
+describe("documentUsesTemplateTags", () => {
+  it("is true for a real <% ... %> pair", () => {
+    assert.equal(documentUsesTemplateTags('a <% b %> c'), true);
+  });
+
+  it("is true when the tags span lines", () => {
+    assert.equal(documentUsesTemplateTags("<%\n  foreach $x in @y {\n%>\n<% } %>"), true);
+  });
+
+  it("is false for plain OtterScript", () => {
+    assert.equal(documentUsesTemplateTags("if $x {\n  Log-Information $x;\n}\n"), false);
+  });
+
+  it("does not count a '<%' inside a string literal", () => {
+    assert.equal(documentUsesTemplateTags('$s = "<% not a tag %>";'), false);
+  });
+
+  it("does not count a '<%' inside a comment", () => {
+    assert.equal(documentUsesTemplateTags("# <% commented out %>"), false);
+    assert.equal(documentUsesTemplateTags("/* <% block %> */"), false);
+  });
+
+  it("is false for an unclosed '<%' or a stray '%>'", () => {
+    assert.equal(documentUsesTemplateTags("<% no close here"), false);
+    assert.equal(documentUsesTemplateTags("no open here %>"), false);
+    assert.equal(documentUsesTemplateTags(""), false);
   });
 });

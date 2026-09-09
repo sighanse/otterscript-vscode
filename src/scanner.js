@@ -257,6 +257,110 @@ function advanceScanState(lineText, state) {
   scanLineState(lineText, state, null);
 }
 
+// ============================================================
+// TEXT-TEMPLATE TAGS  (<% ... %>)
+// ============================================================
+// OtterScript text templates (ProGet / BuildMaster / Otter notification bodies,
+// `Apply-Template` literals) are literal output text with `<% ... %>` code
+// blocks. Everything OUTSIDE a tag is not OtterScript; only the tag bodies are.
+// These helpers let the diagnostics engine see just the code.
+
+/**
+ * Carried state for {@link maskOutsideTemplateTags}: whether the scan is
+ * currently between a `<%` and its `%>`.
+ *
+ * Kept separate from {@link CodeScanState} on purpose — the template pass runs
+ * before, and independently of, string/comment masking, and every non-template
+ * scan (the common case) would otherwise carry a dead field.
+ *
+ * @typedef {{ inTemplateTag: boolean }} TemplateScanState
+ */
+
+/**
+ * Creates a fresh template-scan state object.
+ *
+ * @returns {TemplateScanState}
+ */
+function createTemplateScanState() {
+  return { inTemplateTag: false };
+}
+
+/**
+ * Blanks every character that is NOT inside a `<% ... %>` template tag,
+ * length-preserving, so downstream code diagnostics see only the real
+ * OtterScript between tags and not the literal output text of a text template
+ * (JSON, Markdown, ...). The `<%` / `%>` delimiters are blanked too.
+ *
+ * Runs on the RAW line, before {@link maskNonCodeSpans}: outside a tag there is
+ * no OtterScript, so string/comment rules must not apply there; inside a tag,
+ * quoted spans are skipped only so a `%>` within a tag-body string does not end
+ * the tag early. Callers gate this on {@link documentUsesTemplateTags} so a
+ * `.otter` file with no tags is never affected.
+ *
+ * @param {string} line
+ * @param {TemplateScanState} state - Mutated in place; carries `inTemplateTag`
+ *   across lines.
+ * @returns {string}
+ */
+function maskOutsideTemplateTags(line, state) {
+  const chars = line.split("");
+  /** @type {string | null} line-local quote while inside a tag-body string */
+  let quote = null;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+
+    if (!state.inTemplateTag) {
+      chars[i] = " ";
+      if (ch === "<" && line[i + 1] === "%") {
+        chars[i + 1] = " ";
+        state.inTemplateTag = true;
+        i++;
+      }
+      continue;
+    }
+
+    // -- inside a tag: keep the code, but track strings so a `%>` inside one
+    //    does not close the tag, and blank the closing delimiter.
+    if (quote) {
+      if (ch === quote && isUnescapedQuoteAt(line, i)) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === "%" && line[i + 1] === ">") {
+      chars[i] = " ";
+      chars[i + 1] = " ";
+      state.inTemplateTag = false;
+      i++;
+    }
+  }
+
+  return chars.join("");
+}
+
+/**
+ * True when `text` uses OtterScript text templating: after string/comment
+ * masking (so a `<%` inside a literal or comment does not count) it contains a
+ * `<%` with a later `%>`. Cheap; the diagnostics engine calls it once per pass
+ * to decide whether to run {@link maskOutsideTemplateTags} and the
+ * template-specific checks.
+ *
+ * @param {string} text - Full document text
+ * @returns {boolean}
+ */
+function documentUsesTemplateTags(text) {
+  const state = createCodeScanState();
+  let masked = "";
+  for (const rawLine of text.split(/\r?\n/)) {
+    masked += maskNonCodeSpans(rawLine, state) + "\n";
+  }
+  const open = masked.indexOf("<%");
+  return open !== -1 && masked.indexOf("%>", open + 2) !== -1;
+}
+
 /**
  * @typedef {{ name: string, line: number, character: number }} ModuleDeclarationHit
  *   `line` and `character` are 0-based; `character` is the column where the
@@ -445,12 +549,17 @@ function getActiveParameterIndex(argsText) {
 module.exports = {
   // -- Scan state
   createCodeScanState,
+  createTemplateScanState,
 
   // -- Primitives
   isUnescapedQuoteAt,
   scanLineState,
   maskNonCodeSpans,
   advanceScanState,
+
+  // -- Text-template tags
+  maskOutsideTemplateTags,
+  documentUsesTemplateTags,
 
   // -- String & comment detection
   isInStringOrComment,
