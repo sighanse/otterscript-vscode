@@ -479,6 +479,13 @@ describe("maskOutsideTemplateTags", () => {
     assert.ok(!out.includes("X"));
   });
 
+  it("does not treat a '<%' inside a literal-text string as a tag opener", () => {
+    const st = createTemplateScanState();
+    const out = maskOutsideTemplateTags('"note": "use <% %> here", "x": 1', st);
+    assert.equal(st.inTemplateTag, false);
+    assert.equal(out.trim(), "");
+  });
+
   it("handles two tags on one line", () => {
     const out = mask('a <% one %> b <% two %> c');
     assert.equal(out.replace(/\s+/g, " ").trim(), "one two");

@@ -464,3 +464,64 @@ describe("updateDiagnostics - template <% %> structural checks", () => {
     assert.ok(diagnose("<% if count == 5 { %>x<% } %>").some((d) => d.code === "missing-dollar"));
   });
 });
+
+// ============================================================
+// template/expression mode mixing  (phase 2, check 4)
+// ============================================================
+
+describe("updateDiagnostics - template-in-expression", () => {
+  /** @param {string} src */
+  const has = (src) => diagnose(src).some((d) => d.code === "template-in-expression");
+
+  it("flags a <% opened inside an unclosed $Func( / %( / @( in literal text", () => {
+    assert.ok(has('"x": $ToJson(%( a: 1 <% $y %> ))'));
+    assert.ok(has('"x": $Eval( <% $y %> )'));
+    assert.ok(has('"x": @( 1, <% $y %> )'));
+  });
+
+  it("does not flag a <% loop inside a JSON array or object", () => {
+    const src = ['"items": [', "<% foreach $p in @x { %>", "  ,{ }", "<% } %>", "]"].join("\n");
+    assert.equal(diagnose(src).filter((d) => d.code === "template-in-expression").length, 0);
+  });
+
+  it("reports once per stuck region, not on every following tag", () => {
+    const src = ["$ToJson(%(", "<% foreach $p in @x { %>", "a", "<% } %>", "))"].join("\n");
+    assert.equal(diagnose(src).filter((d) => d.code === "template-in-expression").length, 1);
+  });
+});
+
+// ============================================================
+// adjacent operands with no operator  (phase 2, check 5)
+// ============================================================
+
+describe("updateDiagnostics - missing-operator", () => {
+  /** @param {string} src */
+  const has = (src) => diagnose(src).some((d) => d.code === "missing-operator");
+
+  it("flags two operands with no operator inside %( ) / @( )", () => {
+    assert.ok(has("$m = %( v: $a $b );"));
+    assert.ok(has("@v = @( $a $b );"));
+    assert.ok(has("$m = %( v: $a + $b $c );")); // after a real operator
+  });
+
+  it("flags each gap in $a $b $c", () => {
+    assert.equal(diagnose("@v = @( $a $b $c );").filter((d) => d.code === "missing-operator").length, 2);
+  });
+
+  it("does not flag well-formed map / vector / call syntax", () => {
+    for (const src of [
+      "Log-Information $x;",
+      "foreach $x in @y { }",
+      "for server $env { }",
+      "set $x = $a;",
+      "$r = $Compare($a, >, $b);",
+      "call Foo;",
+      "$m = %( a: $x, b: $y );",
+      "$m = %( v: $a + $b );",
+      "$m = %( k: $a );",
+      "$m = %( v: $ToJson($a), w: 1 );",
+    ]) {
+      assert.equal(has(src), false, src);
+    }
+  });
+});

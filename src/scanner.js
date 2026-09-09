@@ -292,10 +292,12 @@ function createTemplateScanState() {
  * (JSON, Markdown, ...). The `<%` / `%>` delimiters are blanked too.
  *
  * Runs on the RAW line, before {@link maskNonCodeSpans}: outside a tag there is
- * no OtterScript, so string/comment rules must not apply there; inside a tag,
- * quoted spans are skipped only so a `%>` within a tag-body string does not end
- * the tag early. Callers gate this on {@link documentUsesTemplateTags} so a
- * `.otter` file with no tags is never affected.
+ * no OtterScript, so comment rules do not apply, but quoted spans are still
+ * skipped both outside a tag (so a `<%` inside a string literal is not a tag
+ * opener) and inside one (so a `%>` inside a tag-body string does not close the
+ * tag early). Quote tracking is line-local. Callers gate this on
+ * {@link documentUsesTemplateTags} so a `.otter` file with no tags is never
+ * affected.
  *
  * @param {string} line
  * @param {TemplateScanState} state - Mutated in place; carries `inTemplateTag`
@@ -312,6 +314,16 @@ function maskOutsideTemplateTags(line, state) {
 
     if (!state.inTemplateTag) {
       chars[i] = " ";
+      // Track quoted spans in the literal text too, so a `<%` written inside a
+      // string (`"use <% %> for loops"`) is not mistaken for a tag opener.
+      if (quote) {
+        if (ch === quote && isUnescapedQuoteAt(line, i)) quote = null;
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        quote = ch;
+        continue;
+      }
       if (ch === "<" && line[i + 1] === "%") {
         chars[i + 1] = " ";
         state.inTemplateTag = true;
