@@ -41,6 +41,7 @@ const {
   createForToForeachFix,
   createInvalidOperatorFix,
   createMissingDollarFix,
+  createUnknownNamespaceFix,
   getOutputChannel,
   getDiagnosticCode,
   getActiveParameterIndex,
@@ -48,6 +49,7 @@ const {
   getModuleDeclarations,
   getModuleCallReferencesByName,
   findModuleDeclarationRange,
+  findModuleDeclarations,
   findModuleReferences,
   isModuleCallContext,
   isModuleDeclarationContext,
@@ -59,6 +61,7 @@ const {
   MODULE_NAME_TOKEN_REGEX,
   validateDocs,
   scheduleTimerForUri,
+  mapWithConcurrency,
   createRegexPatterns,
   computeFoldingRanges
 } = require('./helpers');
@@ -82,16 +85,16 @@ function activate(context) {
   log.info(`${extensionName} v${version} activated`);
 
   // -- Load initial configuration
-  let { completionEnabled, hoverEnabled, signatureHelpEnabled, codeLensEnabled } = loadConfig();
-  log.info(`Settings loaded: completion=${completionEnabled}, hover=${hoverEnabled}, signatureHelp=${signatureHelpEnabled}, codeLens=${codeLensEnabled}`);
+  let { completionEnabled, hoverEnabled, signatureHelpEnabled, codeLensEnabled, workspaceSymbolsEnabled } = loadConfig();
+  log.info(`Settings loaded: completion=${completionEnabled}, hover=${hoverEnabled}, signatureHelp=${signatureHelpEnabled}, codeLens=${codeLensEnabled}, workspaceSymbols=${workspaceSymbolsEnabled}`);
 
   // -- Watch for settings changes while extension is running
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
       // -- Only reload if OtterScript settings changed
       if (e.affectsConfiguration("otterscript")) {
-        ({ completionEnabled, hoverEnabled, signatureHelpEnabled, codeLensEnabled } = loadConfig());
-        log.info(`Settings reloaded: completion=${completionEnabled}, hover=${hoverEnabled}, signatureHelp=${signatureHelpEnabled}, codeLens=${codeLensEnabled}`);
+        ({ completionEnabled, hoverEnabled, signatureHelpEnabled, codeLensEnabled, workspaceSymbolsEnabled } = loadConfig());
+        log.info(`Settings reloaded: completion=${completionEnabled}, hover=${hoverEnabled}, signatureHelp=${signatureHelpEnabled}, codeLens=${codeLensEnabled}, workspaceSymbols=${workspaceSymbolsEnabled}`);
       }
     })
   );
@@ -125,6 +128,7 @@ function activate(context) {
   }
   // -- Extract each documentation category into its own variable.
   const {
+    NAMESPACES,
     operationDocs,
     syntaxDocs,
     keywordDocs,
@@ -191,15 +195,17 @@ function activate(context) {
           let fn = null;
           let args = null;
 
+          let isOperation = false;
+
           const candidates = [
-            { regex: scalarSignatureRegex,    table: scalarFunctionDocs }, // ($Func)
-            { regex: vectorSignatureRegex,    table: vectorFunctionDocs }, // (@Func)
-            { regex: operationSignatureRegex, table: operationDocs },      // (Log-Information etc...)
+            { regex: scalarSignatureRegex,    table: scalarFunctionDocs, operation: false }, // ($Func)
+            { regex: vectorSignatureRegex,    table: vectorFunctionDocs, operation: false }, // (@Func)
+            { regex: operationSignatureRegex, table: operationDocs,       operation: true  }, // (Log-Information etc...)
           ];
 
-          for (const { regex, table } of candidates) {
+          for (const { regex, table, operation } of candidates) {
             const m = textBeforeCursor.match(regex());
-            if (m && table[m[1]]) { match = m; fn = table[m[1]]; args = m[2]; break; }
+            if (m && table[m[1]]) { match = m; fn = table[m[1]]; args = m[2]; isOperation = operation; break; }
           }
 
           // -- Validate we have everything needed
@@ -218,7 +224,16 @@ function activate(context) {
           // Parse signature to extract individual parameters
           // Handles nested parentheses in signature (e.g., "Func(a, (b + c), d)")
 
-          const sig = new vscode.SignatureInformation(fn.signature, fn.documentation);
+          // -- Qualify the displayed signature with its namespace when it belongs
+          // to one and the stored signature string doesn't already spell it out.
+          // Operations only: "Namespace::Operation" is grammatically valid, whereas
+          // the syntax for namespaced $/@ functions is not surfaced here.
+          const signatureLabel =
+            isOperation && fn.namespace && !fn.signature.includes("::")
+              ? `${fn.namespace}::${fn.signature}`
+              : fn.signature;
+
+          const sig = new vscode.SignatureInformation(signatureLabel, fn.documentation);
 
           const paramMatch = fn.signature.match(/\(([\s\S]*)\)/);
           if (paramMatch) {
@@ -505,7 +520,7 @@ function activate(context) {
   // Shows documentation when user hovers over code elements.
   // Triggered by mouse hover or Ctrl+K Ctrl+I (keyboard).
   //
-  // Hover resolution order matter (MOST specific FIRST)
+  // Hover resolution order matters (MOST specific FIRST)
 
   const hoverProvider = vscode.languages.registerHoverProvider(
     "otterscript",
@@ -683,6 +698,7 @@ function activate(context) {
     "invalid-operator":        createInvalidOperatorFix,
     "assignment-in-condition": createAssignmentInConditionFix,
     "incorrect-for-usage":     createForToForeachFix,
+    "unknown-namespace":       createUnknownNamespaceFix,
   });
 
   // ============================================================
@@ -730,9 +746,7 @@ function activate(context) {
    *
    * Triggered by: Command Palette or Ctrl+Shift+Alt+F
    *
-   * @see createMissingDollarFix
-   * @see createInvalidOperatorFix
-   * @see createForToForeachFix
+   * @see FIX_FACTORIES - the diagnostic-code -> fix-factory dispatch table
    */
   const fixAllCommand = vscode.commands.registerCommand(
     'otterscript.fixAll',
@@ -887,6 +901,194 @@ function activate(context) {
   );
 
   // ============================================================
+  // WORKSPACE SYMBOL PROVIDER (module declarations across files)
+  // ============================================================
+  // Powers "Go to Symbol in Workspace" (Ctrl+T): every `module` declaration in
+  // every .otter/.oscript file in the workspace. Backed by an in-memory index
+  // and kept fresh by a file-system watcher. The open editor's live/unsaved view
+  // is still served by the document symbol provider.
+  //
+  // The index is built lazily: activation does NO disk I/O for it. The first
+  // Ctrl+T (provideWorkspaceSymbols) triggers the one-time scan; the watcher
+  // then keeps it current. Workspaces that never use Ctrl+T never pay for it.
+  //
+  // All index work is also gated on `otterscript.workspaceSymbols.enable`: when
+  // it is off, no scanning, disk reads, or index mutations happen.
+
+  const OTTER_FILE_GLOB = "**/*.{otter,oscript}";
+  // Cap on the workspace scan: files matched, and concurrent reads in flight.
+  const WORKSPACE_SCAN_FILE_LIMIT = 5000;
+  const WORKSPACE_SCAN_CONCURRENCY = 20;
+
+  /**
+   * @typedef {{ uri: vscode.Uri, symbols: { name: string, range: vscode.Range }[] }} ModuleIndexEntry
+   */
+  /** @type {Map<string, ModuleIndexEntry>} keyed by uri.toString() */
+  const workspaceModuleIndex = new Map();
+  /** @type {Map<string, ReturnType<typeof setTimeout>>} */
+  const workspaceIndexTimers = new Map();
+
+  /**
+   * Applies (or clears, when it declares no modules) one file's module-index
+   * entry from its text.
+   *
+   * @param {vscode.Uri} uri
+   * @param {string} text
+   * @returns {void}
+   */
+  function setModuleIndexEntry(uri, text) {
+    if (!workspaceSymbolsEnabled) return;
+    const symbols = findModuleDeclarations(text).map(hit => ({
+      name: hit.name,
+      range: new vscode.Range(
+        hit.line, hit.character, hit.line, hit.character + hit.name.length
+      ),
+    }));
+
+    if (symbols.length > 0) {
+      workspaceModuleIndex.set(uri.toString(), { uri, symbols });
+    } else {
+      workspaceModuleIndex.delete(uri.toString());
+    }
+  }
+
+  /**
+   * Reads one file from disk and refreshes (or removes) its module-index entry.
+   *
+   * @param {vscode.Uri} uri
+   * @returns {Promise<void>}
+   */
+  async function indexModuleFile(uri) {
+    if (!workspaceSymbolsEnabled) return;
+    try {
+      const bytes = await vscode.workspace.fs.readFile(uri);
+      setModuleIndexEntry(uri, new TextDecoder("utf-8").decode(bytes));
+    } catch {
+      // Gone or unreadable -- drop it.
+      workspaceModuleIndex.delete(uri.toString());
+    }
+  }
+
+  /**
+   * Rescans every OtterScript file in the workspace from scratch.
+   *
+   * @returns {Promise<void>}
+   */
+  async function rebuildWorkspaceModuleIndex() {
+    workspaceModuleIndex.clear();
+    if (!workspaceSymbolsEnabled) return;
+
+    const files = await vscode.workspace.findFiles(
+      OTTER_FILE_GLOB, undefined, WORKSPACE_SCAN_FILE_LIMIT
+    );
+    // Bounded concurrency -- avoid firing thousands of fs.readFile at once.
+    await mapWithConcurrency(files, WORKSPACE_SCAN_CONCURRENCY, indexModuleFile);
+
+    // Also cover already-open OtterScript documents. This is what makes the
+    // provider work for loose files and for a window with no folder open, where
+    // findFiles returns nothing.
+    for (const doc of vscode.workspace.textDocuments) {
+      if (doc.languageId === "otterscript") setModuleIndexEntry(doc.uri, doc.getText());
+    }
+
+    const moduleCount = [...workspaceModuleIndex.values()].reduce((n, e) => n + e.symbols.length, 0);
+    log.info(
+      `Workspace module index: ${moduleCount} module(s) in ${workspaceModuleIndex.size} file(s) ` +
+      `(${files.length} on disk)`
+    );
+  }
+
+  // Lazily-built index. `null` until the first workspace-symbol query (or a
+  // watcher event once a build has happened) kicks off rebuildWorkspaceModuleIndex.
+  // Reset to `null` on failure so the next query retries, and when the enable
+  // setting is toggled (see the config listener below).
+  /** @type {Promise<void> | null} */
+  let workspaceIndexReady = null;
+
+  /**
+   * Ensures the workspace module index has been built (once), returning the
+   * in-flight or settled build promise. Callers await this before reading
+   * `workspaceModuleIndex`.
+   *
+   * @returns {Promise<void>}
+   */
+  function ensureWorkspaceIndex() {
+    if (!workspaceIndexReady) {
+      workspaceIndexReady = rebuildWorkspaceModuleIndex().catch(err => {
+        log.error("Failed to build workspace module index", err);
+        workspaceIndexReady = null; // let the next query retry
+      });
+    }
+    return workspaceIndexReady;
+  }
+
+  const workspaceSymbolProvider = vscode.languages.registerWorkspaceSymbolProvider({
+    /**
+     * @param {string} query
+     * @returns {Promise<vscode.SymbolInformation[]>}
+     */
+    async provideWorkspaceSymbols(query) {
+      if (!workspaceSymbolsEnabled) return [];
+      await ensureWorkspaceIndex();
+
+      const needle = query.toLowerCase();
+      /** @type {vscode.SymbolInformation[]} */
+      const results = [];
+      for (const { uri, symbols } of workspaceModuleIndex.values()) {
+        for (const { name, range } of symbols) {
+          if (needle && !name.toLowerCase().includes(needle)) continue;
+          results.push(new vscode.SymbolInformation(
+            name,
+            vscode.SymbolKind.Module,
+            "",
+            new vscode.Location(uri, range)
+          ));
+        }
+      }
+      return results;
+    }
+  });
+
+  // Watcher events only matter once the index has actually been built: before
+  // the first Ctrl+T there is nothing to keep fresh, and touching it here would
+  // leave a misleading partial index. `!workspaceIndexReady` covers both "never
+  // built" and "last build failed"; the next query rebuilds from scratch anyway.
+  const otterFileWatcher = vscode.workspace.createFileSystemWatcher(OTTER_FILE_GLOB);
+  otterFileWatcher.onDidCreate(uri => {
+    if (!workspaceSymbolsEnabled || !workspaceIndexReady) return;
+    void indexModuleFile(uri);
+  });
+  otterFileWatcher.onDidDelete(uri => {
+    workspaceModuleIndex.delete(uri.toString());
+    clearTimerForUri(workspaceIndexTimers, uri);
+  });
+  otterFileWatcher.onDidChange(uri => {
+    // Gated so no debounce timers accumulate in workspaceIndexTimers when the
+    // feature is off or the index has not been built yet.
+    if (!workspaceSymbolsEnabled || !workspaceIndexReady) return;
+    // Debounced -- a save can arrive alongside editor change events.
+    scheduleTimerForUri(workspaceIndexTimers, uri, 400, () => { void indexModuleFile(uri); });
+  });
+
+  // -- React to `otterscript.workspaceSymbols.enable` flipping at runtime.
+  //    Either way we just reset the lazy state: enabling does NOT eagerly scan
+  //    (the next Ctrl+T builds it, like a fresh activation); disabling drops the
+  //    index and any pending debounce timers. Reads the setting here so it does
+  //    not depend on any other listener's ordering.
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(e => {
+      if (!e.affectsConfiguration("otterscript.workspaceSymbols.enable")) return;
+      workspaceSymbolsEnabled = vscode.workspace
+        .getConfiguration("otterscript")
+        .get("workspaceSymbols.enable", true);
+      workspaceModuleIndex.clear();
+      for (const timer of workspaceIndexTimers.values()) clearTimeout(timer);
+      workspaceIndexTimers.clear();
+      workspaceIndexReady = null;
+    })
+  );
+
+  // ============================================================
   // CODE LENS PROVIDER (Module References)
   // ============================================================
   // Shows reference counts above module declarations and links to
@@ -965,6 +1167,7 @@ function activate(context) {
     knownScalarFunctions,
     knownVectorFunctions,
     knownOperations,
+    knownNamespaces: NAMESPACES,
     scalarCallRegex,
     vectorCallRegex,
     operationCallRegex,
@@ -1011,7 +1214,10 @@ function activate(context) {
       });
     }),
     // -- Run diagnostics when a new file is opened (handles files opened after activation)
-    vscode.workspace.onDidOpenTextDocument(document => updateDiagnostics(document, diagnostics, diagnosticsContext)),
+    vscode.workspace.onDidOpenTextDocument(document => {
+      updateDiagnostics(document, diagnostics, diagnosticsContext);
+      if (document.languageId === "otterscript") setModuleIndexEntry(document.uri, document.getText());
+    }),
 
     // -- Re-run diagnostics on save. The onDidChangeTextDocument handler above is
     // debounced, so this gives an immediate refresh on explicit/auto save and covers
@@ -1019,6 +1225,7 @@ function activate(context) {
     vscode.workspace.onDidSaveTextDocument(document => {
       if (document.languageId === "otterscript") {
         updateDiagnostics(document, diagnostics, diagnosticsContext);
+        setModuleIndexEntry(document.uri, document.getText());
       }
     }),
 
@@ -1029,22 +1236,34 @@ function activate(context) {
       clearTimerForUri(diagnosticTimers, doc.uri);
     }),
 
-    // -- All providers are registered here for cleanup on deactivation
-    signatureHelpProvider,
+    // -- Providers, commands, and watchers (alphabetical). VS Code disposes
+    //    everything pushed here automatically on deactivation.
+    codeActionsProvider,
+    codeLensProvider,
+    definitionProvider,
+    documentSymbolProvider,
+    fixAllCommand,
+    foldingRangeProvider,
     functionCompletionProvider,
-    variableCompletionProvider,
-    vectorCompletionProvider,
+    hoverProvider,
     mapCompletionProvider,
     operationCompletionProvider,
-    hoverProvider,
-    codeActionsProvider,
-    definitionProvider,
+    otterFileWatcher,
     referenceProvider,
-    documentSymbolProvider,
-    codeLensProvider,
-    fixAllCommand,
     refreshDiagnosticsCommand,
-    foldingRangeProvider
+    signatureHelpProvider,
+    variableCompletionProvider,
+    vectorCompletionProvider,
+    workspaceSymbolProvider,
+
+    // -- Cancel any pending workspace-index debounce timers on deactivation
+    //    (mirrors the diagnosticTimers cleanup in deactivate()).
+    {
+      dispose() {
+        for (const timer of workspaceIndexTimers.values()) clearTimeout(timer);
+        workspaceIndexTimers.clear();
+      }
+    }
   );
 }
 

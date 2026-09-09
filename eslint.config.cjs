@@ -13,7 +13,12 @@ module.exports = [
   js.configs.recommended,
 
   {
-    files: ["**/*.js"],
+    files: ["**/*.{js,cjs}"],
+
+    linterOptions: {
+      // Fail on `// eslint-disable*` comments that no longer suppress anything.
+      reportUnusedDisableDirectives: "error"
+    },
 
     languageOptions: {
       ecmaVersion: "latest",
@@ -46,7 +51,9 @@ module.exports = [
       "eqeqeq": ["warn", "smart"],
       "no-empty": ["warn", { allowEmptyCatch: true }],
       "comma-dangle": ["warn", "only-multiline"],
-      "eol-last": ["warn", "always"],
+      // Line endings and final newline are enforced by .gitattributes plus the
+      // mixed-line-ending / end-of-file-fixer pre-commit hooks, so the
+      // (deprecated-in-core) linebreak-style / eol-last rules are not repeated here.
       /*
        * Other
        */
@@ -60,7 +67,6 @@ module.exports = [
         terms: ["TODO", "FIXME"],
         location: "start"
       }],
-      "no-return-await": "warn",
       "require-atomic-updates": "warn",
       "prefer-promise-reject-errors": "warn",
       "no-throw-literal": "error",
@@ -71,7 +77,9 @@ module.exports = [
       "no-useless-return": "warn",
       "no-misleading-character-class": "error",
       "no-async-promise-executor": "error",
+      "no-debugger": "error",
       "default-case": "warn",
+      "default-case-last": "warn",
       "no-else-return": "warn",
       "no-lonely-if": "warn",
       "unicode-bom": "error",
@@ -80,7 +88,6 @@ module.exports = [
        */
 
       "no-console": "off",
-      "no-debugger": "off",
       "no-invalid-this": "off",
 
       "no-restricted-globals": ["error",
@@ -98,6 +105,17 @@ module.exports = [
     files: ["src/language-data.js"],
     rules: {
       "no-useless-escape": "off",
+    }
+  },
+  {
+    // scanner.js is the pure, dependency-free text layer -- keep it vscode-free
+    // (see its @fileoverview and jsconfig.test.json). Enforce, don't just document.
+    files: ["src/scanner.js"],
+    rules: {
+      "no-restricted-syntax": ["error", {
+        selector: "CallExpression[callee.name='require'][arguments.0.value='vscode']",
+        message: "scanner.js must stay vscode-free; put vscode-dependent code in helpers.js.",
+      }],
     }
   }
 ];

@@ -1,0 +1,146 @@
+###############################################################################
+# SAMPLE-VALID.OTTER
+#
+# A realistic OtterScript that MUST produce zero diagnostics. It is the
+# false-positive smoke test: if anything here gets a squiggle, a diagnostic
+# rule has become too eager. Also handy as a clean surface for eyeballing
+# hover / signature help / completion without error noise.
+#
+# Scenario: scan the packages in a ProGet feed, warn on high CVSS scores,
+# and promote the clean ones to a "released" feed.
+###############################################################################
+
+set $feed = "internal-nuget";
+set $releasedFeed = "released-nuget";
+set $cvssThreshold = 7.0;
+set $reportPath = $PathCombine($WorkingDirectory, "scan-report.json");
+
+global $scanStartedUtc = $DateUtc("yyyy-MM-ddTHH:mm:ssZ");
+
+Log-Information "Starting vulnerability scan of feed $feed at $scanStartedUtc";
+
+###############################################################################
+# COLLECT PACKAGES
+###############################################################################
+
+@packages = @Split($PackageProperty("names", ""), ",");
+
+if $Compare($ListCount(@packages), ==, 0) {
+    Log-Warning "No packages found in $feed - nothing to do";
+    return;
+}
+
+Log-Information "Found $ListCount(@packages) package(s) to evaluate";
+
+###############################################################################
+# EVALUATE EACH PACKAGE
+###############################################################################
+
+set $flagged = 0;
+set $promoted = 0;
+
+foreach $pkg in @packages {
+    set $name = $Trim($pkg);
+
+    if $Compare($name, ==, "") {
+        continue;
+    }
+
+    set $score = $PackageProperty("cvss", "0");
+    set $isVulnerable = $Compare($score, >=, $cvssThreshold, true);
+
+    if $isVulnerable {
+        set $flagged = $Increment($flagged);
+        Log-Warning "$name has CVSS $score (>= $cvssThreshold) - holding back";
+
+        with retry=2, timeout=30 {
+            try {
+                Post-Http(
+                    Url: "https://hooks.example.com/security",
+                    ContentType: "application/json",
+                    Body: $ToJson(%(
+                        package: $name,
+                        feed: $feed,
+                        cvss: $score,
+                        detectedUtc: $DateUtc("o")
+                    ))
+                );
+            } catch {
+                Log-Error "Failed to notify security channel for $name";
+            }
+        }
+    } else {
+        Log-Debug "$name is clean (CVSS $score) - eligible for promotion";
+        set $promoted = $Increment($promoted);
+    }
+}
+
+###############################################################################
+# NESTED CONTEXT + LOOP CONTROL
+###############################################################################
+
+foreach $env in @("dev", "test", "staging") {
+    for server $env {
+        if $Compare($env, ==, "staging") {
+            Log-Information "Reached staging - stopping rollout preview";
+            break;
+        }
+        Log-Information "Would promote to $env";
+    }
+}
+
+###############################################################################
+# KNOWN NAMESPACE-QUALIFIED OPERATIONS
+###############################################################################
+
+ProGet::Create-Directory( Path: $PathCombine($WorkingDirectory, "artifacts") );
+Windows::Ensure-Service( Name: "InedoProGetSvc", Status: running );
+
+###############################################################################
+# TEMPLATE OUTPUT
+###############################################################################
+
+<% foreach %p in @packages { %>
+* $(%p) evaluated against threshold $cvssThreshold
+<% } %>
+
+###############################################################################
+# SWIM STRING SUMMARY
+###############################################################################
+
+set $summary = >>Scan complete.
+Flagged: $flagged
+Promoted: $promoted
+Report: $reportPath>>;
+
+Log-Information $summary;
+
+###############################################################################
+# MODULE DEFINITION + CALL
+###############################################################################
+
+module WriteReport <
+    in $path,
+    in $flaggedCount = 0,
+    in $promotedCount = 0
+> {
+    set $payload = $ToJson(%(
+        flagged: $flaggedCount,
+        promoted: $promotedCount,
+        finishedUtc: $DateUtc("o")
+    ));
+    Create-File(
+        Name: $path,
+        Text: $payload,
+        Overwrite: true
+    );
+    Log-Information "Wrote report to $path";
+}
+
+call WriteReport(
+    path: $reportPath,
+    flaggedCount: $flagged,
+    promotedCount: $promoted
+);
+
+Log-Information "Done. $flagged flagged, $promoted promoted.";

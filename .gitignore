@@ -4,9 +4,13 @@ node_modules/
 *.tgz
 .vscode/*
 !.vscode/settings.json
+!.vscode/launch.json
 *.log
 *.tmp
 *.ps1
 *.vsix
 .DS_Store
 Thumbs.db
+
+# Local planning docs — not checked in
+docs/milestones/

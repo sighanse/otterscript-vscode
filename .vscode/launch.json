@@ -1,0 +1,18 @@
+{
+  // F5 launches an Extension Development Host with THIS repo opened as the test
+  // workspace, so features that scan workspace files (e.g. the workspace symbol
+  // provider over test/sample.otter) have content to work with.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "${workspaceFolder}"
+      ],
+      "outFiles": ["${workspaceFolder}/src/**/*.js"]
+    }
+  ]
+}

@@ -2,9 +2,12 @@
 /**
  * check-language-sync.js
  *
- * Fails if the function/operation name lists baked into the TextMate grammar
- * (syntaxes/otterscript.tmLanguage.json) have drifted out of sync with the
- * authoritative docs tables in src/language-data.js.
+ * Fails if either:
+ *   1. the function/operation name lists baked into the TextMate grammar
+ *      (syntaxes/otterscript.tmLanguage.json) have drifted out of sync with the
+ *      authoritative docs tables in src/language-data.js, or
+ *   2. any docs-table entry carries a `namespace` that is neither `null` nor a
+ *      member of the `NAMESPACES` allowlist exported by language-data.js.
  *
  * Background: the grammar matches scalar functions, vector functions and
  * operations with hand-maintained regex alternations, e.g.
@@ -27,7 +30,7 @@
 
 /**
  * @typedef {{ name: string, match: string }} GrammarPattern
- * @typedef {Record<string, { signature?: string }>} DocsTable
+ * @typedef {Record<string, { signature?: string, namespace?: string | null }>} DocsTable
  */
 
 const path = require("path");
@@ -157,12 +160,50 @@ for (const check of checks) {
   }
 }
 
+// ------------------------------------------------------------------
+// Namespace allowlist check
+// ------------------------------------------------------------------
+// Every docs-table entry must carry a `namespace` that is either null or one of
+// the known OtterScript namespace tokens. Catches typos and any future value
+// added without updating the allowlist in language-data.js.
+
+/** @type {ReadonlySet<string>} */
+const namespaces = data.NAMESPACES;
+const nsTables = /** @type {Record<string, DocsTable>} */ ({
+  operationDocs: data.operationDocs,
+  scalarFunctionDocs: data.scalarFunctionDocs,
+  vectorFunctionDocs: data.vectorFunctionDocs,
+  variableDocs: data.variableDocs,
+  keywordDocs: data.keywordDocs,
+  syntaxDocs: data.syntaxDocs,
+});
+
+/** @type {string[]} */
+const badNamespaces = [];
+for (const [tableName, table] of Object.entries(nsTables)) {
+  for (const [key, entry] of Object.entries(table)) {
+    const ns = entry.namespace;
+    if (ns === undefined) {
+      badNamespaces.push(`${tableName}.${key}: missing 'namespace'`);
+    } else if (ns !== null && !namespaces.has(ns)) {
+      badNamespaces.push(`${tableName}.${key}: ${JSON.stringify(ns)}`);
+    }
+  }
+}
+
+if (badNamespaces.length) {
+  drift = true;
+  console.log(`\nDRIFT  namespaces  [not null and not in NAMESPACES]`);
+  console.log(`  ${badNamespaces.join("\n  ")}`);
+  console.log(`  allowed: ${[...namespaces].join(", ")}`);
+}
+
 if (drift) {
   console.log(
     "\nlanguage-data.js and syntaxes/otterscript.tmLanguage.json are out of sync."
   );
   console.log(
-    "Update the regex alternation(s) above so highlighting matches the docs tables."
+    "Update the regex alternation(s) and/or namespace values above to match."
   );
   process.exitCode = 1;
 } else {

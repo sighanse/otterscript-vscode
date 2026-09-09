@@ -8,9 +8,12 @@
 - [ ] Grammar (tmLanguage)
 - [ ] Completion
 - [ ] Hover / docs
+- [ ] Signature help
 - [ ] Snippets
 - [ ] Diagnostics
+- [ ] Navigation (definition / references / symbols)
 - [ ] Language Data (src/language-data.js)
+- [ ] Tests
 - [ ] Documentation
 - [ ] Other
 
@@ -22,8 +25,10 @@
 <!--- If it fixes an open issue, please link to the issue here. -->
 
 ## How Has This Been Tested?
-<!--- Please describe in detail how you tested your changes. -->
-<!--- Include details of your testing environment, and the tests you ran to -->
-<!--- see how your change affects other areas of the code, etc. -->
+<!--- Run `npm run check` (lint + type check + grammar/language-data sync + unit -->
+<!--- tests). Add or update unit tests for pure-logic changes. Note any manual -->
+<!--- Extension Host (F5) smoke testing and your VS Code version. -->
+
+- [ ] `npm run check` passes
 
 ## Screenshots (if appropriate)

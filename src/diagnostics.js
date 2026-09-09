@@ -24,10 +24,19 @@ const {
  * @property {Set<string>} knownScalarFunctions - Known scalar function names
  * @property {Set<string>} knownVectorFunctions - Known vector function names
  * @property {Set<string>} knownOperations - Known operation names
+ * @property {ReadonlySet<string>} knownNamespaces - Valid OtterScript namespace tokens
  * @property {() => RegExp} scalarCallRegex - Regex factory for scalar function calls
  * @property {() => RegExp} vectorCallRegex - Regex factory for vector function calls
  * @property {() => RegExp} operationCallRegex - Regex factory for operation-like tokens
  */
+
+/**
+ * Matches a `Namespace::` qualifier: a bare identifier followed by `::` and then
+ * a letter (the operation name). Group 1 is the char before the token so we can
+ * reject mid-token matches; group 2 is the namespace token itself.
+ * @type {RegExp}
+ */
+const NAMESPACE_QUALIFIER_REGEX = /(^|[^A-Za-z0-9_$@:])([A-Za-z][A-Za-z0-9]*)::(?=[A-Za-z])/g;
 
 /**
  * Updates diagnostics for an OtterScript document.
@@ -49,10 +58,15 @@ function updateDiagnostics(document, collection, ctx) {
     knownScalarFunctions,
     knownVectorFunctions,
     knownOperations,
+    knownNamespaces,
     scalarCallRegex,
     vectorCallRegex,
     operationCallRegex,
   } = ctx;
+
+  // Lower-cased view of the namespace allowlist for lenient matching (Inedo
+  // resolves namespaces case-insensitively; only genuinely unknown tokens flag).
+  const knownNamespacesLower = new Set([...knownNamespaces].map((n) => n.toLowerCase()));
 
   // -- Symbol-balance state (text is pre-masked by shared scanner helpers)
   const symbols = [
@@ -154,6 +168,13 @@ function updateDiagnostics(document, collection, ctx) {
     // -- Detect unknown operations
     for (const match of line.matchAll(operationCallRegex())) {
       const name = match[1];
+
+      // When the token is the operation half of `UnknownNs::Do-Thing`, the
+      // unknown-namespace check below already flags the real problem -- don't
+      // also report the operation name as unknown.
+      const qualifier = line.slice(0, match.index).match(/([A-Za-z][A-Za-z0-9]*)::$/)?.[1];
+      if (qualifier && !knownNamespacesLower.has(qualifier.toLowerCase())) continue;
+
       if (
         name.includes("-") &&
         !name.startsWith("$") &&
@@ -176,6 +197,33 @@ function updateDiagnostics(document, collection, ctx) {
         diagnostic.source = "OtterScript";
         issues.push(diagnostic);
       }
+    }
+
+    // ------------------------------------------------------------
+    // Unknown "Namespace::" qualifiers
+    // ------------------------------------------------------------
+    // Flag `Frobnicate::Do-Thing` when `Frobnicate` is not a known OtterScript
+    // namespace. A missing prefix is NOT flagged -- namespaces are optional.
+    // `call Raft::Module` uses `::` for raft names, not namespaces, so skip it.
+    for (const match of line.matchAll(NAMESPACE_QUALIFIER_REGEX)) {
+      const token = match[2];
+      if (knownNamespacesLower.has(token.toLowerCase())) continue;
+
+      const tokenStart = match.index + match[1].length;
+      const beforeToken = line.slice(0, tokenStart);
+      if (/\bcall\s+$/i.test(beforeToken)) continue; // raft-qualified module call
+
+      const diagnostic = new vscode.Diagnostic(
+        new vscode.Range(
+          new vscode.Position(lineIndex, tokenStart),
+          new vscode.Position(lineIndex, tokenStart + token.length)
+        ),
+        `Unknown namespace '${token}'`,
+        vscode.DiagnosticSeverity.Warning
+      );
+      diagnostic.code = "unknown-namespace";
+      diagnostic.source = "OtterScript";
+      issues.push(diagnostic);
     }
 
     // -- Detect invalid logical operators

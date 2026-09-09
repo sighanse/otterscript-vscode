@@ -1,15 +1,36 @@
 ###############################################################################
-# SAMPLE.OTTER
+# SAMPLE.OTTER  —  manual-review corpus for the OtterScript extension
 #
-# This file is intended for testing:
-# - Syntax highlighting
-# - Hover (keywords, scalar functions, vector functions, variables)
-# - Signature help
-# - Completion
-# - Error tolerance in grammar
+# Structure:
+#   PART 1  VALID CONSTRUCTS   — must produce ZERO diagnostics. Any squiggle
+#                                here is a false-positive regression.
+#   PART 2  INTENTIONAL ERRORS — every line tagged `# EXPECT: <code>` must
+#                                raise exactly that diagnostic; lines with a
+#                                `quick-fix:` note must offer that Ctrl+. action.
+#
+# Review pass:
+#   1. Open in VS Code. The Problems panel must list ONLY PART 2 items.
+#   2. Compare the count against the TALLY at the bottom of this file.
+#   3. On each `quick-fix:` line, press Ctrl+.  and confirm the named action.
+#   4. Inside the FIX-ALL BLOCK run "OtterScript: Fix All Issues"
+#      (Ctrl+Shift+Alt+F) and confirm all four are corrected in one pass with
+#      no leftover or shifted ranges.
+#   5. Spot-check hover / signature help / completion across PART 1.
+#
+# sample-valid.otter is a second, realistic script that must also stay clean.
 ###############################################################################
 
-#region All except Other
+
+###############################################################################
+###############################################################################
+##                                                                           ##
+##   PART 1  —  VALID CONSTRUCTS  (Problems panel must stay empty for these)  ##
+##                                                                           ##
+###############################################################################
+###############################################################################
+
+#region part-1-valid
+
 ###############################################################################
 # BASIC VARIABLES & ASSIGNMENTS
 ###############################################################################
@@ -39,7 +60,7 @@ if $count == "sws" {
 if $count > 0 {
 }
 
-foreach $x in @(1,2,3) {
+foreach $x in @(1, 2, 3) {
 }
 
 try {
@@ -111,7 +132,7 @@ $ceil = $Ceiling(2.3);
 $floor = $Floor(2.9);
 
 ###############################################################################
-# $Compare FUNCTION
+# $Compare FUNCTION  (safe operator forms only — see PART 2 §E for the '=' case)
 ###############################################################################
 # Valid operator forms: < > <= >= = !=
 # Returns "true" or "false"
@@ -120,8 +141,8 @@ if $Compare(5, >, 3) {
     Log-Information "5 > 3";
 }
 
-if $Compare("abc", =, "abc") {
-    Log-Information "Strings are equal";
+if $Compare("abc", !=, "xyz") {
+    Log-Information "Strings differ";
 }
 
 # ProGet-style example
@@ -130,43 +151,23 @@ if $Compare($VulnerabilityScore, >=, 7.5) {
 }
 
 # Forced numeric comparison
-#
 if $Compare("07", >, "6", true) {
     Log-Information "Numeric forcing works";
 }
 
-# Unknown operator (should trigger diagnostics but not break highlighting)
-if $count == 3 $count < 5 {
-    Log-Information "Unknown operator";
-}
-
-if $tru == "test1" {
-    Log-Information "Test 1";
-}
-if $DirectoryExists("C:\\path\\to\\directory") {
-    #  dsfsfd
-}
-if $a == "test2" {
-    Log-Information "Test 2";
-}
-
 ###############################################################################
-# LOOP CONTROL STATEMENTS
+# LOOP CONTROL STATEMENTS (inside a loop — valid)
 ###############################################################################
 
-foreach $i in @(1,2,3) {
+foreach $i in @(1, 2, 3) {
     if $i == 2 {
         continue;
     }
-    if $x == 3 {
+    if $i == 3 {
         break;
     }
     Log-Information $i;
 }
-# continue outside loop — should warn but not break
-continue;
-for i = 1 to 100
-local
 
 ###############################################################################
 # FILE SYSTEM
@@ -194,7 +195,7 @@ $utc = $DateUtc("yyyy-MM-ddTHH:mm:ss");
 @numbers = @(1, 2, 3, 4, 5);
 @range = @Range(5, 3);
 @parts = @Split("a,b,c", ",");
-@combined = @ListConcat(@(1,2), @(3,4));
+@combined = @ListConcat(@(1, 2), @(3, 4));
 
 ###############################################################################
 # PROGET-SPECIFIC VARIABLES & VECTORS
@@ -215,6 +216,13 @@ foreach $key in @ApiKeys {
 $hash = $PackageHash("hex", "sha512");
 $description = $PackageProperty("description", "none");
 $auth = $EncodeBasicAuth("user", "password");
+
+###############################################################################
+# KNOWN NAMESPACE QUALIFIERS  (namespace + operation both known -> no diagnostic)
+###############################################################################
+
+ProGet::Create-Directory( Path: "C:\\temp\\artifacts" );
+Windows::Ensure-Service( Name: "w3svc", Status: running );
 
 ###############################################################################
 # MODULES
@@ -250,7 +258,7 @@ with retry=3 {
 }
 
 with retry=2 {
-    foreach $x in @(1,2,3) {
+    foreach $x in @(1, 2, 3) {
         if $x > 1 {
             try {
                 Log-Information $x;
@@ -261,7 +269,6 @@ with retry=2 {
     }
 }
 
-#
 ###############################################################################
 # SWIM STRINGS
 ###############################################################################
@@ -288,44 +295,10 @@ that spans multiple lines>--8>
 <% } %>
 
 ###############################################################################
-# INTENTIONAL INVALID SYNTAX (RECOVERY TESTS)
+# MISC STATEMENTS / KEYWORD HIGHLIGHTING
 ###############################################################################
 
-$Base64DecZZode("Test");
-@RangZZe(1, 5, 2)
-Log-InformatZZion "message";
-
-# Missing $
-if count == 1 {
-    Log-Warning "This condition is invalid but highlighting should recover";
-}
-
-#if $count == 3 {
-#    Log-Information "Missing brace test";
-# missing }
-
-if $count = 3 & $count < 5 {
-    # invalid operator: single &
-}
-
-Log-Information "$ToUpper should not hover here";
-"$NotAFunctionInsideString"
-#endregion
-###############################################################################
-# OTHER STATEMENTS
-###############################################################################
-
-/*
-   function test() {
-       $unknownFunction();  // Should NOT show "unknown scalar function"
-       { } { } {            // Should NOT affect brace count
-   }
-*/
-
-/* comment {{{
-end */
-
-raise-error "Shit hits the fan"
+raise-error "intentional failure for testing";
 await;
 warn;
 fail;
@@ -334,14 +307,122 @@ force normal;
 $Substring("abcd", (1 + 1), 3);      # nested parentheses
 $Replace("a,b,c", ",", "|", true);   # extra argument
 
+# Semicolons are optional — the lines below must not be flagged.
 $url = $UrlEncode("https://www.github.com")
 $encoded = $HtmlEncode("test")
 $fullPath = $PathCombine("path1", "path2")
 
-$json = $ToJson(%(
-    name: "example",
-    name: "example",
-    count: $count,
-    values: @(1, 2, 3),
-));
+#endregion
 
+
+###############################################################################
+###############################################################################
+##                                                                           ##
+##   PART 2  —  INTENTIONAL ERRORS                                            ##
+##                                                                           ##
+##   Every `# EXPECT:` line must raise exactly the named diagnostic.          ##
+##   `quick-fix:` notes the Ctrl+. action that must be offered.               ##
+##                                                                           ##
+###############################################################################
+###############################################################################
+
+#region part-2-errors
+
+# ---------------------------------------------------------------------------
+# A. One diagnostic per line
+# ---------------------------------------------------------------------------
+
+$Base64DecZZode("Test");             # EXPECT: unknown-scalar-function   ($Base64DecZZode)
+@RangZZe(1, 5, 2)                    # EXPECT: unknown-vector-function   (@RangZZe)
+Log-InformatZZion "message";         # EXPECT: unknown-operation         (Log-InformatZZion)
+
+Dockr::Run-Container();              # EXPECT: unknown-namespace   quick-fix: Change namespace to 'Docker'
+Frobnicate::Do-Thing();             # EXPECT: unknown-namespace   (no quick-fix — too far from any known namespace)
+
+$cfg = %(
+    name:  "example",
+    name:  "duplicate",              # EXPECT: duplicate-map-key         ('name')
+    count: 3,
+);
+
+@vals = @Split("a,b", ",")];         # EXPECT: unbalanced — Unexpected closing bracket: Extra ']'
+
+# ---------------------------------------------------------------------------
+# B. FIX-ALL BLOCK — run "OtterScript: Fix All Issues" (Ctrl+Shift+Alt+F) here.
+#    All four must be corrected in a single pass, ranges intact.
+# ---------------------------------------------------------------------------
+
+if count == 1 {                      # EXPECT: missing-dollar            quick-fix: add '$'  -> if $count == 1
+}
+if $limit = 10 {                     # EXPECT: assignment-in-condition   quick-fix: change '=' to '=='
+}
+if $ready & $enabled {               # EXPECT: invalid-operator          quick-fix: change '&' to '&&'
+}
+for idx = 1 to 10                    # EXPECT: incorrect-for-usage       quick-fix: convert 'for' to 'foreach'
+
+# ---------------------------------------------------------------------------
+# C. Two diagnostics on one line (both quick-fixes offered independently)
+# ---------------------------------------------------------------------------
+
+if $count = 3 & $count < 5 {         # EXPECT: assignment-in-condition + invalid-operator
+}
+
+# ---------------------------------------------------------------------------
+# D. MUST NOT FLAG — recovery / scoping cases that look wrong but are valid
+# ---------------------------------------------------------------------------
+
+foreach $n in @(1, 2, 3) {           # 'foreach' is correct — no incorrect-for-usage
+}
+for server "web-01" {                # 'for <context>' binding — no incorrect-for-usage
+    Log-Information "bound";
+}
+if $count == 3 $count < 5 {          # missing operator between expressions — NOT diagnosed; highlighting recovers
+}
+continue;                            # 'continue' outside a loop — NOT diagnosed
+Log-Information "$ToUpper stays literal inside a string";
+"$NotAFunction inside a string";
+
+/*
+   $UnknownFunctionZZ("x");          inside a block comment — no unknown-scalar-function
+   { { {                             unbalanced braces inside a comment — ignored
+*/
+
+# ---------------------------------------------------------------------------
+# E. KNOWN FALSE POSITIVE — tracked for a future diagnostics refinement
+# ---------------------------------------------------------------------------
+
+if $Compare("abc", =, "abc") {       # FLAGS assignment-in-condition — the '=' is a $Compare
+    Log-Information "equal";         # operator argument, not a condition assignment. Accepted
+}                                    # limitation of the current line-based scanner.
+
+#endregion
+
+# ---------------------------------------------------------------------------
+# F. Unbalanced brace — MUST BE LAST. The unclosed '{' below is expected to
+#    swallow the rest of the file, so keep nothing meaningful after it.
+# ---------------------------------------------------------------------------
+
+if $done {                           # EXPECT: unbalanced — Unclosed brace(s): 1 '{' not closed
+
+
+###############################################################################
+# TALLY — expected diagnostics (PART 2 only)
+#
+#   unknown-scalar-function ....... 1   (A: $Base64DecZZode)
+#   unknown-vector-function ....... 1   (A: @RangZZe)
+#   unknown-operation ............. 1   (A: Log-InformatZZion)
+#   unknown-namespace ............. 2   (A: Dockr [fixable], Frobnicate [no fix])
+#   duplicate-map-key ............. 1   (A: name)
+#   missing-dollar ................ 1   (B: count)
+#   assignment-in-condition ...... 2   (B: $limit=10 ; C: $count=3)
+#   invalid-operator ............. 2   (B: $ready & ; C: & $count)
+#   incorrect-for-usage .......... 1   (B: for idx = 1 to 10)
+#   unbalanced (Extra ']') ....... 1   (A: @Split(...)] )
+#   unbalanced (Unclosed '{') .... 1   (F: if $done {)
+#   -----------------------------------
+#   TOTAL ........................ 14
+#
+# Sections D and E of PART 2 contribute 1 more (the tracked false positive in
+# §E), so the Problems panel shows 15 items total. Everything in PART 1 and
+# every "MUST NOT FLAG" line in §D must contribute 0.
+###############################################################################
