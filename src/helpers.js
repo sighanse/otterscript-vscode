@@ -25,6 +25,7 @@ const {
   advanceScanState,
   maskOutsideTemplateTags,
   documentUsesTemplateTags,
+  findTemplateTagDelimiters,
   isInStringOrComment,
   getActiveParameterIndex,
   MODULE_NAME_TOKEN_REGEX,
@@ -1158,22 +1159,17 @@ function computeFoldingRanges(document) {
       swimStart = -1;
     }
 
-    // -- <% %> template tags (multi-line tags only; brace folding still applies inside tags)
-    let searchIndex = 0;
-    while (true) {
-      const openIdx = maskedLine.indexOf("<%", searchIndex);
-      const closeIdx = maskedLine.indexOf("%>", searchIndex);
-      if (openIdx === -1 && closeIdx === -1) break;
-
-      if (openIdx !== -1 && (closeIdx === -1 || openIdx < closeIdx)) {
+    // -- <% %> template tags (multi-line tags only; brace folding still applies
+    //    inside tags). Delimiter detection is shared with diagnostics via
+    //    scanner.findTemplateTagDelimiters.
+    for (const delim of findTemplateTagDelimiters(maskedLine)) {
+      if (delim.open) {
         templateTagStack.push(lineIndex);
-        searchIndex = openIdx + 2;
       } else {
         const start = templateTagStack.pop();
         if (start !== undefined && lineIndex > start) {
           ranges.push(new vscode.FoldingRange(start, lineIndex, vscode.FoldingRangeKind.Region));
         }
-        searchIndex = closeIdx + 2;
       }
     }
 
@@ -1261,6 +1257,7 @@ module.exports = {
   maskNonCodeSpans,
   maskOutsideTemplateTags,
   documentUsesTemplateTags,
+  findTemplateTagDelimiters,
   findModuleDeclarationRange,
   getModuleCallReferencesByName,
   clearModuleInfoCache,

@@ -23,6 +23,7 @@ const {
   advanceScanState,
   maskOutsideTemplateTags,
   documentUsesTemplateTags,
+  findTemplateTagDelimiters,
   isInStringOrComment,
   getActiveParameterIndex,
   MODULE_NAME_TOKEN_REGEX,
@@ -528,5 +529,36 @@ describe("documentUsesTemplateTags", () => {
     assert.equal(documentUsesTemplateTags("<% no close here"), false);
     assert.equal(documentUsesTemplateTags("no open here %>"), false);
     assert.equal(documentUsesTemplateTags(""), false);
+  });
+});
+
+// ============================================================
+// findTemplateTagDelimiters
+// ============================================================
+
+describe("findTemplateTagDelimiters", () => {
+  it("returns open/close delimiters in source order", () => {
+    assert.deepEqual(findTemplateTagDelimiters("a <% b %> c <% d %>"), [
+      { index: 2, open: true },
+      { index: 7, open: false },
+      { index: 12, open: true },
+      { index: 17, open: false },
+    ]);
+  });
+
+  it("finds a lone opener or a lone closer", () => {
+    assert.deepEqual(findTemplateTagDelimiters("x <% y"), [{ index: 2, open: true }]);
+    assert.deepEqual(findTemplateTagDelimiters("y %> x"), [{ index: 2, open: false }]);
+  });
+
+  it("returns [] for a line with no delimiters", () => {
+    assert.deepEqual(findTemplateTagDelimiters('  "type": "TextBlock",'), []);
+  });
+
+  it("handles an empty tag <%%>", () => {
+    assert.deepEqual(findTemplateTagDelimiters("<%%>"), [
+      { index: 0, open: true },
+      { index: 2, open: false },
+    ]);
   });
 });

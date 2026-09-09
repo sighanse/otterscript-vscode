@@ -354,6 +354,30 @@ function maskOutsideTemplateTags(line, state) {
 }
 
 /**
+ * Finds `<%` / `%>` template-tag delimiters in one already-masked line, in
+ * source order. The single place the "what is a tag delimiter" rule lives, so
+ * folding and diagnostics cannot drift on it.
+ *
+ * @param {string} maskedLine - Output of {@link maskNonCodeSpans} for one line
+ *   (so a `<%` inside a string or comment is already gone)
+ * @returns {{ index: number, open: boolean }[]}
+ */
+function findTemplateTagDelimiters(maskedLine) {
+  /** @type {{ index: number, open: boolean }[]} */
+  const out = [];
+  for (let i = 0; i < maskedLine.length - 1; i++) {
+    if (maskedLine[i] === "<" && maskedLine[i + 1] === "%") {
+      out.push({ index: i, open: true });
+      i++;
+    } else if (maskedLine[i] === "%" && maskedLine[i + 1] === ">") {
+      out.push({ index: i, open: false });
+      i++;
+    }
+  }
+  return out;
+}
+
+/**
  * True when `text` uses OtterScript text templating: after string/comment
  * masking (so a `<%` inside a literal or comment does not count) it contains a
  * `<%` with a later `%>`. Cheap; the diagnostics engine calls it once per pass
@@ -572,6 +596,7 @@ module.exports = {
   // -- Text-template tags
   maskOutsideTemplateTags,
   documentUsesTemplateTags,
+  findTemplateTagDelimiters,
 
   // -- String & comment detection
   isInStringOrComment,

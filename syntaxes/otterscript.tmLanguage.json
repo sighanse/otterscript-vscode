@@ -525,7 +525,7 @@
           "patterns": [
             {
               "name": "keyword.control.template.otterscript",
-              "match": "\\b(if|else|foreach|in)\\b"
+              "match": "\\b(if|else|foreach|for|in|while)\\b"
             },
             { "include": "#if-block" },
             { "include": "#proget-variables" },
