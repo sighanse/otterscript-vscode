@@ -414,11 +414,22 @@ function findTemplateTagDelimiters(maskedLine) {
 }
 
 /**
- * True when `text` uses OtterScript text templating: after string/comment
- * masking (so a `<%` inside a literal or comment does not count) it contains a
- * `<%` with a later `%>`. Cheap; the diagnostics engine calls it once per pass
- * to decide whether to run {@link maskOutsideTemplateTags} and the
- * template-specific checks.
+ * True when `text` uses OtterScript text templating: after {@link maskNonCodeSpans}
+ * (so a `<%` inside a string, `#` / `//` line comment, block comment, or
+ * swim-string does not count) it contains a `<%` with a later `%>`. Cheap; the
+ * diagnostics engine calls it once per pass to decide whether to run
+ * {@link maskOutsideTemplateTags} and the template-specific checks.
+ *
+ * KNOWN LIMITATION: `maskNonCodeSpans` applies OtterScript comment rules
+ * everywhere, but in a text template the content outside `<% %>` is literal
+ * output (JSON, Markdown, ...), where `#` / `//` are not comments. So a `<%`
+ * that appears *after* an unquoted `#` or `//` on the same line is masked away
+ * here, and if every `<% %>` pair in the file is hidden that way the document
+ * is never treated as template-aware. This trade-off is deliberate: it keeps a
+ * plain `.otter` file whose *comment* shows a `<% ... %>` example (or a
+ * commented-out template line) from being misdetected as a template and having
+ * its real code blanked. Realistic templates put tags on their own line or
+ * after JSON/text with no bare `#` / `//`, so this rarely bites.
  *
  * @param {string} text - Full document text
  * @returns {boolean}

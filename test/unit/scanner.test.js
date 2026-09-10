@@ -541,6 +541,13 @@ describe("documentUsesTemplateTags", () => {
     assert.equal(documentUsesTemplateTags("close %> first\nthen open <%"), false);
   });
 
+  it("documented limitation: a '<%' after an unquoted # / // on its line is not seen", () => {
+    // Trade-off: this also keeps a plain .otter file whose comment shows a
+    // template example from being misdetected as a template.
+    assert.equal(documentUsesTemplateTags("heading # 3   <% if $x { %>y<% } %>"), false);
+    assert.equal(documentUsesTemplateTags("# example: <% foreach $x in @y { %>..<% } %>"), false);
+  });
+
   it("is false for plain OtterScript", () => {
     assert.equal(documentUsesTemplateTags("if $x {\n  Log-Information $x;\n}\n"), false);
   });
