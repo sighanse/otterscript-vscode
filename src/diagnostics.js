@@ -538,7 +538,7 @@ function updateDiagnostics(document, collection, ctx) {
         new vscode.Position(tagBalance.lastLine, tagBalance.lastCol),
         new vscode.Position(tagBalance.lastLine, tagBalance.lastCol + 2)
       ),
-      `Unclosed template tag: '<%' at line ${tagBalance.lastLine + 1}, col ${tagBalance.lastCol + 1} not closed`,
+      `Unclosed template tag: '<%' not closed (first at line ${tagBalance.lastLine + 1}, col ${tagBalance.lastCol + 1})`,
       vscode.DiagnosticSeverity.Error
     );
     d.source = "OtterScript";

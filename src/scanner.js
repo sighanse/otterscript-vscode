@@ -306,7 +306,7 @@ function createTemplateScanState() {
  */
 function maskOutsideTemplateTags(line, state) {
   const chars = line.split("");
-  /** @type {string | null} line-local quote while inside a tag-body string */
+  /** @type {string | null} open quote char (line-local), in or out of a tag */
   let quote = null;
 
   for (let i = 0; i < line.length; i++) {

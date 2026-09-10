@@ -4,9 +4,9 @@
  * primitives that the rest of the extension builds on.
  *
  * These cover the character-classification logic (strings, line/block comments,
- * swim-strings) that has historically regressed, plus the small argument/string
- * helpers and module-name matchers. No `vscode` shim is required: scanner.js has
- * no VS Code dependency.
+ * swim-strings) that has historically regressed, the `<% %>` text-template
+ * helpers, plus the small argument/string helpers and module-name matchers. No
+ * `vscode` shim is required: scanner.js has no VS Code dependency.
  *
  * Run via `npm test` (`node --test test/unit`).
  */

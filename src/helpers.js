@@ -1257,7 +1257,8 @@ module.exports = {
   maskNonCodeSpans,
   maskOutsideTemplateTags,
   documentUsesTemplateTags,
-  findTemplateTagDelimiters,
+  // findTemplateTagDelimiters is used only by computeFoldingRanges below;
+  // it is imported from ./scanner above, not re-exported (no external caller).
   findModuleDeclarationRange,
   getModuleCallReferencesByName,
   clearModuleInfoCache,
