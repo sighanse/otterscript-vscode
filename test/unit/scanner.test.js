@@ -487,6 +487,30 @@ describe("maskOutsideTemplateTags", () => {
     assert.equal(out.trim(), "");
   });
 
+  it("does not close a tag on a '%>' inside a tag-body '#' comment", () => {
+    const st = createTemplateScanState();
+    maskOutsideTemplateTags("<% $x # note with %> in it", st);
+    assert.equal(st.inTemplateTag, true);
+    maskOutsideTemplateTags("$y %>", st);
+    assert.equal(st.inTemplateTag, false);
+  });
+
+  it("does not close a tag on a '%>' inside a multi-line block comment", () => {
+    const st = createTemplateScanState();
+    maskOutsideTemplateTags("<% $x /*  a %>", st);
+    assert.equal(st.inTemplateTag, true);
+    const out = maskOutsideTemplateTags("still %> comment */ $z %>", st);
+    assert.equal(st.inTemplateTag, false);
+    assert.ok(out.includes("$z"));
+  });
+
+  it("does not close a tag on a '%>' inside a tag-body swim-string", () => {
+    const st = createTemplateScanState();
+    const out = maskOutsideTemplateTags("<% Log-Information >>a %> b>> %>", st);
+    assert.equal(st.inTemplateTag, false);
+    assert.ok(out.includes("Log-Information"));
+  });
+
   it("handles two tags on one line", () => {
     const out = mask('a <% one %> b <% two %> c');
     assert.equal(out.replace(/\s+/g, " ").trim(), "one two");
@@ -510,6 +534,11 @@ describe("documentUsesTemplateTags", () => {
 
   it("is true when the tags span lines", () => {
     assert.equal(documentUsesTemplateTags("<%\n  foreach $x in @y {\n%>\n<% } %>"), true);
+  });
+
+  it("does not count a '%>' that precedes the first '<%'", () => {
+    assert.equal(documentUsesTemplateTags("%> <%"), false);
+    assert.equal(documentUsesTemplateTags("close %> first\nthen open <%"), false);
   });
 
   it("is false for plain OtterScript", () => {

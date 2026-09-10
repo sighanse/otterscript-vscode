@@ -266,14 +266,17 @@ function advanceScanState(lineText, state) {
 // These helpers let the diagnostics engine see just the code.
 
 /**
- * Carried state for {@link maskOutsideTemplateTags}: whether the scan is
- * currently between a `<%` and its `%>`.
+ * Carried state for {@link maskOutsideTemplateTags}:
+ * - `inTemplateTag` — is the scan currently between a `<%` and its `%>`
+ * - `code` — the {@link CodeScanState} for the OtterScript *inside* a tag, so a
+ *   `%>` that sits in a tag-body string / comment / swim-string (possibly opened
+ *   on an earlier line of a multi-line tag) does not close the tag early.
  *
- * Kept separate from {@link CodeScanState} on purpose — the template pass runs
- * before, and independently of, string/comment masking, and every non-template
- * scan (the common case) would otherwise carry a dead field.
+ * Kept separate from a bare {@link CodeScanState} on purpose — the outer pass
+ * runs before, and independently of, {@link maskNonCodeSpans}, and every
+ * non-template scan (the common case) would otherwise carry these fields.
  *
- * @typedef {{ inTemplateTag: boolean }} TemplateScanState
+ * @typedef {{ inTemplateTag: boolean, code: CodeScanState }} TemplateScanState
  */
 
 /**
@@ -282,7 +285,7 @@ function advanceScanState(lineText, state) {
  * @returns {TemplateScanState}
  */
 function createTemplateScanState() {
-  return { inTemplateTag: false };
+  return { inTemplateTag: false, code: createCodeScanState() };
 }
 
 /**
@@ -292,36 +295,36 @@ function createTemplateScanState() {
  * (JSON, Markdown, ...). The `<%` / `%>` delimiters are blanked too.
  *
  * Runs on the RAW line, before {@link maskNonCodeSpans}: outside a tag there is
- * no OtterScript, so comment rules do not apply, but quoted spans are still
- * skipped both outside a tag (so a `<%` inside a string literal is not a tag
- * opener) and inside one (so a `%>` inside a tag-body string does not close the
- * tag early). Quote tracking is line-local. Callers gate this on
- * {@link documentUsesTemplateTags} so a `.otter` file with no tags is never
- * affected.
+ * no OtterScript, so only quoted spans are tracked (a `<%` inside a string
+ * literal is not a tag opener); inside a tag the body IS OtterScript, so `%>`
+ * closes the tag only when it is real code — a `%>` in a tag-body string, line
+ * comment, block comment, or swim-string is ignored, mirroring
+ * {@link scanLineState}. Callers gate this on {@link documentUsesTemplateTags}
+ * so a `.otter` file with no tags is never affected.
  *
  * @param {string} line
  * @param {TemplateScanState} state - Mutated in place; carries `inTemplateTag`
- *   across lines.
+ *   and the inside-tag {@link CodeScanState} across lines.
  * @returns {string}
  */
 function maskOutsideTemplateTags(line, state) {
   const chars = line.split("");
-  /** @type {string | null} open quote char (line-local), in or out of a tag */
-  let quote = null;
+  const code = state.code;
+  /** @type {string | null} open quote char in the literal text (line-local) */
+  let litQuote = null;
 
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
 
+    // ---- Outside a tag: blank everything; only strings are tracked ----------
     if (!state.inTemplateTag) {
       chars[i] = " ";
-      // Track quoted spans in the literal text too, so a `<%` written inside a
-      // string (`"use <% %> for loops"`) is not mistaken for a tag opener.
-      if (quote) {
-        if (ch === quote && isUnescapedQuoteAt(line, i)) quote = null;
+      if (litQuote) {
+        if (ch === litQuote && isUnescapedQuoteAt(line, i)) litQuote = null;
         continue;
       }
       if (ch === '"' || ch === "'") {
-        quote = ch;
+        litQuote = ch;
         continue;
       }
       if (ch === "<" && line[i + 1] === "%") {
@@ -332,14 +335,25 @@ function maskOutsideTemplateTags(line, state) {
       continue;
     }
 
-    // -- inside a tag: keep the code, but track strings so a `%>` inside one
-    //    does not close the tag, and blank the closing delimiter.
-    if (quote) {
-      if (ch === quote && isUnescapedQuoteAt(line, i)) quote = null;
+    // ---- Inside a tag: keep the code; `%>` closes only when it is real code --
+    // A tag never closes mid string/comment/swim, so on the next `<%` `code` is
+    // already clean; no reset needed.
+    if (code.inBlockComment) {
+      if (ch === "*" && line[i + 1] === "/") { code.inBlockComment = false; i++; }
       continue;
     }
-    if (ch === '"' || ch === "'") {
-      quote = ch;
+    if (code.swimDelimiter) {
+      if (line.startsWith(code.swimDelimiter, i)) {
+        i += code.swimDelimiter.length - 1;
+        code.swimDelimiter = null;
+      }
+      continue;
+    }
+    if (code.inString) {
+      if (ch === code.quote && isUnescapedQuoteAt(line, i)) {
+        code.inString = false;
+        code.quote = null;
+      }
       continue;
     }
     if (ch === "%" && line[i + 1] === ">") {
@@ -347,6 +361,28 @@ function maskOutsideTemplateTags(line, state) {
       chars[i + 1] = " ";
       state.inTemplateTag = false;
       i++;
+      continue;
+    }
+    if (ch === "/" && line[i + 1] === "*") {
+      code.inBlockComment = true;
+      i++;
+      continue;
+    }
+    if (ch === ">") {
+      const swimMatch = line.slice(i).match(/^>[^>]{0,5}>/);
+      if (swimMatch) {
+        code.swimDelimiter = swimMatch[0];
+        i += swimMatch[0].length - 1;
+        continue;
+      }
+    }
+    if (ch === '"' || ch === "'") {
+      code.inString = true;
+      code.quote = ch;
+      continue;
+    }
+    if (ch === "#" || (ch === "/" && line[i + 1] === "/")) {
+      break; // rest of the line is a comment; nothing after can close the tag
     }
   }
 
@@ -389,12 +425,19 @@ function findTemplateTagDelimiters(maskedLine) {
  */
 function documentUsesTemplateTags(text) {
   const state = createCodeScanState();
-  let masked = "";
+  let sawOpen = false;
   for (const rawLine of text.split(/\r?\n/)) {
-    masked += maskNonCodeSpans(rawLine, state) + "\n";
+    const masked = maskNonCodeSpans(rawLine, state);
+    if (sawOpen) {
+      if (masked.includes("%>")) return true;
+      continue;
+    }
+    const open = masked.indexOf("<%");
+    if (open === -1) continue;
+    sawOpen = true;
+    if (masked.indexOf("%>", open + 2) !== -1) return true;
   }
-  const open = masked.indexOf("<%");
-  return open !== -1 && masked.indexOf("%>", open + 2) !== -1;
+  return false;
 }
 
 /**
