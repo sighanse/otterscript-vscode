@@ -36,7 +36,7 @@
             "type": "Container",
             "items": [
               { "type": "TextBlock", "text": "Affected packages:", "weight": "bolder", "wrap": true }
-<% foreach $p in @AffectedPackages { %>
+<% foreach $p in @AffectedPackages {   /* a tag-body comment mentioning %> must not close the tag */ %>
               ,{
                 "type": "TextBlock",
                 "text": $ToJson("- " + $p.Name + " " + $p.AffectedVersions),
