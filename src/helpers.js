@@ -20,8 +20,12 @@ const vscode = require("vscode");
 // from this module's `module.exports` for backward compatibility.
 const {
   createCodeScanState,
+  createTemplateScanState,
   maskNonCodeSpans,
   advanceScanState,
+  maskOutsideTemplateTags,
+  documentUsesTemplateTags,
+  findTemplateTagDelimiters,
   isInStringOrComment,
   getActiveParameterIndex,
   MODULE_NAME_TOKEN_REGEX,
@@ -982,6 +986,21 @@ function createForToForeachFix(document, diagnostic) {
 }
 
 /**
+ * Creates a quick-fix that replaces a template block terminator keyword
+ * (`<% end %>`, `<% endforeach %>`, ...) with `}`, so it becomes `<% } %>`.
+ * The diagnostic range covers exactly the keyword token.
+ *
+ * @param {vscode.TextDocument} document - The document containing the diagnostic
+ * @param {vscode.Diagnostic} diagnostic - The `template-end-keyword` diagnostic
+ * @returns {vscode.CodeAction} A code action that replaces the keyword with `}`
+ */
+function createTemplateEndFix(document, diagnostic) {
+  return createCodeAction("Replace with '}'", diagnostic, (edit) => {
+    edit.replace(document.uri, diagnostic.range, "}");
+  });
+}
+
+/**
  * Levenshtein edit distance between two short strings.
  *
  * @param {string} a
@@ -1140,22 +1159,17 @@ function computeFoldingRanges(document) {
       swimStart = -1;
     }
 
-    // -- <% %> template tags (multi-line tags only; brace folding still applies inside tags)
-    let searchIndex = 0;
-    while (true) {
-      const openIdx = maskedLine.indexOf("<%", searchIndex);
-      const closeIdx = maskedLine.indexOf("%>", searchIndex);
-      if (openIdx === -1 && closeIdx === -1) break;
-
-      if (openIdx !== -1 && (closeIdx === -1 || openIdx < closeIdx)) {
+    // -- <% %> template tags (multi-line tags only; brace folding still applies
+    //    inside tags). Delimiter detection is shared with diagnostics via
+    //    scanner.findTemplateTagDelimiters.
+    for (const delim of findTemplateTagDelimiters(maskedLine)) {
+      if (delim.open) {
         templateTagStack.push(lineIndex);
-        searchIndex = openIdx + 2;
       } else {
         const start = templateTagStack.pop();
         if (start !== undefined && lineIndex > start) {
           ranges.push(new vscode.FoldingRange(start, lineIndex, vscode.FoldingRangeKind.Region));
         }
-        searchIndex = closeIdx + 2;
       }
     }
 
@@ -1229,6 +1243,7 @@ module.exports = {
   createAssignmentInConditionFix,
   createForToForeachFix,
   createUnknownNamespaceFix,
+  createTemplateEndFix,
   nearestNamespace,
 
   // -- Module navigation
@@ -1238,7 +1253,12 @@ module.exports = {
   getModuleDeclarations,
   findModuleDeclarations,
   createCodeScanState,
+  createTemplateScanState,
   maskNonCodeSpans,
+  maskOutsideTemplateTags,
+  documentUsesTemplateTags,
+  // findTemplateTagDelimiters is used only by computeFoldingRanges below;
+  // it is imported from ./scanner above, not re-exported (no external caller).
   findModuleDeclarationRange,
   getModuleCallReferencesByName,
   clearModuleInfoCache,

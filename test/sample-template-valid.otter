@@ -1,0 +1,52 @@
+# SAMPLE-TEMPLATE-VALID.OTTER
+#
+# A well-formed OtterScript *text template* (ProGet / Otter notification body
+# style): literal JSON output with <% ... %> code blocks. It MUST produce zero
+# diagnostics — the template-aware pass blanks the literal text between tags and
+# only checks the OtterScript inside the tags.
+#
+# This is the corrected "new vulnerability" webhook body from the milestone
+# reference: comma BEFORE each looped item (a static first element makes the
+# leading comma valid), $ToJson() on every dynamic value, $p loop variable,
+# no <% set %>.
+
+{
+  "type": "message",
+  "attachments": [
+    {
+      "contentType": "application/vnd.microsoft.card.adaptive",
+      "content": {
+        "type": "AdaptiveCard",
+        "version": "1.2",
+        "body": [
+          {
+            "type": "TextBlock",
+            "text": "Security Vulnerability Published",
+            "size": "medium", "weight": "bolder", "color": "attention", "wrap": true
+          },
+          {
+            "type": "FactSet",
+            "facts": [
+              { "title": "Package", "value": $ToJson($PackageName + " " + $PackageVersion) },
+              { "title": "Vulnerability ID", "value": $ToJson($VulnerabilityId) },
+              { "title": "Summary", "value": $ToJson($VulnerabilitySummary) }
+            ]
+          },
+          {
+            "type": "Container",
+            "items": [
+              { "type": "TextBlock", "text": "Affected packages:", "weight": "bolder", "wrap": true }
+<% foreach $p in @AffectedPackages { %>
+              ,{
+                "type": "TextBlock",
+                "text": $ToJson("- " + $p.Name + " " + $p.AffectedVersions),
+                "wrap": true
+              }
+<% } %>
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

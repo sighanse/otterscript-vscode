@@ -257,6 +257,189 @@ function advanceScanState(lineText, state) {
   scanLineState(lineText, state, null);
 }
 
+// ============================================================
+// TEXT-TEMPLATE TAGS  (<% ... %>)
+// ============================================================
+// OtterScript text templates (ProGet / BuildMaster / Otter notification bodies,
+// `Apply-Template` literals) are literal output text with `<% ... %>` code
+// blocks. Everything OUTSIDE a tag is not OtterScript; only the tag bodies are.
+// These helpers let the diagnostics engine see just the code.
+
+/**
+ * Carried state for {@link maskOutsideTemplateTags}:
+ * - `inTemplateTag` — is the scan currently between a `<%` and its `%>`
+ * - `code` — the {@link CodeScanState} for the OtterScript *inside* a tag, so a
+ *   `%>` that sits in a tag-body string / comment / swim-string (possibly opened
+ *   on an earlier line of a multi-line tag) does not close the tag early.
+ *
+ * Kept separate from a bare {@link CodeScanState} on purpose — the outer pass
+ * runs before, and independently of, {@link maskNonCodeSpans}, and every
+ * non-template scan (the common case) would otherwise carry these fields.
+ *
+ * @typedef {{ inTemplateTag: boolean, code: CodeScanState }} TemplateScanState
+ */
+
+/**
+ * Creates a fresh template-scan state object.
+ *
+ * @returns {TemplateScanState}
+ */
+function createTemplateScanState() {
+  return { inTemplateTag: false, code: createCodeScanState() };
+}
+
+/**
+ * Blanks every character that is NOT inside a `<% ... %>` template tag,
+ * length-preserving, so downstream code diagnostics see only the real
+ * OtterScript between tags and not the literal output text of a text template
+ * (JSON, Markdown, ...). The `<%` / `%>` delimiters are blanked too.
+ *
+ * Runs on the RAW line, before {@link maskNonCodeSpans}: outside a tag there is
+ * no OtterScript, so only quoted spans are tracked (a `<%` inside a string
+ * literal is not a tag opener); inside a tag the body IS OtterScript, so `%>`
+ * closes the tag only when it is real code — a `%>` in a tag-body string, line
+ * comment, block comment, or swim-string is ignored, mirroring
+ * {@link scanLineState}. Callers gate this on {@link documentUsesTemplateTags}
+ * so a `.otter` file with no tags is never affected.
+ *
+ * @param {string} line
+ * @param {TemplateScanState} state - Mutated in place; carries `inTemplateTag`
+ *   and the inside-tag {@link CodeScanState} across lines.
+ * @returns {string}
+ */
+function maskOutsideTemplateTags(line, state) {
+  const chars = line.split("");
+  const code = state.code;
+  /** @type {string | null} open quote char in the literal text (line-local) */
+  let litQuote = null;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+
+    // ---- Outside a tag: blank everything; only strings are tracked ----------
+    if (!state.inTemplateTag) {
+      chars[i] = " ";
+      if (litQuote) {
+        if (ch === litQuote && isUnescapedQuoteAt(line, i)) litQuote = null;
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        litQuote = ch;
+        continue;
+      }
+      if (ch === "<" && line[i + 1] === "%") {
+        chars[i + 1] = " ";
+        state.inTemplateTag = true;
+        i++;
+      }
+      continue;
+    }
+
+    // ---- Inside a tag: keep the code; `%>` closes only when it is real code --
+    // A tag never closes mid string/comment/swim, so on the next `<%` `code` is
+    // already clean; no reset needed.
+    if (code.inBlockComment) {
+      if (ch === "*" && line[i + 1] === "/") { code.inBlockComment = false; i++; }
+      continue;
+    }
+    if (code.swimDelimiter) {
+      if (line.startsWith(code.swimDelimiter, i)) {
+        i += code.swimDelimiter.length - 1;
+        code.swimDelimiter = null;
+      }
+      continue;
+    }
+    if (code.inString) {
+      if (ch === code.quote && isUnescapedQuoteAt(line, i)) {
+        code.inString = false;
+        code.quote = null;
+      }
+      continue;
+    }
+    if (ch === "%" && line[i + 1] === ">") {
+      chars[i] = " ";
+      chars[i + 1] = " ";
+      state.inTemplateTag = false;
+      i++;
+      continue;
+    }
+    if (ch === "/" && line[i + 1] === "*") {
+      code.inBlockComment = true;
+      i++;
+      continue;
+    }
+    if (ch === ">") {
+      const swimMatch = line.slice(i).match(/^>[^>]{0,5}>/);
+      if (swimMatch) {
+        code.swimDelimiter = swimMatch[0];
+        i += swimMatch[0].length - 1;
+        continue;
+      }
+    }
+    if (ch === '"' || ch === "'") {
+      code.inString = true;
+      code.quote = ch;
+      continue;
+    }
+    if (ch === "#" || (ch === "/" && line[i + 1] === "/")) {
+      break; // rest of the line is a comment; nothing after can close the tag
+    }
+  }
+
+  return chars.join("");
+}
+
+/**
+ * Finds `<%` / `%>` template-tag delimiters in one already-masked line, in
+ * source order. The single place the "what is a tag delimiter" rule lives, so
+ * folding and diagnostics cannot drift on it.
+ *
+ * @param {string} maskedLine - Output of {@link maskNonCodeSpans} for one line
+ *   (so a `<%` inside a string or comment is already gone)
+ * @returns {{ index: number, open: boolean }[]}
+ */
+function findTemplateTagDelimiters(maskedLine) {
+  /** @type {{ index: number, open: boolean }[]} */
+  const out = [];
+  for (let i = 0; i < maskedLine.length - 1; i++) {
+    if (maskedLine[i] === "<" && maskedLine[i + 1] === "%") {
+      out.push({ index: i, open: true });
+      i++;
+    } else if (maskedLine[i] === "%" && maskedLine[i + 1] === ">") {
+      out.push({ index: i, open: false });
+      i++;
+    }
+  }
+  return out;
+}
+
+/**
+ * True when `text` uses OtterScript text templating: after string/comment
+ * masking (so a `<%` inside a literal or comment does not count) it contains a
+ * `<%` with a later `%>`. Cheap; the diagnostics engine calls it once per pass
+ * to decide whether to run {@link maskOutsideTemplateTags} and the
+ * template-specific checks.
+ *
+ * @param {string} text - Full document text
+ * @returns {boolean}
+ */
+function documentUsesTemplateTags(text) {
+  const state = createCodeScanState();
+  let sawOpen = false;
+  for (const rawLine of text.split(/\r?\n/)) {
+    const masked = maskNonCodeSpans(rawLine, state);
+    if (sawOpen) {
+      if (masked.includes("%>")) return true;
+      continue;
+    }
+    const open = masked.indexOf("<%");
+    if (open === -1) continue;
+    sawOpen = true;
+    if (masked.indexOf("%>", open + 2) !== -1) return true;
+  }
+  return false;
+}
+
 /**
  * @typedef {{ name: string, line: number, character: number }} ModuleDeclarationHit
  *   `line` and `character` are 0-based; `character` is the column where the
@@ -445,12 +628,18 @@ function getActiveParameterIndex(argsText) {
 module.exports = {
   // -- Scan state
   createCodeScanState,
+  createTemplateScanState,
 
   // -- Primitives
   isUnescapedQuoteAt,
   scanLineState,
   maskNonCodeSpans,
   advanceScanState,
+
+  // -- Text-template tags
+  maskOutsideTemplateTags,
+  documentUsesTemplateTags,
+  findTemplateTagDelimiters,
 
   // -- String & comment detection
   isInStringOrComment,

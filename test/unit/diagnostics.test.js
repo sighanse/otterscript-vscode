@@ -391,3 +391,147 @@ describe("updateDiagnostics — unknown namespace", () => {
     assert.ok(!codes.includes("unknown-namespace"));
   });
 });
+
+// ============================================================
+// text-template (<% ... %>) structural checks  (phase 1)
+// ============================================================
+
+describe("updateDiagnostics - template <% %> structural checks", () => {
+  /** @param {string} src */
+  const msgs = (src) => diagnose(src).map((d) => d.message);
+  /** @param {string} src */
+  const codes = (src) => diagnose(src).map((d) => d.code);
+
+  it("does not run any template check on a document with no tags", () => {
+    // `<% ... %>` only inside a string -> not template-aware -> plain scan.
+    assert.deepEqual(diagnose('set $t = "<% foreach $x in @y { %>";'), []);
+  });
+
+  it("blanks the literal text between tags (no false unknown-function / brace noise)", () => {
+    const src = [
+      "{",
+      '  "items": [',
+      "    <% foreach $p in @AffectedPackages { %>",
+      '    { "type": "TextBlock", "text": $ToJson("- " + $p.Name) }',
+      "    <% } %>",
+      "  ]",
+      "}",
+    ].join("\n");
+    assert.deepEqual(diagnose(src), []);
+  });
+
+  it("flags <% end %> and offers the } quick-fix code", () => {
+    const ds = diagnose("<% foreach $p in @x { %>a<% end %>");
+    const end = ds.find((d) => d.code === "template-end-keyword");
+    assert.ok(end);
+    assert.match(end.message, /<% end %>/);
+    assert.equal(end.severity, DiagnosticSeverity.Warning);
+  });
+
+  it("flags every <% endfoo %> spelling", () => {
+    for (const kw of ["end", "endif", "endfor", "endforeach", "endwhile", "ENDIF"]) {
+      assert.ok(
+        diagnose(`<% if $x { %>a<% ${kw} %>`).some((d) => d.code === "template-end-keyword"),
+        kw
+      );
+    }
+  });
+
+  it("flags a block opener with no brace", () => {
+    assert.ok(diagnose("<% if !$p.Last %>,<% } %>").some((d) => d.code === "template-missing-brace"));
+    assert.ok(diagnose("<% foreach $p in @x %>").some((d) => d.code === "template-missing-brace"));
+    assert.ok(diagnose("<% while $x %>").some((d) => d.code === "template-missing-brace"));
+    assert.ok(diagnose('<% for server "web" %>').some((d) => d.code === "template-missing-brace"));
+  });
+
+  it("does not flag a well-formed block opener or closer", () => {
+    assert.equal(codes("<% foreach $p in @x { %>").filter((c) => c === "template-missing-brace").length, 0);
+    assert.equal(codes("<% if $x { %>").filter((c) => c === "template-missing-brace").length, 0);
+    assert.equal(codes('<% for server "web" { %>').filter((c) => c === "template-missing-brace").length, 0);
+    assert.equal(codes("<% } %>").filter((c) => c === "template-missing-brace").length, 0);
+    assert.equal(codes("<% } else { %>").filter((c) => c === "template-missing-brace").length, 0);
+    assert.equal(codes("<% iffy $x %>").filter((c) => c === "template-missing-brace").length, 0);
+  });
+
+  it("leaves bare 'for i = ...' misuse to the incorrect-for-usage check", () => {
+    const cs = codes("<% for i = 1 to 10 %>");
+    assert.ok(cs.includes("incorrect-for-usage"));
+    assert.ok(!cs.includes("template-missing-brace"));
+  });
+
+  it("flags a stray %> with no matching <%", () => {
+    // needs a real tag elsewhere so the doc is template-aware
+    assert.ok(msgs("oops %> then <% $x %>").some((m) => /Unexpected '%>'/.test(m)));
+  });
+
+  it("flags an unclosed <% among complete tags", () => {
+    const ds = diagnose(["<% if $x { %>", "text", "<% foreach $p in @y {"].join("\n"));
+    assert.ok(ds.some((d) => /Unclosed template tag/.test(d.message)));
+  });
+
+  it("still runs the ordinary code checks inside a tag body", () => {
+    // missing '$' in a template-embedded if condition
+    assert.ok(diagnose("<% if count == 5 { %>x<% } %>").some((d) => d.code === "missing-dollar"));
+  });
+});
+
+// ============================================================
+// template/expression mode mixing  (phase 2, check 4)
+// ============================================================
+
+describe("updateDiagnostics - template-in-expression", () => {
+  /** @param {string} src */
+  const has = (src) => diagnose(src).some((d) => d.code === "template-in-expression");
+
+  it("flags a <% opened inside an unclosed $Func( / %( / @( in literal text", () => {
+    assert.ok(has('"x": $ToJson(%( a: 1 <% $y %> ))'));
+    assert.ok(has('"x": $Eval( <% $y %> )'));
+    assert.ok(has('"x": @( 1, <% $y %> )'));
+  });
+
+  it("does not flag a <% loop inside a JSON array or object", () => {
+    const src = ['"items": [', "<% foreach $p in @x { %>", "  ,{ }", "<% } %>", "]"].join("\n");
+    assert.equal(diagnose(src).filter((d) => d.code === "template-in-expression").length, 0);
+  });
+
+  it("reports once per stuck region, not on every following tag", () => {
+    const src = ["$ToJson(%(", "<% foreach $p in @x { %>", "a", "<% } %>", "))"].join("\n");
+    assert.equal(diagnose(src).filter((d) => d.code === "template-in-expression").length, 1);
+  });
+});
+
+// ============================================================
+// adjacent operands with no operator  (phase 2, check 5)
+// ============================================================
+
+describe("updateDiagnostics - missing-operator", () => {
+  /** @param {string} src */
+  const has = (src) => diagnose(src).some((d) => d.code === "missing-operator");
+
+  it("flags two operands with no operator inside %( ) / @( )", () => {
+    assert.ok(has("$m = %( v: $a $b );"));
+    assert.ok(has("@v = @( $a $b );"));
+    assert.ok(has("$m = %( v: $a + $b $c );")); // after a real operator
+  });
+
+  it("flags each gap in $a $b $c", () => {
+    assert.equal(diagnose("@v = @( $a $b $c );").filter((d) => d.code === "missing-operator").length, 2);
+  });
+
+  it("does not flag well-formed map / vector / call syntax", () => {
+    for (const src of [
+      "Log-Information $x;",
+      "foreach $x in @y { }",
+      "for server $env { }",
+      "set $x = $a;",
+      "$r = $Compare($a, >, $b);",
+      "call Foo;",
+      "$m = %( a: $x, b: $y );",
+      "$m = %( v: $a + $b );",
+      "$m = %( k: $a );",
+      "$m = %( v: $ToJson($a), w: 1 );",
+    ]) {
+      assert.equal(has(src), false, src);
+    }
+  });
+});

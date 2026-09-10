@@ -1,0 +1,50 @@
+# SAMPLE-TEMPLATE.OTTER
+#
+# Manual-review corpus for the text-template (<% ... %>) diagnostics (phases 1-2).
+# The whole file is one OtterScript text template: literal output text plus
+# <% ... %> code blocks. Every `# EXPECT:` note marks a line that must raise
+# exactly the named diagnostic; the literal JSON between tags must raise NOTHING
+# (the template-aware pass blanks it).
+#
+# NOTE: inside template literal text `#` is not a comment, it is output - the
+# notes below are harmless annotation only.
+#
+# Expected total: 8 diagnostics -
+#   template-missing-brace x2, template-end-keyword x2, "Unexpected '%>'" x1,
+#   "Unclosed template tag '<%'" x1, template-in-expression x1, missing-operator x1.
+# Everything else (valid tags, literal JSON) must be clean.
+
+# --- A. Phase 1: <% %> structure -------------------------------------------
+{
+  "items": [
+<% foreach $p in @AffectedPackages { %>
+    { "type": "TextBlock", "text": $ToJson("- " + $p.Name) },
+<% if !$p.Last %>
+    "separator"                                  # EXPECT (line above): template-missing-brace
+<% end %>                                        # EXPECT: template-end-keyword
+<% } %>
+  ]
+}
+
+<% endforeach %>                                 # EXPECT: template-end-keyword
+<% while $keepGoing %>                           # EXPECT: template-missing-brace
+
+then %>                                          # EXPECT: Unexpected '%>' - no matching '<%'
+
+# --- B. Phase 2: mode-mixing + juxtaposed operands ------------------------
+"bad": $ToJson(%( x: 1 <% $y %> ))               # EXPECT: template-in-expression
+<% $m = %( v: $a $b ) %>                         # EXPECT: missing-operator ($a $b)
+
+# --- must NOT flag -------------------------------------------------------------
+<% foreach $s in @AllServers() { %>
+    $ToJson($s.Name)
+<% } %>
+<% if $ok { %>ok<% } else { %>no<% } %>
+"list": [
+<% foreach $p in @x { %>
+    ,{ "n": $ToJson($p.Name) }
+<% } %>
+]
+
+# --- unclosed tag: keep LAST (everything after it is treated as tag code) ----
+<% foreach $x in @y

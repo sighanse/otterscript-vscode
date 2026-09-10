@@ -42,6 +42,7 @@ const {
   createInvalidOperatorFix,
   createAssignmentInConditionFix,
   createForToForeachFix,
+  createTemplateEndFix,
   createUnbalancedDiagnostic,
   getDiagnosticCode,
   validateDocs,
@@ -624,6 +625,13 @@ describe("quick-fix factories", () => {
     const fix = /** @type {any} */ (createForToForeachFix(makeDoc("for $x in y"), diagAt(0, 3)));
     assert.equal(fix.title, "Replace 'for' with 'foreach'");
     assert.equal(fix.edit.edits[0][3], "foreach");
+  });
+
+  it("createTemplateEndFix replaces the diagnostic range with '}'", () => {
+    const fix = /** @type {any} */ (createTemplateEndFix(makeDoc("<% end %>"), diagAt(3, 6)));
+    assert.equal(fix.title, "Replace with '}'");
+    assert.equal(fix.edit.edits[0][0], "replace");
+    assert.equal(fix.edit.edits[0][3], "}");
   });
 });
 

@@ -41,6 +41,7 @@ const {
   createForToForeachFix,
   createInvalidOperatorFix,
   createMissingDollarFix,
+  createTemplateEndFix,
   createUnknownNamespaceFix,
   getOutputChannel,
   getDiagnosticCode,
@@ -699,6 +700,7 @@ function activate(context) {
     "assignment-in-condition": createAssignmentInConditionFix,
     "incorrect-for-usage":     createForToForeachFix,
     "unknown-namespace":       createUnknownNamespaceFix,
+    "template-end-keyword":    createTemplateEndFix,
   });
 
   // ============================================================
