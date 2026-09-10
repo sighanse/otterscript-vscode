@@ -46,8 +46,15 @@ const NAMESPACE_QUALIFIER_REGEX = /(^|[^A-Za-z0-9_$@:])([A-Za-z][A-Za-z0-9]*)::(
 const TEMPLATE_TAG_REGEX = /<%(.*?)%>/g;
 /** Tag body that is only a block-terminator keyword (`end`, `endforeach`, ...). @type {RegExp} */
 const TEMPLATE_END_KEYWORD_REGEX = /^\s*(end(?:if|for|foreach|while)?)\s*$/i;
-/** Tag body that opens a block (`if` / `foreach` / `while`, optionally after `}`/`else`). @type {RegExp} */
-const TEMPLATE_BLOCK_OPENER_REGEX = /^\s*(?:\}\s*)?(?:else\s+)?(?:if|foreach|while)\b/i;
+/**
+ * Tag body that opens a `{ }` block: `if` / `foreach` / `while`, optionally
+ * after `}` / `else`, or context-binding `for server|role|directory|deployable`.
+ * Bare `for i = ... ` / `for $x in ...` is left to the `incorrect-for-usage`
+ * check, which owns that misuse.
+ * @type {RegExp}
+ */
+const TEMPLATE_BLOCK_OPENER_REGEX =
+  /^\s*(?:\}\s*)?(?:else\s+)?(?:(?:if|foreach|while)\b|for\s+(?:server|role|directory|deployable)\b)/i;
 
 /**
  * Emits the `<% %>` structural diagnostics (Phase 1) and the template/expression
@@ -156,7 +163,7 @@ function checkTemplateTags(tagView, lineIndex, issues, tagBalance, exprState) {
     }
 
     if (!body.includes("{") && TEMPLATE_BLOCK_OPENER_REGEX.test(body)) {
-      const kwMatch = /** @type {RegExpMatchArray} */ (body.match(/\b(?:if|foreach|while)\b/i));
+      const kwMatch = /** @type {RegExpMatchArray} */ (body.match(/\b(?:if|foreach|for|while)\b/i));
       const kwStart = bodyStart + /** @type {number} */ (kwMatch.index);
       const d = new vscode.Diagnostic(
         new vscode.Range(

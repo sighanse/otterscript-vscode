@@ -440,13 +440,23 @@ describe("updateDiagnostics - template <% %> structural checks", () => {
   it("flags a block opener with no brace", () => {
     assert.ok(diagnose("<% if !$p.Last %>,<% } %>").some((d) => d.code === "template-missing-brace"));
     assert.ok(diagnose("<% foreach $p in @x %>").some((d) => d.code === "template-missing-brace"));
+    assert.ok(diagnose("<% while $x %>").some((d) => d.code === "template-missing-brace"));
+    assert.ok(diagnose('<% for server "web" %>').some((d) => d.code === "template-missing-brace"));
   });
 
   it("does not flag a well-formed block opener or closer", () => {
     assert.equal(codes("<% foreach $p in @x { %>").filter((c) => c === "template-missing-brace").length, 0);
     assert.equal(codes("<% if $x { %>").filter((c) => c === "template-missing-brace").length, 0);
+    assert.equal(codes('<% for server "web" { %>').filter((c) => c === "template-missing-brace").length, 0);
     assert.equal(codes("<% } %>").filter((c) => c === "template-missing-brace").length, 0);
     assert.equal(codes("<% } else { %>").filter((c) => c === "template-missing-brace").length, 0);
+    assert.equal(codes("<% iffy $x %>").filter((c) => c === "template-missing-brace").length, 0);
+  });
+
+  it("leaves bare 'for i = ...' misuse to the incorrect-for-usage check", () => {
+    const cs = codes("<% for i = 1 to 10 %>");
+    assert.ok(cs.includes("incorrect-for-usage"));
+    assert.ok(!cs.includes("template-missing-brace"));
   });
 
   it("flags a stray %> with no matching <%", () => {
