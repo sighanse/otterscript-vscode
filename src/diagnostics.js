@@ -180,75 +180,6 @@ function checkTemplateTags(tagView, lineIndex, issues, tagBalance, exprState) {
   }
 }
 
-/** An operand token: `$name`, `@name`, or a number. @type {RegExp} */
-const OPERAND_TOKEN = /\$[A-Za-z]\w*|@[A-Za-z]\w*|\d[\d.]*/y;
-
-/**
- * Phase 2, check 5: two operand tokens with only whitespace between them inside
- * a `%( ... )` / `@( ... )` literal -- e.g. `%( v: $a $b )` -- which OtterScript
- * evaluates to a "Stack Empty" error. Scoped to map/vector literals only (the
- * innermost open bracket must be `%(` or `@(`); a missing `+` there is the
- * classic mistake. Function-call argument lists are left for a later pass.
- *
- * @param {vscode.TextDocument} document - For offset -> Position conversion only
- * @param {string} maskedText - Whole document, `maskNonCodeSpans`-masked
- * @returns {vscode.Diagnostic[]}
- */
-function findAdjacentOperandDiagnostics(document, maskedText) {
-  /** @type {vscode.Diagnostic[]} */
-  const issues = [];
-  /** @type {("map" | "plain")[]} */
-  const stack = [];
-  let mapDepth = 0;
-
-  for (let i = 0; i < maskedText.length; i++) {
-    const ch = maskedText[i];
-
-    if ((ch === "%" || ch === "@") && maskedText[i + 1] === "(") {
-      stack.push("map");
-      mapDepth++;
-      i++;
-      continue;
-    }
-    if (ch === "(") {
-      stack.push("plain");
-      continue;
-    }
-    if (ch === ")") {
-      if (stack.pop() === "map") mapDepth--;
-      continue;
-    }
-
-    // Only look for juxtaposition when the innermost bracket is a map/vector.
-    if (mapDepth === 0 || stack[stack.length - 1] !== "map") continue;
-    if (ch !== "$" && ch !== "@" && !(ch >= "0" && ch <= "9")) continue;
-
-    OPERAND_TOKEN.lastIndex = i;
-    const first = OPERAND_TOKEN.exec(maskedText);
-    if (!first || first.index !== i) continue;
-
-    let j = i + first[0].length;
-    if (maskedText[j] !== " " && maskedText[j] !== "\t") { i = j - 1; continue; }
-    while (maskedText[j] === " " || maskedText[j] === "\t") j++;
-
-    OPERAND_TOKEN.lastIndex = j;
-    const second = OPERAND_TOKEN.exec(maskedText);
-    if (second && second.index === j) {
-      const diagnostic = new vscode.Diagnostic(
-        new vscode.Range(document.positionAt(j), document.positionAt(j + second[0].length)),
-        `Missing operator between '${first[0]}' and '${second[0]}' - did you mean '+'? (adjacent values raise "Stack Empty")`,
-        vscode.DiagnosticSeverity.Warning
-      );
-      diagnostic.code = "missing-operator";
-      diagnostic.source = "OtterScript";
-      issues.push(diagnostic);
-    }
-    i = j - 1; // re-scan from the second operand (catches `$a $b $c`)
-  }
-
-  return issues;
-}
-
 /**
  * Updates diagnostics for an OtterScript document.
  * Performs a full scan of the document and reports all issues.
@@ -546,11 +477,7 @@ function updateDiagnostics(document, collection, ctx) {
   }
 
   // -- Detect duplicate keys inside map expressions: %( key: value, key: value )
-  const joinedMasked = maskedLines.join("\n");
-  issues.push(...findDuplicateMapKeyDiagnosticsFromMasked(document, joinedMasked));
-
-  // -- Detect adjacent operands with no operator inside %(...) / @(...)
-  issues.push(...findAdjacentOperandDiagnostics(document, joinedMasked));
+  issues.push(...findDuplicateMapKeyDiagnosticsFromMasked(document, maskedLines.join("\n")));
 
   collection.set(document.uri, issues);
 }

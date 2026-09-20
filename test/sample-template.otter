@@ -9,9 +9,9 @@
 # NOTE: inside template literal text `#` is not a comment, it is output - the
 # notes below are harmless annotation only.
 #
-# Expected total: 11 diagnostics -
+# Expected total: 8 diagnostics -
 #   template-missing-brace x3, template-end-keyword x2, "Unexpected '%>'" x1,
-#   "Unclosed template tag '<%'" x1, template-in-expression x1, missing-operator x3.
+#   "Unclosed template tag '<%'" x1, template-in-expression x1.
 # Everything else (valid tags, literal JSON) must be clean.
 
 # --- A. Phase 1: <% %> structure -------------------------------------------
@@ -32,10 +32,8 @@
 
 then %>                                          # EXPECT: Unexpected '%>' - no matching '<%'
 
-# --- B. Phase 2: mode-mixing + juxtaposed operands ------------------------
+# --- B. Phase 2: mode-mixing -----------------------------------------------
 "bad": $ToJson(%( x: 1 <% $y %> ))               # EXPECT: template-in-expression
-<% $m = %( v: $a $b ) %>                         # EXPECT: missing-operator ($a $b)
-<% $n = @( $a $b $c ) %>                         # EXPECT: missing-operator x2 ($b, $c)
 
 # --- must NOT flag -------------------------------------------------------------
 <% foreach $s in @AllServers() { %>
@@ -43,6 +41,11 @@ then %>                                          # EXPECT: Unexpected '%>' - no 
 <% } %>
 <% if $ok { %>ok<% } else { %>no<% } %>
 <% $x = 1 /* note with %> inside */ $y = 2 %>
+# $a $b next to each other is ONE implicit string (Inedo docs: "no need for
+# string concatenation ... just put the variables next to each other"), not a
+# missing operator -- must stay clean even inside a map/vector literal.
+<% $m = %( v: $a $b ) %>
+<% $n = @( $a $b $c ) %>
 "list": [
 <% foreach $p in @x { %>
     ,{ "n": $ToJson($p.Name) }

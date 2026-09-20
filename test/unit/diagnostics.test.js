@@ -501,37 +501,30 @@ describe("updateDiagnostics - template-in-expression", () => {
 });
 
 // ============================================================
-// adjacent operands with no operator  (phase 2, check 5)
+// implicit-string juxtaposition inside %( ) / @( ) is VALID -- not a diagnostic
 // ============================================================
+// Phase 2 shipped a "missing-operator" check flagging `%( v: $a $b )` as two
+// operands with no `+`. Per Inedo's own docs (executionengine/otterscript/
+// strings-and-literals.md): "there is no need for things like string
+// concatenation: just put the variables next to each other ... and they will
+// be evaluated at runtime as expected." An implicit string is delimited by a
+// comma / right-paren / right-brace / semicolon -- exactly a map value or
+// vector element position -- so `$a $b` there is ONE implicit-string value
+// (concatenated at runtime), not a parse error. The check was removed; these
+// tests pin that such code stays clean.
 
-describe("updateDiagnostics - missing-operator", () => {
-  /** @param {string} src */
-  const has = (src) => diagnose(src).some((d) => d.code === "missing-operator");
-
-  it("flags two operands with no operator inside %( ) / @( )", () => {
-    assert.ok(has("$m = %( v: $a $b );"));
-    assert.ok(has("@v = @( $a $b );"));
-    assert.ok(has("$m = %( v: $a + $b $c );")); // after a real operator
-  });
-
-  it("flags each gap in $a $b $c", () => {
-    assert.equal(diagnose("@v = @( $a $b $c );").filter((d) => d.code === "missing-operator").length, 2);
-  });
-
-  it("does not flag well-formed map / vector / call syntax", () => {
+describe("updateDiagnostics - implicit-string juxtaposition (not a diagnostic)", () => {
+  it("does not flag adjacent $/@ tokens inside a map value or vector element", () => {
     for (const src of [
-      "Log-Information $x;",
-      "foreach $x in @y { }",
-      "for server $env { }",
-      "set $x = $a;",
-      "$r = $Compare($a, >, $b);",
-      "call Foo;",
+      "$m = %( v: $a $b );",
+      "@v = @( $a $b );",
+      "@v = @( $a $b $c );",
+      "$m = %( v: $a + $b $c );",
       "$m = %( a: $x, b: $y );",
-      "$m = %( v: $a + $b );",
       "$m = %( k: $a );",
       "$m = %( v: $ToJson($a), w: 1 );",
     ]) {
-      assert.equal(has(src), false, src);
+      assert.deepEqual(diagnose(src).map((d) => d.code), [], src);
     }
   });
 });
