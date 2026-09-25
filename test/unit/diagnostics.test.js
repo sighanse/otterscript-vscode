@@ -22,6 +22,8 @@ const ctx = {
   knownKeywords: new Set(Object.keys(data.keywordDocs)),
   knownScalarFunctions: new Set(Object.keys(data.scalarFunctionDocs)),
   knownVectorFunctions: new Set(Object.keys(data.vectorFunctionDocs)),
+  scalarFunctionDocs: data.scalarFunctionDocs,
+  vectorFunctionDocs: data.vectorFunctionDocs,
   knownOperations: new Set(Object.keys(data.operationDocs)),
   knownNamespaces: data.NAMESPACES,
   ...createRegexPatterns(new Set(Object.keys(data.operationDocs))),
@@ -201,6 +203,55 @@ describe("updateDiagnostics — unknown vector function", () => {
 
   it("does not flag a known vector function", () => {
     assert.deepEqual(only("foreach $s in @AllServers() { }", "unknown-vector-function"), []);
+  });
+});
+
+// ============================================================
+// too many arguments
+// ============================================================
+
+describe("updateDiagnostics — too many arguments", () => {
+  it("flags a fixed-arity scalar function called with an extra argument", () => {
+    const [d] = only('$r = $ToJson($a, $b);', "too-many-arguments");
+    assert.ok(d);
+    assert.equal(d.message, "'$ToJson' takes at most 1 argument, got 2.");
+    assert.equal(d.severity, DiagnosticSeverity.Warning);
+    assert.equal(d.range.start.character, 6, "points at the name, past the '$'");
+    assert.equal(d.range.end.character, 6 + "ToJson".length);
+  });
+
+  it("flags a fixed-arity vector function called with an extra argument", () => {
+    const [d] = only("$r = @Split($a, $b, $c, $d);", "too-many-arguments");
+    assert.ok(d);
+    assert.equal(d.message, "'@Split' takes at most 3 arguments, got 4.");
+  });
+
+  it("does not flag a call within the documented argument count", () => {
+    assert.deepEqual(only('$r = $ToJson($a);', "too-many-arguments"), []);
+    assert.deepEqual(only("$r = @Split($a, $b, $c);", "too-many-arguments"), []);
+  });
+
+  it("does not flag implicit-string juxtaposition as extra arguments", () => {
+    // $a $b with no comma is ONE implicit-string argument, not two.
+    assert.deepEqual(only('$r = $ToJson($a $b);', "too-many-arguments"), []);
+  });
+
+  it("does not flag a nested map/vector literal as multiple top-level arguments", () => {
+    assert.deepEqual(
+      only('$r = $ToJson(%( a: $x, b: $y ));', "too-many-arguments"),
+      []
+    );
+  });
+
+  it("does not flag a vararg function regardless of argument count", () => {
+    assert.deepEqual(
+      only("$r = $Coalesce($a, $b, $c, $d, $e);", "too-many-arguments"),
+      []
+    );
+  });
+
+  it("does not flag an unknown function (that check is owned by unknown-scalar-function)", () => {
+    assert.deepEqual(only('$r = $Frobnicate($a, $b, $c);', "too-many-arguments"), []);
   });
 });
 

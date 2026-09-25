@@ -1168,6 +1168,8 @@ function activate(context) {
     knownKeywords,
     knownScalarFunctions,
     knownVectorFunctions,
+    scalarFunctionDocs,
+    vectorFunctionDocs,
     knownOperations,
     knownNamespaces: NAMESPACES,
     scalarCallRegex,

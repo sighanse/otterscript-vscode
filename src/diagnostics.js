@@ -13,6 +13,7 @@ const {
   createTemplateScanState,
   createUnbalancedDiagnostic,
   findDuplicateMapKeyDiagnosticsFromMasked,
+  findArgumentCountDiagnosticsFromMasked,
   maskNonCodeSpans,
   maskOutsideTemplateTags,
   documentUsesTemplateTags,
@@ -26,6 +27,8 @@ const {
  * @property {Set<string>} knownKeywords - Known language keywords
  * @property {Set<string>} knownScalarFunctions - Known scalar function names
  * @property {Set<string>} knownVectorFunctions - Known vector function names
+ * @property {Record<string, {signature?: string}>} scalarFunctionDocs - Scalar function docs, keyed by name
+ * @property {Record<string, {signature?: string}>} vectorFunctionDocs - Vector function docs, keyed by name
  * @property {Set<string>} knownOperations - Known operation names
  * @property {ReadonlySet<string>} knownNamespaces - Valid OtterScript namespace tokens
  * @property {() => RegExp} scalarCallRegex - Regex factory for scalar function calls
@@ -199,6 +202,8 @@ function updateDiagnostics(document, collection, ctx) {
     knownKeywords,
     knownScalarFunctions,
     knownVectorFunctions,
+    scalarFunctionDocs,
+    vectorFunctionDocs,
     knownOperations,
     knownNamespaces,
     scalarCallRegex,
@@ -477,7 +482,12 @@ function updateDiagnostics(document, collection, ctx) {
   }
 
   // -- Detect duplicate keys inside map expressions: %( key: value, key: value )
-  issues.push(...findDuplicateMapKeyDiagnosticsFromMasked(document, maskedLines.join("\n")));
+  const joinedMasked = maskedLines.join("\n");
+  issues.push(...findDuplicateMapKeyDiagnosticsFromMasked(document, joinedMasked));
+
+  // -- Detect calls that pass more arguments than a known function's fixed-arity
+  //    signature allows, e.g. $ToJson($a, $b) ($ToJson takes exactly one).
+  issues.push(...findArgumentCountDiagnosticsFromMasked(document, joinedMasked, scalarFunctionDocs, vectorFunctionDocs));
 
   collection.set(document.uri, issues);
 }

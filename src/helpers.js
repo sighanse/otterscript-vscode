@@ -865,6 +865,130 @@ function findDuplicateMapKeyDiagnosticsFromMasked(document, maskedText) {
 }
 
 /**
+ * Parses a `$Name(...)` / `@Name(...)` doc signature and returns the maximum
+ * number of arguments the call can take, or `null` when the signature isn't a
+ * fixed-arity parenthesized call (a bare property like `$ExecutionId`, or a
+ * vararg signature containing a literal `...` parameter such as
+ * `$PathCombine(path1, path2, ...)`).
+ *
+ * Only the total slot count is computed -- required vs. `[optional]` isn't
+ * distinguished, since that's all a "too many arguments" check needs and it
+ * avoids relying on the optional-bracket convention being 100% consistent.
+ *
+ * @param {string} signature - e.g. `"$ToJson(data)"`
+ * @returns {number | null}
+ */
+function parseFixedMaxArity(signature) {
+  const m = signature.match(/^[$@][A-Za-z]\w*\(([\s\S]*)\)$/);
+  if (!m) return null;
+
+  const argsText = m[1].trim();
+  if (argsText === "") return 0;
+
+  const parts = argsText.split(",").map((s) => s.trim());
+  if (parts.some((p) => p === "...")) return null;
+
+  return parts.length;
+}
+
+/**
+ * Finds calls to known scalar/vector functions that pass more arguments than
+ * their documented signature allows, given text already masked by
+ * {@link maskNonCodeSpans} (and, for template-aware documents,
+ * {@link maskOutsideTemplateTags}). Only functions with a fixed-arity,
+ * parenthesized signature are checked -- see {@link parseFixedMaxArity}.
+ *
+ * This deliberately does NOT flag too few arguments: which parameters are
+ * truly required (vs. documented as optional) is a softer signal than the
+ * hard ceiling on total slots, so under-counting stays silent to avoid false
+ * positives.
+ *
+ * @param {vscode.TextDocument} document - Used only for `positionAt()`.
+ * @param {string} maskedText - Full document text, already masked.
+ * @param {Record<string, {signature?: string}>} scalarFunctionDocs
+ * @param {Record<string, {signature?: string}>} vectorFunctionDocs
+ * @returns {vscode.Diagnostic[]}
+ */
+function findArgumentCountDiagnosticsFromMasked(document, maskedText, scalarFunctionDocs, vectorFunctionDocs) {
+  /** @type {vscode.Diagnostic[]} */
+  const issues = [];
+
+  /**
+   * @param {number} openParenIndex - Index of the call's '(' in `maskedText`
+   * @returns {number} Matching ')' index, or -1 when not found
+   */
+  function findMatchingParen(openParenIndex) {
+    let depth = 1;
+    for (let i = openParenIndex + 1; i < maskedText.length; i++) {
+      if (maskedText[i] === "(") depth++;
+      if (maskedText[i] === ")") depth--;
+      if (depth === 0) return i;
+    }
+    return -1;
+  }
+
+  /**
+   * @param {number} start - Index just after the call's '('
+   * @param {number} end - Index of the matching ')'
+   * @returns {number} Number of top-level comma-separated arguments
+   */
+  function countArgs(start, end) {
+    const body = maskedText.slice(start, end);
+    if (body.trim() === "") return 0;
+
+    let depth = 0;
+    let count = 1;
+    for (const ch of body) {
+      if (ch === "(" || ch === "[" || ch === "{") depth++;
+      else if (ch === ")" || ch === "]" || ch === "}") { if (depth > 0) depth--; }
+      else if (ch === "," && depth === 0) count++;
+    }
+    return count;
+  }
+
+  /**
+   * @param {RegExp} nameRegex - Global regex; group 1 is the function name
+   * @param {Record<string, {signature?: string}>} docs
+   * @param {string} sigil - `"$"` or `"@"`, for the diagnostic message
+   */
+  function scan(nameRegex, docs, sigil) {
+    for (const match of maskedText.matchAll(nameRegex)) {
+      const name = match[1];
+      const doc = docs[name];
+      if (!doc?.signature) continue;
+
+      const maxArity = parseFixedMaxArity(doc.signature);
+      if (maxArity === null) continue;
+
+      const openParenIndex = /** @type {number} */ (match.index) + match[0].length - 1;
+      const closeParenIndex = findMatchingParen(openParenIndex);
+      if (closeParenIndex === -1) continue;
+
+      const argCount = countArgs(openParenIndex + 1, closeParenIndex);
+      if (argCount <= maxArity) continue;
+
+      const nameStart = /** @type {number} */ (match.index) + 1;
+      const diagnostic = new vscode.Diagnostic(
+        new vscode.Range(
+          document.positionAt(nameStart),
+          document.positionAt(nameStart + name.length)
+        ),
+        `'${sigil}${name}' takes at most ${maxArity} argument${maxArity === 1 ? "" : "s"}, got ${argCount}.`,
+        vscode.DiagnosticSeverity.Warning
+      );
+      diagnostic.code = "too-many-arguments";
+      diagnostic.source = "OtterScript";
+      issues.push(diagnostic);
+    }
+  }
+
+  scan(/\$([A-Za-z][A-Za-z0-9_]*)\s*\(/g, scalarFunctionDocs, "$");
+  scan(/@([A-Za-z][A-Za-z0-9_]*)\s*\(/g, vectorFunctionDocs, "@");
+
+  return issues;
+}
+
+/**
  * Gets the diagnostic code as a string.
  * @param {vscode.Diagnostic} diagnostic
  * @returns {string}
@@ -1228,6 +1352,7 @@ module.exports = {
   getActiveParameterIndex,
   checkMissingDollar,
   findDuplicateMapKeyDiagnosticsFromMasked,
+  findArgumentCountDiagnosticsFromMasked,
   validateDocs,
   createUnbalancedDiagnostic,
   getDiagnosticCode,
