@@ -192,7 +192,7 @@ Log-Error "Failed to connect to server";
   "Post-Http": {
     namespace: "HTTP",
     name: "Post-Http",
-    signature: 'Post-Http(Url: <text>, [Method: <integer>], [ContentType: <text>], [TextData: <text>], [FormData: <%(key1: value1, ...)>], [LogRequestData: <true/false>], [LogResponseBody: <true/false>], [ResponseBody: <text>], [ErrorStatusCodes: <text>], [RequestHeaders: <%(key1: value1, ...)>], [MaxResponseLength: <integer>], [ProxyRequest: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [IgnoreSslErrors: <true/false>]);',
+    signature: 'Post-Http(Url: <text>, [Method: POST|PUT|PATCH], [ContentType: <text>], [TextData: <text>], [FormData: <%(key1: value1, ...)>], [LogRequestData: <true/false>], [LogResponseBody: <true/false>], [ResponseBody: <text>], [ErrorStatusCodes: <text>], [RequestHeaders: <%(key1: value1, ...)>], [MaxResponseLength: <integer>], [ProxyRequest: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [IgnoreSslErrors: <true/false>]);',
     snippet: 'Post-Http(\n    Url: "${1:https://example.com}",\n    ${2:ContentType: "application/json",}\n    ${3:TextData: "${4:request body}"},\n    ${5:FormData: %(\n        ${6:key}: "${7:value}"\n    )},\n    ${8:LogResponseBody: true}\n);',
     description: 'Executes an HTTP POST/PUT/PATCH request to a URL, typically used for RESTful operations.',
     documentation: `
@@ -200,7 +200,8 @@ Log-Error "Failed to connect to server";
 - \`Url\` - The target URL (text)
 
 **Optional Arguments:**
-- \`Method\` - HTTP method (integer: 0=POST, 1=PUT, 2=PATCH)
+- \`Method\` - HTTP method: \`POST\` (default), \`PUT\`, or \`PATCH\` — a named
+  value, not a number (e.g. \`Method: PUT\`, never \`Method: 1\`)
 - \`ContentType\` - Request content type (text)
 - \`TextData\` - Direct text input for request body (overrides FormData)
 - \`FormData\` - Map of form data key/value pairs (e.g., \`%(key1: "value1", key2: "value2")\`)
@@ -288,14 +289,16 @@ Download-Http https://downloadurl.local
   "Upload-Http": {
     namespace: "HTTP",
     name: "Upload-Http",
-    signature: "Upload-Http([Method: <integer>], FileName: <text>, Url: <text>, [LogResponseBody: <true/false>], [ErrorStatusCodes: <text>], [ResponseBody: <text>], [RequestHeaders: <%(key1: value1, ...)>], [MaxResponseLength: <integer>], [ProxyRequest: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [IgnoreSslErrors: <true/false>]);",
+    signature: "Upload-Http([Method: POST|PUT|PATCH], FileName: <text>, Url: <text>, [LogResponseBody: <true/false>], [ErrorStatusCodes: <text>], [ResponseBody: <text>], [RequestHeaders: <%(key1: value1, ...)>], [MaxResponseLength: <integer>], [ProxyRequest: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [IgnoreSslErrors: <true/false>]);",
     snippet: "Upload-Http ${1:file.txt}\n(\n    Method: ${2:POST},\n    Url: ${3:url.local}\n);$0",
     description: "Uploads a file to a specified URL using an HTTP POST or PUT.",
     documentation: `
+\`Method\` is a named value (\`POST\`, \`PUT\`, or \`PATCH\`), not a number.
+
 **Script Usage:**
 \`\`\`otterscript
 Upload-Http(
-    [Method: <integer>],
+    [Method: POST|PUT|PATCH],
     FileName: <text>,
     Url: <text>,
     [LogResponseBody: <true/false>],
@@ -597,14 +600,16 @@ Acquire-Server(
   "Get-Http": {
     namespace: "HTTP",
     name: "Get-Http",
-    signature: "Get-Http([Method: <integer>], Url: <text>, [LogResponseBody: <true/false>], [ErrorStatusCodes: <text>], [ResponseBody: <text>], [RequestHeaders: <%(key1: value1, ...)>], [MaxResponseLength: <integer>], [ProxyRequest: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [IgnoreSslErrors: <true/false>]);",
+    signature: "Get-Http([Method: GET|DELETE|HEAD], Url: <text>, [LogResponseBody: <true/false>], [ErrorStatusCodes: <text>], [ResponseBody: <text>], [RequestHeaders: <%(key1: value1, ...)>], [MaxResponseLength: <integer>], [ProxyRequest: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [IgnoreSslErrors: <true/false>]);",
     snippet: "Get-Http ${1:https://myurl.local}\n(\n    Method: ${2:GET}\n);$0",
     description: "Executes an HTTP GET, DELETE, or HEAD request against a URL.",
     documentation: `
+\`Method\` is a named value (\`GET\`, \`DELETE\`, or \`HEAD\`), not a number.
+
 **Script Usage:**
 \`\`\`otterscript
 Get-Http(
-    [Method: <integer>],
+    [Method: GET|DELETE|HEAD],
     Url: <text>,
     [LogResponseBody: <true/false>],
     [ErrorStatusCodes: <text>],
@@ -1485,12 +1490,20 @@ multiple lines
 ### Templating Tag
 **Syntax:** \`<% ... %>\`
 
-Used to embed OtterScript code inside text templates.
+Used to embed OtterScript code inside text templates. Per Inedo's own
+text-templating docs, only two grammar elements are described as supported
+inside a tag: an Iteration Block (\`foreach ... { }\`) and a Predicate
+Statement (\`if\`/\`else ... { }\`) — not arbitrary statements, operation
+calls, \`try\`/\`catch\`, etc. This extension's own checks currently also
+accept \`while\` and \`for server|role|directory|deployable\` as block
+openers here; that may be broader than what the engine actually allows —
+worth confirming against a real template if you hit a runtime error on one
+of those forms.
 
 **Example:**
 \`\`\`otterscript
-<% foreach %p in @AffectedPackages { %>
-  * $(%p.Name)
+<% foreach $p in @AffectedPackages { %>
+  * $($p.Name)
 <% } %>
 \`\`\`
 `
@@ -1603,21 +1616,37 @@ This has no elements; if this statement is found, the execution engine ends the 
   "local": {
     namespace: null,
     name: "local",
-    signature: "local $variable = value;",
-    description: "Declares a local variable scoped to the current block.",
+    signature: "set local $variable = value;",
+    description: "Modifier on 'set' that forces assignment in the current block scope.",
     documentation: `
-Local variables override outer variables of the same name.
+\`local\` is a scope modifier on the \`set\` statement, not a statement of its
+own — there is no bare \`local $x = value;\` form (that syntax was removed;
+Otter 2023+ rejects it). Local variables override outer variables of the
+same name for the rest of the current block.
+
+**Syntax:**
+\`\`\`otterscript
+set local $variable = value;
+\`\`\`
 `
   },
   "global": {
     namespace: null,
     name: "global",
-    description: "Declares or assigns a global variable.",
+    signature: "set global $variable = value;",
+    description: "Modifier on 'set' that forces assignment in the global scope.",
     documentation: `
+\`global\` is a scope modifier on the \`set\` statement, not a statement of its
+own — there is no bare \`global $x = value;\` form.
+
 **Syntax:**
 \`\`\`otterscript
-global $var = value;
+set global $var = value;
 \`\`\`
+
+**Note:** since an Otter 2023 behavior change, a plain \`set $x = value;\` with
+no modifier and no prior declaration now defaults to **global** scope.
+\`local\` is what you need to opt back into block scoping.
 `
   },
   "continue": {
@@ -1646,9 +1675,9 @@ If break is used outside of an iteration block, a warning will be written to the
     name: "foreach",
     description: 'Iterates over items in a vector. Works in both OtterScript code and template tags.',
     documentation: `
-Can be used in two contexts:
+Two forms:
 
-**OtterScript Code Block:**
+**Iterating a vector, binding each item to a variable:**
 \`\`\`otterscript
 foreach $item in @(values) {
     # loop body
@@ -1656,17 +1685,26 @@ foreach $item in @(values) {
 \`\`\`
 
 **Parameters:**
-- \`$item\` - Variable name for each iteration (use \`$\` in code, \`%\` in templates)
+- \`$item\` - The loop variable. Its sigil is NOT a code-vs-template thing —
+  use \`$item\` and access record-like fields with dot notation
+  (\`$item.Name\`), the same convention ProGet's own webhook examples use for
+  looping over \`@AffectedPackages\`, \`@BuildIssues\`, etc.
 - \`@vector\` - The vector to iterate over
 
-**Example with ProGet:**
+**Context-iteration form** (binds the execution context itself, not a
+variable — no loop body access to the current item):
 \`\`\`otterscript
-# In template
-<% foreach %p in @AffectedPackages { %>
-  \* $(%p.Name) $(%p.AffectedVersions)
+foreach server in @vector { # also: role, directory
+    # statements run once per server in @vector, with that server in context
+}
+\`\`\`
+
+**Example with ProGet (works the same inside \`<% %>\` or a normal code block):**
+\`\`\`otterscript
+<% foreach $p in @AffectedPackages { %>
+  \* $($p.Name) $($p.AffectedVersions)
 <% } %>
 
-# In code block
 foreach $pkg in @AffectedPackages {
     Log-Information "Package: $pkg.Name"
 }
@@ -1894,11 +1932,15 @@ with retry=3, timeout=30 {
 \`\`\`
 
 **Supported directives:**
-- \`retry\`
-- \`timeout\`
-- \`executionPolicy\`
-- \`lock\`
-- \`credentials\`
+- \`retry=<integer>\`
+- \`timeout=<integer>\`
+- \`executionPolicy=(always|onChange)\`
+- \`lock[=[!]token]\`
+- \`credentials=<...>\`
+- \`async[=token]\` - runs the block in the background; pair with \`await\`
+  (bare \`await;\` waits for all async blocks, \`await token;\` waits only for
+  blocks using that token) to wait for it to finish
+- \`isolation\` - runs remote operations in a throwaway process
 
 **Notes:**
 - Directives apply only to the enclosed block
@@ -1918,6 +1960,9 @@ set $variable = value;
 **Notes:**
 - Variables must be prefixed with \`$\`
 - Assignment uses \`=\`
+- Since an Otter 2023 behavior change, a plain \`set $x = value;\` with no
+  prior declaration and no \`local\`/\`global\` modifier now defaults to
+  **global** scope — use \`set local $x = value;\` for block scoping.
 `
   },
   "raise-error": {
@@ -1977,14 +2022,18 @@ catch
 **Notes:**
 - Execution continues after this statement
 - Commonly used inside \`catch\` blocks
+- A bare \`warn;\` is a no-op if the execution status is already **Failing**
+  — it only ever raises the status, never lowers it. Use \`force warn;\` to
+  downgrade a Failing status back to Warning.
 `
   },
   "fail": {
     namespace: null,
     name: "fail",
-    description: "Sets the execution status to Fail.",
+    description: "Changes the execution state to Failing and terminates execution immediately.",
     documentation: `
-Sets the execution status to **Fail** while allowing execution to continue.
+Changes the execution state to **Failing** and terminates execution
+immediately.
 
 **Syntax:**
 \`\`\`otterscript
@@ -1992,8 +2041,29 @@ fail;
 \`\`\`
 
 **Notes:**
-- Does not immediately stop execution
-- Differs from \`raise-error\`, which halts execution
+- Terminates execution immediately — recovery is **not** possible, even
+  inside a \`try\`/\`catch\` block (unlike \`raise-error\`, which a \`catch\`
+  block CAN intercept).
+- For a status change that does NOT stop execution, use \`error;\` instead.
+`
+  },
+  "error": {
+    namespace: null,
+    name: "error",
+    description: "Sets the execution status to Failed without stopping execution.",
+    documentation: `
+Sets the execution status to **Failed** while allowing execution to continue.
+
+**Syntax:**
+\`\`\`otterscript
+error;
+\`\`\`
+
+**Notes:**
+- Does not stop execution — later statements still run.
+- Differs from \`fail;\`, which terminates execution immediately and
+  uncatchably, and from \`raise-error "message"\`, which stops execution but
+  can be caught by \`try\`/\`catch\`.
 `
   },
 
@@ -2080,18 +2150,22 @@ const variableDocs = {
 
 - alpine
 - asset
+- bower
 - cargo
 - chocolatey
 - composer
 - conan
 - conda
 - cran
+- debian
 - docker
 - helm
 - maven(Java)
 - npm
 - nuget
+- openvsx
 - powershell
+- pub
 - pypi
 - romp
 - rpm(yum)
@@ -2132,19 +2206,17 @@ const variableDocs = {
     documentation: `
 **Available in:** ProGet
 
-| $PackageEvent   | Description            |
-| --------------- | ---------------------- |
-| PKGADD          | Package Created        |
-| PKGDEL          | Package Deleted        |
-| PKGDPL          | Package Deployed       |
-| PKGMDF          | Package Overwritten    |
-| PKGPGD          | Package Purged         |
-| PKGPMT          | Package Promoted       |
-| PKGSTA          | Package Status Updated |
+One of: \`Added\`, \`Overwritten\`, \`Promoted\`, \`Deployed\`, \`Deleted\`,
+\`Purged\`, \`Status Changed\`.
+
+**Note:** Inedo's own webhook documentation is inconsistent about whether
+this variable is named \`$PackageEvent\` or \`$WebhookEvent\` (both appear in
+different, similarly-recent official examples) — if this doesn't resolve in
+your notifier, try the other name.
 
 **Example:**
 \`\`\`otterscript
-%( title: "**Feed**", value: $FeedName )
+%( title: "**Event**", value: $PackageEvent )
 \`\`\`
 `
   },
@@ -2412,7 +2484,7 @@ $trimmed = $Trim("  hello  ");
   "Substring": {
     namespace: null,
     name: "$Substring",
-    signature: "$Substring(text, startIndex, length)",
+    signature: "$Substring(text, startIndex, [length])",
     snippet: "\\$Substring(${1:text}, ${2:startIndex}, ${3:length})",
     description: "Extracts a substring from a string.",
     documentation: `
@@ -2421,14 +2493,22 @@ Extracts a substring from the specified string starting at the given index.
 **Parameters:**
 - \`text\` - The source string
 - \`startIndex\` - The zero-based starting position
-- \`length\` - The number of characters to extract
+- \`length\` - (Optional) The number of characters to extract. If omitted, the
+  remainder of the string is used.
 
 **Returns:** Extracted substring
+
+**Notes:**
+- If \`startIndex\` is at or past the end of \`text\`, the result is \`""\`
+  rather than an error. A negative \`startIndex\` or \`length\` does throw.
 
 **Example:**
 \`\`\`otterscript
 $sub = $Substring("Hello World", 6, 5);
 # Result: "World"
+
+$rest = $Substring("Hello World", 6);
+# Result: "World" (length omitted -- takes the remainder)
 \`\`\`
 `,
   },
@@ -2590,18 +2670,22 @@ Parses a JSON string and converts it into an OtterScript map, vector, or scalar 
 **Parameters:**
 - \`jsonString\` - The JSON string to parse
 
-**Returns:** OtterScript value (map, vector, or scalar)
+**Returns:** OtterScript value (map, vector, or scalar) — see the sigil note below
 
 **Example:**
 \`\`\`otterscript
-$data = $FromJson('{"name": "Steve", "age": 42}');
-# $data is now a map with keys "name" and "age"
-$name = $data[name];
+%data = %FromJson('{"name": "Steve", "age": 42}');
+# %data is now a map with keys "name" and "age"
+$name = %data[name];
 \`\`\`
 
 **Notes:**
+- The sigil you call it with selects the shape you get back: \`%FromJson(...)\`
+  for a JSON object (map), \`@FromJson(...)\` for a JSON array (vector),
+  \`$FromJson(...)\` for a bare scalar. This is the same function under all
+  three sigils, not three different functions.
 - Symmetric with \`$ToJson\`: JSON numbers, booleans, and \`null\` all become
-  string scalars, not a distinct numeric/boolean type — \`$data[age]\` above is
+  string scalars, not a distinct numeric/boolean type — \`%data[age]\` above is
   the string \`"42"\`, not a number. OtterScript scalars are always strings.
 - Invalid JSON throws rather than returning an empty/default value — there is
   no built-in "try parse"; wrap in \`try\`/\`catch\` if the input isn't trusted.
@@ -2677,44 +2761,52 @@ $result = $Expr("(5 + 3) * 2");
   "Increment": {
     namespace: null,
     name: "$Increment",
-    signature: "$Increment(value)",
+    signature: "$Increment(value, [amount])",
     snippet: "\\$Increment(${1:variable})",
-    description: "Increments a numeric value by 1.",
+    description: "Increments a numeric value by 1, or by an optional amount.",
     documentation: `
-Increments the specified value by 1.
+Increments the specified value by 1, or by \`amount\` if given.
 
 **Parameters:**
 - \`value\` - The numeric value to increment
+- \`amount\` - (Optional) Amount to add. Defaults to \`1\`.
 
-**Returns:** Value + 1
+**Returns:** \`value + amount\`
 
 **Example:**
 \`\`\`otterscript
 $count = 5;
 $count = $Increment($count);
 # Result: 6
+
+$count = $Increment($count, 10);
+# Result: 16
 \`\`\`
 `,
   },
   "Decrement": {
     namespace: null,
     name: "$Decrement",
-    signature: "$Decrement(value)",
+    signature: "$Decrement(value, [amount])",
     snippet: "\\$Decrement(${1:variable})",
-    description: "Decrements a numeric value by 1.",
+    description: "Decrements a numeric value by 1, or by an optional amount.",
     documentation: `
-Decrements the specified value by 1.
+Decrements the specified value by 1, or by \`amount\` if given.
 
 **Parameters:**
 - \`value\` - The numeric value to decrement
+- \`amount\` - (Optional) Amount to subtract. Defaults to \`1\`.
 
-**Returns:** Value - 1
+**Returns:** \`value - amount\`
 
 **Example:**
 \`\`\`otterscript
 $count = 5;
 $count = $Decrement($count);
 # Result: 4
+
+$count = $Decrement($count, 10);
+# Result: -6
 \`\`\`
 `,
   },
@@ -2794,12 +2886,15 @@ Compares two scalar values using the specified operator.
 - \`arg1\` - Left-hand value
 - \`operator\` - One of: \`<\`, \`>\`, \`<=\`, \`>=\`, \`=\`, \`!=\`
 - \`arg2\` - Right-hand value
-- \`asNumber\` - (Optional) Forces numeric comparison when \`true\`
+- \`asNumber\` - (Optional) \`true\`/\`false\`/omitted — see Behavior below
 
 **Behavior:**
-- If both values can be parsed as numbers, a numeric comparison is used
-- Otherwise, a case-sensitive string comparison is performed
-- The optional \`asNumber\` parameter forces numeric comparison
+- Omitted (default): numeric comparison if both values parse as numbers,
+  otherwise a case-sensitive string comparison
+- \`asNumber: true\`: always numeric — **throws** if either side does not
+  parse as a number, rather than falling back to a string comparison
+- \`asNumber: false\`: always a string comparison, even if both values look
+  numeric
 
 **Returns:**
 - \`"true"\` or \`"false"\` (string)
@@ -2889,9 +2984,11 @@ Log-Information "Running on server: $ServerName";
     name: "$EnvironmentName",
     signature: "$EnvironmentName()",
     snippet: "\\$EnvironmentName()",
-    description: "Returns the name of the current environment (Otter only).",
+    description: "Returns the name of the current environment.",
     documentation: `
-Returns the name of the environment currently in context.
+Returns the name of the environment currently in context (Otter and
+BuildMaster; Otter additionally attempts to infer a single environment from
+server, role, and job when none is directly in context).
 
 **Returns:** Environment name string
 
@@ -2939,12 +3036,19 @@ Retrieves an element from a vector at the specified index (0-based).
 - \`vector\` - The source vector
 - \`index\` - The zero-based index of the item to retrieve
 
-**Returns:** The item at the specified index
+**Returns:** The item at the specified index — see the sigil note below
+
+**Notes:**
+- Like \`$FromJson\`, the sigil you call it with selects the shape you get
+  back: \`$ListItem(...)\` for a scalar element, \`%ListItem(...)\` if the
+  element at that index is itself a map, \`@ListItem(...)\` if it's a vector.
+  \`$ListItem\` (scalar) is correct whenever the vector holds plain values, as
+  in the example below.
 
 **Example:**
 \`\`\`otterscript
-$items = @("apple", "banana", "cherry");
-$second = $ListItem($items, 1);
+@items = @("apple", "banana", "cherry");
+$second = $ListItem(@items, 1);
 # Result: "banana"
 \`\`\`
 `
@@ -3024,21 +3128,23 @@ Exec sometool.exe --host $host;
   "PackageHash": {
     namespace: null,
     name: "$PackageHash",
-    signature: "$PackageHash(format, algorithm)",
-    snippet: "\\$PackageHash(\"${1|hex,base64|}\", \"${2|sha512,sha1|}\")",
-    description: "Returns the value of the associated hash of the package currently in scope.",
+    signature: "$PackageHash(packageName, [sourceName])",
+    snippet: "\\$PackageHash(\"${1:packageName}\")",
+    description: "Returns the hex-encoded SHA1 hash of a package's current version.",
     documentation: `
-Returns the value of the associated hash of the package currently in scope if available (i.e., previously calculated).
+Gets the hex-encoded SHA1 hash of the version of \`packageName\` associated
+with the current build. There is no format/algorithm choice — the hash is
+always hex-encoded SHA1.
 
 **Parameters:**
-- \`format\` - Either 'hex' or 'base64'
-- \`algorithm\` - The hash algorithm ('sha512' or 'sha1')
+- \`packageName\` - The package name
+- \`sourceName\` - (Optional) The package source to look in
 
-**Returns:** Hash value as string
+**Returns:** Hex-encoded SHA1 hash as string
 
 **Example:**
 \`\`\`otterscript
-$hash = $PackageHash("hex", "sha512");
+$hash = $PackageHash("MyPackage");
 \`\`\`
 `
   },
@@ -3070,12 +3176,14 @@ $description = $PackageProperty("myPropertyName", "No property defined");
     name: "$Coalesce",
     signature: "$Coalesce(value1, value2, ...)",
     snippet: "\\$Coalesce(${1:value1}, ${2:value2})${0}",
-    description: "Returns the first non-empty value from a list of arguments.",
+    description: "Returns the first argument that isn't empty or whitespace-only.",
     documentation: `
 **Parameters:**
 - \`value1, value2, ...\` - Values to evaluate in order
 
-**Returns:** The first argument that is not empty/undefined, or an empty string if all are empty
+**Returns:** The first argument that is not empty and not entirely whitespace
+(a value that is only spaces/tabs is skipped just like an empty one), or an
+empty string if every argument is
 
 **Example:**
 \`\`\`otterscript
@@ -3187,6 +3295,33 @@ if $IsVariableDefined("OptionalSetting")
 \`\`\`
 `
   },
+  "GetVariableValue": {
+    namespace: null,
+    name: "$GetVariableValue",
+    signature: "$GetVariableValue(variableName, [variableType])",
+    snippet: "\\$GetVariableValue(\"${1:variableName}\")${0}",
+    description: "Returns the value of a variable if it's defined in the current context; otherwise returns null.",
+    documentation: `
+Unlike \`$IsVariableDefined\` (which only returns \`true\`/\`false\`), this
+returns the variable's actual value, or \`null\` when it isn't defined —
+useful to avoid a separate existence check before reading an optional
+variable.
+
+**Parameters:**
+- \`variableName\` (required) - The name of the variable, without the \`$\`, \`@\`, or \`%\` sigil.
+- \`variableType\` - (Optional) Must be one of: \`any\`, \`scalar\`, \`vector\`, \`map\`.
+
+**Returns:** The variable's value, or \`null\` if not defined
+
+**Example:**
+\`\`\`otterscript
+$value = $GetVariableValue("OptionalSetting");
+if $value != null {
+    Log-Information "Setting: $value";
+}
+\`\`\`
+`
+  },
   "JSEncode": {
     namespace: null,
     name: "$JSEncode",
@@ -3279,6 +3414,23 @@ Log-Information $NextYear;
     description: "Returns the current state of the execution (normal, warning, or error).",
     documentation: `
 **Returns:** One of \`normal\`, \`warning\`, or \`error\`.
+`
+  },
+  "IsSimulation": {
+    namespace: null,
+    name: "$IsSimulation",
+    signature: "$IsSimulation()",
+    snippet: "\\$IsSimulation()",
+    description: "Returns \"true\" if the execution is a simulation; otherwise \"false\".",
+    documentation: `
+**Returns:** \`"true"\` or \`"false"\`
+
+**Example:**
+\`\`\`otterscript
+if $IsSimulation() {
+    Log-Information "Dry run - no changes will be made";
+}
+\`\`\`
 `
   },
   "WorkingDirectory": {
@@ -3422,14 +3574,15 @@ const vectorFunctionDocs = {
   "ListInsert": {
     namespace: null,
     name: "@ListInsert",
-    signature: '@ListInsert(list, item, index)',
+    signature: '@ListInsert(list, item, [index])',
     snippet: "@ListInsert(${1:@list}, \"${2:item}\", ${3:index})",
-    description: 'Inserts an item into a list at the specified index.',
+    description: 'Inserts an item into a list, at a given position or at the end.',
     documentation: `
 **Parameters:**
 - \`list\` - The list to modify
 - \`item\` - The item to insert
-- \`index\` - The zero-based position to insert the item
+- \`index\` - (Optional) The zero-based position to insert the item. If
+  omitted, the item is appended to the end of the list.
 
 **Returns:** New list with item inserted
 
@@ -3438,6 +3591,9 @@ const vectorFunctionDocs = {
 @colors = @("red", "blue");
 @colors = @ListInsert(@colors, "green", 1);
 # Result: @("red", "green", "blue")
+
+@colors = @ListInsert(@colors, "yellow");
+# Result: @("red", "green", "blue", "yellow") -- index omitted, appended
 \`\`\`
 `
   },

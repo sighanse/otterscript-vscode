@@ -213,7 +213,7 @@ foreach $key in @ApiKeys {
 # PROGET FUNCTIONS
 ###############################################################################
 
-$hash = $PackageHash("hex", "sha512");
+$hash = $PackageHash("MyPackage");
 $description = $PackageProperty("description", "none");
 $auth = $EncodeBasicAuth("user", "password");
 
