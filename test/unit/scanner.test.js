@@ -24,6 +24,8 @@ const {
   maskOutsideTemplateTags,
   documentUsesTemplateTags,
   findTemplateTagDelimiters,
+  findBalancedParenEnd,
+  findEmbeddedExpressionEnd,
   isInStringOrComment,
   getActiveParameterIndex,
   MODULE_NAME_TOKEN_REGEX,
@@ -520,6 +522,118 @@ describe("maskOutsideTemplateTags", () => {
     for (const line of ['', '<%%>', 'plain', '<% x', 'y %>', '<% a %> <% b %>']) {
       assert.equal(mask(line).length, line.length, JSON.stringify(line));
     }
+  });
+
+  // ----------------------------------------------------------------
+  // Embedded `$` value expressions in literal text (no <% %> needed)
+  // ----------------------------------------------------------------
+
+  it("keeps a bare $Name(args) call embedded in literal text", () => {
+    const out = mask('{ "value": $ToJson($x, $y) },');
+    assert.ok(out.includes("$ToJson($x, $y)"), out);
+    assert.ok(!out.includes('"value"') && !out.includes("{"));
+    assert.equal(out.trimEnd().endsWith(")"), true, out); // trailing ',' blanked
+  });
+
+  it("keeps a bare $Name / $Name.Prop.Chain variable reference", () => {
+    const out = mask('* $p.Name and $p.AffectedVersions here');
+    assert.ok(out.includes("$p.Name"), out);
+    assert.ok(out.includes("$p.AffectedVersions"), out);
+    assert.ok(!out.includes("here"));
+  });
+
+  it("keeps a $(expression) wrapper", () => {
+    const out = mask('note: $(@list[0]) end');
+    assert.ok(out.includes("$(@list[0])"), out);
+    assert.ok(!out.includes("note") && !out.includes("end"));
+  });
+
+  it("keeps a call argument containing a nested map/vector literal", () => {
+    const out = mask('{ "v": $ToJson(%( a: $x, b: $y )) }');
+    assert.ok(out.includes("$ToJson(%( a: $x, b: $y ))"), out);
+  });
+
+  it("does not let a ')' inside a call's string argument end the call early", () => {
+    const out = mask('$ToJson("weird)paren") tail');
+    assert.ok(out.includes('$ToJson("weird)paren")'), out);
+    assert.ok(!out.includes("tail"));
+  });
+
+  it("treats an unclosed call on the line as plain literal text (falls back to blank)", () => {
+    const out = mask('{ "a": $ToJson($x, "b": 1 }');
+    // The outer $ToJson( never finds its ')' on this line, so it's blanked --
+    // but the bare $x inside it is then seen fresh and kept, same as any bare
+    // variable reference would be.
+    assert.ok(!out.includes("ToJson"), out);
+    assert.ok(out.includes("$x"), out);
+  });
+
+  it("does not treat '$' followed by a digit (e.g. a price) as an expression", () => {
+    assert.equal(mask('Costs $5.00 today').trim(), "");
+  });
+
+  it("does not recognize an embedded expression inside a literal-text string", () => {
+    const st = createTemplateScanState();
+    const out = maskOutsideTemplateTags('"note: $ToJson($x) inline" tail', st);
+    assert.equal(out.trim(), "");
+  });
+
+  it("is length-preserving with embedded expressions present", () => {
+    for (const line of ['$ToJson($x, $y)', '{ "v": $ToJson($x) },', 'a $Name(1, (2), 3) b']) {
+      assert.equal(mask(line).length, line.length, JSON.stringify(line));
+    }
+  });
+});
+
+// ============================================================
+// findBalancedParenEnd / findEmbeddedExpressionEnd
+// ============================================================
+
+describe("findBalancedParenEnd", () => {
+  it("finds the matching ')' skipping nested parens", () => {
+    const line = "$Foo(a, (b, c), d) tail";
+    assert.equal(findBalancedParenEnd(line, 4), line.indexOf(") tail"));
+  });
+
+  it("skips a ')' inside a quoted string argument", () => {
+    const line = '$Foo("a)b") tail';
+    assert.equal(findBalancedParenEnd(line, 4), line.indexOf(") tail"));
+  });
+
+  it("returns -1 when unclosed on the line", () => {
+    assert.equal(findBalancedParenEnd("$Foo(a, b", 4), -1);
+  });
+});
+
+describe("findEmbeddedExpressionEnd", () => {
+  it("matches $Name(args)", () => {
+    const line = "$ToJson($x, $y) tail";
+    assert.equal(findEmbeddedExpressionEnd(line, 0), line.indexOf(" tail"));
+  });
+
+  it("matches $(expression)", () => {
+    const line = "$(@list[0]) tail";
+    assert.equal(findEmbeddedExpressionEnd(line, 0), line.indexOf(" tail"));
+  });
+
+  it("matches a bare $Name with a property chain", () => {
+    const line = "$p.Name.Sub tail";
+    assert.equal(findEmbeddedExpressionEnd(line, 0), line.indexOf(" tail"));
+  });
+
+  it("matches a bare $Name with no call and no chain", () => {
+    const line = "$x tail";
+    assert.equal(findEmbeddedExpressionEnd(line, 0), line.indexOf(" tail"));
+  });
+
+  it("returns -1 for '$' not followed by an identifier or '('", () => {
+    assert.equal(findEmbeddedExpressionEnd("$5.00", 0), -1);
+    assert.equal(findEmbeddedExpressionEnd("$ x", 0), -1);
+    assert.equal(findEmbeddedExpressionEnd("$", 0), -1);
+  });
+
+  it("returns -1 when a $Name(...) call is unclosed on the line", () => {
+    assert.equal(findEmbeddedExpressionEnd("$ToJson($x, ", 0), -1);
   });
 });
 

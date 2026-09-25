@@ -73,6 +73,79 @@ function isUnescapedQuoteAt(text, index) {
   return backslashCount % 2 === 0;
 }
 
+/**
+ * From `openParenIndex` (the index of the `(` itself), finds the index of its
+ * matching `)` on the SAME line, skipping over quoted-string content (so a `)`
+ * inside a string doesn't end the call early) and tracking nested parens (so a
+ * map/vector literal argument works). Returns -1 when unclosed on this line.
+ *
+ * @param {string} line
+ * @param {number} openParenIndex
+ * @returns {number}
+ */
+function findBalancedParenEnd(line, openParenIndex) {
+  let depth = 1;
+  /** @type {string | null} */
+  let quote = null;
+  for (let i = openParenIndex + 1; i < line.length; i++) {
+    const ch = line[i];
+    if (quote) {
+      if (ch === quote && isUnescapedQuoteAt(line, i)) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") { quote = ch; continue; }
+    if (ch === "(") depth++;
+    else if (ch === ")") {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * From `dollarIndex` (the index of a `$` found in literal template text),
+ * determines whether it starts an embedded OtterScript value expression --
+ * `$(expression)`, `$Name(args)`, or a bare `$Name` / `$Name.Prop.Chain`
+ * variable reference -- and returns the index just past its end. Returns -1
+ * when the `$` isn't followed by anything that looks like one (e.g. a literal
+ * `$` in prose or a price like "$5.00"), so it's just literal text.
+ *
+ * Single-line only, matching {@link findBalancedParenEnd}: a call whose `)`
+ * isn't found on this line is treated as not an embedded expression here (it
+ * stays blanked, same as plain literal text, rather than risk misreading the
+ * rest of the line).
+ *
+ * @param {string} line
+ * @param {number} dollarIndex
+ * @returns {number}
+ */
+function findEmbeddedExpressionEnd(line, dollarIndex) {
+  const next = line[dollarIndex + 1];
+
+  if (next === "(") {
+    const close = findBalancedParenEnd(line, dollarIndex + 1);
+    return close === -1 ? -1 : close + 1;
+  }
+
+  if (!next || !/[A-Za-z_]/.test(next)) return -1;
+
+  let i = dollarIndex + 2;
+  while (i < line.length && /[A-Za-z0-9_]/.test(line[i])) i++;
+
+  if (line[i] === "(") {
+    const close = findBalancedParenEnd(line, i);
+    return close === -1 ? -1 : close + 1;
+  }
+
+  while (line[i] === "." && line[i + 1] && /[A-Za-z_]/.test(line[i + 1])) {
+    i++;
+    while (i < line.length && /[A-Za-z0-9_]/.test(line[i])) i++;
+  }
+
+  return i;
+}
+
 // ============================================================
 // MODULE-NAME REGEXES
 // ============================================================
@@ -289,18 +362,21 @@ function createTemplateScanState() {
 }
 
 /**
- * Blanks every character that is NOT inside a `<% ... %>` template tag,
- * length-preserving, so downstream code diagnostics see only the real
- * OtterScript between tags and not the literal output text of a text template
- * (JSON, Markdown, ...). The `<%` / `%>` delimiters are blanked too.
+ * Blanks every character that is NOT inside a `<% ... %>` template tag AND NOT
+ * part of an embedded `$` value expression in the literal text (see
+ * {@link findEmbeddedExpressionEnd}), length-preserving, so downstream code
+ * diagnostics see the real OtterScript between tags, the real OtterScript
+ * embedded directly in literal output (`$ToJson(...)`, `$PackageName`, ...),
+ * and nothing else. The `<%` / `%>` delimiters are blanked too.
  *
  * Runs on the RAW line, before {@link maskNonCodeSpans}: outside a tag there is
- * no OtterScript, so only quoted spans are tracked (a `<%` inside a string
- * literal is not a tag opener); inside a tag the body IS OtterScript, so `%>`
- * closes the tag only when it is real code — a `%>` in a tag-body string, line
- * comment, block comment, or swim-string is ignored, mirroring
- * {@link scanLineState}. Callers gate this on {@link documentUsesTemplateTags}
- * so a `.otter` file with no tags is never affected.
+ * mostly no OtterScript, so only quoted spans (a `<%` inside a string literal
+ * is not a tag opener) and embedded `$` expressions are tracked; inside a tag
+ * the body IS OtterScript, so `%>` closes the tag only when it is real code —
+ * a `%>` in a tag-body string, line comment, block comment, or swim-string is
+ * ignored, mirroring {@link scanLineState}. Callers gate this on
+ * {@link documentUsesTemplateTags} so a `.otter` file with no tags is never
+ * affected.
  *
  * @param {string} line
  * @param {TemplateScanState} state - Mutated in place; carries `inTemplateTag`
@@ -316,22 +392,34 @@ function maskOutsideTemplateTags(line, state) {
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
 
-    // ---- Outside a tag: blank everything; only strings are tracked ----------
+    // ---- Outside a tag: blank everything except strings and embedded `$`
+    // value expressions, which are tracked/kept respectively -------------------
     if (!state.inTemplateTag) {
-      chars[i] = " ";
       if (litQuote) {
+        chars[i] = " ";
         if (ch === litQuote && isUnescapedQuoteAt(line, i)) litQuote = null;
         continue;
       }
       if (ch === '"' || ch === "'") {
+        chars[i] = " ";
         litQuote = ch;
         continue;
       }
       if (ch === "<" && line[i + 1] === "%") {
+        chars[i] = " ";
         chars[i + 1] = " ";
         state.inTemplateTag = true;
         i++;
+        continue;
       }
+      if (ch === "$") {
+        const end = findEmbeddedExpressionEnd(line, i);
+        if (end !== -1) {
+          i = end - 1; // keep chars[i..end) as-is; outer loop's i++ lands at `end`
+          continue;
+        }
+      }
+      chars[i] = " ";
       continue;
     }
 
@@ -651,6 +739,8 @@ module.exports = {
   maskOutsideTemplateTags,
   documentUsesTemplateTags,
   findTemplateTagDelimiters,
+  findBalancedParenEnd,
+  findEmbeddedExpressionEnd,
 
   // -- String & comment detection
   isInStringOrComment,

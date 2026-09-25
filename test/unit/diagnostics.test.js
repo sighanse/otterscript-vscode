@@ -552,6 +552,48 @@ describe("updateDiagnostics - template-in-expression", () => {
 });
 
 // ============================================================
+// diagnostics reach $ expressions embedded directly in literal template text
+// ============================================================
+// A ProGet webhook body is almost entirely literal JSON text with `$Func(...)`
+// calls embedded directly in it (no <% %> wrapper needed -- see
+// strings-and-literals.md). Before this, maskOutsideTemplateTags() blanked
+// ALL literal text uniformly, so a typo'd function name or a wrong argument
+// count in exactly this position -- where the real logic of a template lives
+// -- was invisible. Each src below needs a real <% %> pair elsewhere so
+// documentUsesTemplateTags() puts the document in template-aware mode at all.
+
+describe("updateDiagnostics - $ expressions embedded in literal template text", () => {
+  it("flags an unknown scalar function embedded in literal text", () => {
+    const src = ['{ "v": $Frobnicate($x) }', "<% if $ok { %>", "<% } %>"].join("\n");
+    const [d] = only(src, "unknown-scalar-function");
+    assert.ok(d);
+    assert.equal(d.message, "Unknown scalar function '$Frobnicate'");
+  });
+
+  it("flags too many arguments on a call embedded in literal text", () => {
+    const src = ['{ "v": $ToJson($x, $y) }', "<% if $ok { %>", "<% } %>"].join("\n");
+    const [d] = only(src, "too-many-arguments");
+    assert.ok(d);
+    assert.equal(d.message, "'$ToJson' takes at most 1 argument, got 2.");
+  });
+
+  it("does not flag a known function within its documented argument count", () => {
+    const src = ['{ "v": $ToJson($x $y) }', "<% if $ok { %>", "<% } %>"].join("\n");
+    assert.deepEqual(only(src, "unknown-scalar-function"), []);
+    assert.deepEqual(only(src, "too-many-arguments"), []);
+  });
+
+  it("does not flag plain literal text around an embedded call", () => {
+    const src = [
+      '{ "label": "Affected packages:", "value": $ToJson($p.Name) }',
+      "<% foreach $p in @AffectedPackages { %>",
+      "<% } %>",
+    ].join("\n");
+    assert.deepEqual(diagnose(src), []);
+  });
+});
+
+// ============================================================
 // implicit-string juxtaposition inside %( ) / @( ) is VALID -- not a diagnostic
 // ============================================================
 // Phase 2 shipped a "missing-operator" check flagging `%( v: $a $b )` as two
