@@ -201,12 +201,12 @@ $utc = $DateUtc("yyyy-MM-ddTHH:mm:ss");
 # PROGET-SPECIFIC VARIABLES & VECTORS
 ###############################################################################
 
-foreach $pkg in @AffectedPackages {
-    Log-Warning "$pkg.Name affected versions: $pkg.AffectedVersions";
+foreach %pkg in @AffectedPackages {
+    Log-Warning "$(%pkg.Name) affected versions: $(%pkg.AffectedVersions)";
 }
 
-foreach $key in @ApiKeys {
-    Log-Information "API key: $key.Name expires $key.ExpirationDate";
+foreach %key in @ApiKeys {
+    Log-Information "API key: $(%key.Name) expires $(%key.ExpirationDate)";
 }
 
 ###############################################################################

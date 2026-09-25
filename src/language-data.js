@@ -1685,10 +1685,14 @@ foreach $item in @(values) {
 \`\`\`
 
 **Parameters:**
-- \`$item\` - The loop variable. Its sigil is NOT a code-vs-template thing —
-  use \`$item\` and access record-like fields with dot notation
-  (\`$item.Name\`), the same convention ProGet's own webhook examples use for
-  looping over \`@AffectedPackages\`, \`@BuildIssues\`, etc.
+- \`$item\` - The loop variable's sigil must match the SHAPE of the vector's
+  elements: \`$item\` for plain scalar elements (e.g. \`foreach $s in @(1,2,3)\`),
+  \`%item\` when each element is a map (e.g. looping \`@AffectedPackages\`,
+  whose elements have \`Name\`/\`AffectedVersions\` fields), \`@item\` when each
+  element is itself a vector. This isn't optional styling — per the formal
+  grammar, dot/bracket indexing (\`.Name\`, \`[key]\`) is only defined for \`@\`
+  and \`%\` sigils, never \`$\`; \`$item.Name\` is not valid indexing (it's just
+  \`$item\` followed by literal text \`.Name\`).
 - \`@vector\` - The vector to iterate over
 
 **Context-iteration form** (binds the execution context itself, not a
@@ -1699,14 +1703,18 @@ foreach server in @vector { # also: role, directory
 }
 \`\`\`
 
-**Example with ProGet (works the same inside \`<% %>\` or a normal code block):**
+**Example with ProGet (works the same inside \`<% %>\` or a normal code block).**
+Note \`%p\` (element is a map) and that \`$(...)\` wraps the indexing — per
+strings-and-literals.md, an \`@\`/\`%\` sigil is only auto-recognized at the
+START of a literal expression, so referencing it mid-string needs the
+explicit nested-evaluate wrapper:
 \`\`\`otterscript
-<% foreach $p in @AffectedPackages { %>
-  \* $($p.Name) $($p.AffectedVersions)
+<% foreach %p in @AffectedPackages { %>
+  \* $(%p.Name) $(%p.AffectedVersions)
 <% } %>
 
-foreach $pkg in @AffectedPackages {
-    Log-Information "Package: $pkg.Name"
+foreach %pkg in @AffectedPackages {
+    Log-Information "Package: $(%pkg.Name)"
 }
 \`\`\`
 `

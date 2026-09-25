@@ -17,9 +17,9 @@
 # --- A. Phase 1: <% %> structure -------------------------------------------
 {
   "items": [
-<% foreach $p in @AffectedPackages { %>
-    { "type": "TextBlock", "text": $ToJson("- " + $p.Name) },
-<% if !$p.Last %>
+<% foreach %p in @AffectedPackages { %>
+    { "type": "TextBlock", "text": $ToJson("- " + %p.Name) },
+<% if !%p.Last %>
     "separator"                                  # EXPECT (line above): template-missing-brace
 <% end %>                                        # EXPECT: template-end-keyword  (quick-fix: "Replace with }")
 <% } %>
@@ -36,8 +36,8 @@ then %>                                          # EXPECT: Unexpected '%>' - no 
 "bad": $ToJson(%( x: 1 <% $y %> ))               # EXPECT: template-in-expression
 
 # --- must NOT flag -------------------------------------------------------------
-<% foreach $s in @AllServers() { %>
-    $ToJson($s.Name)
+<% foreach %s in @AllServers() { %>
+    $ToJson(%s.Name)
 <% } %>
 <% if $ok { %>ok<% } else { %>no<% } %>
 <% $x = 1 /* note with %> inside */ $y = 2 %>
@@ -47,8 +47,8 @@ then %>                                          # EXPECT: Unexpected '%>' - no 
 <% $m = %( v: $a $b ) %>
 <% $n = @( $a $b $c ) %>
 "list": [
-<% foreach $p in @x { %>
-    ,{ "n": $ToJson($p.Name) }
+<% foreach %p in @x { %>
+    ,{ "n": $ToJson(%p.Name) }
 <% } %>
 ]
 
