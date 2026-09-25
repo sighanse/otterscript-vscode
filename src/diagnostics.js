@@ -17,6 +17,7 @@ const {
   maskNonCodeSpans,
   maskOutsideTemplateTags,
   documentUsesTemplateTags,
+  log,
 } = require("./helpers");
 
 /**
@@ -481,13 +482,18 @@ function updateDiagnostics(document, collection, ctx) {
     issues.push(d);
   }
 
-  // -- Detect duplicate keys inside map expressions: %( key: value, key: value )
+  // -- Detect duplicate keys inside map expressions, and calls with more
+  //    arguments than a function's fixed-arity signature allows. Isolated in
+  //    its own try/catch: these two run over the whole joined document rather
+  //    than per-line like every check above, so a bug here must not be able
+  //    to wipe out the per-line diagnostics already collected above it.
   const joinedMasked = maskedLines.join("\n");
-  issues.push(...findDuplicateMapKeyDiagnosticsFromMasked(document, joinedMasked));
-
-  // -- Detect calls that pass more arguments than a known function's fixed-arity
-  //    signature allows, e.g. $ToJson($a, $b) ($ToJson takes exactly one).
-  issues.push(...findArgumentCountDiagnosticsFromMasked(document, joinedMasked, scalarFunctionDocs, vectorFunctionDocs));
+  try {
+    issues.push(...findDuplicateMapKeyDiagnosticsFromMasked(document, joinedMasked));
+    issues.push(...findArgumentCountDiagnosticsFromMasked(document, joinedMasked, scalarFunctionDocs, vectorFunctionDocs));
+  } catch (err) {
+    log.error(`Cross-line diagnostic scan failed for ${document.uri.toString()}:`, err);
+  }
 
   collection.set(document.uri, issues);
 }
