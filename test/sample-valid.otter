@@ -99,10 +99,10 @@ Windows::Ensure-Service( Name: "InedoProGetSvc", Status: running );
 ###############################################################################
 # TEMPLATE OUTPUT
 ###############################################################################
-
-<% foreach %p in @packages { %>
-* $(%p) evaluated against threshold $cvssThreshold
-<% } %>
+# Deliberately no <% ... %> block here: documentUsesTemplateTags() treats any
+# document containing a real tag pair as a text template and blanks everything
+# outside it, which would silently defeat this file's whole purpose as a
+# false-positive smoke test. See test/sample-template-valid.otter instead.
 
 ###############################################################################
 # SWIM STRING SUMMARY

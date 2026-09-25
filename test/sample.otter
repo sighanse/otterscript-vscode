@@ -289,10 +289,12 @@ that spans multiple lines>--8>
 ###############################################################################
 # TEMPLATE SYNTAX (HIGHLIGHTING + EMBEDDING)
 ###############################################################################
-
-<% foreach %p in @AffectedPackages { %>
-* $(%p.Name) $(%p.AffectedVersions)
-<% } %>
+# A real <% ... %> pair does NOT belong in this file: documentUsesTemplateTags()
+# treats any document containing one as a text template and blanks everything
+# outside the tags, which would silently zero out every diagnostic in PART 2
+# below. That coverage (tag/interpolation highlighting, $(...) embedding) lives
+# in sample-template-valid.otter instead, where template-aware mode is exactly
+# what's under test.
 
 ###############################################################################
 # MISC STATEMENTS / KEYWORD HIGHLIGHTING
