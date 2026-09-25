@@ -2261,7 +2261,15 @@ $json = $ToJson(%(
 **Notes:**
 - Maps → JSON objects
 - Vectors → JSON arrays
-- Scalars → JSON strings
+- Scalars → JSON strings **always** — a scalar is never emitted as a JSON
+  number or boolean, even if it looks like one:
+  \`$ToJson(3)\` produces the JSON string \`"3"\`, not the number \`3\`, and
+  \`$ToJson(true)\` produces \`"true"\`, not the boolean \`true\`. If the
+  consumer expects a native JSON number/boolean at that position, cast on
+  their end or build the value as part of a map/vector instead of a bare
+  scalar.
+- Takes exactly one argument — there is no overload for encoding multiple
+  values at once.
 `,
   },
   "HtmlEncode": {
@@ -2590,6 +2598,13 @@ $data = $FromJson('{"name": "Steve", "age": 42}');
 # $data is now a map with keys "name" and "age"
 $name = $data[name];
 \`\`\`
+
+**Notes:**
+- Symmetric with \`$ToJson\`: JSON numbers, booleans, and \`null\` all become
+  string scalars, not a distinct numeric/boolean type — \`$data[age]\` above is
+  the string \`"42"\`, not a number. OtterScript scalars are always strings.
+- Invalid JSON throws rather than returning an empty/default value — there is
+  no built-in "try parse"; wrap in \`try\`/\`catch\` if the input isn't trusted.
 `,
   },
   // File System Functions
@@ -2796,6 +2811,12 @@ $Compare("abc", =, "abc")
 $Compare($VulnerabilityScore, >=, 7.5)
 $Compare("07", >, "6", true)
 \`\`\`
+
+**Note:** \`if $Compare(a, =, b) { ... }\` triggers this extension's
+"possible assignment in condition" warning — the line-based scanner can't
+tell \`=\` here (a \`$Compare\` operator argument) from a stray assignment. The
+squiggle is a known false positive; \`=\` is correct and required by
+\`$Compare\`'s signature, not a typo for \`==\`.
 `
   },
   // Regular Expression Functions
@@ -3024,7 +3045,7 @@ $hash = $PackageHash("hex", "sha512");
   "PackageProperty": {
     namespace: null,
     name: "$PackageProperty",
-    signature: "$PackageProperty(name, default)",
+    signature: "$PackageProperty(name, [default])",
     snippet: "\\$PackageProperty(\"${1:propertyName}\", \"${2:defaultValue}\")",
     description: "Returns the value of any property of the package currently in scope.",
     documentation: `
@@ -3032,7 +3053,9 @@ Returns the value of any property of the package currently in scope or the defau
 
 **Parameters:**
 - \`name\` - The property name to retrieve
-- \`default\` - Optional default value if property doesn't exist
+- \`default\` - (Optional) Value to return if the property doesn't exist. Omitting
+  it is only safe when the property is guaranteed to be set — otherwise the call
+  throws rather than returning an empty value; see the note above.
 
 **Returns:** Property value as string
 
@@ -3565,11 +3588,11 @@ foreach $key in @ApiKeys {
   "BuildIssues": {
     namespace: null,
     name: "@BuildIssues",
-    signature: '@BuildIssues(includeClosed)',
+    signature: '@BuildIssues([includeClosed])',
     description: 'Returns a list of issues on the build in the current scope.',
     documentation: `
 **Parameters:**
-- \`includeClosed\` - Optional, include closed issues
+- \`includeClosed\` - (Optional) Include closed issues
 
 **Properties:**
 - \`Sequence\` - Issue sequence number
