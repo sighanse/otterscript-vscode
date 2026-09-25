@@ -19,6 +19,7 @@ This extension started as a learning project while implementing [custom webhook 
 - Syntax highlighting for OtterScript constructs, including namespaced operations (`ProGet::`, `Otter::`, `Windows::`)
 - Hover documentation, auto-completion, and signature help for built-in functions, operations, variables, and map/vector expressions
 - Diagnostics for common mistakes (missing `$`, unknown functions, invalid operators, `=` used in `if` conditions, duplicate map keys, too many arguments to a fixed-arity function, unknown `Namespace::` prefixes, malformed `<% %>` text-template tags, template/expression mode mixing) — including `$` expressions embedded directly in a text template's literal output (e.g. `$ToJson(...)` in a webhook body), not just code inside `<% %>`
+- Opt-in Adaptive Card checks for Teams webhook bodies: an unrecognized `"type"` value or a missing `"version"` on a literal `"type": "AdaptiveCard"` object is flagged. Best-effort only — it does not validate full card structure against the schema, since a template's `<% %>` control flow means there's no single concrete JSON document to validate against
 - Quick‑fix code actions, plus a **Fix All Issues** command (`Ctrl+Shift+Alt+F`) that applies every available fix in the file
 - Go to Definition (F12) and Find All References (Shift+F12) for document-local module calls
 - Outline and breadcrumbs via document symbols

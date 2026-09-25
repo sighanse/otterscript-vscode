@@ -594,6 +594,34 @@ describe("updateDiagnostics - $ expressions embedded in literal template text", 
 });
 
 // ============================================================
+// Adaptive Card checks are wired into updateDiagnostics, gated on templateAware
+// ============================================================
+// Deeper coverage of the check itself lives in test/unit/adaptivecard.test.js;
+// this just confirms updateDiagnostics actually calls it (with `text`, inside
+// the templateAware branch) and the diagnostic reaches the collection.
+
+describe("updateDiagnostics - Adaptive Card checks", () => {
+  it("flags an unknown Adaptive Card type when the document is template-aware", () => {
+    const src = [
+      '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "TextBlok" } ] }',
+      "<% if $ok { %>",
+      "<% } %>",
+    ].join("\n");
+    const [d] = only(src, "adaptivecard-unknown-type");
+    assert.ok(d);
+    assert.equal(d.message, "Unknown Adaptive Card type 'TextBlok'.");
+  });
+
+  it("does not run at all when the document is not template-aware (no real <% %>)", () => {
+    // No <% %> anywhere -- documentUsesTemplateTags() is false, so
+    // updateDiagnostics never calls findAdaptiveCardDiagnostics, even though
+    // this text alone would otherwise trigger it.
+    const src = '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "TextBlok" } ] }';
+    assert.deepEqual(only(src, "adaptivecard-unknown-type"), []);
+  });
+});
+
+// ============================================================
 // implicit-string juxtaposition inside %( ) / @( ) is VALID -- not a diagnostic
 // ============================================================
 // Phase 2 shipped a "missing-operator" check flagging `%( v: $a $b )` as two

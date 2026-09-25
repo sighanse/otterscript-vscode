@@ -478,6 +478,114 @@ function maskOutsideTemplateTags(line, state) {
 }
 
 /**
+ * The inverse of {@link maskOutsideTemplateTags}: blanks everything INSIDE a
+ * `<% ... %>` template tag, length-preserving, and leaves the literal output
+ * text completely untouched (not even embedded `$` expressions are blanked —
+ * callers that need those gone too should mask separately). For a caller
+ * that wants to see the literal text as-is (e.g. treating it as JSON), this
+ * is what removes the OtterScript control-flow noise (`<% foreach ... %>`,
+ * `<% } %>`, ...) without disturbing anything else.
+ *
+ * Uses the same tag-boundary detection as {@link maskOutsideTemplateTags}
+ * (a `<%` inside a literal-text string is not a real opener; a `%>` inside a
+ * tag-body string/comment/swim-string does not close the tag early), so the
+ * two functions agree on exactly where tags start and end.
+ *
+ * @param {string} line
+ * @param {TemplateScanState} state - Mutated in place; carries `inTemplateTag`
+ *   and the inside-tag {@link CodeScanState} across lines. Use a SEPARATE
+ *   state object from any {@link maskOutsideTemplateTags} pass over the same
+ *   lines -- each function's state must only ever see its own calls.
+ * @returns {string}
+ */
+function maskTemplateTagContents(line, state) {
+  const chars = line.split("");
+  const code = state.code;
+  /** @type {string | null} open quote char in the literal text (line-local) */
+  let litQuote = null;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+
+    // ---- Outside a tag: keep the literal text as-is; only track strings
+    // (so a '<%' inside one isn't mistaken for a real tag opener) and the
+    // tag opener itself, which IS blanked. ----------------------------------
+    if (!state.inTemplateTag) {
+      if (litQuote) {
+        if (ch === litQuote && isUnescapedQuoteAt(line, i)) litQuote = null;
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        litQuote = ch;
+        continue;
+      }
+      if (ch === "<" && line[i + 1] === "%") {
+        chars[i] = " ";
+        chars[i + 1] = " ";
+        state.inTemplateTag = true;
+        i++;
+      }
+      continue;
+    }
+
+    // ---- Inside a tag: blank everything; `%>` closes only when it is real
+    // code, mirroring maskOutsideTemplateTags's inside-tag branch exactly. --
+    chars[i] = " ";
+    if (code.inBlockComment) {
+      if (ch === "*" && line[i + 1] === "/") { chars[i + 1] = " "; code.inBlockComment = false; i++; }
+      continue;
+    }
+    if (code.swimDelimiter) {
+      if (line.startsWith(code.swimDelimiter, i)) {
+        for (let k = 1; k < code.swimDelimiter.length; k++) chars[i + k] = " ";
+        i += code.swimDelimiter.length - 1;
+        code.swimDelimiter = null;
+      }
+      continue;
+    }
+    if (code.inString) {
+      if (ch === code.quote && isUnescapedQuoteAt(line, i)) {
+        code.inString = false;
+        code.quote = null;
+      }
+      continue;
+    }
+    if (ch === "%" && line[i + 1] === ">") {
+      chars[i + 1] = " ";
+      state.inTemplateTag = false;
+      i++;
+      continue;
+    }
+    if (ch === "/" && line[i + 1] === "*") {
+      chars[i + 1] = " ";
+      code.inBlockComment = true;
+      i++;
+      continue;
+    }
+    if (ch === ">") {
+      const swimMatch = line.slice(i).match(/^>[^>]{0,5}>/);
+      if (swimMatch) {
+        for (let k = 1; k < swimMatch[0].length; k++) chars[i + k] = " ";
+        code.swimDelimiter = swimMatch[0];
+        i += swimMatch[0].length - 1;
+        continue;
+      }
+    }
+    if (ch === '"' || ch === "'") {
+      code.inString = true;
+      code.quote = ch;
+      continue;
+    }
+    if (ch === "#" || (ch === "/" && line[i + 1] === "/")) {
+      for (let k = i; k < line.length; k++) chars[k] = " ";
+      break; // rest of the line is a comment; nothing after can close the tag
+    }
+  }
+
+  return chars.join("");
+}
+
+/**
  * Finds `<%` / `%>` template-tag delimiters in one already-masked line, in
  * source order. The single place the "what is a tag delimiter" rule lives, so
  * folding and diagnostics cannot drift on it.
@@ -737,6 +845,7 @@ module.exports = {
 
   // -- Text-template tags
   maskOutsideTemplateTags,
+  maskTemplateTagContents,
   documentUsesTemplateTags,
   findTemplateTagDelimiters,
   findBalancedParenEnd,

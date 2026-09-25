@@ -19,6 +19,7 @@ const {
   documentUsesTemplateTags,
   log,
 } = require("./helpers");
+const { findAdaptiveCardDiagnostics } = require("./adaptivecard");
 
 /**
  * Context object passed to updateDiagnostics to avoid hidden closures.
@@ -491,6 +492,11 @@ function updateDiagnostics(document, collection, ctx) {
   try {
     issues.push(...findDuplicateMapKeyDiagnosticsFromMasked(document, joinedMasked));
     issues.push(...findArgumentCountDiagnosticsFromMasked(document, joinedMasked, scalarFunctionDocs, vectorFunctionDocs));
+    // -- Best-effort Adaptive Card checks, opt-in via a literal
+    //    "type": "AdaptiveCard" in the template's literal output.
+    if (templateAware) {
+      issues.push(...findAdaptiveCardDiagnostics(document, text));
+    }
   } catch (err) {
     log.error(`Cross-line diagnostic scan failed for ${document.uri.toString()}:`, err);
   }
