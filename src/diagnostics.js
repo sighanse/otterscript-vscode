@@ -483,18 +483,17 @@ function updateDiagnostics(document, collection, ctx) {
     issues.push(d);
   }
 
-  // -- Detect duplicate keys inside map expressions, and calls with more
-  //    arguments than a function's fixed-arity signature allows. Isolated in
-  //    its own try/catch: these two run over the whole joined document rather
-  //    than per-line like every check above, so a bug here must not be able
-  //    to wipe out the per-line diagnostics already collected above it.
+  // -- Duplicate map keys, too-many-arguments, and (template-aware documents
+  //    only) opt-in Adaptive Card checks. Isolated in its own try/catch:
+  //    these run over the whole joined document rather than per-line like
+  //    every check above, so a bug here must not be able to wipe out the
+  //    per-line diagnostics already collected above it.
   const joinedMasked = maskedLines.join("\n");
   try {
     issues.push(...findDuplicateMapKeyDiagnosticsFromMasked(document, joinedMasked));
     issues.push(...findArgumentCountDiagnosticsFromMasked(document, joinedMasked, scalarFunctionDocs, vectorFunctionDocs));
-    // -- Best-effort Adaptive Card checks, opt-in via a literal
-    //    "type": "AdaptiveCard" in the template's literal output.
     if (templateAware) {
+      // Opt-in via a literal "type": "AdaptiveCard" in the literal output.
       issues.push(...findAdaptiveCardDiagnostics(document, text));
     }
   } catch (err) {

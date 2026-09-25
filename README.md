@@ -44,7 +44,7 @@ See [CHANGELOG.md](https://github.com/sighanse/otterscript-vscode/blob/main/CHAN
 
 ## What this extension does NOT do
 
-- It does not validate or execute OtterScript
+- It does not execute OtterScript — diagnostics are static, best-effort pattern checks (see below), not proof a script will run correctly
 - It does not connect to Otter, ProGet, or other Inedo services
 - It does not auto-fix on save or format your code; fixes are only applied when you explicitly invoke a quick‑fix or the **Fix All Issues** command
 - It does not attempt full semantic analysis
