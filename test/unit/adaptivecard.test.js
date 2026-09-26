@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * @fileoverview Unit tests for src/adaptivecard.js — the opt-in, best-effort
+ * @fileoverview Unit tests for src/adaptivecard.js — the content-triggered, best-effort
  * Adaptive Card `"type"`/`"version"` checks.
  *
  * Requires the vscode stub before adaptivecard.js (which pulls in vscode) loads.
@@ -44,12 +44,12 @@ function diagnose(source) {
 /** @param {string} source @param {string} code */
 const only = (source, code) => diagnose(source).filter((d) => d.code === code);
 
-describe("findAdaptiveCardDiagnostics — opt-in detection", () => {
+describe("findAdaptiveCardDiagnostics — card detection", () => {
   it("does nothing when there is no 'type': 'AdaptiveCard' anywhere", () => {
     assert.deepEqual(diagnose('{ "type": "message", "text": "hi" }'), []);
   });
 
-  it("does not opt in from a string VALUE that merely contains 'type'/'AdaptiveCard'-like text", () => {
+  it("does not trigger from a string VALUE that merely contains 'type'/'AdaptiveCard'-like text", () => {
     // A TextBlock explaining card syntax to the user -- these quotes are
     // escaped JSON-string content, not real "type"/"version" properties.
     const src = '{ "type": "message", "text": "Use \\"type\\": \\"AdaptiveCard\\" as the root." }';
@@ -75,6 +75,12 @@ describe("findAdaptiveCardDiagnostics — opt-in detection", () => {
       '}',
     ].join("\n");
     assert.deepEqual(diagnose(src), []);
+  });
+
+  it("finds the card object even when an earlier sibling string value contains a brace", () => {
+    const src = '{ "$schema": "}", "type": "AdaptiveCard", "body": [ { "type": "Bogus" } ] }';
+    const codes = diagnose(src).map((d) => d.code).sort();
+    assert.deepEqual(codes, ["adaptivecard-missing-version", "adaptivecard-unknown-type"]);
   });
 });
 

@@ -1,7 +1,8 @@
 // @ts-check
 /**
- * @fileoverview Best-effort, opt-in checks for Adaptive Card JSON embedded in
- * an OtterScript text template (e.g. a Microsoft Teams webhook body).
+ * @fileoverview Best-effort, content-triggered checks for Adaptive Card JSON
+ * embedded in an OtterScript text template (e.g. a Microsoft Teams webhook
+ * body).
  *
  * Deliberately narrow in scope: no schema-driven structural/required-property
  * validation, and no attempt to resolve what a `<% foreach %>` loop or an
@@ -131,14 +132,25 @@ function findMatchingBrace(text, openBraceIndex) {
 /**
  * Finds the nearest unmatched `{` at or before `index`, scanning backward --
  * i.e. the JSON object that directly contains whatever text is at `index`.
+ * String tokens (see {@link findJsonStringTokens}) are skipped whole, so a
+ * `{`/`}` inside a sibling string value doesn't confuse the depth count --
+ * the backward counterpart of {@link findMatchingBrace}'s quote handling.
  *
  * @param {string} text
  * @param {number} index
  * @returns {number} Matching `{` index, or -1 if none found.
  */
 function findEnclosingBraceStart(text, index) {
+  const tokens = findJsonStringTokens(text);
+  let t = tokens.length - 1;
   let depth = 0;
   for (let i = index; i >= 0; i--) {
+    while (t >= 0 && tokens[t].start > i) t--;
+    if (t >= 0 && tokens[t].end >= i) {
+      i = tokens[t].start; // loop's i-- then lands just before the opening quote
+      t--;
+      continue;
+    }
     const ch = text[i];
     if (ch === "}") depth++;
     else if (ch === "{") {
@@ -150,8 +162,8 @@ function findEnclosingBraceStart(text, index) {
 }
 
 /**
- * Runs the Adaptive Card checks over one document. Opt-in: does nothing
- * unless the literal (non-`<% %>`) text contains `"type": "AdaptiveCard"`
+ * Runs the Adaptive Card checks over one document. Content-triggered: does
+ * nothing unless the literal (non-`<% %>`) text contains `"type": "AdaptiveCard"`
  * somewhere -- everything outside that object (e.g. a Teams message
  * envelope's own `"type": "message"`) is never checked. Only the FIRST such
  * object is checked; a nested `Action.ShowCard`'s own Adaptive Card is out

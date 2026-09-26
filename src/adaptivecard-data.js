@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * @fileoverview Static data for the (opt-in, best-effort) Adaptive Card
+ * @fileoverview Static data for the (content-triggered, best-effort) Adaptive Card
  * `"type"` check in src/adaptivecard.js.
  *
  * Source of truth: the real, machine-readable Adaptive Card JSON Schema

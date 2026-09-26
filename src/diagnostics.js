@@ -536,7 +536,7 @@ function updateDiagnostics(document, collection, ctx) {
   }
 
   // -- Duplicate map keys, too-many-arguments, and (template-aware documents
-  //    only) opt-in Adaptive Card checks. Isolated in its own try/catch:
+  //    only) content-triggered Adaptive Card checks. Isolated in its own try/catch:
   //    these run over the whole joined document rather than per-line like
   //    every check above, so a bug here must not be able to wipe out the
   //    per-line diagnostics already collected above it.
@@ -545,7 +545,7 @@ function updateDiagnostics(document, collection, ctx) {
     issues.push(...findDuplicateMapKeyDiagnosticsFromMasked(document, joinedMasked));
     issues.push(...findArgumentCountDiagnosticsFromMasked(document, joinedMasked, scalarFunctionDocs, vectorFunctionDocs));
     if (templateAware) {
-      // Opt-in via a literal "type": "AdaptiveCard" in the literal output.
+      // Triggered by a literal "type": "AdaptiveCard" in the literal output.
       issues.push(...findAdaptiveCardDiagnostics(document, text));
     }
   } catch (err) {
