@@ -47,8 +47,6 @@ const { findAdaptiveCardDiagnostics } = require("./adaptivecard");
 const NAMESPACE_QUALIFIER_REGEX = /(^|[^A-Za-z0-9_$@:])([A-Za-z][A-Za-z0-9]*)::(?=[A-Za-z])/g;
 
 // -- Text-template (`<% ... %>`) structural checks --------------------------
-/** One complete single-line template tag; group 1 is the body. @type {RegExp} */
-const TEMPLATE_TAG_REGEX = /<%(.*?)%>/g;
 /** Tag body that is only a block-terminator keyword (`end`, `endforeach`, ...). @type {RegExp} */
 const TEMPLATE_END_KEYWORD_REGEX = /^\s*(end(?:if|for|foreach|while)?)\s*$/i;
 /**
@@ -62,10 +60,80 @@ const TEMPLATE_BLOCK_OPENER_REGEX =
   /^\s*(?:\}\s*)?(?:else\s+)?(?:(?:if|foreach|while)\b|for\s+(?:server|role|directory|deployable)\b)/i;
 
 /**
+ * Finds the first segment containing `needle` as a literal substring, and
+ * returns its source position. Used to locate a keyword within a tag body
+ * that may have been accumulated across several physical lines -- the
+ * keyword itself is assumed to live wholly within one of those lines (a
+ * realistic assumption; nobody splits `foreach` across a line break).
+ *
+ * @param {{ lineIndex: number, startCol: number, text: string }[]} segments
+ * @param {string} needle
+ * @returns {{ lineIndex: number, col: number } | null}
+ */
+function locateInSegments(segments, needle) {
+  for (const seg of segments) {
+    const idx = seg.text.indexOf(needle);
+    if (idx !== -1) return { lineIndex: seg.lineIndex, col: seg.startCol + idx };
+  }
+  return null;
+}
+
+/**
+ * Checks 2 & 3: given one complete `<% ... %>` tag's body -- possibly
+ * accumulated across multiple physical lines -- flags a bare terminator
+ * keyword (`<% end %>`) or a block opener missing its `{` (`<% foreach ... %>`
+ * with no brace before `%>`).
+ *
+ * @param {{ lineIndex: number, startCol: number, text: string }[]} segments -
+ *   One entry per physical line the tag body spans, in source order.
+ * @param {vscode.Diagnostic[]} issues
+ * @returns {void}
+ */
+function checkTagBody(segments, issues) {
+  const body = segments.map((s) => s.text).join("\n");
+
+  const endKw = body.match(TEMPLATE_END_KEYWORD_REGEX);
+  if (endKw) {
+    const kw = endKw[1];
+    const loc = /** @type {{ lineIndex: number, col: number }} */ (locateInSegments(segments, kw));
+    const d = new vscode.Diagnostic(
+      new vscode.Range(
+        new vscode.Position(loc.lineIndex, loc.col),
+        new vscode.Position(loc.lineIndex, loc.col + kw.length)
+      ),
+      `'<% ${kw} %>' is not OtterScript - close a template block with '<% } %>'`,
+      vscode.DiagnosticSeverity.Warning
+    );
+    d.code = "template-end-keyword";
+    d.source = "OtterScript";
+    issues.push(d);
+    return; // a terminator tag is never also a block opener
+  }
+
+  if (!body.includes("{") && TEMPLATE_BLOCK_OPENER_REGEX.test(body)) {
+    const kwMatch = /** @type {RegExpMatchArray} */ (body.match(/\b(?:if|foreach|for|while)\b/i));
+    const kwText = kwMatch[0];
+    const loc = /** @type {{ lineIndex: number, col: number }} */ (locateInSegments(segments, kwText));
+    const d = new vscode.Diagnostic(
+      new vscode.Range(
+        new vscode.Position(loc.lineIndex, loc.col),
+        new vscode.Position(loc.lineIndex, loc.col + kwText.length)
+      ),
+      `'<% ${kwText} ... %>' must open a block - add '{' before '%>'`,
+      vscode.DiagnosticSeverity.Warning
+    );
+    d.code = "template-missing-brace";
+    d.source = "OtterScript";
+    issues.push(d);
+  }
+}
+
+/**
  * Emits the `<% %>` structural diagnostics (Phase 1) and the template/expression
  * mode-mixing check (Phase 2, check 4) for one line of a template-aware
  * document. Consumes the string/comment-masked line (delimiters still visible);
- * pushes onto `issues` and advances the cross-line `tagBalance` / `exprState`.
+ * pushes onto `issues` and advances the cross-line `tagBalance` / `exprState` /
+ * `tagBody`.
  *
  * @param {string} tagView - `maskNonCodeSpans` output for the raw line
  * @param {number} lineIndex
@@ -73,9 +141,17 @@ const TEMPLATE_BLOCK_OPENER_REGEX =
  * @param {{ count: number, lastLine: number, lastCol: number }} tagBalance
  * @param {{ depth: number }} exprState - Unclosed OtterScript-expression depth
  *   in the literal text (`$(`, `%(`, `@(`, `$Name(`), carried across lines.
+ * @param {{ segments: { lineIndex: number, startCol: number, text: string }[] }} tagBody -
+ *   The currently-open tag's body, accumulated one segment per physical line
+ *   it spans (checks 2 & 3 run once the closing `%>` is reached, however many
+ *   lines away that is).
  * @returns {void}
  */
-function checkTemplateTags(tagView, lineIndex, issues, tagBalance, exprState) {
+function checkTemplateTags(tagView, lineIndex, issues, tagBalance, exprState, tagBody) {
+  // Where, on THIS line, the currently-open tag's body segment begins. Stays
+  // 0 for a line that starts already inside a tag opened on a previous line.
+  let segmentStart = 0;
+
   // Check 1: `<%` / `%>` balance (mirrors the brace/paren/bracket balance loop).
   // Check 4: a `<%` reached while an OtterScript expression opened in the literal
   //   text is still unclosed -- text templating and expressions cannot nest.
@@ -101,6 +177,7 @@ function checkTemplateTags(tagView, lineIndex, issues, tagBalance, exprState) {
       if (tagBalance.count === 0) {
         tagBalance.lastLine = lineIndex;
         tagBalance.lastCol = col;
+        segmentStart = col + 2;
       }
       tagBalance.count++;
       col++;
@@ -121,6 +198,13 @@ function checkTemplateTags(tagView, lineIndex, issues, tagBalance, exprState) {
         issues.push(d);
       } else {
         tagBalance.count--;
+        if (tagBalance.count === 0) {
+          // The tag closes here -- run checks 2 & 3 over its full body,
+          // however many lines it took to get here, then start fresh.
+          tagBody.segments.push({ lineIndex, startCol: segmentStart, text: tagView.slice(segmentStart, col) });
+          checkTagBody(tagBody.segments, issues);
+          tagBody.segments = [];
+        }
       }
       col++;
       continue;
@@ -144,44 +228,10 @@ function checkTemplateTags(tagView, lineIndex, issues, tagBalance, exprState) {
     }
   }
 
-  // Checks 2 & 3: inspect each complete single-line `<% ... %>` tag body.
-  for (const m of tagView.matchAll(TEMPLATE_TAG_REGEX)) {
-    const body = m[1];
-    const bodyStart = /** @type {number} */ (m.index) + 2;
-
-    const endKw = body.match(TEMPLATE_END_KEYWORD_REGEX);
-    if (endKw) {
-      const kw = endKw[1];
-      const kwStart = bodyStart + body.indexOf(kw);
-      const d = new vscode.Diagnostic(
-        new vscode.Range(
-          new vscode.Position(lineIndex, kwStart),
-          new vscode.Position(lineIndex, kwStart + kw.length)
-        ),
-        `'<% ${kw} %>' is not OtterScript - close a template block with '<% } %>'`,
-        vscode.DiagnosticSeverity.Warning
-      );
-      d.code = "template-end-keyword";
-      d.source = "OtterScript";
-      issues.push(d);
-      continue; // a terminator tag is never also a block opener
-    }
-
-    if (!body.includes("{") && TEMPLATE_BLOCK_OPENER_REGEX.test(body)) {
-      const kwMatch = /** @type {RegExpMatchArray} */ (body.match(/\b(?:if|foreach|for|while)\b/i));
-      const kwStart = bodyStart + /** @type {number} */ (kwMatch.index);
-      const d = new vscode.Diagnostic(
-        new vscode.Range(
-          new vscode.Position(lineIndex, kwStart),
-          new vscode.Position(lineIndex, kwStart + kwMatch[0].length)
-        ),
-        `'<% ${kwMatch[0]} ... %>' must open a block - add '{' before '%>'`,
-        vscode.DiagnosticSeverity.Warning
-      );
-      d.code = "template-missing-brace";
-      d.source = "OtterScript";
-      issues.push(d);
-    }
+  // The tag is still open at end of line -- record this line's contribution
+  // and keep accumulating on the next one.
+  if (tagBalance.count > 0) {
+    tagBody.segments.push({ lineIndex, startCol: segmentStart, text: tagView.slice(segmentStart) });
   }
 }
 
@@ -236,6 +286,8 @@ function updateDiagnostics(document, collection, ctx) {
   const tagScanState = createCodeScanState();
   const tagBalance = { count: 0, lastLine: -1, lastCol: -1 };
   const tplExprState = { depth: 0 };
+  /** @type {{ segments: { lineIndex: number, startCol: number, text: string }[] }} */
+  const tagBody = { segments: [] };
 
   // -- Split into lines for line-by-line processing
   const lines = text.split("\n");
@@ -246,7 +298,7 @@ function updateDiagnostics(document, collection, ctx) {
     const raw = lines[lineIndex];
 
     if (templateAware) {
-      checkTemplateTags(maskNonCodeSpans(raw, tagScanState), lineIndex, issues, tagBalance, tplExprState);
+      checkTemplateTags(maskNonCodeSpans(raw, tagScanState), lineIndex, issues, tagBalance, tplExprState, tagBody);
     }
 
     const line = templateAware

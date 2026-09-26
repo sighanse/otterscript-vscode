@@ -504,6 +504,27 @@ describe("updateDiagnostics - template <% %> structural checks", () => {
     assert.equal(codes("<% iffy $x %>").filter((c) => c === "template-missing-brace").length, 0);
   });
 
+  it("flags a block opener with no brace when the tag spans multiple lines", () => {
+    const src = ["<%", "foreach $p in @x", "%>"].join("\n");
+    const d = only(src, "template-missing-brace")[0];
+    assert.ok(d);
+    // The keyword lives on line 1 (0-based), where it actually appears.
+    assert.equal(d.range.start.line, 1);
+    assert.equal(d.range.start.character, src.split("\n")[1].indexOf("foreach"));
+  });
+
+  it("flags <% end %> when the tag spans multiple lines", () => {
+    const src = ["<% if $x { %>", "a", "<%", "end", "%>"].join("\n");
+    const d = only(src, "template-end-keyword")[0];
+    assert.ok(d);
+    assert.equal(d.range.start.line, 3);
+  });
+
+  it("does not flag a well-formed multi-line block opener", () => {
+    const src = ["<%", "foreach $p in @x {", "%>"].join("\n");
+    assert.equal(codes(src).filter((c) => c === "template-missing-brace").length, 0);
+  });
+
   it("leaves bare 'for i = ...' misuse to the incorrect-for-usage check", () => {
     const cs = codes("<% for i = 1 to 10 %>");
     assert.ok(cs.includes("incorrect-for-usage"));
