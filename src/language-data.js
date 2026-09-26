@@ -1502,8 +1502,8 @@ of those forms.
 
 **Example:**
 \`\`\`otterscript
-<% foreach $p in @AffectedPackages { %>
-  * $($p.Name)
+<% foreach %p in @AffectedPackages { %>
+  * $(%p.Name)
 <% } %>
 \`\`\`
 `
@@ -3743,8 +3743,8 @@ const vectorFunctionDocs = {
 
 **Example:**
 \`\`\`otterscript
-foreach $key in @ApiKeys {
-  Log-Information "Key: $key.Name, Expires: $key.ExpirationDate";
+foreach %key in @ApiKeys {
+  Log-Information "Key: $(%key.Name), Expires: $(%key.ExpirationDate)";
 }
 \`\`\`
 `
@@ -3764,8 +3764,8 @@ foreach $key in @ApiKeys {
 
 **Example:**
 \`\`\`otterscript
-foreach $issue in @BuildIssues(true) {
-  Log-Information "Issue $issue.Sequence: $issue.Detail";
+foreach %issue in @BuildIssues(true) {
+  Log-Information "Issue $(%issue.Sequence): $(%issue.Detail)";
 }
 \`\`\`
 `
