@@ -294,7 +294,8 @@ function updateDiagnostics(document, collection, ctx) {
   // -- Split into lines for line-by-line processing
   const lines = text.split("\n");
 
-  // -- Process all lines
+  // -- Process all lines. Each masked line is also kept so the cross-line
+  //    checks at the end can run over the whole masked document at once.
   const maskedLines = [];
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
     const raw = lines[lineIndex];
@@ -317,7 +318,8 @@ function updateDiagnostics(document, collection, ctx) {
     }
 
     // ------------------------------------------------------------
-    // Character-by-character symbol balance checks
+    // Character-by-character symbol balance checks. An extra closer is
+    // reported immediately; still-open symbols are reported after the loop.
     // ------------------------------------------------------------
     for (let col = 0; col < line.length; col++) {
       const ch = line[col];
@@ -427,7 +429,9 @@ function updateDiagnostics(document, collection, ctx) {
       ));
     }
 
-    // -- Detect invalid logical operators
+    // ------------------------------------------------------------
+    // `if` conditions: assignment-like '=' and single '&' / '|'
+    // ------------------------------------------------------------
     if (/^\s*if\b/.test(line)) {
       // -- Detect assignment-like '=' in conditions (likely intended as '==').
       // `line` is already a length-preserving masked version of the source line.
@@ -449,6 +453,7 @@ function updateDiagnostics(document, collection, ctx) {
         ));
       }
 
+      // -- Detect a lone '&' / '|' (OtterScript's logical operators are '&&' / '||').
       for (let j = 0; j < line.length; j++) {
         const ch = line[j];
         if (ch === "&" || ch === "|") {
@@ -466,7 +471,9 @@ function updateDiagnostics(document, collection, ctx) {
       }
     }
 
-    // -- Detect incorrect 'for' usage as a loop
+    // ------------------------------------------------------------
+    // Incorrect 'for' usage as a loop
+    // ------------------------------------------------------------
     // Matches: for i = 1 to 10, for $item in @list, for item in list
     const forLoopLikePattern = /^\s*for\s+(\$?\w+)\s+(=|in)\s+/i;
     if (forLoopLikePattern.test(line)) {

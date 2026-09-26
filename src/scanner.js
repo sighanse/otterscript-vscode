@@ -8,12 +8,14 @@
  *
  * It owns the single source of truth for how the extension recognises non-code
  * spans — quoted strings, line comments, block comments, and swim-strings — plus
- * the argument-index helper and module-name regexes that build on that scan.
- * Everything here operates on plain strings, numbers, and the {@link CodeScanState}
- * plain object; nothing here constructs a `vscode.*` value.
+ * the `<% %>` text-template tag masking, the argument-index helper, and the
+ * module-name regexes that build on that scan. Everything here operates on plain
+ * strings, numbers, and plain state objects ({@link CodeScanState},
+ * {@link TemplateScanState}); nothing here constructs a `vscode.*` value.
  *
- * `helpers.js` re-exports the public members of this module, so existing callers
- * that `require("./helpers")` keep working unchanged.
+ * `helpers.js` re-exports the members its own callers need (extension.js and
+ * diagnostics.js import them from there); the rest — used only internally, by
+ * adaptivecard.js, or by tests — are imported from this module directly.
  *
  * @module scanner
  */
@@ -161,7 +163,7 @@ function findEmbeddedExpressionEnd(line, dollarIndex) {
  */
 const MODULE_NAME_TOKEN_REGEX = /[A-Za-z][\w-]*/;
 
-/** Matches a `module <Name>` declaration and captures the name. */
+/** Matches a `module <Name>` declaration at line start and captures the name. */
 const MODULE_DECLARATION_REGEX = /^\s*module\s+([A-Za-z][\w-]*)/;
 /** Matches a `call [Raft::]<Name>` target and captures the module name. */
 const MODULE_CALL_TARGET_REGEX = /\bcall\s+(?:[A-Za-z][\w-]*::)?([A-Za-z][\w-]*)\b/;
@@ -263,6 +265,8 @@ function scanLineState(lineText, state, chars) {
       continue;
     }
 
+    // Swim-string opener: `>`, up to 5 non-`>` chars, `>` (e.g. `>>`, `>END>`).
+    // The body runs until the same delimiter appears again, possibly lines later.
     if (ch === ">") {
       const swimMatch = lineText.slice(i).match(/^>[^>]{0,5}>/);
       if (swimMatch) {
@@ -285,6 +289,7 @@ function scanLineState(lineText, state, chars) {
       continue;
     }
 
+    // Line comments (`#` or `//`): blank the rest of the line and stop.
     if (ch === "#") {
       if (chars) { for (let j = i; j < chars.length; j++) chars[j] = " "; }
       break;
@@ -659,9 +664,9 @@ function documentUsesTemplateTags(text) {
  * reported per line (the grammar allows only one). Line endings may be LF or
  * CRLF -- suitable for scanning raw file contents read from disk.
  *
- * Pure counterpart of the declaration scan in `helpers.getModuleInfo`, for
- * callers (e.g. a workspace-symbol index) that only have text and want plain
- * data rather than `vscode` ranges.
+ * The single declaration scan: `helpers.getModuleInfo` wraps these hits in
+ * `vscode` ranges for an open document, and the workspace-symbol index uses
+ * them directly on raw file text read from disk.
  *
  * @param {string} text - Full document / file text
  * @returns {ModuleDeclarationHit[]}
@@ -789,7 +794,9 @@ function isInStringOrComment(line, position, initialState) {
 function getActiveParameterIndex(argsText) {
   let activeParam = 0;
   let inString = false;
+  /** @type {string | null} quote char of the open string */
   let quote = null;
+  // Separate counters per bracket kind: a comma is top-level only when all are 0.
   let parenDepth = 0;
   let bracketDepth = 0;
   let curlyDepth = 0;

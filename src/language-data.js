@@ -9,9 +9,10 @@
  * - All documentation values are plain strings.
  *
  * Rendering rules:
- * - extension.js is responsible for converting documentation strings
- *   to vscode.MarkdownString instances.
- * - Snippets here may contain escaped '$' or '@' when used standalone.
+ * - helpers.js (`buildHoverMarkdown` / `buildCompletionItem`) converts these
+ *   strings to vscode.MarkdownString / CompletionItem instances.
+ * - Snippets here may contain escaped '$' or '@' when used standalone; the
+ *   completion providers strip the leading sigil the user already typed.
  */
 
 /**
@@ -80,6 +81,9 @@
  *
  * Single source of truth for `validateDocs`, the grammar/language-data sync
  * check, and any namespace-aware editor feature.
+ *
+ * `Object.freeze` does not stop `Set.prototype.add`; read-only-ness is enforced
+ * by the `ReadonlySet` type under `// @ts-check`, not at runtime.
  *
  * @type {ReadonlySet<string>}
  */
@@ -3938,7 +3942,8 @@ foreach $server in @ServersInRoleAndEnvironment("WebServer", "Production") {
   }
 };
 
-// Freeze exported docs to guarantee immutability at runtime
+// Freeze the exported tables so no consumer can add, remove, or replace an
+// entry at runtime. Shallow: the individual DocEntry objects are not frozen.
 Object.freeze(operationDocs);
 Object.freeze(syntaxDocs);
 Object.freeze(keywordDocs);
