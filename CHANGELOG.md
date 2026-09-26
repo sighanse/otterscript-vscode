@@ -22,6 +22,7 @@
 ### Fixed
 
 - Hovering anywhere on a `#region` / `#endregion` line no longer shows the directive's documentation — only hovering the directive itself does
+- Duplicate map keys are now also detected in a map nested inside another map (e.g. `%( x: %( a: 1, a: 2 ) )`)
 
 ## [0.3.0] - 2026-09-09
 
