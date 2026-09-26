@@ -109,24 +109,6 @@
         }
       }
     },
-    "colors": [
-      {
-        "id": "otterscript.errorBackground",
-        "description": "Background color for syntax errors",
-        "defaults": {
-          "dark": "#FF000022",
-          "light": "#FF000022"
-        }
-      },
-      {
-        "id": "otterscript.warningBackground",
-        "description": "Background color for warnings",
-        "defaults": {
-          "dark": "#FFA50022",
-          "light": "#FFA50022"
-        }
-      }
-    ],
     "commands": [
       {
         "command": "otterscript.fixAll",

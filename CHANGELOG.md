@@ -13,6 +13,15 @@
 
 - Corrected numerous hover-doc inaccuracies against Inedo's own docs (`$PackageHash`, `$Increment`/`$Decrement`, `$Substring`, `$Coalesce`, `$Compare`, `$FromJson`/`$ListItem` sigil-based return shape, `$PackageEvent` event codes, `Post-Http`/`Get-Http`/`Upload-Http`'s `Method` values, `foreach`'s loop-variable sigil rules, and several keyword docs); added missing `$GetVariableValue` and `$IsSimulation` entries
 - Fixed example code throughout the docs that used invalid `$item.Property` dot-indexing on a map-bound loop variable — corrected to `%item.Property`
+- The `foreachaffected` and `foreachapikey` snippets now bind the loop variable as a map (`%package`, `%apiKey`), since those vectors hold maps
+
+### Removed
+
+- Unused `otterscript.errorBackground` / `otterscript.warningBackground` theme colors (they were never applied to anything)
+
+### Fixed
+
+- Hovering anywhere on a `#region` / `#endregion` line no longer shows the directive's documentation — only hovering the directive itself does
 
 ## [0.3.0] - 2026-09-09
 

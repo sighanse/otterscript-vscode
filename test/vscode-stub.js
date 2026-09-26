@@ -107,13 +107,11 @@ class FoldingRange {
 
 /**
  * Mirrors the subset of `vscode.MarkdownString` that `buildHoverMarkdown` uses:
- * a growable `value` string plus `appendMarkdown`, and the `isTrusted` flag.
+ * a growable `value` string plus `appendMarkdown`.
  */
 class MarkdownString {
   constructor() {
     this.value = "";
-    /** @type {boolean} */
-    this.isTrusted = false;
   }
 
   /**

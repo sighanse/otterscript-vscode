@@ -462,8 +462,8 @@ describe("updateDiagnostics - template <% %> structural checks", () => {
     const src = [
       "{",
       '  "items": [',
-      "    <% foreach $p in @AffectedPackages { %>",
-      '    { "type": "TextBlock", "text": $ToJson("- " + $p.Name) }',
+      "    <% foreach %p in @AffectedPackages { %>",
+      '    { "type": "TextBlock", "text": $ToJson(%p.Name) }',
       "    <% } %>",
       "  ]",
       "}",
@@ -606,8 +606,8 @@ describe("updateDiagnostics - $ expressions embedded in literal template text", 
 
   it("does not flag plain literal text around an embedded call", () => {
     const src = [
-      '{ "label": "Affected packages:", "value": $ToJson($p.Name) }',
-      "<% foreach $p in @AffectedPackages { %>",
+      '{ "label": "Affected packages:", "value": $ToJson(%p.Name) }',
+      "<% foreach %p in @AffectedPackages { %>",
       "<% } %>",
     ].join("\n");
     assert.deepEqual(diagnose(src), []);
