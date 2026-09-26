@@ -49,6 +49,18 @@ describe("findAdaptiveCardDiagnostics — opt-in detection", () => {
     assert.deepEqual(diagnose('{ "type": "message", "text": "hi" }'), []);
   });
 
+  it("does not opt in from a string VALUE that merely contains 'type'/'AdaptiveCard'-like text", () => {
+    // A TextBlock explaining card syntax to the user -- these quotes are
+    // escaped JSON-string content, not real "type"/"version" properties.
+    const src = '{ "type": "message", "text": "Use \\"type\\": \\"AdaptiveCard\\" as the root." }';
+    assert.deepEqual(diagnose(src), []);
+  });
+
+  it("does not misread a 'type' key whose value string contains an escaped quote", () => {
+    const src = String.raw`{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "TextBlock", "text": "He said \"hi\"" } ] }`;
+    assert.deepEqual(diagnose(src), []);
+  });
+
   it("does not flag a 'type' field outside the Adaptive Card object (e.g. a Teams envelope)", () => {
     const src = [
       '{',

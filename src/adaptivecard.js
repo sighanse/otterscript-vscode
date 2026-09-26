@@ -21,12 +21,83 @@ const vscode = require("vscode");
 const { createTemplateScanState, maskTemplateTagContents, isUnescapedQuoteAt } = require("./scanner");
 const { ADAPTIVE_CARD_TYPES } = require("./adaptivecard-data");
 
-/** Anchor for detecting an Adaptive Card object at all -- see module doc. */
-const ROOT_TYPE_REGEX = /"type"\s*:\s*"AdaptiveCard"/;
-/** Every `"type": "..."` property inside the located Adaptive Card object. */
-const TYPE_PROPERTY_REGEX = /"type"\s*:\s*"([^"]*)"/g;
-/** Presence check only -- not validating the version string's own format. */
-const VERSION_PROPERTY_REGEX = /"version"\s*:/;
+/**
+ * Splits `text` into its double-quoted JSON string-literal tokens, honoring
+ * backslash escaping (so `\"` inside a string doesn't end it early). Used
+ * instead of a raw regex so a string VALUE that happens to contain
+ * characters resembling `"type": "X"` (e.g. a TextBlock showing example
+ * JSON to the user) stays part of its OWN token and is never re-split into
+ * fake key/value tokens.
+ *
+ * @param {string} text
+ * @returns {{ value: string, start: number, end: number }[]} `start`/`end`
+ *   are the indices of the surrounding quotes; `value` is the raw text
+ *   between them (escape sequences left undecoded).
+ */
+function findJsonStringTokens(text) {
+  const tokens = [];
+  let i = 0;
+  while (i < text.length) {
+    if (text[i] !== '"') { i++; continue; }
+    const start = i;
+    let j = i + 1;
+    while (j < text.length && !(text[j] === '"' && isUnescapedQuoteAt(text, j))) j++;
+    if (j >= text.length) break; // unterminated -- malformed JSON, not this module's concern
+    tokens.push({ value: text.slice(start + 1, j), start, end: j });
+    i = j + 1;
+  }
+  return tokens;
+}
+
+/**
+ * Finds every `"<keyName>": "<value>"` property in `text` -- i.e. every
+ * place a string token equal to `keyName` is immediately followed (only
+ * whitespace and a `:` between) by another string token. Two JSON string
+ * tokens separated by nothing but a colon can only mean a key/value pair in
+ * well-formed JSON (a value is never followed directly by a bare colon), so
+ * this can't be fooled by unrelated string content the way a plain regex
+ * scanning raw characters can.
+ *
+ * @param {string} text
+ * @param {string} keyName
+ * @returns {{ value: string, valueStart: number, valueEnd: number }[]}
+ *   `valueStart`/`valueEnd` bracket just the value's content, excluding
+ *   its surrounding quotes.
+ */
+function findStringProperties(text, keyName) {
+  const tokens = findJsonStringTokens(text);
+  const results = [];
+  for (let i = 0; i < tokens.length - 1; i++) {
+    if (tokens[i].value !== keyName) continue;
+    const between = text.slice(tokens[i].end + 1, tokens[i + 1].start);
+    if (!/^\s*:\s*$/.test(between)) continue;
+    const valueToken = tokens[i + 1];
+    results.push({ value: valueToken.value, valueStart: valueToken.start + 1, valueEnd: valueToken.end });
+  }
+  return results;
+}
+
+/**
+ * Whether `text` contains `keyName` used as a JSON key at all, regardless of
+ * what its value is (string, number, object, ...). A string token followed
+ * by nothing but whitespace and then `:` can only be a key in well-formed
+ * JSON, so -- as with {@link findStringProperties} -- this can't be
+ * triggered by unrelated string content.
+ *
+ * @param {string} text
+ * @param {string} keyName
+ * @returns {boolean}
+ */
+function hasKeyProperty(text, keyName) {
+  const tokens = findJsonStringTokens(text);
+  for (const token of tokens) {
+    if (token.value !== keyName) continue;
+    let i = token.end + 1;
+    while (i < text.length && /\s/.test(text[i])) i++;
+    if (text[i] === ":") return true;
+  }
+  return false;
+}
 
 /**
  * Finds the matching `}` for an opening `{` at `openBraceIndex`, scanning
@@ -97,17 +168,17 @@ function findAdaptiveCardDiagnostics(document, text) {
   const state = createTemplateScanState();
   const literalText = text.split("\n").map((line) => maskTemplateTagContents(line, state)).join("\n");
 
-  const rootMatch = ROOT_TYPE_REGEX.exec(literalText);
-  if (!rootMatch) return issues;
+  const root = findStringProperties(literalText, "type").find((t) => t.value === "AdaptiveCard");
+  if (!root) return issues;
 
-  const objStart = findEnclosingBraceStart(literalText, rootMatch.index);
+  const objStart = findEnclosingBraceStart(literalText, root.valueStart);
   if (objStart === -1) return issues; // malformed JSON -- the unbalanced-symbol check owns this
   const objEnd = findMatchingBrace(literalText, objStart);
   if (objEnd === -1) return issues;
 
   const span = literalText.slice(objStart, objEnd + 1);
 
-  if (!VERSION_PROPERTY_REGEX.test(span)) {
+  if (!hasKeyProperty(span, "version")) {
     const diagnostic = new vscode.Diagnostic(
       new vscode.Range(document.positionAt(objStart), document.positionAt(objStart + 1)),
       'Adaptive Card is missing its required "version" property.',
@@ -118,15 +189,14 @@ function findAdaptiveCardDiagnostics(document, text) {
     issues.push(diagnostic);
   }
 
-  for (const m of span.matchAll(TYPE_PROPERTY_REGEX)) {
-    const value = m[1];
+  for (const { value, valueStart, valueEnd } of findStringProperties(span, "type")) {
     if (ADAPTIVE_CARD_TYPES.has(value)) continue;
 
-    const valueStart = objStart + /** @type {number} */ (m.index) + m[0].lastIndexOf(value);
+    const absoluteStart = objStart + valueStart;
     const diagnostic = new vscode.Diagnostic(
       new vscode.Range(
-        document.positionAt(valueStart),
-        document.positionAt(valueStart + value.length)
+        document.positionAt(absoluteStart),
+        document.positionAt(absoluteStart + (valueEnd - valueStart))
       ),
       `Unknown Adaptive Card type '${value}'.`,
       vscode.DiagnosticSeverity.Warning
