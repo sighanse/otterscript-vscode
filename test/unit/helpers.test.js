@@ -42,6 +42,7 @@ const {
   createInvalidOperatorFix,
   createAssignmentInConditionFix,
   createForToForeachFix,
+  createTemplateEndFix,
   createUnbalancedDiagnostic,
   getDiagnosticCode,
   validateDocs,
@@ -185,6 +186,13 @@ describe("findDuplicateMapKeyDiagnosticsFromMasked", () => {
     const diags = run("%( a: 1, b: %( a: 9 ), a: 2 )");
     assert.equal(diags.length, 1);
     assert.match(diags[0].message, /Duplicate key 'a'/);
+  });
+
+  it("reports a duplicate inside a map nested in another map", () => {
+    const src = "%( x: %( a: 1, a: 2 ) )";
+    const diags = run(src);
+    assert.equal(diags.length, 1);
+    assert.equal(diags[0].range.start.character, src.lastIndexOf("a"));
   });
 
   it("reports duplicates independently per map expression", () => {
@@ -624,6 +632,13 @@ describe("quick-fix factories", () => {
     const fix = /** @type {any} */ (createForToForeachFix(makeDoc("for $x in y"), diagAt(0, 3)));
     assert.equal(fix.title, "Replace 'for' with 'foreach'");
     assert.equal(fix.edit.edits[0][3], "foreach");
+  });
+
+  it("createTemplateEndFix replaces the diagnostic range with '}'", () => {
+    const fix = /** @type {any} */ (createTemplateEndFix(makeDoc("<% end %>"), diagAt(3, 6)));
+    assert.equal(fix.title, "Replace with '}'");
+    assert.equal(fix.edit.edits[0][0], "replace");
+    assert.equal(fix.edit.edits[0][3], "}");
   });
 });
 

@@ -145,7 +145,7 @@
         },
         {
           "name": "support.function.variable.otterscript",
-          "match": "\\$(ToJson|FromJson|HtmlEncode|UrlEncode|Base64Encode|Base64Decode|ListCount|ListItem|PathCombine|Eval|Date|DateUtc|Trim|ToLower|ToUpper|Substring|Replace|Join|MatchesRegex|RegexReplace|Expr|Increment|Decrement|Abs|Ceiling|Floor|Compare|FileExists|DirectoryExists|ServerName|EnvironmentName|Coalesce|PadLeft|PadRight|TrimStart|TrimEnd|IsVariableDefined|JSEncode|SHEval|ListIndexOf|XmlEncode|NewLine|SpecialWindowsPath|ResolvePath|FileContents|EnvironmentVariable|EncodeBasicAuth|SecureCredentialProperty|SecureResourceProperty|PackageHash|PackageProperty)\\("
+          "match": "\\$(ToJson|FromJson|HtmlEncode|UrlEncode|Base64Encode|Base64Decode|ListCount|ListItem|PathCombine|Eval|Date|DateUtc|Trim|ToLower|ToUpper|Substring|Replace|Join|MatchesRegex|RegexReplace|Expr|Increment|Decrement|Abs|Ceiling|Floor|Compare|FileExists|DirectoryExists|ServerName|EnvironmentName|Coalesce|PadLeft|PadRight|TrimStart|TrimEnd|IsVariableDefined|GetVariableValue|JSEncode|SHEval|ListIndexOf|XmlEncode|NewLine|SpecialWindowsPath|ResolvePath|FileContents|EnvironmentVariable|EncodeBasicAuth|SecureCredentialProperty|SecureResourceProperty|PackageHash|PackageProperty|IsSimulation)\\("
         },
         {
         "name": "support.function.vector.otterscript",
@@ -525,7 +525,7 @@
           "patterns": [
             {
               "name": "keyword.control.template.otterscript",
-              "match": "\\b(if|else|foreach|in)\\b"
+              "match": "\\b(if|else|foreach|for|in|while)\\b"
             },
             { "include": "#if-block" },
             { "include": "#proget-variables" },

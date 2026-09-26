@@ -2,9 +2,9 @@
 /**
  * @fileoverview Minimal `vscode` module stub for unit tests.
  *
- * `helpers.js` does `require("vscode")` at load time and constructs a handful of
- * VS Code value types (`Position`, `Range`, `Diagnostic`, `FoldingRange`) inside
- * the functions under test. The real `vscode` module only exists inside the
+ * `helpers.js`, `diagnostics.js`, and `adaptivecard.js` do `require("vscode")` at
+ * load time and construct a handful of VS Code value types (`Position`, `Range`,
+ * `Diagnostic`, `FoldingRange`, ...) inside the functions under test. The real `vscode` module only exists inside the
  * extension host, so this file provides just enough of that surface and installs
  * itself into the module loader.
  *
@@ -107,13 +107,11 @@ class FoldingRange {
 
 /**
  * Mirrors the subset of `vscode.MarkdownString` that `buildHoverMarkdown` uses:
- * a growable `value` string plus `appendMarkdown`, and the `isTrusted` flag.
+ * a growable `value` string plus `appendMarkdown`.
  */
 class MarkdownString {
   constructor() {
     this.value = "";
-    /** @type {boolean} */
-    this.isTrusted = false;
   }
 
   /**

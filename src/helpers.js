@@ -20,8 +20,12 @@ const vscode = require("vscode");
 // from this module's `module.exports` for backward compatibility.
 const {
   createCodeScanState,
+  createTemplateScanState,
   maskNonCodeSpans,
   advanceScanState,
+  maskOutsideTemplateTags,
+  documentUsesTemplateTags,
+  findTemplateTagDelimiters,
   isInStringOrComment,
   getActiveParameterIndex,
   MODULE_NAME_TOKEN_REGEX,
@@ -95,7 +99,8 @@ const NON_VARIABLE_IDENTIFIERS = new Set([
 // ============================================================
 
 /**
- * Returns current time formatted as HH:MM:SS.
+ * Returns the current local time as a 24-hour clock string (e.g. "14:03:59";
+ * exact format follows the host locale).
  * @returns {string}
  * @private
  */
@@ -133,6 +138,53 @@ function getOutputChannel() {
 function appendOutputLine(line) {
   getOutputChannel().appendLine(line);
 }
+
+/**
+ * Centralized logger for OtterScript Language extension.
+ *
+ * `info` / `warn` / `error` write to both the developer console and the
+ * OtterScript output channel; `debug` writes to the console only.
+ *
+ * @example
+ * log.info('Extension activated');
+ * log.warn('Missing documentation field');
+ * log.error('Failed to load docs', err);
+ * log.debug('Processing line', lineIndex);
+ */
+const log = {
+  /** @param {...any} args - @example log.info('Extension activated') */
+  info: (...args) => {
+    const now = timestamp();
+    console.log(LOGPREFIX, `[${now}]`, ...args);
+    appendOutputLine(`[${now}] ${args.join(' ')}`);
+  },
+
+  /** @param {...any} args - @example log.warn('Missing field') */
+  warn: (...args) => {
+    const now = timestamp();
+    console.warn(LOGPREFIX, `[${now}]`, ...args);
+    appendOutputLine(`⚠️ [${now}] ${args.join(' ')}`);
+  },
+
+  /** @param {...any} args - @example log.error('Failed', err) */
+  error: (...args) => {
+    const now = timestamp();
+    console.error(LOGPREFIX, `[${now}]`, ...args);
+    appendOutputLine(`❌ [${now}] ${args.join(' ')}`);
+  },
+
+  /** @param {...any} args - @example log.debug('Processing', lineIndex) */
+  debug: (...args) => {
+    const now = timestamp();
+    // Debug logs go to console only - intentionally excluded from Output Channel
+    // to avoid flooding the user-visible log with internal diagnostics.
+    console.debug(LOGPREFIX, `[${now}]`, '[DEBUG]', ...args);
+  }
+};
+
+// ============================================================
+// TIMERS & CONCURRENCY
+// ============================================================
 
 /**
  * Clears a scheduled timer for the given URI key.
@@ -195,46 +247,6 @@ async function mapWithConcurrency(items, limit, worker) {
   const size = Math.min(Math.max(1, Math.floor(limit)), items.length);
   await Promise.all(Array.from({ length: size }, run));
 }
-
-/**
- * Centralized logger for OtterScript Language extension.
- *
- * @example
- * log.info('Extension activated');
- * log.warn('Missing documentation field');
- * log.error('Failed to load docs', err);
- * log.debug('Processing line', lineIndex);
- */
-const log = {
-  /** @param {...any} args - @example log.info('Extension activated') */
-  info: (...args) => {
-    const now = timestamp();
-    console.log(LOGPREFIX, `[${now}]`, ...args);
-    appendOutputLine(`[${now}] ${args.join(' ')}`);
-  },
-
-  /** @param {...any} args - @example log.warn('Missing field') */
-  warn: (...args) => {
-    const now = timestamp();
-    console.warn(LOGPREFIX, `[${now}]`, ...args);
-    appendOutputLine(`⚠️ [${now}] ${args.join(' ')}`);
-  },
-
-  /** @param {...any} args - @example log.error('Failed', err) */
-  error: (...args) => {
-    const now = timestamp();
-    console.error(LOGPREFIX, `[${now}]`, ...args);
-    appendOutputLine(`❌ [${now}] ${args.join(' ')}`);
-  },
-
-  /** @param {...any} args - @example log.debug('Processing', lineIndex) */
-  debug: (...args) => {
-    const now = timestamp();
-    // Debug logs go to console only - intentionally excluded from Output Channel
-    // to avoid flooding the user-visible log with internal diagnostics.
-    console.debug(LOGPREFIX, `[${now}]`, '[DEBUG]', ...args);
-  }
-};
 
 // ============================================================
 // VALIDATION
@@ -309,6 +321,10 @@ function validateDocs(label, docsTable) {
   return { errors, warnings };
 }
 
+// ============================================================
+// COMPLETION HELPERS
+// ============================================================
+
 /**
  * Checks if the cursor is in a valid position for showing completions.
  * @param {vscode.TextDocument} document - The current text document
@@ -360,7 +376,7 @@ function getTypedIdentifier(document, position, triggerChar) {
  *
  * @example
  * const regex = buildWordRegex(['Log-Information', 'Log-Error']);
- * // Returns: /\b(Log-Information|Log-Error)\b/
+ * // Returns: /\b(Log\-Information|Log\-Error)\b/  (regex metacharacters escaped)
  */
 function buildWordRegex(names) {
   return new RegExp(
@@ -374,6 +390,15 @@ function buildWordRegex(names) {
 
 /**
  * Creates all regex patterns needed for the extension.
+ *
+ * Each entry is a factory returning a FRESH RegExp, so callers never share a
+ * global regex's `lastIndex` state between scans.
+ *
+ * - `*CallRegex` (global): find `$Name(` / `@Name(` / bare-word tokens in a line.
+ * - `*SignatureRegex` (anchored to end of input): find the call the cursor is inside,
+ *   given the text before the cursor; group 1 = name, group 2 = args so far.
+ * - `operationRegex`: word-boundary match of any known operation name.
+ *
  * @param {Set<string>} knownOperations - Set of operation names
  * @returns {{
  *   scalarCallRegex: () => RegExp,
@@ -402,7 +427,15 @@ function createRegexPatterns(knownOperations) {
   };
 }
 
+// ============================================================
+// MODULE NAVIGATION
+// ============================================================
+
 /**
+ * A `module <Name>` declaration in an open document.
+ * `range` covers just the name; `lineRange` covers the whole declaration line
+ * (used as the DocumentSymbol's full range).
+ *
  * @typedef {{ name: string, range: vscode.Range, lineRange: vscode.Range }} ModuleDeclaration
  */
 
@@ -414,7 +447,11 @@ function createRegexPatterns(knownOperations) {
  * }} ModuleInfoCacheEntry
  */
 
-/** @type {Map<string, ModuleInfoCacheEntry>} */
+/**
+ * Per-document module analysis, keyed by `uri.toString()` and invalidated by
+ * `document.version`. Entries are dropped on close via {@link clearModuleInfoCache}.
+ * @type {Map<string, ModuleInfoCacheEntry>}
+ */
 const moduleInfoCache = new Map();
 
 /**
@@ -425,7 +462,7 @@ const moduleInfoCache = new Map();
  */
 
 /**
- * Scans a document and returns all module declarations.
+ * Returns all module declarations in a document (cached per document version).
  *
  * @param {vscode.TextDocument} document
  * @returns {ModuleDeclaration[]}
@@ -630,9 +667,6 @@ function isInStringOrCommentDoc(document, position) {
  *   - description: Optional - Short description
  *   - documentation: Optional - Extended Markdown documentation
  *   - namespace: Optional - Owning OtterScript namespace (shown as provenance)
- * @param {boolean} [isTrusted=false] - Set true to allow command URIs in the
- * rendered Markdown. Wired through to `MarkdownString.isTrusted`; no caller
- * currently passes true.
  * @returns {vscode.MarkdownString} - Formatted hover content
  *
  * @example
@@ -643,7 +677,7 @@ function isInStringOrCommentDoc(document, position) {
  * // **Signature:** `$ToJson(data)`
  * // Converts to JSON
  */
-function buildHoverMarkdown(doc, isTrusted = false) {
+function buildHoverMarkdown(doc) {
   const md = new vscode.MarkdownString();
 
   // Heading (### is h3 in Markdown, renders bold in VS Code)
@@ -670,9 +704,6 @@ function buildHoverMarkdown(doc, isTrusted = false) {
     md.appendMarkdown(doc.documentation);
   }
 
-  // true would allow richer formatting, but we set the default to false
-  md.isTrusted = isTrusted;
-
   return md;
 }
 
@@ -682,9 +713,10 @@ function buildHoverMarkdown(doc, isTrusted = false) {
  * This centralizes completion item creation to ensure all providers
  * produce consistent UI elements (labels, details, documentation, sorting).
  *
- * @param {import('../src/language-data.js').DocEntry} doc - Documentation object
+ * @param {import('./language-data.js').DocEntry} doc - Documentation object
  * @param {vscode.CompletionItemKind} kind - Item kind (Function, Variable, Keyword, etc.)
- * @param {string} sortPrefix - Sort order prefix (e.g., "0_" for operations, "1_" for functions)
+ * @param {string} sortPrefix - Sort order prefix; lower sorts first (e.g. "0_"
+ *   operations, "1_" keywords / scalar functions, "2_" variables)
  * @param {string | vscode.SnippetString} insertText - Text to insert when selected
  * @param {boolean} [triggerSignatureHelp=false] - Whether to trigger signature help after insertion
  * @returns {vscode.CompletionItem} - Formatted completion item
@@ -718,10 +750,19 @@ function buildCompletionItem(doc, kind, sortPrefix, insertText, triggerSignature
   return item;
 }
 
+// ============================================================
+// DIAGNOSTIC CHECKS
+// ============================================================
+
 /**
  * Checks for missing '$' before variable names in if conditions.
  *
- * @param {string} line - The raw line of code
+ * Only the first operand after `if` (and any opening parens) is checked, and
+ * only when it is directly followed by a comparison operator -- e.g.
+ * `if count == 5` or `if (count > 5)`.
+ *
+ * @param {string} line - The line, already masked by {@link maskNonCodeSpans}
+ *   (so identifiers inside strings/comments are not seen)
  * @param {number} lineIndex - The line number (0-indexed)
  * @param {Set<string>} nonVariableIdentifiers - Set of literals (true, false, null)
  * @returns {vscode.Diagnostic | null} - Diagnostic if missing '$' found, null otherwise
@@ -756,6 +797,26 @@ function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
 }
 
 /**
+ * Finds the matching ')' for the '(' at `openParenIndex` in text already
+ * masked by {@link maskNonCodeSpans} (so no string-awareness is needed).
+ * Unlike scanner's `findBalancedParenEnd`, this may cross line breaks.
+ *
+ * @param {string} maskedText
+ * @param {number} openParenIndex - Index of the opening '('
+ * @returns {number} Matching ')' index, or -1 when not found
+ * @private
+ */
+function findMatchingParen(maskedText, openParenIndex) {
+  let depth = 1;
+  for (let i = openParenIndex + 1; i < maskedText.length; i++) {
+    if (maskedText[i] === "(") depth++;
+    if (maskedText[i] === ")") depth--;
+    if (depth === 0) return i;
+  }
+  return -1;
+}
+
+/**
  * Finds duplicate keys inside map expressions and returns diagnostics, given
  * text that has ALREADY been masked by {@link maskNonCodeSpans}.
  *
@@ -776,22 +837,6 @@ function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
 function findDuplicateMapKeyDiagnosticsFromMasked(document, maskedText) {
   /** @type {vscode.Diagnostic[]} */
   const issues = [];
-
-  /**
-   * Finds the matching ')' for an opening '(' position.
-   *
-   * @param {number} openParenIndex - Index of opening '('
-   * @returns {number} Matching ')' index, or -1 when not found
-   */
-  function findMatchingParen(openParenIndex) {
-    let depth = 1;
-    for (let i = openParenIndex + 1; i < maskedText.length; i++) {
-      if (maskedText[i] === '(') depth++;
-      if (maskedText[i] === ')') depth--;
-      if (depth === 0) return i;
-    }
-    return -1;
-  }
 
   /**
    * Parses a map expression body and reports duplicate top-level keys.
@@ -847,12 +892,13 @@ function findDuplicateMapKeyDiagnosticsFromMasked(document, maskedText) {
     }
   }
 
+  // Every `%(` gets its own scan -- including maps nested inside another map,
+  // whose keys scanMapBody deliberately ignores when scanning the outer one.
   for (let i = 0; i < maskedText.length - 1; i++) {
     if (maskedText[i] === '%' && maskedText[i + 1] === '(') {
-      const close = findMatchingParen(i + 1);
+      const close = findMatchingParen(maskedText, i + 1);
       if (close !== -1) {
         scanMapBody(i + 2, close);
-        i = close;
       }
     }
   }
@@ -861,7 +907,118 @@ function findDuplicateMapKeyDiagnosticsFromMasked(document, maskedText) {
 }
 
 /**
- * Gets the diagnostic code as a string.
+ * Parses a `$Name(...)` / `@Name(...)` doc signature and returns the maximum
+ * number of arguments the call can take, or `null` when the signature isn't a
+ * fixed-arity parenthesized call (a bare property like `$ExecutionId`, or a
+ * vararg signature containing a literal `...` parameter such as
+ * `$PathCombine(path1, path2, ...)`).
+ *
+ * Only the total slot count is computed -- required vs. `[optional]` isn't
+ * distinguished, since that's all a "too many arguments" check needs and it
+ * avoids relying on the optional-bracket convention being 100% consistent.
+ *
+ * @param {string} signature - e.g. `"$ToJson(data)"`
+ * @returns {number | null}
+ */
+function parseFixedMaxArity(signature) {
+  const m = signature.match(/^[$@][A-Za-z]\w*\(([\s\S]*)\)$/);
+  if (!m) return null;
+
+  const argsText = m[1].trim();
+  if (argsText === "") return 0;
+
+  const parts = argsText.split(",").map((s) => s.trim());
+  if (parts.some((p) => p === "...")) return null;
+
+  return parts.length;
+}
+
+/**
+ * Finds calls to known scalar/vector functions that pass more arguments than
+ * their documented signature allows, given text already masked by
+ * {@link maskNonCodeSpans} (and, for template-aware documents,
+ * {@link maskOutsideTemplateTags}). Only functions with a fixed-arity,
+ * parenthesized signature are checked -- see {@link parseFixedMaxArity}.
+ *
+ * This deliberately does NOT flag too few arguments: which parameters are
+ * truly required (vs. documented as optional) is a softer signal than the
+ * hard ceiling on total slots, so under-counting stays silent to avoid false
+ * positives.
+ *
+ * @param {vscode.TextDocument} document - Used only for `positionAt()`.
+ * @param {string} maskedText - Full document text, already masked.
+ * @param {Record<string, {signature?: string}>} scalarFunctionDocs
+ * @param {Record<string, {signature?: string}>} vectorFunctionDocs
+ * @returns {vscode.Diagnostic[]}
+ */
+function findArgumentCountDiagnosticsFromMasked(document, maskedText, scalarFunctionDocs, vectorFunctionDocs) {
+  /** @type {vscode.Diagnostic[]} */
+  const issues = [];
+
+  /**
+   * @param {number} start - Index just after the call's '('
+   * @param {number} end - Index of the matching ')'
+   * @returns {number} Number of top-level comma-separated arguments
+   */
+  function countArgs(start, end) {
+    const body = maskedText.slice(start, end);
+    if (body.trim() === "") return 0;
+
+    let depth = 0;
+    let count = 1;
+    for (const ch of body) {
+      if (ch === "(" || ch === "[" || ch === "{") depth++;
+      else if (ch === ")" || ch === "]" || ch === "}") { if (depth > 0) depth--; }
+      else if (ch === "," && depth === 0) count++;
+    }
+    return count;
+  }
+
+  /**
+   * @param {RegExp} nameRegex - Global regex; group 1 is the function name
+   * @param {Record<string, {signature?: string}>} docs
+   * @param {string} sigil - `"$"` or `"@"`, for the diagnostic message
+   */
+  function scan(nameRegex, docs, sigil) {
+    for (const match of maskedText.matchAll(nameRegex)) {
+      const name = match[1];
+      const doc = docs[name];
+      if (!doc?.signature) continue;
+
+      const maxArity = parseFixedMaxArity(doc.signature);
+      if (maxArity === null) continue;
+
+      const openParenIndex = /** @type {number} */ (match.index) + match[0].length - 1;
+      const closeParenIndex = findMatchingParen(maskedText, openParenIndex);
+      if (closeParenIndex === -1) continue;
+
+      const argCount = countArgs(openParenIndex + 1, closeParenIndex);
+      if (argCount <= maxArity) continue;
+
+      const nameStart = /** @type {number} */ (match.index) + 1;
+      const diagnostic = new vscode.Diagnostic(
+        new vscode.Range(
+          document.positionAt(nameStart),
+          document.positionAt(nameStart + name.length)
+        ),
+        `'${sigil}${name}' takes at most ${maxArity} argument${maxArity === 1 ? "" : "s"}, got ${argCount}.`,
+        vscode.DiagnosticSeverity.Warning
+      );
+      diagnostic.code = "too-many-arguments";
+      diagnostic.source = "OtterScript";
+      issues.push(diagnostic);
+    }
+  }
+
+  scan(/\$([A-Za-z][A-Za-z0-9_]*)\s*\(/g, scalarFunctionDocs, "$");
+  scan(/@([A-Za-z][A-Za-z0-9_]*)\s*\(/g, vectorFunctionDocs, "@");
+
+  return issues;
+}
+
+/**
+ * Gets the diagnostic code as a string, unwrapping the `{ value, target }`
+ * object form; returns '' when the diagnostic has no code.
  * @param {vscode.Diagnostic} diagnostic
  * @returns {string}
  */
@@ -973,11 +1130,26 @@ function createAssignmentInConditionFix(document, diagnostic) {
  *
  * @param {vscode.TextDocument} document - The document containing the diagnostic
  * @param {vscode.Diagnostic} diagnostic - The diagnostic with the incorrect 'for' usage
- * @returns {vscode.CodeAction | null} Code action or null if replacement unknown
+ * @returns {vscode.CodeAction} A code action that replaces 'for' with 'foreach'
  */
 function createForToForeachFix(document, diagnostic) {
   return createCodeAction("Replace 'for' with 'foreach'", diagnostic, (edit) => {
     edit.replace(document.uri, diagnostic.range, 'foreach');
+  });
+}
+
+/**
+ * Creates a quick-fix that replaces a template block terminator keyword
+ * (`<% end %>`, `<% endforeach %>`, ...) with `}`, so it becomes `<% } %>`.
+ * The diagnostic range covers exactly the keyword token.
+ *
+ * @param {vscode.TextDocument} document - The document containing the diagnostic
+ * @param {vscode.Diagnostic} diagnostic - The `template-end-keyword` diagnostic
+ * @returns {vscode.CodeAction} A code action that replaces the keyword with `}`
+ */
+function createTemplateEndFix(document, diagnostic) {
+  return createCodeAction("Replace with '}'", diagnostic, (edit) => {
+    edit.replace(document.uri, diagnostic.range, "}");
   });
 }
 
@@ -1049,10 +1221,16 @@ function createUnknownNamespaceFix(document, diagnostic) {
   });
 }
 
+// ============================================================
+// UNBALANCED SYMBOLS
+// ============================================================
+
 /**
  * Creates a diagnostic for unbalanced symbols.
  * @param {number} count - Current count (positive = unclosed, negative = extra closing)
- * @param {number} lastPos - Position of last unmatched symbol
+ * @param {number} lastPos - Document offset of the symbol to report: the
+ *   outermost still-open opener when `count > 0`, or the extra closer when
+ *   `count < 0`
  * @param {string} openChar - Opening character ('{', '(', '[')
  * @param {string} closeChar - Closing character ('}', ')', ']')
  * @param {string} name - Display name ('brace', 'parenthesis', 'bracket')
@@ -1078,8 +1256,15 @@ function createUnbalancedDiagnostic(count, lastPos, openChar, closeChar, name, d
   return diagnostic;
 }
 
+// ============================================================
+// FOLDING RANGES
+// ============================================================
+
 /**
  * Computes folding ranges for an OtterScript document.
+ *
+ * Folds `{ }` blocks, multi-line `%( )` / `@( )` literals, multi-line `<% %>`
+ * tags, `#region` / `#endregion` pairs, block comments, and swim-strings.
  *
  * Reuses the same `maskNonCodeSpans` pass as diagnostics, so folding respects
  * strings, swim-strings, and block comments identically to every other feature
@@ -1140,22 +1325,17 @@ function computeFoldingRanges(document) {
       swimStart = -1;
     }
 
-    // -- <% %> template tags (multi-line tags only; brace folding still applies inside tags)
-    let searchIndex = 0;
-    while (true) {
-      const openIdx = maskedLine.indexOf("<%", searchIndex);
-      const closeIdx = maskedLine.indexOf("%>", searchIndex);
-      if (openIdx === -1 && closeIdx === -1) break;
-
-      if (openIdx !== -1 && (closeIdx === -1 || openIdx < closeIdx)) {
+    // -- <% %> template tags (multi-line tags only; brace folding still applies
+    //    inside tags). Delimiter detection is shared with diagnostics via
+    //    scanner.findTemplateTagDelimiters.
+    for (const delim of findTemplateTagDelimiters(maskedLine)) {
+      if (delim.open) {
         templateTagStack.push(lineIndex);
-        searchIndex = openIdx + 2;
       } else {
         const start = templateTagStack.pop();
         if (start !== undefined && lineIndex > start) {
           ranges.push(new vscode.FoldingRange(start, lineIndex, vscode.FoldingRangeKind.Region));
         }
-        searchIndex = closeIdx + 2;
       }
     }
 
@@ -1209,11 +1389,11 @@ module.exports = {
   // -- Helpers
   isValidCompletionPosition,
   getTypedIdentifier,
-  isInStringOrComment,
   isInStringOrCommentDoc,
   getActiveParameterIndex,
   checkMissingDollar,
   findDuplicateMapKeyDiagnosticsFromMasked,
+  findArgumentCountDiagnosticsFromMasked,
   validateDocs,
   createUnbalancedDiagnostic,
   getDiagnosticCode,
@@ -1229,6 +1409,7 @@ module.exports = {
   createAssignmentInConditionFix,
   createForToForeachFix,
   createUnknownNamespaceFix,
+  createTemplateEndFix,
   nearestNamespace,
 
   // -- Module navigation
@@ -1238,7 +1419,13 @@ module.exports = {
   getModuleDeclarations,
   findModuleDeclarations,
   createCodeScanState,
+  createTemplateScanState,
   maskNonCodeSpans,
+  maskOutsideTemplateTags,
+  documentUsesTemplateTags,
+  // findTemplateTagDelimiters (used by computeFoldingRanges) and
+  // isInStringOrComment (used by isInStringOrCommentDoc) are imported from
+  // ./scanner above but not re-exported -- no external caller needs them here.
   findModuleDeclarationRange,
   getModuleCallReferencesByName,
   clearModuleInfoCache,

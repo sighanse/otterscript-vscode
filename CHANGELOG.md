@@ -1,5 +1,29 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Template-aware diagnostics for `<% %>` text-template tags: malformed/unbalanced tags, `<% end %>` where `<% } %>` is required, a block opener (`if`/`foreach`/`while`/`for server|role|directory|deployable`) missing its `{` (including tags spanning multiple lines), and a `<% %>` tag mixed with an unclosed OtterScript expression
+- Diagnostics for `$` expressions embedded directly in a text template's literal output (e.g. `$ToJson(...)` in a webhook body), not just code inside `<% %>`
+- `too-many-arguments` diagnostic for a call that exceeds a function's documented fixed argument count
+- Adaptive Card checks for Teams webhook bodies, automatically triggered when a literal `"type": "AdaptiveCard"` object is found: flags an unrecognized `"type"` value or a missing `"version"`
+
+### Changed
+
+- Corrected numerous hover-doc inaccuracies against Inedo's own docs (`$PackageHash`, `$Increment`/`$Decrement`, `$Substring`, `$Coalesce`, `$Compare`, `$FromJson`/`$ListItem` sigil-based return shape, `$PackageEvent` event codes, `Post-Http`/`Get-Http`/`Upload-Http`'s `Method` values, `foreach`'s loop-variable sigil rules, and several keyword docs); added missing `$GetVariableValue` and `$IsSimulation` entries
+- Fixed example code throughout the docs that used invalid `$item.Property` dot-indexing on a map-bound loop variable — corrected to `%item.Property`
+- The `foreachaffected` and `foreachapikey` snippets now bind the loop variable as a map (`%package`, `%apiKey`), since those vectors hold maps
+
+### Removed
+
+- Unused `otterscript.errorBackground` / `otterscript.warningBackground` theme colors (they were never applied to anything)
+
+### Fixed
+
+- Hovering anywhere on a `#region` / `#endregion` line no longer shows the directive's documentation — only hovering the directive itself does
+- Duplicate map keys are now also detected in a map nested inside another map (e.g. `%( x: %( a: 1, a: 2 ) )`)
+
 ## [0.3.0] - 2026-09-09
 
 ### Added

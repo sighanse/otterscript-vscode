@@ -26,13 +26,13 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^24.13.3",
+    "@types/node": "^24.19.0",
     "@types/vscode": "1.85.0",
     "@vscode/vsce": "^3.9.2",
-    "eslint": "^10.10.0",
+    "eslint": "^10.11.0",
     "globals": "^17.12.0",
     "jsonc-parser": "^3.3.1",
-    "ovsx": "^1.1.1"
+    "ovsx": "^1.2.0"
   },
   "categories": [
     "Programming Languages",
@@ -109,24 +109,6 @@
         }
       }
     },
-    "colors": [
-      {
-        "id": "otterscript.errorBackground",
-        "description": "Background color for syntax errors",
-        "defaults": {
-          "dark": "#FF000022",
-          "light": "#FF000022"
-        }
-      },
-      {
-        "id": "otterscript.warningBackground",
-        "description": "Background color for warnings",
-        "defaults": {
-          "dark": "#FFA50022",
-          "light": "#FFA50022"
-        }
-      }
-    ],
     "commands": [
       {
         "command": "otterscript.fixAll",

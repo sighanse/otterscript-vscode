@@ -1,0 +1,66 @@
+# SAMPLE-TEMPLATE-VALID.OTTER
+#
+# A well-formed OtterScript *text template* (ProGet / Otter notification body
+# style): literal JSON output with <% ... %> code blocks. It MUST produce zero
+# diagnostics — the template-aware pass blanks the literal text between tags and
+# only checks the OtterScript inside the tags.
+#
+# This is the corrected "new vulnerability" webhook body from the milestone
+# reference: comma BEFORE each looped item (a static first element makes the
+# leading comma valid), $ToJson() on every dynamic value, no <% set %>.
+#
+# @AffectedPackages elements are maps, so the loop variable is %p (not $p) --
+# per the formal grammar, dot/bracket indexing (.Name, [key]) is only defined
+# for @ and % sigils, never $. Inside a string, %p.Name must be wrapped as
+# $(%p.Name): per strings-and-literals.md, @/% sigils are only auto-recognized
+# at the START of a literal expression, so mid-string they need the explicit
+# nested-evaluate wrapper. This matches Inedo's own official email example
+# for this exact scenario (foreach %p in @AffectedPackages -> $(%p.Name)).
+
+{
+  "type": "message",
+  "attachments": [
+    {
+      "contentType": "application/vnd.microsoft.card.adaptive",
+      "content": {
+        "type": "AdaptiveCard",
+        "version": "1.2",
+        "body": [
+          {
+            "type": "TextBlock",
+            "text": "Security Vulnerability Published",
+            "size": "medium", "weight": "bolder", "color": "attention", "wrap": true
+          },
+          {
+            "type": "FactSet",
+            "facts": [
+              { "title": "Package", "value": $ToJson($PackageName $PackageVersion) },
+              { "title": "Vulnerability ID", "value": $ToJson($VulnerabilityId) },
+              { "title": "Summary", "value": $ToJson($VulnerabilitySummary) }
+            ]
+          },
+          {
+            "type": "Container",
+            "items": [
+              { "type": "TextBlock", "text": "Affected packages:", "weight": "bolder", "wrap": true }
+<% foreach %p in @AffectedPackages {   /* a tag-body comment mentioning %> must not close the tag */ %>
+              ,{
+                "type": "TextBlock",
+                "text": $ToJson("- $(%p.Name) $(%p.AffectedVersions)"),
+                "wrap": true
+              }
+<% } %>
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
+
+# Below: $(...) interpolation of a loop variable directly in literal template
+# text (as opposed to $ToJson(...) above) -- moved here from test/sample.otter,
+# which must never contain a real <% %> pair (see the note in that file).
+<% foreach %p in @AffectedPackages { %>
+* $(%p.Name) $(%p.AffectedVersions)
+<% } %>

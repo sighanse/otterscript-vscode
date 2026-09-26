@@ -22,6 +22,8 @@ const ctx = {
   knownKeywords: new Set(Object.keys(data.keywordDocs)),
   knownScalarFunctions: new Set(Object.keys(data.scalarFunctionDocs)),
   knownVectorFunctions: new Set(Object.keys(data.vectorFunctionDocs)),
+  scalarFunctionDocs: data.scalarFunctionDocs,
+  vectorFunctionDocs: data.vectorFunctionDocs,
   knownOperations: new Set(Object.keys(data.operationDocs)),
   knownNamespaces: data.NAMESPACES,
   ...createRegexPatterns(new Set(Object.keys(data.operationDocs))),
@@ -201,6 +203,55 @@ describe("updateDiagnostics — unknown vector function", () => {
 
   it("does not flag a known vector function", () => {
     assert.deepEqual(only("foreach $s in @AllServers() { }", "unknown-vector-function"), []);
+  });
+});
+
+// ============================================================
+// too many arguments
+// ============================================================
+
+describe("updateDiagnostics — too many arguments", () => {
+  it("flags a fixed-arity scalar function called with an extra argument", () => {
+    const [d] = only('$r = $ToJson($a, $b);', "too-many-arguments");
+    assert.ok(d);
+    assert.equal(d.message, "'$ToJson' takes at most 1 argument, got 2.");
+    assert.equal(d.severity, DiagnosticSeverity.Warning);
+    assert.equal(d.range.start.character, 6, "points at the name, past the '$'");
+    assert.equal(d.range.end.character, 6 + "ToJson".length);
+  });
+
+  it("flags a fixed-arity vector function called with an extra argument", () => {
+    const [d] = only("$r = @Split($a, $b, $c, $d);", "too-many-arguments");
+    assert.ok(d);
+    assert.equal(d.message, "'@Split' takes at most 3 arguments, got 4.");
+  });
+
+  it("does not flag a call within the documented argument count", () => {
+    assert.deepEqual(only('$r = $ToJson($a);', "too-many-arguments"), []);
+    assert.deepEqual(only("$r = @Split($a, $b, $c);", "too-many-arguments"), []);
+  });
+
+  it("does not flag implicit-string juxtaposition as extra arguments", () => {
+    // $a $b with no comma is ONE implicit-string argument, not two.
+    assert.deepEqual(only('$r = $ToJson($a $b);', "too-many-arguments"), []);
+  });
+
+  it("does not flag a nested map/vector literal as multiple top-level arguments", () => {
+    assert.deepEqual(
+      only('$r = $ToJson(%( a: $x, b: $y ));', "too-many-arguments"),
+      []
+    );
+  });
+
+  it("does not flag a vararg function regardless of argument count", () => {
+    assert.deepEqual(
+      only("$r = $Coalesce($a, $b, $c, $d, $e);", "too-many-arguments"),
+      []
+    );
+  });
+
+  it("does not flag an unknown function (that check is owned by unknown-scalar-function)", () => {
+    assert.deepEqual(only('$r = $Frobnicate($a, $b, $c);', "too-many-arguments"), []);
   });
 });
 
@@ -389,5 +440,233 @@ describe("updateDiagnostics — unknown namespace", () => {
     const codes = diagnose("ProGet::Totally-Made-Up ();").map((d) => d.code);
     assert.ok(codes.includes("unknown-operation"));
     assert.ok(!codes.includes("unknown-namespace"));
+  });
+});
+
+// ============================================================
+// text-template (<% ... %>) structural checks  (phase 1)
+// ============================================================
+
+describe("updateDiagnostics - template <% %> structural checks", () => {
+  /** @param {string} src */
+  const msgs = (src) => diagnose(src).map((d) => d.message);
+  /** @param {string} src */
+  const codes = (src) => diagnose(src).map((d) => d.code);
+
+  it("does not run any template check on a document with no tags", () => {
+    // `<% ... %>` only inside a string -> not template-aware -> plain scan.
+    assert.deepEqual(diagnose('set $t = "<% foreach $x in @y { %>";'), []);
+  });
+
+  it("blanks the literal text between tags (no false unknown-function / brace noise)", () => {
+    const src = [
+      "{",
+      '  "items": [',
+      "    <% foreach %p in @AffectedPackages { %>",
+      '    { "type": "TextBlock", "text": $ToJson(%p.Name) }',
+      "    <% } %>",
+      "  ]",
+      "}",
+    ].join("\n");
+    assert.deepEqual(diagnose(src), []);
+  });
+
+  it("flags <% end %> and offers the } quick-fix code", () => {
+    const ds = diagnose("<% foreach $p in @x { %>a<% end %>");
+    const end = ds.find((d) => d.code === "template-end-keyword");
+    assert.ok(end);
+    assert.match(end.message, /<% end %>/);
+    assert.equal(end.severity, DiagnosticSeverity.Warning);
+  });
+
+  it("flags every <% endfoo %> spelling", () => {
+    for (const kw of ["end", "endif", "endfor", "endforeach", "endwhile", "ENDIF"]) {
+      assert.ok(
+        diagnose(`<% if $x { %>a<% ${kw} %>`).some((d) => d.code === "template-end-keyword"),
+        kw
+      );
+    }
+  });
+
+  it("flags a block opener with no brace", () => {
+    assert.ok(diagnose("<% if !$p.Last %>,<% } %>").some((d) => d.code === "template-missing-brace"));
+    assert.ok(diagnose("<% foreach $p in @x %>").some((d) => d.code === "template-missing-brace"));
+    assert.ok(diagnose("<% while $x %>").some((d) => d.code === "template-missing-brace"));
+    assert.ok(diagnose('<% for server "web" %>').some((d) => d.code === "template-missing-brace"));
+  });
+
+  it("does not flag a well-formed block opener or closer", () => {
+    assert.equal(codes("<% foreach $p in @x { %>").filter((c) => c === "template-missing-brace").length, 0);
+    assert.equal(codes("<% if $x { %>").filter((c) => c === "template-missing-brace").length, 0);
+    assert.equal(codes('<% for server "web" { %>').filter((c) => c === "template-missing-brace").length, 0);
+    assert.equal(codes("<% } %>").filter((c) => c === "template-missing-brace").length, 0);
+    assert.equal(codes("<% } else { %>").filter((c) => c === "template-missing-brace").length, 0);
+    assert.equal(codes("<% iffy $x %>").filter((c) => c === "template-missing-brace").length, 0);
+  });
+
+  it("flags a block opener with no brace when the tag spans multiple lines", () => {
+    const src = ["<%", "foreach $p in @x", "%>"].join("\n");
+    const d = only(src, "template-missing-brace")[0];
+    assert.ok(d);
+    // The keyword lives on line 1 (0-based), where it actually appears.
+    assert.equal(d.range.start.line, 1);
+    assert.equal(d.range.start.character, src.split("\n")[1].indexOf("foreach"));
+  });
+
+  it("flags <% end %> when the tag spans multiple lines", () => {
+    const src = ["<% if $x { %>", "a", "<%", "end", "%>"].join("\n");
+    const d = only(src, "template-end-keyword")[0];
+    assert.ok(d);
+    assert.equal(d.range.start.line, 3);
+  });
+
+  it("does not flag a well-formed multi-line block opener", () => {
+    const src = ["<%", "foreach $p in @x {", "%>"].join("\n");
+    assert.equal(codes(src).filter((c) => c === "template-missing-brace").length, 0);
+  });
+
+  it("leaves bare 'for i = ...' misuse to the incorrect-for-usage check", () => {
+    const cs = codes("<% for i = 1 to 10 %>");
+    assert.ok(cs.includes("incorrect-for-usage"));
+    assert.ok(!cs.includes("template-missing-brace"));
+  });
+
+  it("flags a stray %> with no matching <%", () => {
+    // needs a real tag elsewhere so the doc is template-aware
+    assert.ok(msgs("oops %> then <% $x %>").some((m) => /Unexpected '%>'/.test(m)));
+  });
+
+  it("flags an unclosed <% among complete tags", () => {
+    const ds = diagnose(["<% if $x { %>", "text", "<% foreach $p in @y {"].join("\n"));
+    assert.ok(ds.some((d) => /Unclosed template tag/.test(d.message)));
+  });
+
+  it("still runs the ordinary code checks inside a tag body", () => {
+    // missing '$' in a template-embedded if condition
+    assert.ok(diagnose("<% if count == 5 { %>x<% } %>").some((d) => d.code === "missing-dollar"));
+  });
+});
+
+// ============================================================
+// template/expression mode mixing  (phase 2, check 4)
+// ============================================================
+
+describe("updateDiagnostics - template-in-expression", () => {
+  /** @param {string} src */
+  const has = (src) => diagnose(src).some((d) => d.code === "template-in-expression");
+
+  it("flags a <% opened inside an unclosed $Func( / %( / @( in literal text", () => {
+    assert.ok(has('"x": $ToJson(%( a: 1 <% $y %> ))'));
+    assert.ok(has('"x": $Eval( <% $y %> )'));
+    assert.ok(has('"x": @( 1, <% $y %> )'));
+  });
+
+  it("does not flag a <% loop inside a JSON array or object", () => {
+    const src = ['"items": [', "<% foreach $p in @x { %>", "  ,{ }", "<% } %>", "]"].join("\n");
+    assert.equal(diagnose(src).filter((d) => d.code === "template-in-expression").length, 0);
+  });
+
+  it("reports once per stuck region, not on every following tag", () => {
+    const src = ["$ToJson(%(", "<% foreach $p in @x { %>", "a", "<% } %>", "))"].join("\n");
+    assert.equal(diagnose(src).filter((d) => d.code === "template-in-expression").length, 1);
+  });
+});
+
+// ============================================================
+// diagnostics reach $ expressions embedded directly in literal template text
+// ============================================================
+// A ProGet webhook body is almost entirely literal JSON text with `$Func(...)`
+// calls embedded directly in it (no <% %> wrapper needed -- see
+// strings-and-literals.md). Before this, maskOutsideTemplateTags() blanked
+// ALL literal text uniformly, so a typo'd function name or a wrong argument
+// count in exactly this position -- where the real logic of a template lives
+// -- was invisible. Each src below needs a real <% %> pair elsewhere so
+// documentUsesTemplateTags() puts the document in template-aware mode at all.
+
+describe("updateDiagnostics - $ expressions embedded in literal template text", () => {
+  it("flags an unknown scalar function embedded in literal text", () => {
+    const src = ['{ "v": $Frobnicate($x) }', "<% if $ok { %>", "<% } %>"].join("\n");
+    const [d] = only(src, "unknown-scalar-function");
+    assert.ok(d);
+    assert.equal(d.message, "Unknown scalar function '$Frobnicate'");
+  });
+
+  it("flags too many arguments on a call embedded in literal text", () => {
+    const src = ['{ "v": $ToJson($x, $y) }', "<% if $ok { %>", "<% } %>"].join("\n");
+    const [d] = only(src, "too-many-arguments");
+    assert.ok(d);
+    assert.equal(d.message, "'$ToJson' takes at most 1 argument, got 2.");
+  });
+
+  it("does not flag a known function within its documented argument count", () => {
+    const src = ['{ "v": $ToJson($x $y) }', "<% if $ok { %>", "<% } %>"].join("\n");
+    assert.deepEqual(only(src, "unknown-scalar-function"), []);
+    assert.deepEqual(only(src, "too-many-arguments"), []);
+  });
+
+  it("does not flag plain literal text around an embedded call", () => {
+    const src = [
+      '{ "label": "Affected packages:", "value": $ToJson(%p.Name) }',
+      "<% foreach %p in @AffectedPackages { %>",
+      "<% } %>",
+    ].join("\n");
+    assert.deepEqual(diagnose(src), []);
+  });
+});
+
+// ============================================================
+// Adaptive Card checks are wired into updateDiagnostics, gated on templateAware
+// ============================================================
+// Deeper coverage of the check itself lives in test/unit/adaptivecard.test.js;
+// this just confirms updateDiagnostics actually calls it (with `text`, inside
+// the templateAware branch) and the diagnostic reaches the collection.
+
+describe("updateDiagnostics - Adaptive Card checks", () => {
+  it("flags an unknown Adaptive Card type when the document is template-aware", () => {
+    const src = [
+      '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "TextBlok" } ] }',
+      "<% if $ok { %>",
+      "<% } %>",
+    ].join("\n");
+    const [d] = only(src, "adaptivecard-unknown-type");
+    assert.ok(d);
+    assert.equal(d.message, "Unknown Adaptive Card type 'TextBlok'.");
+  });
+
+  it("does not run at all when the document is not template-aware (no real <% %>)", () => {
+    // No <% %> anywhere -- documentUsesTemplateTags() is false, so
+    // updateDiagnostics never calls findAdaptiveCardDiagnostics, even though
+    // this text alone would otherwise trigger it.
+    const src = '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "TextBlok" } ] }';
+    assert.deepEqual(only(src, "adaptivecard-unknown-type"), []);
+  });
+});
+
+// ============================================================
+// implicit-string juxtaposition inside %( ) / @( ) is VALID -- not a diagnostic
+// ============================================================
+// Phase 2 shipped a "missing-operator" check flagging `%( v: $a $b )` as two
+// operands with no `+`. Per Inedo's own docs (executionengine/otterscript/
+// strings-and-literals.md): "there is no need for things like string
+// concatenation: just put the variables next to each other ... and they will
+// be evaluated at runtime as expected." An implicit string is delimited by a
+// comma / right-paren / right-brace / semicolon -- exactly a map value or
+// vector element position -- so `$a $b` there is ONE implicit-string value
+// (concatenated at runtime), not a parse error. The check was removed; these
+// tests pin that such code stays clean.
+
+describe("updateDiagnostics - implicit-string juxtaposition (not a diagnostic)", () => {
+  it("does not flag adjacent $/@ tokens inside a map value or vector element", () => {
+    for (const src of [
+      "$m = %( v: $a $b );",
+      "@v = @( $a $b );",
+      "@v = @( $a $b $c );",
+      "$m = %( v: $a + $b $c );",
+      "$m = %( a: $x, b: $y );",
+      "$m = %( k: $a );",
+      "$m = %( v: $ToJson($a), w: 1 );",
+    ]) {
+      assert.deepEqual(diagnose(src).map((d) => d.code), [], src);
+    }
   });
 });

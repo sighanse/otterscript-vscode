@@ -3,13 +3,15 @@
  * @fileoverview OtterScript Language Extension entry point.
  *
  * RESPONSIBILITIES
- * 1. Register language features (completion, hover, signature help)
+ * 1. Register language features (completion, hover, signature help, quick
+ *    fixes, navigation, symbols, CodeLens, folding)
  * 2. Bridge plain languageData (language-data.js) into VS Code UI objects
- * 3. Provide lightweight diagnostics (syntax sanity checks)
+ * 3. Schedule diagnostics runs (the checks themselves live in diagnostics.js)
  *
  * DESIGN PRINCIPLES
- * - language-data.js contains ONLY plain data (no vscode imports)
- * - extension.js is the only place that creates VS Code objects
+ * - language-data.js and scanner.js are vscode-free (plain data / plain text)
+ * - Provider wiring and editor event handling live here; reusable logic that
+ *   builds vscode objects lives in helpers.js / diagnostics.js / adaptivecard.js
  * - Snippets own insertion text; providers never guess prefixes
  *
  * DOCUMENTATION
@@ -17,7 +19,9 @@
  * @license MIT
  * @see src/language-data.js - Plain data documentation module
  * @see src/helpers.js - Helpers, functions, constants
+ * @see src/scanner.js - vscode-free text scanning (strings, comments, template tags)
  * @see src/diagnostics.js - Diagnostic checks and rules
+ * @see src/adaptivecard.js - Adaptive Card checks for template JSON bodies
  * @see package.json - Extension manifest and configuration schema
  * @see syntaxes/otterscript.tmLanguage.json - TextMate grammar (syntax highlighting)
  * @see snippets/otterscript.json - Snippets for structural templates only
@@ -28,8 +32,17 @@
 const vscode = require("vscode");
 const { updateDiagnostics } = require("./diagnostics");
 
-// -- Path to the language file for OtterScript (functions, variables, operations, keywords)
-const languageFile = "./language-data.js";
+// -- Language documentation (functions, variables, operations, keywords).
+// Plain strings only; any conversion to MarkdownString happens in this file.
+const {
+  NAMESPACES,
+  operationDocs,
+  syntaxDocs,
+  keywordDocs,
+  variableDocs,
+  scalarFunctionDocs,
+  vectorFunctionDocs
+} = require("./language-data");
 
 // -- Import helpers
 const {
@@ -41,6 +54,7 @@ const {
   createForToForeachFix,
   createInvalidOperatorFix,
   createMissingDollarFix,
+  createTemplateEndFix,
   createUnknownNamespaceFix,
   getOutputChannel,
   getDiagnosticCode,
@@ -99,44 +113,6 @@ function activate(context) {
     })
   );
 
-  // -- Loads language documentation from language-data.js.
-  // Objects contain plain strings only.
-  // Any conversion to MarkdownString happens in this file.
-  let languageData;
-  // -- Attempt to load the documentation module with error handling
-  try {
-    languageData = require(languageFile);
-
-    // -- Quick validation to ensure languageData loaded correctly
-    if (!languageData || typeof languageData !== "object") {
-      throw new Error(`${languageFile} did not export an object`);
-    }
-    log.debug(`${languageFile} loaded successfully`);
-  } catch (err) {
-    // -- Log errors
-    log.error(`Failed to load ${languageFile}`, err);
-
-    // -- Show user-friendly error message
-    vscode.window.showErrorMessage(
-      `${extensionName} failed to load ${languageFile}. ` +
-      "The extension could not be activated. Check the developer console for details."
-    );
-
-    // -- Abort activation cleanly - don't register any providers
-    // Without languageData, completions/hover/signature help would show nothing
-    return;
-  }
-  // -- Extract each documentation category into its own variable.
-  const {
-    NAMESPACES,
-    operationDocs,
-    syntaxDocs,
-    keywordDocs,
-    variableDocs,
-    scalarFunctionDocs,
-    vectorFunctionDocs
-  } = languageData;
-
   // -- Validate all documentation sources (intentionally ignore return value)
   for (const [label, table] of Object.entries({
     scalarFunctionDocs,  // $ToJson, $Base64Encode, etc.
@@ -184,13 +160,14 @@ function activate(context) {
           // -- Check if the signature help provider is enabled in settings
           if (!signatureHelpEnabled) return null;
 
-          // -- Get all text from document start to cursor position
-          // This enables multi-line function call detection
+          // -- Get the text before the cursor, up to 10 lines back, so a call
+          // whose arguments span several lines is still detected
           const textBeforeCursor = document.getText(new vscode.Range(
-            new vscode.Position(Math.max(0, position.line - 10), 0),  // Last 10 lines max
+            new vscode.Position(Math.max(0, position.line - 10), 0),
             position
           ));
-          // -- Try each pattern to find the function call
+          // -- Try each pattern to find the call the cursor is inside; the first
+          // pattern whose name is documented wins
           let match = null;
           let fn = null;
           let args = null;
@@ -340,9 +317,10 @@ function activate(context) {
           return Object.entries(variableDocs)
               .filter(([key]) => key.toLowerCase().startsWith(typed.toLowerCase()))
               .map(([_key, doc]) => {
-                  // -- Remove leading $ for insertion (user already typed it)
+                  // -- Remove leading $ for insertion (user already typed it).
+                  // Snippets escape it as `\$`, same as scalarFunctionDocs.
                   const snippet = doc.snippet
-                    ? new vscode.SnippetString(doc.snippet?.replace(/^\$/, ""))
+                    ? new vscode.SnippetString(doc.snippet.replace(/^\\?\$/, ""))
                     : new vscode.SnippetString(doc.name.replace(/^\$/, ""));
                   return buildCompletionItem(doc, vscode.CompletionItemKind.Variable, '2_', snippet, false);
           });
@@ -531,22 +509,13 @@ function activate(context) {
           return null;
         }
 
-        const line = document.lineAt(position.line).text;
-
-        // -- Match #region / #endregion at the cursor position
-        const regionMatch = line.match(/#(end)?region\b/);
-        if (regionMatch) {
-          const start = line.indexOf(regionMatch[0]);
-          const end = start + regionMatch[0].length;
-
-          const range = new vscode.Range(
-            new vscode.Position(position.line, start),
-            new vscode.Position(position.line, end)
-          );
-
-          const doc = keywordDocs[regionMatch[0]];
+        // -- Match #region / #endregion at the cursor position (checked before
+        // the string/comment guard below, since `#` itself starts a comment)
+        const regionRange = document.getWordRangeAtPosition(position, /#(?:end)?region\b/);
+        if (regionRange) {
+          const doc = keywordDocs[document.getText(regionRange)];
           if (doc) {
-            return new vscode.Hover(buildHoverMarkdown(doc), range);
+            return new vscode.Hover(buildHoverMarkdown(doc), regionRange);
           }
         }
 
@@ -699,6 +668,7 @@ function activate(context) {
     "assignment-in-condition": createAssignmentInConditionFix,
     "incorrect-for-usage":     createForToForeachFix,
     "unknown-namespace":       createUnknownNamespaceFix,
+    "template-end-keyword":    createTemplateEndFix,
   });
 
   // ============================================================
@@ -779,16 +749,14 @@ function activate(context) {
 
         if (!action?.edit) continue;
 
+        // -- Copy the action's edits into the combined edit. entries() yields
+        // TextEdits; an insert is a TextEdit with an empty range, so replace()
+        // reproduces inserts and replacements alike.
         let hasEdits = false;
         for (const [uri, uriEdits] of action.edit.entries()) {
           if (uriEdits.length) hasEdits = true;
-          for (const uriEdit of uriEdits) {
-            const edit = /** @type {{ range?: vscode.Range, newText?: string, position?: vscode.Position, text?: string }} */ (uriEdit);
-            if (edit.range && edit.newText) {
-              workspaceEdit.replace(uri, edit.range, edit.newText);
-            } else if (edit.position && edit.text) {
-              workspaceEdit.insert(uri, edit.position, edit.text);
-            }
+          for (const { range, newText } of uriEdits) {
+            workspaceEdit.replace(uri, range, newText);
           }
         }
         if (hasEdits) fixedCount++;
@@ -1153,12 +1121,12 @@ function activate(context) {
   // ============================================================
   // DIAGNOSTICS (ERRORS & WARNINGS)
   // ============================================================
-  // Provides real-time syntax checking and problem detection.
-  // Shows squiggly underlines in the editor for issues like:
+  // Provides real-time syntax checking and problem detection (see
+  // diagnostics.js for the full list). Examples:
   //   - Missing $ before variables in if conditions
-  //   - Unknown functions/operations/variables
+  //   - Unknown functions / operations / namespaces
   //   - Invalid logical operators (& instead of &&)
-  //   - Unbalanced braces
+  //   - Unbalanced braces, parentheses, brackets, and <% %> tags
 
   const diagnostics = vscode.languages.createDiagnosticCollection("otterscript");
   const diagnosticsContext = {
@@ -1166,6 +1134,8 @@ function activate(context) {
     knownKeywords,
     knownScalarFunctions,
     knownVectorFunctions,
+    scalarFunctionDocs,
+    vectorFunctionDocs,
     knownOperations,
     knownNamespaces: NAMESPACES,
     scalarCallRegex,
@@ -1213,15 +1183,17 @@ function activate(context) {
         updateDiagnostics(e.document, diagnostics, diagnosticsContext);
       });
     }),
-    // -- Run diagnostics when a new file is opened (handles files opened after activation)
+    // -- Run diagnostics when a new file is opened (handles files opened after
+    // activation), and index its modules for Go to Symbol in Workspace
     vscode.workspace.onDidOpenTextDocument(document => {
       updateDiagnostics(document, diagnostics, diagnosticsContext);
       if (document.languageId === "otterscript") setModuleIndexEntry(document.uri, document.getText());
     }),
 
-    // -- Re-run diagnostics on save. The onDidChangeTextDocument handler above is
-    // debounced, so this gives an immediate refresh on explicit/auto save and covers
-    // the case where a save reconciles the buffer with on-disk changes.
+    // -- Re-run diagnostics (and refresh the module index) on save. The
+    // onDidChangeTextDocument handler above is debounced, so this gives an
+    // immediate refresh on explicit/auto save and covers the case where a save
+    // reconciles the buffer with on-disk changes.
     vscode.workspace.onDidSaveTextDocument(document => {
       if (document.languageId === "otterscript") {
         updateDiagnostics(document, diagnostics, diagnosticsContext);

@@ -201,19 +201,19 @@ $utc = $DateUtc("yyyy-MM-ddTHH:mm:ss");
 # PROGET-SPECIFIC VARIABLES & VECTORS
 ###############################################################################
 
-foreach $pkg in @AffectedPackages {
-    Log-Warning "$pkg.Name affected versions: $pkg.AffectedVersions";
+foreach %pkg in @AffectedPackages {
+    Log-Warning "$(%pkg.Name) affected versions: $(%pkg.AffectedVersions)";
 }
 
-foreach $key in @ApiKeys {
-    Log-Information "API key: $key.Name expires $key.ExpirationDate";
+foreach %key in @ApiKeys {
+    Log-Information "API key: $(%key.Name) expires $(%key.ExpirationDate)";
 }
 
 ###############################################################################
 # PROGET FUNCTIONS
 ###############################################################################
 
-$hash = $PackageHash("hex", "sha512");
+$hash = $PackageHash("MyPackage");
 $description = $PackageProperty("description", "none");
 $auth = $EncodeBasicAuth("user", "password");
 
@@ -289,10 +289,12 @@ that spans multiple lines>--8>
 ###############################################################################
 # TEMPLATE SYNTAX (HIGHLIGHTING + EMBEDDING)
 ###############################################################################
-
-<% foreach %p in @AffectedPackages { %>
-* $(%p.Name) $(%p.AffectedVersions)
-<% } %>
+# A real <% ... %> pair does NOT belong in this file: documentUsesTemplateTags()
+# treats any document containing one as a text template and blanks everything
+# outside the tags, which would silently zero out every diagnostic in PART 2
+# below. That coverage (tag/interpolation highlighting, $(...) embedding) lives
+# in sample-template-valid.otter instead, where template-aware mode is exactly
+# what's under test.
 
 ###############################################################################
 # MISC STATEMENTS / KEYWORD HIGHLIGHTING
