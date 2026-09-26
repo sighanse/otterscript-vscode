@@ -188,6 +188,13 @@ describe("findDuplicateMapKeyDiagnosticsFromMasked", () => {
     assert.match(diags[0].message, /Duplicate key 'a'/);
   });
 
+  it("reports a duplicate inside a map nested in another map", () => {
+    const src = "%( x: %( a: 1, a: 2 ) )";
+    const diags = run(src);
+    assert.equal(diags.length, 1);
+    assert.equal(diags[0].range.start.character, src.lastIndexOf("a"));
+  });
+
   it("reports duplicates independently per map expression", () => {
     const diags = run("x = %( a: 1, a: 2 ); y = %( b: 1, b: 2 )");
     assert.equal(diags.length, 2);
