@@ -634,9 +634,6 @@ function isInStringOrCommentDoc(document, position) {
  *   - description: Optional - Short description
  *   - documentation: Optional - Extended Markdown documentation
  *   - namespace: Optional - Owning OtterScript namespace (shown as provenance)
- * @param {boolean} [isTrusted=false] - Set true to allow command URIs in the
- * rendered Markdown. Wired through to `MarkdownString.isTrusted`; no caller
- * currently passes true.
  * @returns {vscode.MarkdownString} - Formatted hover content
  *
  * @example
@@ -647,7 +644,7 @@ function isInStringOrCommentDoc(document, position) {
  * // **Signature:** `$ToJson(data)`
  * // Converts to JSON
  */
-function buildHoverMarkdown(doc, isTrusted = false) {
+function buildHoverMarkdown(doc) {
   const md = new vscode.MarkdownString();
 
   // Heading (### is h3 in Markdown, renders bold in VS Code)
@@ -673,9 +670,6 @@ function buildHoverMarkdown(doc, isTrusted = false) {
   if (typeof doc.documentation === "string") {
     md.appendMarkdown(doc.documentation);
   }
-
-  // true would allow richer formatting, but we set the default to false
-  md.isTrusted = isTrusted;
 
   return md;
 }
@@ -760,6 +754,26 @@ function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
 }
 
 /**
+ * Finds the matching ')' for the '(' at `openParenIndex` in text already
+ * masked by {@link maskNonCodeSpans} (so no string-awareness is needed).
+ * Unlike scanner's `findBalancedParenEnd`, this may cross line breaks.
+ *
+ * @param {string} maskedText
+ * @param {number} openParenIndex - Index of the opening '('
+ * @returns {number} Matching ')' index, or -1 when not found
+ * @private
+ */
+function findMatchingParen(maskedText, openParenIndex) {
+  let depth = 1;
+  for (let i = openParenIndex + 1; i < maskedText.length; i++) {
+    if (maskedText[i] === "(") depth++;
+    if (maskedText[i] === ")") depth--;
+    if (depth === 0) return i;
+  }
+  return -1;
+}
+
+/**
  * Finds duplicate keys inside map expressions and returns diagnostics, given
  * text that has ALREADY been masked by {@link maskNonCodeSpans}.
  *
@@ -780,22 +794,6 @@ function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
 function findDuplicateMapKeyDiagnosticsFromMasked(document, maskedText) {
   /** @type {vscode.Diagnostic[]} */
   const issues = [];
-
-  /**
-   * Finds the matching ')' for an opening '(' position.
-   *
-   * @param {number} openParenIndex - Index of opening '('
-   * @returns {number} Matching ')' index, or -1 when not found
-   */
-  function findMatchingParen(openParenIndex) {
-    let depth = 1;
-    for (let i = openParenIndex + 1; i < maskedText.length; i++) {
-      if (maskedText[i] === '(') depth++;
-      if (maskedText[i] === ')') depth--;
-      if (depth === 0) return i;
-    }
-    return -1;
-  }
 
   /**
    * Parses a map expression body and reports duplicate top-level keys.
@@ -853,7 +851,7 @@ function findDuplicateMapKeyDiagnosticsFromMasked(document, maskedText) {
 
   for (let i = 0; i < maskedText.length - 1; i++) {
     if (maskedText[i] === '%' && maskedText[i + 1] === '(') {
-      const close = findMatchingParen(i + 1);
+      const close = findMatchingParen(maskedText, i + 1);
       if (close !== -1) {
         scanMapBody(i + 2, close);
         i = close;
@@ -914,20 +912,6 @@ function findArgumentCountDiagnosticsFromMasked(document, maskedText, scalarFunc
   const issues = [];
 
   /**
-   * @param {number} openParenIndex - Index of the call's '(' in `maskedText`
-   * @returns {number} Matching ')' index, or -1 when not found
-   */
-  function findMatchingParen(openParenIndex) {
-    let depth = 1;
-    for (let i = openParenIndex + 1; i < maskedText.length; i++) {
-      if (maskedText[i] === "(") depth++;
-      if (maskedText[i] === ")") depth--;
-      if (depth === 0) return i;
-    }
-    return -1;
-  }
-
-  /**
    * @param {number} start - Index just after the call's '('
    * @param {number} end - Index of the matching ')'
    * @returns {number} Number of top-level comma-separated arguments
@@ -961,7 +945,7 @@ function findArgumentCountDiagnosticsFromMasked(document, maskedText, scalarFunc
       if (maxArity === null) continue;
 
       const openParenIndex = /** @type {number} */ (match.index) + match[0].length - 1;
-      const closeParenIndex = findMatchingParen(openParenIndex);
+      const closeParenIndex = findMatchingParen(maskedText, openParenIndex);
       if (closeParenIndex === -1) continue;
 
       const argCount = countArgs(openParenIndex + 1, closeParenIndex);
@@ -1101,7 +1085,7 @@ function createAssignmentInConditionFix(document, diagnostic) {
  *
  * @param {vscode.TextDocument} document - The document containing the diagnostic
  * @param {vscode.Diagnostic} diagnostic - The diagnostic with the incorrect 'for' usage
- * @returns {vscode.CodeAction | null} Code action or null if replacement unknown
+ * @returns {vscode.CodeAction} A code action that replaces 'for' with 'foreach'
  */
 function createForToForeachFix(document, diagnostic) {
   return createCodeAction("Replace 'for' with 'foreach'", diagnostic, (edit) => {
@@ -1347,7 +1331,6 @@ module.exports = {
   // -- Helpers
   isValidCompletionPosition,
   getTypedIdentifier,
-  isInStringOrComment,
   isInStringOrCommentDoc,
   getActiveParameterIndex,
   checkMissingDollar,

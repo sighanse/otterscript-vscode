@@ -28,8 +28,17 @@
 const vscode = require("vscode");
 const { updateDiagnostics } = require("./diagnostics");
 
-// -- Path to the language file for OtterScript (functions, variables, operations, keywords)
-const languageFile = "./language-data.js";
+// -- Language documentation (functions, variables, operations, keywords).
+// Plain strings only; any conversion to MarkdownString happens in this file.
+const {
+  NAMESPACES,
+  operationDocs,
+  syntaxDocs,
+  keywordDocs,
+  variableDocs,
+  scalarFunctionDocs,
+  vectorFunctionDocs
+} = require("./language-data");
 
 // -- Import helpers
 const {
@@ -99,44 +108,6 @@ function activate(context) {
       }
     })
   );
-
-  // -- Loads language documentation from language-data.js.
-  // Objects contain plain strings only.
-  // Any conversion to MarkdownString happens in this file.
-  let languageData;
-  // -- Attempt to load the documentation module with error handling
-  try {
-    languageData = require(languageFile);
-
-    // -- Quick validation to ensure languageData loaded correctly
-    if (!languageData || typeof languageData !== "object") {
-      throw new Error(`${languageFile} did not export an object`);
-    }
-    log.debug(`${languageFile} loaded successfully`);
-  } catch (err) {
-    // -- Log errors
-    log.error(`Failed to load ${languageFile}`, err);
-
-    // -- Show user-friendly error message
-    vscode.window.showErrorMessage(
-      `${extensionName} failed to load ${languageFile}. ` +
-      "The extension could not be activated. Check the developer console for details."
-    );
-
-    // -- Abort activation cleanly - don't register any providers
-    // Without languageData, completions/hover/signature help would show nothing
-    return;
-  }
-  // -- Extract each documentation category into its own variable.
-  const {
-    NAMESPACES,
-    operationDocs,
-    syntaxDocs,
-    keywordDocs,
-    variableDocs,
-    scalarFunctionDocs,
-    vectorFunctionDocs
-  } = languageData;
 
   // -- Validate all documentation sources (intentionally ignore return value)
   for (const [label, table] of Object.entries({
@@ -341,9 +312,10 @@ function activate(context) {
           return Object.entries(variableDocs)
               .filter(([key]) => key.toLowerCase().startsWith(typed.toLowerCase()))
               .map(([_key, doc]) => {
-                  // -- Remove leading $ for insertion (user already typed it)
+                  // -- Remove leading $ for insertion (user already typed it).
+                  // Snippets escape it as `\$`, same as scalarFunctionDocs.
                   const snippet = doc.snippet
-                    ? new vscode.SnippetString(doc.snippet?.replace(/^\$/, ""))
+                    ? new vscode.SnippetString(doc.snippet.replace(/^\\?\$/, ""))
                     : new vscode.SnippetString(doc.name.replace(/^\$/, ""));
                   return buildCompletionItem(doc, vscode.CompletionItemKind.Variable, '2_', snippet, false);
           });
@@ -532,22 +504,13 @@ function activate(context) {
           return null;
         }
 
-        const line = document.lineAt(position.line).text;
-
-        // -- Match #region / #endregion at the cursor position
-        const regionMatch = line.match(/#(end)?region\b/);
-        if (regionMatch) {
-          const start = line.indexOf(regionMatch[0]);
-          const end = start + regionMatch[0].length;
-
-          const range = new vscode.Range(
-            new vscode.Position(position.line, start),
-            new vscode.Position(position.line, end)
-          );
-
-          const doc = keywordDocs[regionMatch[0]];
+        // -- Match #region / #endregion at the cursor position (checked before
+        // the string/comment guard below, since `#` itself starts a comment)
+        const regionRange = document.getWordRangeAtPosition(position, /#(?:end)?region\b/);
+        if (regionRange) {
+          const doc = keywordDocs[document.getText(regionRange)];
           if (doc) {
-            return new vscode.Hover(buildHoverMarkdown(doc), range);
+            return new vscode.Hover(buildHoverMarkdown(doc), regionRange);
           }
         }
 
