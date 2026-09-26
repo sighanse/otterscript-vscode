@@ -7,7 +7,7 @@
 - Template-aware diagnostics for `<% %>` text-template tags: malformed/unbalanced tags, `<% end %>` where `<% } %>` is required, a block opener (`if`/`foreach`/`while`/`for server|role|directory|deployable`) missing its `{` (including tags spanning multiple lines), and a `<% %>` tag mixed with an unclosed OtterScript expression
 - Diagnostics for `$` expressions embedded directly in a text template's literal output (e.g. `$ToJson(...)` in a webhook body), not just code inside `<% %>`
 - `too-many-arguments` diagnostic for a call that exceeds a function's documented fixed argument count
-- Opt-in Adaptive Card checks for Teams webhook bodies: flags an unrecognized `"type"` value or a missing `"version"` on a `"type": "AdaptiveCard"` object
+- Adaptive Card checks for Teams webhook bodies, automatically triggered when a literal `"type": "AdaptiveCard"` object is found: flags an unrecognized `"type"` value or a missing `"version"`
 
 ### Changed
 
