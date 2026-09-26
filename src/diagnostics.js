@@ -60,6 +60,28 @@ const TEMPLATE_BLOCK_OPENER_REGEX =
   /^\s*(?:\}\s*)?(?:else\s+)?(?:(?:if|foreach|while)\b|for\s+(?:server|role|directory|deployable)\b)/i;
 
 /**
+ * Builds an OtterScript diagnostic spanning `[start, end)` on one line.
+ *
+ * @param {number} lineIndex
+ * @param {number} start
+ * @param {number} end
+ * @param {string} message
+ * @param {vscode.DiagnosticSeverity} severity
+ * @param {string} [code] - Diagnostic code; omitted for checks with no quick-fix/code
+ * @returns {vscode.Diagnostic}
+ */
+function lineDiagnostic(lineIndex, start, end, message, severity, code) {
+  const d = new vscode.Diagnostic(
+    new vscode.Range(new vscode.Position(lineIndex, start), new vscode.Position(lineIndex, end)),
+    message,
+    severity
+  );
+  if (code) d.code = code;
+  d.source = "OtterScript";
+  return d;
+}
+
+/**
  * Finds the first segment containing `needle` as a literal substring, and
  * returns its source position. Used to locate a keyword within a tag body
  * that may have been accumulated across several physical lines -- the
@@ -96,17 +118,12 @@ function checkTagBody(segments, issues) {
   if (endKw) {
     const kw = endKw[1];
     const loc = /** @type {{ lineIndex: number, col: number }} */ (locateInSegments(segments, kw));
-    const d = new vscode.Diagnostic(
-      new vscode.Range(
-        new vscode.Position(loc.lineIndex, loc.col),
-        new vscode.Position(loc.lineIndex, loc.col + kw.length)
-      ),
+    issues.push(lineDiagnostic(
+      loc.lineIndex, loc.col, loc.col + kw.length,
       `'<% ${kw} %>' is not OtterScript - close a template block with '<% } %>'`,
-      vscode.DiagnosticSeverity.Warning
-    );
-    d.code = "template-end-keyword";
-    d.source = "OtterScript";
-    issues.push(d);
+      vscode.DiagnosticSeverity.Warning,
+      "template-end-keyword"
+    ));
     return; // a terminator tag is never also a block opener
   }
 
@@ -114,17 +131,12 @@ function checkTagBody(segments, issues) {
     const kwMatch = /** @type {RegExpMatchArray} */ (body.match(/\b(?:if|foreach|for|while)\b/i));
     const kwText = kwMatch[0];
     const loc = /** @type {{ lineIndex: number, col: number }} */ (locateInSegments(segments, kwText));
-    const d = new vscode.Diagnostic(
-      new vscode.Range(
-        new vscode.Position(loc.lineIndex, loc.col),
-        new vscode.Position(loc.lineIndex, loc.col + kwText.length)
-      ),
+    issues.push(lineDiagnostic(
+      loc.lineIndex, loc.col, loc.col + kwText.length,
       `'<% ${kwText} ... %>' must open a block - add '{' before '%>'`,
-      vscode.DiagnosticSeverity.Warning
-    );
-    d.code = "template-missing-brace";
-    d.source = "OtterScript";
-    issues.push(d);
+      vscode.DiagnosticSeverity.Warning,
+      "template-missing-brace"
+    ));
   }
 }
 
@@ -161,17 +173,12 @@ function checkTemplateTags(tagView, lineIndex, issues, tagBalance, exprState, ta
 
     if (ch === "<" && next === "%") {
       if (tagBalance.count === 0 && exprState.depth > 0) {
-        const d = new vscode.Diagnostic(
-          new vscode.Range(
-            new vscode.Position(lineIndex, col),
-            new vscode.Position(lineIndex, col + 2)
-          ),
+        issues.push(lineDiagnostic(
+          lineIndex, col, col + 2,
           "Template tag inside an unclosed expression - '<% %>' and OtterScript expressions cannot be mixed",
-          vscode.DiagnosticSeverity.Warning
-        );
-        d.code = "template-in-expression";
-        d.source = "OtterScript";
-        issues.push(d);
+          vscode.DiagnosticSeverity.Warning,
+          "template-in-expression"
+        ));
         exprState.depth = 0; // one report per stuck region
       }
       if (tagBalance.count === 0) {
@@ -186,16 +193,11 @@ function checkTemplateTags(tagView, lineIndex, issues, tagBalance, exprState, ta
 
     if (ch === "%" && next === ">") {
       if (tagBalance.count === 0) {
-        const d = new vscode.Diagnostic(
-          new vscode.Range(
-            new vscode.Position(lineIndex, col),
-            new vscode.Position(lineIndex, col + 2)
-          ),
+        issues.push(lineDiagnostic(
+          lineIndex, col, col + 2,
           "Unexpected '%>' - no matching '<%'",
           vscode.DiagnosticSeverity.Error
-        );
-        d.source = "OtterScript";
-        issues.push(d);
+        ));
       } else {
         tagBalance.count--;
         if (tagBalance.count === 0) {
@@ -351,17 +353,12 @@ function updateDiagnostics(document, collection, ctx) {
       const name = match[1];
       if (!knownScalarFunctions.has(name)) {
         const start = match.index + 1;
-        const diagnostic = new vscode.Diagnostic(
-          new vscode.Range(
-            new vscode.Position(lineIndex, start),
-            new vscode.Position(lineIndex, start + name.length)
-          ),
+        issues.push(lineDiagnostic(
+          lineIndex, start, start + name.length,
           `Unknown scalar function '$${name}'`,
-          vscode.DiagnosticSeverity.Warning
-        );
-        diagnostic.code = "unknown-scalar-function";
-        diagnostic.source = "OtterScript";
-        issues.push(diagnostic);
+          vscode.DiagnosticSeverity.Warning,
+          "unknown-scalar-function"
+        ));
       }
     }
 
@@ -370,17 +367,12 @@ function updateDiagnostics(document, collection, ctx) {
       const name = match[1];
       if (!knownVectorFunctions.has(name)) {
         const start = match.index + 1;
-        const diagnostic = new vscode.Diagnostic(
-          new vscode.Range(
-            new vscode.Position(lineIndex, start),
-            new vscode.Position(lineIndex, start + name.length)
-          ),
+        issues.push(lineDiagnostic(
+          lineIndex, start, start + name.length,
           `Unknown vector function '@${name}'`,
-          vscode.DiagnosticSeverity.Warning
-        );
-        diagnostic.code = "unknown-vector-function";
-        diagnostic.source = "OtterScript";
-        issues.push(diagnostic);
+          vscode.DiagnosticSeverity.Warning,
+          "unknown-vector-function"
+        ));
       }
     }
 
@@ -404,17 +396,12 @@ function updateDiagnostics(document, collection, ctx) {
         !knownVectorFunctions.has(name)
       ) {
         const start = match.index;
-        const diagnostic = new vscode.Diagnostic(
-          new vscode.Range(
-            new vscode.Position(lineIndex, start),
-            new vscode.Position(lineIndex, start + name.length)
-          ),
+        issues.push(lineDiagnostic(
+          lineIndex, start, start + name.length,
           `Unknown operation '${name}'`,
-          vscode.DiagnosticSeverity.Warning
-        );
-        diagnostic.code = "unknown-operation";
-        diagnostic.source = "OtterScript";
-        issues.push(diagnostic);
+          vscode.DiagnosticSeverity.Warning,
+          "unknown-operation"
+        ));
       }
     }
 
@@ -432,17 +419,12 @@ function updateDiagnostics(document, collection, ctx) {
       const beforeToken = line.slice(0, tokenStart);
       if (/\bcall\s+$/i.test(beforeToken)) continue; // raft-qualified module call
 
-      const diagnostic = new vscode.Diagnostic(
-        new vscode.Range(
-          new vscode.Position(lineIndex, tokenStart),
-          new vscode.Position(lineIndex, tokenStart + token.length)
-        ),
+      issues.push(lineDiagnostic(
+        lineIndex, tokenStart, tokenStart + token.length,
         `Unknown namespace '${token}'`,
-        vscode.DiagnosticSeverity.Warning
-      );
-      diagnostic.code = "unknown-namespace";
-      diagnostic.source = "OtterScript";
-      issues.push(diagnostic);
+        vscode.DiagnosticSeverity.Warning,
+        "unknown-namespace"
+      ));
     }
 
     // -- Detect invalid logical operators
@@ -459,17 +441,12 @@ function updateDiagnostics(document, collection, ctx) {
 
         if (!isSingleEquals) continue;
 
-        const diagnostic = new vscode.Diagnostic(
-          new vscode.Range(
-            new vscode.Position(lineIndex, j),
-            new vscode.Position(lineIndex, j + 1)
-          ),
+        issues.push(lineDiagnostic(
+          lineIndex, j, j + 1,
           "Possible assignment in condition. Did you mean '=='?",
-          vscode.DiagnosticSeverity.Warning
-        );
-        diagnostic.code = "assignment-in-condition";
-        diagnostic.source = "OtterScript";
-        issues.push(diagnostic);
+          vscode.DiagnosticSeverity.Warning,
+          "assignment-in-condition"
+        ));
       }
 
       for (let j = 0; j < line.length; j++) {
@@ -478,17 +455,12 @@ function updateDiagnostics(document, collection, ctx) {
           const prev = line[j - 1];
           const next = line[j + 1];
           if (prev !== ch && next !== ch) {
-            const diagnostic = new vscode.Diagnostic(
-              new vscode.Range(
-                new vscode.Position(lineIndex, j),
-                new vscode.Position(lineIndex, j + 1)
-              ),
+            issues.push(lineDiagnostic(
+              lineIndex, j, j + 1,
               `Invalid logical operator '${ch}'. Use '${ch}${ch}'.`,
-              vscode.DiagnosticSeverity.Warning
-            );
-            diagnostic.code = "invalid-operator";
-            diagnostic.source = "OtterScript";
-            issues.push(diagnostic);
+              vscode.DiagnosticSeverity.Warning,
+              "invalid-operator"
+            ));
           }
         }
       }
@@ -499,17 +471,12 @@ function updateDiagnostics(document, collection, ctx) {
     const forLoopLikePattern = /^\s*for\s+(\$?\w+)\s+(=|in)\s+/i;
     if (forLoopLikePattern.test(line)) {
       const startIndex = line.indexOf("for");
-      const diagnostic = new vscode.Diagnostic(
-        new vscode.Range(
-          new vscode.Position(lineIndex, startIndex),
-          new vscode.Position(lineIndex, startIndex + 3)
-        ),
+      issues.push(lineDiagnostic(
+        lineIndex, startIndex, startIndex + 3,
         "'for' in OtterScript does not perform iteration. Use 'foreach' for loops, or 'for server/role/directory' for context binding.",
-        vscode.DiagnosticSeverity.Warning
-      );
-      diagnostic.code = "incorrect-for-usage";
-      diagnostic.source = "OtterScript";
-      issues.push(diagnostic);
+        vscode.DiagnosticSeverity.Warning,
+        "incorrect-for-usage"
+      ));
     }
   }
 
@@ -523,16 +490,11 @@ function updateDiagnostics(document, collection, ctx) {
 
   // -- Unclosed `<%` template tag (mirrors the unbalanced-symbol report above)
   if (templateAware && tagBalance.count > 0) {
-    const d = new vscode.Diagnostic(
-      new vscode.Range(
-        new vscode.Position(tagBalance.lastLine, tagBalance.lastCol),
-        new vscode.Position(tagBalance.lastLine, tagBalance.lastCol + 2)
-      ),
+    issues.push(lineDiagnostic(
+      tagBalance.lastLine, tagBalance.lastCol, tagBalance.lastCol + 2,
       `Unclosed template tag: '<%' not closed (first at line ${tagBalance.lastLine + 1}, col ${tagBalance.lastCol + 1})`,
       vscode.DiagnosticSeverity.Error
-    );
-    d.source = "OtterScript";
-    issues.push(d);
+    ));
   }
 
   // -- Duplicate map keys, too-many-arguments, and (template-aware documents
