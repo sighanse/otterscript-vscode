@@ -12,8 +12,9 @@
  * enumerate or approximate them. It only checks things that hold regardless
  * of what any template hole evaluates to: every literal `"type": "..."`
  * value inside the Adaptive Card object must be a real element/action type
- * name (see adaptivecard-data.js), and that object must have a `"version"`
- * property.
+ * name (see adaptivecard-data.js) -- except inside free-form payloads such as
+ * an action's `data` or Teams' `msteams` extension, where `"type"` is
+ * arbitrary -- and that object must have a `"version"` property.
  *
  * @module adaptivecard
  */
@@ -90,38 +91,53 @@ function findStringProperties(text, keyName) {
  * @returns {boolean}
  */
 function hasKeyProperty(text, keyName) {
-  const tokens = findJsonStringTokens(text);
-  for (const token of tokens) {
-    if (token.value !== keyName) continue;
-    let i = token.end + 1;
-    while (i < text.length && /\s/.test(text[i])) i++;
-    if (text[i] === ":") return true;
-  }
-  return false;
+  return findJsonStringTokens(text).some(
+    (token) => token.value === keyName && valueStartAfterKey(text, token) !== -1
+  );
 }
 
 /**
- * Finds the matching `}` for an opening `{` at `openBraceIndex`, scanning
- * forward and skipping quoted-string content (so a `}`/`{` inside a JSON
+ * If `token` is a JSON key (followed by only whitespace and `:`), returns the
+ * index where its value starts (first non-whitespace after the colon);
+ * otherwise -1.
+ *
+ * @param {string} text
+ * @param {{ end: number }} token - A token from {@link findJsonStringTokens}
+ * @returns {number}
+ */
+function valueStartAfterKey(text, token) {
+  let i = token.end + 1;
+  while (i < text.length && /\s/.test(text[i])) i++;
+  if (text[i] !== ":") return -1;
+  i++;
+  while (i < text.length && /\s/.test(text[i])) i++;
+  return i;
+}
+
+/**
+ * Finds the matching `}` / `]` for the `{` / `[` at `openIndex`, scanning
+ * forward and skipping quoted-string content (so a bracket inside a JSON
  * string value doesn't confuse the depth count).
  *
  * @param {string} text
- * @param {number} openBraceIndex
- * @returns {number} Matching `}` index, or -1 if unclosed.
+ * @param {number} openIndex - Index of a `{` or `[`
+ * @returns {number} Matching closer's index, or -1 if unclosed.
  */
-function findMatchingBrace(text, openBraceIndex) {
+function findMatchingClose(text, openIndex) {
+  const open = text[openIndex];
+  const close = open === "[" ? "]" : "}";
   let depth = 1;
   /** @type {string | null} */
   let quote = null;
-  for (let i = openBraceIndex + 1; i < text.length; i++) {
+  for (let i = openIndex + 1; i < text.length; i++) {
     const ch = text[i];
     if (quote) {
       if (ch === quote && isUnescapedQuoteAt(text, i)) quote = null;
       continue;
     }
     if (ch === '"' || ch === "'") { quote = ch; continue; }
-    if (ch === "{") depth++;
-    else if (ch === "}") {
+    if (ch === open) depth++;
+    else if (ch === close) {
       depth--;
       if (depth === 0) return i;
     }
@@ -130,11 +146,41 @@ function findMatchingBrace(text, openBraceIndex) {
 }
 
 /**
+ * Keys whose value is free-form JSON rather than Adaptive Card content, so a
+ * `"type"` anywhere inside it is NOT an element/action discriminator:
+ * - `data` — the arbitrary payload of `Action.Submit` / `Action.Execute`
+ * - `msteams` — Teams' card extension, e.g. mention entities
+ *   (`"entities": [{ "type": "mention", ... }]`)
+ * @type {ReadonlySet<string>}
+ */
+const FREE_FORM_KEYS = new Set(["data", "msteams"]);
+
+/**
+ * Finds the `[start, end]` spans of every object/array value belonging to a
+ * {@link FREE_FORM_KEYS} key in `text`. A scalar value (e.g. `"data": "x"`)
+ * contains nothing nested, so it yields no span.
+ *
+ * @param {string} text
+ * @returns {{ start: number, end: number }[]}
+ */
+function findFreeFormSpans(text) {
+  const spans = [];
+  for (const token of findJsonStringTokens(text)) {
+    if (!FREE_FORM_KEYS.has(token.value)) continue;
+    const valueStart = valueStartAfterKey(text, token);
+    if (valueStart === -1 || (text[valueStart] !== "{" && text[valueStart] !== "[")) continue;
+    const end = findMatchingClose(text, valueStart);
+    if (end !== -1) spans.push({ start: valueStart, end });
+  }
+  return spans;
+}
+
+/**
  * Finds the nearest unmatched `{` at or before `index`, scanning backward --
  * i.e. the JSON object that directly contains whatever text is at `index`.
  * String tokens (see {@link findJsonStringTokens}) are skipped whole, so a
  * `{`/`}` inside a sibling string value doesn't confuse the depth count --
- * the backward counterpart of {@link findMatchingBrace}'s quote handling.
+ * the backward counterpart of {@link findMatchingClose}'s quote handling.
  *
  * @param {string} text
  * @param {number} index
@@ -185,7 +231,7 @@ function findAdaptiveCardDiagnostics(document, text) {
 
   const objStart = findEnclosingBraceStart(literalText, root.valueStart);
   if (objStart === -1) return issues; // malformed JSON -- the unbalanced-symbol check owns this
-  const objEnd = findMatchingBrace(literalText, objStart);
+  const objEnd = findMatchingClose(literalText, objStart);
   if (objEnd === -1) return issues;
 
   const span = literalText.slice(objStart, objEnd + 1);
@@ -201,8 +247,10 @@ function findAdaptiveCardDiagnostics(document, text) {
     issues.push(diagnostic);
   }
 
+  const freeFormSpans = findFreeFormSpans(span);
   for (const { value, valueStart, valueEnd } of findStringProperties(span, "type")) {
     if (ADAPTIVE_CARD_TYPES.has(value)) continue;
+    if (freeFormSpans.some((s) => valueStart > s.start && valueStart < s.end)) continue;
 
     const absoluteStart = objStart + valueStart;
     const diagnostic = new vscode.Diagnostic(

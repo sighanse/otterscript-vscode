@@ -133,6 +133,27 @@ describe("findAdaptiveCardDiagnostics — unknown type", () => {
     assert.deepEqual(only(src, "adaptivecard-unknown-type"), []);
   });
 
+  it("does not flag a 'type' inside an action's free-form 'data' payload", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.4", "actions": [ { "type": "Action.Submit", "data": { "type": "business-event", "nested": [ { "type": "x" } ] } } ] }';
+    assert.deepEqual(only(src, "adaptivecard-unknown-type"), []);
+  });
+
+  it("does not flag Teams mention entities under 'msteams'", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.4", "msteams": { "entities": [ { "type": "mention", "text": "<at>Bob</at>" } ] } }';
+    assert.deepEqual(only(src, "adaptivecard-unknown-type"), []);
+  });
+
+  it("still flags a typo'd type after a free-form payload closes", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.4", "actions": [ { "type": "Action.Submit", "data": { "type": "ok" } } ], "body": [ { "type": "TextBlok" } ] }';
+    const flagged = only(src, "adaptivecard-unknown-type").map((d) => d.message);
+    assert.deepEqual(flagged, ["Unknown Adaptive Card type 'TextBlok'."]);
+  });
+
+  it("does not skip anything for a scalar 'data' value", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.4", "actions": [ { "type": "Action.Submitt", "data": "x" } ] }';
+    assert.equal(only(src, "adaptivecard-unknown-type").length, 1);
+  });
+
   it("does not flag a 'type'-like key that isn't exactly 'type' (e.g. 'mediaType')", () => {
     const src = '{ "type": "AdaptiveCard", "version": "1.2", "mediaType": "video/mp4" }';
     assert.deepEqual(only(src, "adaptivecard-unknown-type"), []);
