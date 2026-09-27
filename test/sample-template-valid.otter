@@ -16,6 +16,10 @@
 # at the START of a literal expression, so mid-string they need the explicit
 # nested-evaluate wrapper. This matches Inedo's own official email example
 # for this exact scenario (foreach %p in @AffectedPackages -> $(%p.Name)).
+#
+# The card also carries the shapes the Adaptive Card check must NOT flag: an
+# Action.Submit "data" payload and a Teams "msteams" mention entity, both of
+# which use "type" for something other than a card element.
 
 {
   "type": "message",
@@ -51,8 +55,18 @@
               }
 <% } %>
             ]
-          }
-        ]
+          },
+          { "type": "TextBlock", "text": "<at>Security</at> please review.", "wrap": true }
+        ],
+        "actions": [
+          { "type": "Action.OpenUrl", "title": "View", "url": $ToJson($VulnerabilityUrl) },
+          { "type": "Action.Submit", "title": "Acknowledge", "data": { "type": "ack", "id": $ToJson($VulnerabilityId) } }
+        ],
+        "msteams": {
+          "entities": [
+            { "type": "mention", "text": "<at>Security</at>", "mentioned": { "id": "security@example.com", "name": "Security" } }
+          ]
+        }
       }
     }
   ]
@@ -63,4 +77,14 @@
 # which must never contain a real <% %> pair (see the note in that file).
 <% foreach %p in @AffectedPackages { %>
 * $(%p.Name) $(%p.AffectedVersions)
+<% } %>
+
+# Below: a well-formed tag spanning several lines (its '{' is on a later line
+# than the keyword) using the % form of $FromJson.
+<%
+  %severity = %FromJson('{"level": "high"}');
+  if $Compare(%severity.level, ==, "high")
+  {
+%>
+Severity: high
 <% } %>

@@ -84,7 +84,7 @@ describe("manual-review fixtures", () => {
   it("sample.otter is NOT template-aware and flags exactly its documented tally", () => {
     const source = fs.readFileSync(path.join(__dirname, "..", "sample.otter"), "utf8");
     assert.equal(documentUsesTemplateTags(source), false);
-    assert.equal(diagnoseFixture("sample.otter").length, 15);
+    assert.equal(diagnoseFixture("sample.otter").length, 18);
   });
 
   it("sample-valid.otter is NOT template-aware and stays clean", () => {
@@ -96,12 +96,18 @@ describe("manual-review fixtures", () => {
   it("sample-template.otter IS template-aware and flags exactly its documented tally", () => {
     const source = fs.readFileSync(path.join(__dirname, "..", "sample-template.otter"), "utf8");
     assert.equal(documentUsesTemplateTags(source), true);
-    assert.equal(diagnoseFixture("sample-template.otter").length, 8);
+    assert.equal(diagnoseFixture("sample-template.otter").length, 13);
   });
 
   it("sample-template-valid.otter IS template-aware and stays clean", () => {
     const source = fs.readFileSync(path.join(__dirname, "..", "sample-template-valid.otter"), "utf8");
     assert.equal(documentUsesTemplateTags(source), true);
     assert.deepEqual(diagnoseFixture("sample-template-valid.otter"), []);
+  });
+
+  it("sample-webhook-template.otter (a paste-ready body, no annotations) IS template-aware and stays clean", () => {
+    const source = fs.readFileSync(path.join(__dirname, "..", "sample-webhook-template.otter"), "utf8");
+    assert.equal(documentUsesTemplateTags(source), true);
+    assert.deepEqual(diagnoseFixture("sample-webhook-template.otter"), []);
   });
 });

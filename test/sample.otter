@@ -12,12 +12,17 @@
 #   1. Open in VS Code. The Problems panel must list ONLY PART 2 items.
 #   2. Compare the count against the TALLY at the bottom of this file.
 #   3. On each `quick-fix:` line, press Ctrl+.  and confirm the named action.
+#   (test/unit/fixtures.test.js pins the total, so a changed tally fails CI.)
 #   4. Inside the FIX-ALL BLOCK run "OtterScript: Fix All Issues"
 #      (Ctrl+Shift+Alt+F) and confirm all four are corrected in one pass with
 #      no leftover or shifted ranges.
-#   5. Spot-check hover / signature help / completion across PART 1.
+#   5. Spot-check hover / signature help / completion across PART 1, including
+#      the $ / @ / % forms of FromJson and ListItem (type `%Fr` for completion,
+#      `%ListItem(` for signature help), and #region hover (only on the
+#      directive itself, not the rest of its line).
 #
 # sample-valid.otter is a second, realistic script that must also stay clean.
+# Text-template (<% %>) coverage lives in the sample-template*.otter files.
 ###############################################################################
 
 
@@ -105,7 +110,18 @@ $json = $ToJson(%(
     values: @(1, 2, 3)
 ));
 
-$map = $FromJson($json);
+# The call-site sigil picks the result shape (same function under all three):
+%map = %FromJson($json);                      # JSON object -> map
+@list = @FromJson('["a", "b", "c"]');         # JSON array  -> vector
+$first = $ListItem(@list, 0);                 # plain element -> scalar
+@records = @FromJson('[{"id": 1}, {"id": 2}]');
+%record = %ListItem(@records, 0);             # element that is itself a map
+
+# Keys only need to be unique per map: the outer and inner 'a' do not clash.
+%nested = %(
+    a: 1,
+    inner: %( a: 2, b: 3 )
+);
 
 ###############################################################################
 # STRING & REGEX
@@ -307,7 +323,7 @@ fail;
 force normal;
 
 $Substring("abcd", (1 + 1), 3);      # nested parentheses
-$Replace("a,b,c", ",", "|", true);   # extra argument
+$Replace("a,b,c", ",", "|", true);   # optional 4th argument (ignoreCase) - within arity
 
 # Semicolons are optional — the lines below must not be flagged.
 $url = $UrlEncode("https://www.github.com")
@@ -347,6 +363,11 @@ $cfg = %(
     count: 3,
 );
 
+$deep = %( inner: %( k: 1, k: 2 ) ); # EXPECT: duplicate-map-key         ('k', inside a nested map)
+
+$tooMany = $ToJson($a, $b);          # EXPECT: too-many-arguments        ('$ToJson' takes at most 1)
+%tooMany = %FromJson($a, $b);        # EXPECT: too-many-arguments        ('%FromJson' takes at most 1)
+
 @vals = @Split("a,b", ",")];         # EXPECT: unbalanced — Unexpected closing bracket: Extra ']'
 
 # ---------------------------------------------------------------------------
@@ -381,6 +402,8 @@ for server "web-01" {                # 'for <context>' binding — no incorrect-
 if $count == 3 $count < 5 {          # missing operator between expressions — NOT diagnosed; highlighting recovers
 }
 continue;                            # 'continue' outside a loop — NOT diagnosed
+@asVector = @FromJson($json);        # @ form of a sigil-polymorphic function — no unknown-vector-function
+%asMap = %ListItem(@records, 1);     # % form — no unknown-function warning of any kind
 Log-Information "$ToUpper stays literal inside a string";
 "$NotAFunction inside a string";
 
@@ -414,7 +437,8 @@ if $done {                           # EXPECT: unbalanced — Unclosed brace(s):
 #   unknown-vector-function ....... 1   (A: @RangZZe)
 #   unknown-operation ............. 1   (A: Log-InformatZZion)
 #   unknown-namespace ............. 2   (A: Dockr [fixable], Frobnicate [no fix])
-#   duplicate-map-key ............. 1   (A: name)
+#   duplicate-map-key ............. 2   (A: name ; k in a nested map)
+#   too-many-arguments ............ 2   (A: $ToJson ; %FromJson)
 #   missing-dollar ................ 1   (B: count)
 #   assignment-in-condition ...... 2   (B: $limit=10 ; C: $count=3)
 #   invalid-operator ............. 2   (B: $ready & ; C: & $count)
@@ -422,9 +446,9 @@ if $done {                           # EXPECT: unbalanced — Unclosed brace(s):
 #   unbalanced (Extra ']') ....... 1   (A: @Split(...)] )
 #   unbalanced (Unclosed '{') .... 1   (F: if $done {)
 #   -----------------------------------
-#   TOTAL ........................ 14
+#   TOTAL ........................ 17
 #
 # Sections D and E of PART 2 contribute 1 more (the tracked false positive in
-# §E), so the Problems panel shows 15 items total. Everything in PART 1 and
+# §E), so the Problems panel shows 18 items total. Everything in PART 1 and
 # every "MUST NOT FLAG" line in §D must contribute 0.
 ###############################################################################

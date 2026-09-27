@@ -25,6 +25,14 @@ Log-Information "Starting vulnerability scan of feed $feed at $scanStartedUtc";
 
 @packages = @Split($PackageProperty("names", ""), ",");
 
+# Per-feed settings arrive as JSON; the call-site sigil picks the result shape.
+%settings = %FromJson($PackageProperty("scanSettings", "{}"));
+@ignoredIds = @FromJson($PackageProperty("ignoredIds", "[]"));
+@owners = @FromJson($PackageProperty("owners", "[]"));
+%primaryOwner = %ListItem(@owners, 0);
+
+Log-Debug "Ignoring $ListCount(@ignoredIds) id(s); primary owner $(%primaryOwner.Name)";
+
 if $Compare($ListCount(@packages), ==, 0) {
     Log-Warning "No packages found in $feed - nothing to do";
     return;
@@ -62,7 +70,8 @@ foreach $pkg in @packages {
                         package: $name,
                         feed: $feed,
                         cvss: $score,
-                        detectedUtc: $DateUtc("o")
+                        detectedUtc: $DateUtc("o"),
+                        source: %( feed: $feed, scanner: "otter" )
                     ))
                 );
             } catch {
