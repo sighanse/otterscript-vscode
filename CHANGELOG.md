@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.4.0] - 2026-09-27
 
 ### Added
 
@@ -8,7 +8,7 @@
 - Diagnostics for `$` expressions embedded directly in a text template's literal output (e.g. `$ToJson(...)` in a webhook body), not just code inside `<% %>`
 - `too-many-arguments` diagnostic for a call that exceeds a function's documented fixed argument count
 - Map-function support for `%FromJson(...)` and `%ListItem(...)` (the map-returning form of these sigil-polymorphic functions): highlighting, hover, completion after `%`, signature help, and the too-many-arguments check
-- Adaptive Card checks for Teams webhook bodies, automatically triggered when a literal `"type": "AdaptiveCard"` object is found: flags an unrecognized `"type"` value or a missing `"version"`
+- Adaptive Card checks for Teams webhook bodies, automatically triggered when a literal `"type": "AdaptiveCard"` object is found: flags an unrecognized `"type"` value or a missing `"version"` (free-form `data` / `msteams` payloads, such as Teams mentions, are not checked)
 
 ### Changed
 
