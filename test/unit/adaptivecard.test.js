@@ -77,6 +77,16 @@ describe("findAdaptiveCardDiagnostics — card detection", () => {
     assert.deepEqual(diagnose(src), []);
   });
 
+  it("does not treat a card-lookalike inside a 'data' payload as the card", () => {
+    const src = '{ "type": "message", "data": { "type": "AdaptiveCard", "body": [ { "type": "Custom" } ] } }';
+    assert.deepEqual(diagnose(src), []);
+  });
+
+  it("picks the real card even when a payload lookalike appears first", () => {
+    const src = '{ "actions": [ { "type": "Action.Submit", "data": { "type": "AdaptiveCard" } } ], "type": "AdaptiveCard", "version": "1.4", "body": [ { "type": "TextBlok" } ] }';
+    assert.deepEqual(diagnose(src).map((d) => d.message), ["Unknown Adaptive Card type 'TextBlok'."]);
+  });
+
   it("finds the card object even when an earlier sibling string value contains a brace", () => {
     const src = '{ "$schema": "}", "type": "AdaptiveCard", "body": [ { "type": "Bogus" } ] }';
     const codes = diagnose(src).map((d) => d.code).sort();

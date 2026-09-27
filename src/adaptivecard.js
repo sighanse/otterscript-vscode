@@ -176,6 +176,18 @@ function findFreeFormSpans(text) {
 }
 
 /**
+ * Whether `index` falls strictly inside any of `spans` (as returned by
+ * {@link findFreeFormSpans}).
+ *
+ * @param {{ start: number, end: number }[]} spans
+ * @param {number} index
+ * @returns {boolean}
+ */
+function isInsideAny(spans, index) {
+  return spans.some((s) => index > s.start && index < s.end);
+}
+
+/**
  * Finds the nearest unmatched `{` at or before `index`, scanning backward --
  * i.e. the JSON object that directly contains whatever text is at `index`.
  * String tokens (see {@link findJsonStringTokens}) are skipped whole, so a
@@ -226,7 +238,13 @@ function findAdaptiveCardDiagnostics(document, text) {
   const state = createTemplateScanState();
   const literalText = text.split("\n").map((line) => maskTemplateTagContents(line, state)).join("\n");
 
-  const root = findStringProperties(literalText, "type").find((t) => t.value === "AdaptiveCard");
+  // A payload that merely looks like a card (e.g. an Action.Submit "data"
+  // object with "type": "AdaptiveCard") is not the card -- skip such
+  // candidates so they neither trigger the checks nor shadow the real root.
+  const literalFreeFormSpans = findFreeFormSpans(literalText);
+  const root = findStringProperties(literalText, "type").find(
+    (t) => t.value === "AdaptiveCard" && !isInsideAny(literalFreeFormSpans, t.valueStart)
+  );
   if (!root) return issues;
 
   const objStart = findEnclosingBraceStart(literalText, root.valueStart);
@@ -250,7 +268,7 @@ function findAdaptiveCardDiagnostics(document, text) {
   const freeFormSpans = findFreeFormSpans(span);
   for (const { value, valueStart, valueEnd } of findStringProperties(span, "type")) {
     if (ADAPTIVE_CARD_TYPES.has(value)) continue;
-    if (freeFormSpans.some((s) => valueStart > s.start && valueStart < s.end)) continue;
+    if (isInsideAny(freeFormSpans, valueStart)) continue;
 
     const absoluteStart = objStart + valueStart;
     const diagnostic = new vscode.Diagnostic(
