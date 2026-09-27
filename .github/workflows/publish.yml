@@ -12,6 +12,8 @@ concurrency:
 
 jobs:
   publish:
+    # Only ever publish from main -- a manual run on any other branch is skipped.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:

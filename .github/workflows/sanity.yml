@@ -34,21 +34,9 @@ jobs:
       # ============================================================
       # VALIDATION STEPS
       # ============================================================
-
-      - name: Validate JavaScript syntax
-        id: syntax
-        continue-on-error: true
-        run: |
-          find src -name "*.js" -exec node -c {} \;
-          echo "✅ JavaScript Syntax validation passed"
-
-      - name: Validate module exports
-        id: exports
-        continue-on-error: true
-        run: |
-          echo "Validating exports..."
-          node -e "require('./src/language-data.js')"
-          echo "✅ Module Export validation passed"
+      # Every check uses continue-on-error so the summary below always shows
+      # the full picture; the "Enforce checks" step at the end is what actually
+      # fails the job (every check blocks except the informational npm audit).
 
       - name: ESLint
         id: eslint
@@ -85,7 +73,7 @@ jobs:
             echo "Validating $file..."
             node -e "JSON.parse(require('fs').readFileSync('$file', 'utf8'))"
           done
-           echo "✅ JSON validation passed"
+          echo "✅ JSON validation passed"
 
       - name: Validate JSONC files
         id: jsonc
@@ -112,7 +100,7 @@ jobs:
           echo "## Line Ending Verification"
           echo ""
 
-          # Check src/ files
+          # Check every tracked text file (binaries are skipped by grep -I)
           CRLF_FILES=$(grep -rlI $'\r' --exclude-dir=.git --exclude-dir=.vscode --exclude-dir=node_modules . 2>/dev/null || true)
 
           if [ -n "$CRLF_FILES" ]; then
@@ -125,38 +113,32 @@ jobs:
 
           echo "✅ All source files have LF line endings"
 
+      # Catches manifest / .vscodeignore mistakes before merge rather than in
+      # the post-merge Build workflow. Runs last so the .vsix it writes is not
+      # scanned by the checks above.
+      - name: Package extension (validation only)
+        id: package
+        run: npm run package
+        continue-on-error: true
+
       - name: Summary
         if: always()
         run: |
           echo "## Sanity Check Results" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
-          # Syntax
-          if [ "${{ steps.syntax.outcome }}" == "success" ]; then
-            echo "✅ Syntax validation: passed" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "❌ Syntax validation: failed" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-          # Exports
-          if [ "${{ steps.exports.outcome }}" == "success" ]; then
-            echo "✅ Module exports: passed" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "❌ Module exports: failed" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
           # ESLint
           if [ "${{ steps.eslint.outcome }}" == "success" ]; then
             echo "✅ ESLint: passed" >> "$GITHUB_STEP_SUMMARY"
-          elif [ "${{ steps.eslint.outcome }}" == "failure" ]; then
-            echo "⚠️ ESLint: issues found" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ ESLint: issues found" >> "$GITHUB_STEP_SUMMARY"
           fi
 
           # JS + JSDoc type check
           if [ "${{ steps.jscheck.outcome }}" == "success" ]; then
             echo "✅ JS + JSDoc type check: passed" >> "$GITHUB_STEP_SUMMARY"
-          elif [ "${{ steps.jscheck.outcome }}" == "failure" ]; then
-            echo "⚠️ JS + JSDoc type check: issues found" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ JS + JSDoc type check: issues found" >> "$GITHUB_STEP_SUMMARY"
           fi
 
           # Grammar / language-data sync
@@ -187,15 +169,6 @@ jobs:
             echo "❌ JSONC validation: failed" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-          # npm audit
-          if [ "${{ steps.audit.outcome }}" == "success" ]; then
-            echo "✅ npm audit: passed (no vulnerabilities)" >> "$GITHUB_STEP_SUMMARY"
-          elif [ "${{ steps.audit.outcome }}" == "failure" ]; then
-            echo "⚠️ npm audit: vulnerability(ies) found" >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "⏭️ npm audit: cancelled/skipped" >> "$GITHUB_STEP_SUMMARY"
-          fi
-
           # Line Endings
           if [ "${{ steps.lineEndings.outcome }}" == "success" ]; then
             echo "✅ Line endings: LF" >> "$GITHUB_STEP_SUMMARY"
@@ -203,44 +176,46 @@ jobs:
             echo "❌ Line endings: CRLF detected" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # Grammar / language-data drift is treated as a hard failure: highlighting
-      # silently breaks when the two fall out of sync, so block the PR on it.
-      - name: Enforce grammar / language-data sync
-        if: always()
-        run: |
-          if [ "${{ steps.langsync.outcome }}" != "success" ]; then
-            echo "::error::grammar and src/language-data.js are out of sync (see 'Grammar / language-data sync' step)"
-            exit 1
+          # Packaging
+          if [ "${{ steps.package.outcome }}" == "success" ]; then
+            echo "✅ Package: passed" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ Package: failed" >> "$GITHUB_STEP_SUMMARY"
           fi
-          echo "grammar / language-data sync: ok"
 
-      # Unit tests are a hard failure: they guard the scanner / diagnostics
-      # logic that has repeatedly regressed, so block the PR on a red suite.
-      - name: Enforce unit tests
-        if: always()
-        run: |
-          if [ "${{ steps.tests.outcome }}" != "success" ]; then
-            echo "::error::unit tests failed (see 'Unit tests' step)"
-            exit 1
+          # npm audit (informational only -- does not block the PR)
+          if [ "${{ steps.audit.outcome }}" == "success" ]; then
+            echo "✅ npm audit: passed (no vulnerabilities)" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${{ steps.audit.outcome }}" == "failure" ]; then
+            echo "⚠️ npm audit: vulnerability(ies) found (not blocking)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "⏭️ npm audit: cancelled/skipped" >> "$GITHUB_STEP_SUMMARY"
           fi
-          echo "unit tests: ok"
 
-      # Lint and type-check are hard failures too: the repo holds src, tests and
-      # scripts to zero ESLint warnings and a clean JSDoc type-check.
-      - name: Enforce ESLint
+      # Single gate for every blocking check above. A step that did not run
+      # (e.g. because `npm ci` failed) reports "skipped" and also fails here.
+      - name: Enforce checks
         if: always()
+        env:
+          OUTCOMES: >-
+            ESLint=${{ steps.eslint.outcome }}
+            Type-check=${{ steps.jscheck.outcome }}
+            Grammar-sync=${{ steps.langsync.outcome }}
+            Unit-tests=${{ steps.tests.outcome }}
+            JSON=${{ steps.json.outcome }}
+            JSONC=${{ steps.jsonc.outcome }}
+            Line-endings=${{ steps.lineEndings.outcome }}
+            Package=${{ steps.package.outcome }}
         run: |
-          if [ "${{ steps.eslint.outcome }}" != "success" ]; then
-            echo "::error::ESLint reported problems (see 'ESLint' step)"
-            exit 1
-          fi
-          echo "eslint: ok"
-
-      - name: Enforce JS + JSDoc type check
-        if: always()
-        run: |
-          if [ "${{ steps.jscheck.outcome }}" != "success" ]; then
-            echo "::error::JS + JSDoc type check failed (see 'JS + JSDoc type check' step)"
-            exit 1
-          fi
-          echo "type check: ok"
+          failed=0
+          for entry in $OUTCOMES; do
+            name="${entry%%=*}"
+            outcome="${entry#*=}"
+            if [ "$outcome" != "success" ]; then
+              echo "::error::$name: $outcome (see the '$name' step above)"
+              failed=1
+            else
+              echo "$name: ok"
+            fi
+          done
+          exit "$failed"
