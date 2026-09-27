@@ -39,15 +39,16 @@ diagnostic and module-navigation helpers) against a small `vscode` module stub
 (`test/vscode-stub.js`). It is a blocking step in the Sanity workflow.
 Provider/grammar/snippet behaviour still needs a manual Extension Host (`F5`) smoke test.
 
-`npm run check:lang` (script: [scripts/check-language-sync.js](../scripts/check-language-sync.js)) fails when a scalar/vector function or operation is added to `src/language-data.js` without updating the matching regex alternation in `syntaxes/otterscript.tmLanguage.json` (or vice versa), or when an entry carries a `namespace` outside the `NAMESPACES` allowlist. It runs as a blocking step in the Sanity workflow.
+`npm run check:lang` (script: [scripts/check-language-sync.js](../scripts/check-language-sync.js)) fails when a scalar/vector/map function or operation is added to `src/language-data.js` without updating the matching regex alternation in `syntaxes/otterscript.tmLanguage.json` (or vice versa), or when an entry carries a `namespace` outside the `NAMESPACES` allowlist. It runs as a blocking step in the Sanity workflow.
 
 ## Architecture Map
 
 - `src/extension.js`: activation and provider wiring
 - `src/language-data.js`: language docs model for IntelliSense/snippets; also exports the `NAMESPACES` allowlist
 - `src/diagnostics.js`: diagnostic analysis/rules
-- `src/helpers.js`: VS Code-facing helpers (builds `vscode.*` objects); re-exports `src/scanner.js`
-- `src/scanner.js`: pure, `vscode`-free text primitives (non-code masking, string/comment detection, module-name scan, arg-index)
+- `src/adaptivecard.js`: best-effort Adaptive Card checks for JSON bodies in text templates; its type list lives in `src/adaptivecard-data.js`
+- `src/helpers.js`: VS Code-facing helpers (builds `vscode.*` objects); re-exports the `src/scanner.js` members its callers need
+- `src/scanner.js`: pure, `vscode`-free text primitives (non-code masking, string/comment detection, `<% %>` template-tag masking, module-name scan, arg-index)
 - `test/unit/*.test.js`: `node:test` unit suite; `test/vscode-stub.js` is the `vscode` module stub
 - `syntaxes/otterscript.tmLanguage.json`: TextMate grammar
 - `snippets/otterscript.json`: snippets (JSONC-valid)
@@ -98,6 +99,7 @@ Run these when applicable:
 4. Manual smoke test (`F5`) when provider/grammar/snippet behavior changes:
    - `$` completion appears
    - `@` vector completion appears
+   - `%` completion offers `%FromJson` / `%ListItem` and the `%( )` snippet
    - Hover shows docs
    - `if condition =` warns about missing `$`
    - `>>` auto-closes swim string
