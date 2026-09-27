@@ -15,9 +15,9 @@ Contributions are welcome and appreciated.
 
 ```sh
 npm install       # dev dependencies
-npm run check     # JSDoc type-check + grammar/language-data sync + unit tests
+npm run check     # ESLint + JSDoc type-check + grammar/language-data sync + unit tests
 npm test          # unit tests only (node:test)
-npm run lint      # ESLint
+npm run lint      # ESLint only
 ```
 
 Press <kbd>F5</kbd> in VS Code to launch an Extension Development Host with this

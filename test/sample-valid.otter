@@ -25,6 +25,14 @@ Log-Information "Starting vulnerability scan of feed $feed at $scanStartedUtc";
 
 @packages = @Split($PackageProperty("names", ""), ",");
 
+# Per-feed settings arrive as JSON; the call-site sigil picks the result shape.
+%settings = %FromJson($PackageProperty("scanSettings", "{}"));
+@ignoredIds = @FromJson($PackageProperty("ignoredIds", "[]"));
+@owners = @FromJson($PackageProperty("owners", "[]"));
+%primaryOwner = %ListItem(@owners, 0);
+
+Log-Debug "Ignoring $ListCount(@ignoredIds) id(s); primary owner $(%primaryOwner.Name)";
+
 if $Compare($ListCount(@packages), ==, 0) {
     Log-Warning "No packages found in $feed - nothing to do";
     return;
@@ -62,7 +70,8 @@ foreach $pkg in @packages {
                         package: $name,
                         feed: $feed,
                         cvss: $score,
-                        detectedUtc: $DateUtc("o")
+                        detectedUtc: $DateUtc("o"),
+                        source: %( feed: $feed, scanner: "otter" )
                     ))
                 );
             } catch {
@@ -99,10 +108,10 @@ Windows::Ensure-Service( Name: "InedoProGetSvc", Status: running );
 ###############################################################################
 # TEMPLATE OUTPUT
 ###############################################################################
-
-<% foreach %p in @packages { %>
-* $(%p) evaluated against threshold $cvssThreshold
-<% } %>
+# Deliberately no <% ... %> block here: documentUsesTemplateTags() treats any
+# document containing a real tag pair as a text template and blanks everything
+# outside it, which would silently defeat this file's whole purpose as a
+# false-positive smoke test. See test/sample-template-valid.otter instead.
 
 ###############################################################################
 # SWIM STRING SUMMARY

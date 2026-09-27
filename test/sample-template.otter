@@ -1,0 +1,75 @@
+# SAMPLE-TEMPLATE.OTTER
+#
+# Manual-review corpus for the text-template (<% ... %>) diagnostics, the
+# checks on $ expressions embedded in literal output, and the Adaptive Card checks.
+# The whole file is one OtterScript text template: literal output text plus
+# <% ... %> code blocks. Every `# EXPECT:` note marks a line that must raise
+# exactly the named diagnostic; the literal JSON between tags must raise NOTHING
+# (the template-aware pass blanks it).
+#
+# NOTE: inside template literal text `#` is not a comment, it is output - the
+# notes below are harmless annotation only.
+#
+# Expected total: 13 diagnostics (pinned by test/unit/fixtures.test.js) -
+#   template-missing-brace x4, template-end-keyword x2, "Unexpected '%>'" x1,
+#   "Unclosed template tag '<%'" x1, template-in-expression x1,
+#   unknown-scalar-function x1, too-many-arguments x1,
+#   adaptivecard-missing-version x1, adaptivecard-unknown-type x1.
+# Everything else (valid tags, literal JSON, card payloads) must be clean.
+
+# --- A. Phase 1: <% %> structure -------------------------------------------
+{
+  "items": [
+<% foreach %p in @AffectedPackages { %>
+    { "type": "TextBlock", "text": $ToJson("- " + %p.Name) },
+<% if !%p.Last %>
+    "separator"                                  # EXPECT (line above): template-missing-brace
+<% end %>                                        # EXPECT: template-end-keyword  (quick-fix: "Replace with }")
+<% } %>
+  ]
+}
+
+<% endforeach %>                                 # EXPECT: template-end-keyword
+<% while $keepGoing %>                           # EXPECT: template-missing-brace
+<% for server "web-01" %>                        # EXPECT: template-missing-brace  ('for <context>' opener)
+
+then %>                                          # EXPECT: Unexpected '%>' - no matching '<%'
+
+# --- B. Phase 2: mode-mixing -----------------------------------------------
+"bad": $ToJson(%( x: 1 <% $y %> ))               # EXPECT: template-in-expression
+
+# --- C. A block opener missing its brace, in a tag spanning several lines --------
+<%
+  foreach %q in @AffectedPackages                # EXPECT: template-missing-brace (reported on this line)
+%>
+
+# --- D. $ expressions embedded directly in literal output text ------------------
+"v": $Frobnicat(%p.Name),                        # EXPECT: unknown-scalar-function
+"w": $ToJson($a, $b),                            # EXPECT: too-many-arguments
+
+# --- E. Adaptive Card checks (triggered by the literal AdaptiveCard type) --------
+{ "type": "AdaptiveCard",                        # EXPECT: adaptivecard-missing-version (on the brace)
+  "body": [ { "type": "TextBlok", "text": "hi" } ],                          # EXPECT: adaptivecard-unknown-type
+  "actions": [ { "type": "Action.Submit", "data": { "type": "ack-event" } } ],  # NOT flagged: free-form data
+  "msteams": { "entities": [ { "type": "mention", "text": "<at>Bob</at>" } ] }   # NOT flagged: Teams mention
+}
+
+# --- must NOT flag -------------------------------------------------------------
+<% foreach %s in @AllServers() { %>
+    $ToJson(%s.Name)
+<% } %>
+<% if $ok { %>ok<% } else { %>no<% } %>
+<% $x = 1 /* note with %> inside */ $y = 2 %>
+# $a $b next to each other is ONE implicit string (Inedo docs: "no need for
+# string concatenation ... just put the variables next to each other"), not a
+# missing operator -- must stay clean even inside a map/vector literal.
+<% $m = %( v: $a $b ) %>
+<% $n = @( $a $b $c ) %>
+"list": [
+<% foreach %p in @x { %>
+    ,{ "n": $ToJson(%p.Name) }
+<% } %>
+]
+
+# --- unclosed tag: keep LAST (everything after it is treated as tag code) ----
+<% foreach $x in @y

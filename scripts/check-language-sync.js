@@ -9,7 +9,7 @@
  *   2. any docs-table entry carries a `namespace` that is neither `null` nor a
  *      member of the `NAMESPACES` allowlist exported by language-data.js.
  *
- * Background: the grammar matches scalar functions, vector functions and
+ * Background: the grammar matches scalar, vector, and map functions and
  * operations with hand-maintained regex alternations, e.g.
  *
  *     "match": "\\$(ToJson|FromJson|...|PackageProperty)\\("
@@ -126,6 +126,11 @@ const checks = [
     expected: functionNames(data.vectorFunctionDocs),
   },
   {
+    label: "map functions",
+    scope: "support.function.map.otterscript",
+    expected: functionNames(data.mapFunctionDocs),
+  },
+  {
     label: "operations",
     scope: "keyword.other.operation.otterscript",
     expected: allNames(data.operationDocs),
@@ -173,6 +178,7 @@ const nsTables = /** @type {Record<string, DocsTable>} */ ({
   operationDocs: data.operationDocs,
   scalarFunctionDocs: data.scalarFunctionDocs,
   vectorFunctionDocs: data.vectorFunctionDocs,
+  mapFunctionDocs: data.mapFunctionDocs,
   variableDocs: data.variableDocs,
   keywordDocs: data.keywordDocs,
   syntaxDocs: data.syntaxDocs,

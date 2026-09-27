@@ -42,6 +42,7 @@ const {
   createInvalidOperatorFix,
   createAssignmentInConditionFix,
   createForToForeachFix,
+  createTemplateEndFix,
   createUnbalancedDiagnostic,
   getDiagnosticCode,
   validateDocs,
@@ -185,6 +186,13 @@ describe("findDuplicateMapKeyDiagnosticsFromMasked", () => {
     const diags = run("%( a: 1, b: %( a: 9 ), a: 2 )");
     assert.equal(diags.length, 1);
     assert.match(diags[0].message, /Duplicate key 'a'/);
+  });
+
+  it("reports a duplicate inside a map nested in another map", () => {
+    const src = "%( x: %( a: 1, a: 2 ) )";
+    const diags = run(src);
+    assert.equal(diags.length, 1);
+    assert.equal(diags[0].range.start.character, src.lastIndexOf("a"));
   });
 
   it("reports duplicates independently per map expression", () => {
@@ -514,6 +522,14 @@ describe("createRegexPatterns", () => {
     );
   });
 
+  it("mapSignatureRegex captures '%Name(' + partial args, but not a '%(' literal", () => {
+    const m = "set %m = %ListItem(@x, ".match(rx.mapSignatureRegex());
+    assert.ok(m);
+    assert.equal(m[1], "ListItem");
+    assert.equal(m[2], "@x, ");
+    assert.equal("set %m = %(a: ".match(rx.mapSignatureRegex()), null);
+  });
+
   it("scalarSignatureRegex captures name + partial args at end of prefix", () => {
     const m = "set $r = $Substring(text, 1".match(rx.scalarSignatureRegex());
     assert.ok(m);
@@ -625,6 +641,13 @@ describe("quick-fix factories", () => {
     assert.equal(fix.title, "Replace 'for' with 'foreach'");
     assert.equal(fix.edit.edits[0][3], "foreach");
   });
+
+  it("createTemplateEndFix replaces the diagnostic range with '}'", () => {
+    const fix = /** @type {any} */ (createTemplateEndFix(makeDoc("<% end %>"), diagAt(3, 6)));
+    assert.equal(fix.title, "Replace with '}'");
+    assert.equal(fix.edit.edits[0][0], "replace");
+    assert.equal(fix.edit.edits[0][3], "}");
+  });
 });
 
 // ============================================================
@@ -672,9 +695,10 @@ describe("getDiagnosticCode", () => {
 // ============================================================
 
 describe("getTypedIdentifier", () => {
-  it("extracts the fragment after a '$' / '@' trigger", () => {
+  it("extracts the fragment after a '$' / '@' / '%' trigger", () => {
     assert.equal(getTypedIdentifier(makeDoc("x = $To"), pos(0, 7), "$"), "To");
     assert.equal(getTypedIdentifier(makeDoc("@Sp"), pos(0, 3), "@"), "Sp");
+    assert.equal(getTypedIdentifier(makeDoc("set %m = %From"), pos(0, 14), "%"), "From");
   });
 
   it("returns '' right after the bare sigil", () => {

@@ -4,9 +4,9 @@
  * primitives that the rest of the extension builds on.
  *
  * These cover the character-classification logic (strings, line/block comments,
- * swim-strings) that has historically regressed, plus the small argument/string
- * helpers and module-name matchers. No `vscode` shim is required: scanner.js has
- * no VS Code dependency.
+ * swim-strings) that has historically regressed, the `<% %>` text-template
+ * helpers, plus the small argument/string helpers and module-name matchers. No
+ * `vscode` shim is required: scanner.js has no VS Code dependency.
  *
  * Run via `npm test` (`node --test test/unit`).
  */
@@ -16,10 +16,16 @@ const assert = require("node:assert/strict");
 
 const {
   createCodeScanState,
+  createTemplateScanState,
   isUnescapedQuoteAt,
   scanLineState,
   maskNonCodeSpans,
   advanceScanState,
+  maskOutsideTemplateTags,
+  documentUsesTemplateTags,
+  findTemplateTagDelimiters,
+  findBalancedParenEnd,
+  findEmbeddedExpressionEnd,
   isInStringOrComment,
   getActiveParameterIndex,
   MODULE_NAME_TOKEN_REGEX,
@@ -434,5 +440,275 @@ describe("findModuleDeclarations", () => {
 
   it("does not match a bare 'module' keyword with no name", () => {
     assert.deepEqual(findModuleDeclarations("module\nmodule "), []);
+  });
+});
+
+// ============================================================
+// maskOutsideTemplateTags — <% ... %> spans
+// ============================================================
+
+describe("maskOutsideTemplateTags", () => {
+  /** @param {string} line @param {ReturnType<typeof createTemplateScanState>} [st] */
+  const mask = (line, st = createTemplateScanState()) => maskOutsideTemplateTags(line, st);
+
+  it("keeps only the tag body on a single-line tag; blanks text and delimiters", () => {
+    const out = mask('text <% code %> more');
+    assert.equal(out.length, 'text <% code %> more'.length);
+    assert.equal(out.trimEnd().trimStart(), "code");
+    assert.ok(!out.includes("<%") && !out.includes("%>"));
+    assert.ok(!out.includes("text") && !out.includes("more"));
+  });
+
+  it("blanks the whole line when there is no tag and no carried state", () => {
+    assert.equal(mask('  "type": "TextBlock",  ').trim(), "");
+  });
+
+  it("carries an open tag across lines", () => {
+    const st = createTemplateScanState();
+    const a = maskOutsideTemplateTags('foo <% if $x {', st);
+    assert.equal(st.inTemplateTag, true);
+    assert.equal(a.trim(), "if $x {");
+    const b = maskOutsideTemplateTags('  set $y = 1', st);
+    assert.equal(b.trim(), "set $y = 1"); // still inside the tag
+    const c = maskOutsideTemplateTags('} %> trailing text', st);
+    assert.equal(st.inTemplateTag, false);
+    assert.equal(c.trim(), "}");
+    assert.ok(!c.includes("trailing"));
+  });
+
+  it("does not let a '%>' inside a tag-body string close the tag", () => {
+    const out = mask('<% Log-Information "a %> b" %> X');
+    assert.ok(out.includes('"a %> b"'), out);
+    assert.ok(!out.includes("X"));
+  });
+
+  it("does not treat a '<%' inside a literal-text string as a tag opener", () => {
+    const st = createTemplateScanState();
+    const out = maskOutsideTemplateTags('"note": "use <% %> here", "x": 1', st);
+    assert.equal(st.inTemplateTag, false);
+    assert.equal(out.trim(), "");
+  });
+
+  it("does not close a tag on a '%>' inside a tag-body '#' comment", () => {
+    const st = createTemplateScanState();
+    maskOutsideTemplateTags("<% $x # note with %> in it", st);
+    assert.equal(st.inTemplateTag, true);
+    maskOutsideTemplateTags("$y %>", st);
+    assert.equal(st.inTemplateTag, false);
+  });
+
+  it("does not close a tag on a '%>' inside a multi-line block comment", () => {
+    const st = createTemplateScanState();
+    maskOutsideTemplateTags("<% $x /*  a %>", st);
+    assert.equal(st.inTemplateTag, true);
+    const out = maskOutsideTemplateTags("still %> comment */ $z %>", st);
+    assert.equal(st.inTemplateTag, false);
+    assert.ok(out.includes("$z"));
+  });
+
+  it("does not close a tag on a '%>' inside a tag-body swim-string", () => {
+    const st = createTemplateScanState();
+    const out = maskOutsideTemplateTags("<% Log-Information >>a %> b>> %>", st);
+    assert.equal(st.inTemplateTag, false);
+    assert.ok(out.includes("Log-Information"));
+  });
+
+  it("handles two tags on one line", () => {
+    const out = mask('a <% one %> b <% two %> c');
+    assert.equal(out.replace(/\s+/g, " ").trim(), "one two");
+  });
+
+  it("is length-preserving", () => {
+    for (const line of ['', '<%%>', 'plain', '<% x', 'y %>', '<% a %> <% b %>']) {
+      assert.equal(mask(line).length, line.length, JSON.stringify(line));
+    }
+  });
+
+  // ----------------------------------------------------------------
+  // Embedded `$` value expressions in literal text (no <% %> needed)
+  // ----------------------------------------------------------------
+
+  it("keeps a bare $Name(args) call embedded in literal text", () => {
+    const out = mask('{ "value": $ToJson($x, $y) },');
+    assert.ok(out.includes("$ToJson($x, $y)"), out);
+    assert.ok(!out.includes('"value"') && !out.includes("{"));
+    assert.equal(out.trimEnd().endsWith(")"), true, out); // trailing ',' blanked
+  });
+
+  it("keeps a bare $Name / $Name.Prop.Chain variable reference", () => {
+    const out = mask('* $p.Name and $p.AffectedVersions here');
+    assert.ok(out.includes("$p.Name"), out);
+    assert.ok(out.includes("$p.AffectedVersions"), out);
+    assert.ok(!out.includes("here"));
+  });
+
+  it("keeps a $(expression) wrapper", () => {
+    const out = mask('note: $(@list[0]) end');
+    assert.ok(out.includes("$(@list[0])"), out);
+    assert.ok(!out.includes("note") && !out.includes("end"));
+  });
+
+  it("keeps a call argument containing a nested map/vector literal", () => {
+    const out = mask('{ "v": $ToJson(%( a: $x, b: $y )) }');
+    assert.ok(out.includes("$ToJson(%( a: $x, b: $y ))"), out);
+  });
+
+  it("does not let a ')' inside a call's string argument end the call early", () => {
+    const out = mask('$ToJson("weird)paren") tail');
+    assert.ok(out.includes('$ToJson("weird)paren")'), out);
+    assert.ok(!out.includes("tail"));
+  });
+
+  it("treats an unclosed call on the line as plain literal text (falls back to blank)", () => {
+    const out = mask('{ "a": $ToJson($x, "b": 1 }');
+    // The outer $ToJson( never finds its ')' on this line, so it's blanked --
+    // but the bare $x inside it is then seen fresh and kept, same as any bare
+    // variable reference would be.
+    assert.ok(!out.includes("ToJson"), out);
+    assert.ok(out.includes("$x"), out);
+  });
+
+  it("does not treat '$' followed by a digit (e.g. a price) as an expression", () => {
+    assert.equal(mask('Costs $5.00 today').trim(), "");
+  });
+
+  it("does not recognize an embedded expression inside a literal-text string", () => {
+    const st = createTemplateScanState();
+    const out = maskOutsideTemplateTags('"note: $ToJson($x) inline" tail', st);
+    assert.equal(out.trim(), "");
+  });
+
+  it("is length-preserving with embedded expressions present", () => {
+    for (const line of ['$ToJson($x, $y)', '{ "v": $ToJson($x) },', 'a $Name(1, (2), 3) b']) {
+      assert.equal(mask(line).length, line.length, JSON.stringify(line));
+    }
+  });
+});
+
+// ============================================================
+// findBalancedParenEnd / findEmbeddedExpressionEnd
+// ============================================================
+
+describe("findBalancedParenEnd", () => {
+  it("finds the matching ')' skipping nested parens", () => {
+    const line = "$Foo(a, (b, c), d) tail";
+    assert.equal(findBalancedParenEnd(line, 4), line.indexOf(") tail"));
+  });
+
+  it("skips a ')' inside a quoted string argument", () => {
+    const line = '$Foo("a)b") tail';
+    assert.equal(findBalancedParenEnd(line, 4), line.indexOf(") tail"));
+  });
+
+  it("returns -1 when unclosed on the line", () => {
+    assert.equal(findBalancedParenEnd("$Foo(a, b", 4), -1);
+  });
+});
+
+describe("findEmbeddedExpressionEnd", () => {
+  it("matches $Name(args)", () => {
+    const line = "$ToJson($x, $y) tail";
+    assert.equal(findEmbeddedExpressionEnd(line, 0), line.indexOf(" tail"));
+  });
+
+  it("matches $(expression)", () => {
+    const line = "$(@list[0]) tail";
+    assert.equal(findEmbeddedExpressionEnd(line, 0), line.indexOf(" tail"));
+  });
+
+  it("matches a bare $Name with a property chain", () => {
+    const line = "$p.Name.Sub tail";
+    assert.equal(findEmbeddedExpressionEnd(line, 0), line.indexOf(" tail"));
+  });
+
+  it("matches a bare $Name with no call and no chain", () => {
+    const line = "$x tail";
+    assert.equal(findEmbeddedExpressionEnd(line, 0), line.indexOf(" tail"));
+  });
+
+  it("returns -1 for '$' not followed by an identifier or '('", () => {
+    assert.equal(findEmbeddedExpressionEnd("$5.00", 0), -1);
+    assert.equal(findEmbeddedExpressionEnd("$ x", 0), -1);
+    assert.equal(findEmbeddedExpressionEnd("$", 0), -1);
+  });
+
+  it("returns -1 when a $Name(...) call is unclosed on the line", () => {
+    assert.equal(findEmbeddedExpressionEnd("$ToJson($x, ", 0), -1);
+  });
+});
+
+// ============================================================
+// documentUsesTemplateTags
+// ============================================================
+
+describe("documentUsesTemplateTags", () => {
+  it("is true for a real <% ... %> pair", () => {
+    assert.equal(documentUsesTemplateTags('a <% b %> c'), true);
+  });
+
+  it("is true when the tags span lines", () => {
+    assert.equal(documentUsesTemplateTags("<%\n  foreach $x in @y {\n%>\n<% } %>"), true);
+  });
+
+  it("does not count a '%>' that precedes the first '<%'", () => {
+    assert.equal(documentUsesTemplateTags("%> <%"), false);
+    assert.equal(documentUsesTemplateTags("close %> first\nthen open <%"), false);
+  });
+
+  it("documented limitation: a '<%' after an unquoted # / // on its line is not seen", () => {
+    // Trade-off: this also keeps a plain .otter file whose comment shows a
+    // template example from being misdetected as a template.
+    assert.equal(documentUsesTemplateTags("heading # 3   <% if $x { %>y<% } %>"), false);
+    assert.equal(documentUsesTemplateTags("# example: <% foreach $x in @y { %>..<% } %>"), false);
+  });
+
+  it("is false for plain OtterScript", () => {
+    assert.equal(documentUsesTemplateTags("if $x {\n  Log-Information $x;\n}\n"), false);
+  });
+
+  it("does not count a '<%' inside a string literal", () => {
+    assert.equal(documentUsesTemplateTags('$s = "<% not a tag %>";'), false);
+  });
+
+  it("does not count a '<%' inside a comment", () => {
+    assert.equal(documentUsesTemplateTags("# <% commented out %>"), false);
+    assert.equal(documentUsesTemplateTags("/* <% block %> */"), false);
+  });
+
+  it("is false for an unclosed '<%' or a stray '%>'", () => {
+    assert.equal(documentUsesTemplateTags("<% no close here"), false);
+    assert.equal(documentUsesTemplateTags("no open here %>"), false);
+    assert.equal(documentUsesTemplateTags(""), false);
+  });
+});
+
+// ============================================================
+// findTemplateTagDelimiters
+// ============================================================
+
+describe("findTemplateTagDelimiters", () => {
+  it("returns open/close delimiters in source order", () => {
+    assert.deepEqual(findTemplateTagDelimiters("a <% b %> c <% d %>"), [
+      { index: 2, open: true },
+      { index: 7, open: false },
+      { index: 12, open: true },
+      { index: 17, open: false },
+    ]);
+  });
+
+  it("finds a lone opener or a lone closer", () => {
+    assert.deepEqual(findTemplateTagDelimiters("x <% y"), [{ index: 2, open: true }]);
+    assert.deepEqual(findTemplateTagDelimiters("y %> x"), [{ index: 2, open: false }]);
+  });
+
+  it("returns [] for a line with no delimiters", () => {
+    assert.deepEqual(findTemplateTagDelimiters('  "type": "TextBlock",'), []);
+  });
+
+  it("handles an empty tag <%%>", () => {
+    assert.deepEqual(findTemplateTagDelimiters("<%%>"), [
+      { index: 0, open: true },
+      { index: 2, open: false },
+    ]);
   });
 });

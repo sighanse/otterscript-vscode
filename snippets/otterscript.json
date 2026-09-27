@@ -137,12 +137,12 @@
   },
   "For Each Affected Package": {
     "prefix": "foreachaffected",
-    "body": ["foreach $${1:package} in @AffectedPackages {", "    $2", "}"],
+    "body": ["foreach %${1:package} in @AffectedPackages {", "    $2", "}"],
     "description": "Iterate over affected packages"
   },
   "For Each API Key": {
     "prefix": "foreachapikey",
-    "body": ["foreach $${1:apiKey} in @ApiKeys {", "    $2", "}"],
+    "body": ["foreach %${1:apiKey} in @ApiKeys {", "    $2", "}"],
     "description": "Iterate over API keys"
   },
   "Region Block": {
