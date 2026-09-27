@@ -41,7 +41,8 @@ const {
   keywordDocs,
   variableDocs,
   scalarFunctionDocs,
-  vectorFunctionDocs
+  vectorFunctionDocs,
+  mapFunctionDocs
 } = require("./language-data");
 
 // -- Import helpers
@@ -118,6 +119,7 @@ function activate(context) {
     scalarFunctionDocs,  // $ToJson, $Base64Encode, etc.
     operationDocs,       // Log-Information, Log-Warning, Log-Error, etc.
     vectorFunctionDocs,  // @Split, @Join, etc.
+    mapFunctionDocs,     // %FromJson, %ListItem
     variableDocs,        // $BuildId, $FeedName, etc.
     syntaxDocs,          // Template tags, swim strings, expression delimiters, etc.
     keywordDocs,         // if, foreach, with, set, etc.
@@ -138,6 +140,7 @@ function activate(context) {
     operationCallRegex,
     scalarSignatureRegex,
     vectorSignatureRegex,
+    mapSignatureRegex,
     operationSignatureRegex,
     operationRegex,
   } = createRegexPatterns(knownOperations);
@@ -177,6 +180,7 @@ function activate(context) {
           const candidates = [
             { regex: scalarSignatureRegex,    table: scalarFunctionDocs, operation: false }, // ($Func)
             { regex: vectorSignatureRegex,    table: vectorFunctionDocs, operation: false }, // (@Func)
+            { regex: mapSignatureRegex,       table: mapFunctionDocs,    operation: false }, // (%Func)
             { regex: operationSignatureRegex, table: operationDocs,       operation: true  }, // (Log-Information etc...)
           ];
 
@@ -369,9 +373,10 @@ function activate(context) {
     );
 
   // ============================================================
-  // MAP EXPRESSION COMPLETION PROVIDER (%)
+  // MAP COMPLETION PROVIDER (%Function / %( ... ) expression)
   // ============================================================
-  // Map variables are user-defined and cannot be enumerated
+  // Map variables are user-defined and cannot be enumerated; offers the
+  // map-returning functions (%FromJson, ...) plus the %( ... ) literal snippet.
 
   const mapCompletionProvider =
     vscode.languages.registerCompletionItemProvider(
@@ -381,18 +386,28 @@ function activate(context) {
           // -- Check if completion is enabled and not in a string/comment
           if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
 
-          // -- Ensure syntaxDocs and mapExpr exist
-          if (!syntaxDocs?.mapExpr) {
-            return [];
+          const typed = getTypedIdentifier(document, position, "%");
+          if (typed === null) return [];
+
+          // -- Map functions, filtered by what the user typed after '%'
+          const items = Object.entries(mapFunctionDocs)
+            .filter(([key]) => key.toLowerCase().startsWith(typed.toLowerCase()))
+            .map(([_key, doc]) => {
+              // -- Remove leading % for insertion (user already typed it)
+              const snippet = new vscode.SnippetString(
+                (doc.snippet ?? `${doc.name}(\${0})`).replace(/^%/, ""));
+              return buildCompletionItem(doc, vscode.CompletionItemKind.Function, "1_", snippet, true);
+            });
+
+          // -- The %( ... ) map literal, sorted last
+          if (syntaxDocs?.mapExpr) {
+            const snippet = syntaxDocs.mapExpr.snippet
+              ? new vscode.SnippetString(syntaxDocs.mapExpr.snippet)
+              : new vscode.SnippetString(`${syntaxDocs.mapExpr.name} "(\${0})"`);
+            items.push(buildCompletionItem(syntaxDocs.mapExpr, vscode.CompletionItemKind.Snippet, "~", snippet, false));
           }
 
-          const snippet = syntaxDocs.mapExpr.snippet
-            ? new vscode.SnippetString(syntaxDocs.mapExpr.snippet)
-            : new vscode.SnippetString(`${syntaxDocs.mapExpr.name} "(\${0})"`);
-          const kind = vscode.CompletionItemKind.Snippet;
-          const sortPrefix = "~";
-
-          return [buildCompletionItem(syntaxDocs.mapExpr, kind, sortPrefix, snippet, false)];
+          return items;
         }
       },
       "%"
@@ -620,18 +635,18 @@ function activate(context) {
           return new vscode.Hover(buildHoverMarkdown(doc), operationRange);
         }
 
-        // -- Symbols ($function, @vector, $variable)
-        // Most general case - matches any $ or @ prefixed identifier
-        // Checks scalar functions, vector functions, and variables
+        // -- Symbols ($function, @vector, %map function, $variable)
+        // Most general case - matches any $, @, or % prefixed identifier
+        // Checks scalar/vector/map functions and variables
         // Must be LAST because it matches many things
         const symbolRange = document.getWordRangeAtPosition(
           position,
-          /[@$][A-Za-z][A-Za-z0-9]*/  // $Name or @Name (no spaces)
+          /[@$%][A-Za-z][A-Za-z0-9]*/  // $Name, @Name, or %Name (no spaces)
         );
         if (!symbolRange) return null;
 
         const text = document.getText(symbolRange);
-        const prefix = text[0];         // '$' or '@'
+        const prefix = text[0];         // '$', '@', or '%'
         const name = text.substring(1); // The identifier without prefix
 
         // -- Look up documentation based on prefix type
@@ -643,6 +658,9 @@ function activate(context) {
         } else if (prefix === "@") {
           // -- @ is a vector function
           doc = vectorFunctionDocs[name];
+        } else if (prefix === "%") {
+          // -- % is a map function (a plain %map variable has no doc -> no hover)
+          doc = mapFunctionDocs[name];
         }
 
         // -- No documentation found
@@ -1136,6 +1154,7 @@ function activate(context) {
     knownVectorFunctions,
     scalarFunctionDocs,
     vectorFunctionDocs,
+    mapFunctionDocs,
     knownOperations,
     knownNamespaces: NAMESPACES,
     scalarCallRegex,

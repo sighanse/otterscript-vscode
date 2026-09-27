@@ -24,6 +24,7 @@
  * - variables (ProGet / execution context)
  * - scalar functions ($Function(...))
  * - vector functions (@Function(...))
+ * - map functions (%Function(...))
  *
  * Required fields:
  * - name
@@ -3959,6 +3960,31 @@ foreach $server in @ServersInRoleAndEnvironment("WebServer", "Production") {
   }
 };
 
+// ============================================================
+// MAP FUNCTION DOCS
+// ============================================================
+// Functions callable with the `%` sigil to get a map back. These are the
+// sigil-polymorphic functions -- the same function as the `$` entry, whose
+// documentation (shared here so it cannot drift) explains every sigil form.
+
+/** @type {DocsTable} */
+const mapFunctionDocs = {
+  "FromJson": {
+    ...scalarFunctionDocs.FromJson,
+    name: "%FromJson",
+    signature: "%FromJson(jsonString)",
+    snippet: "%FromJson(${1:jsonString})",
+    description: "Parses a JSON object string into an OtterScript map.",
+  },
+  "ListItem": {
+    ...scalarFunctionDocs.ListItem,
+    name: "%ListItem",
+    signature: "%ListItem(vector, index)",
+    snippet: "%ListItem(${1:@vector}, ${2:index})",
+    description: "Gets an item that is itself a map from a vector by index.",
+  },
+};
+
 // Freeze the exported tables so no consumer can add, remove, or replace an
 // entry at runtime. Shallow: the individual DocEntry objects are not frozen.
 Object.freeze(operationDocs);
@@ -3967,6 +3993,7 @@ Object.freeze(keywordDocs);
 Object.freeze(variableDocs);
 Object.freeze(scalarFunctionDocs);
 Object.freeze(vectorFunctionDocs);
+Object.freeze(mapFunctionDocs);
 
 // Export
 module.exports = {
@@ -3976,5 +4003,6 @@ module.exports = {
   keywordDocs,
   variableDocs,
   scalarFunctionDocs,
-  vectorFunctionDocs
+  vectorFunctionDocs,
+  mapFunctionDocs
 };

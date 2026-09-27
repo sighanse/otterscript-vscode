@@ -152,6 +152,10 @@
         "match": "@(Split|FromJson|ListItem|ListConcat|ListInsert|ListRemove|ListSet|MapKeys|Range|RegexFind|BuildIssues|FilesOnDisk|AcquiredServers|AllServers|ServersInEnvironment|ServersInRole|ServersInRoleAndEnvironment)\\("
         },
         {
+        "name": "support.function.map.otterscript",
+        "match": "%(FromJson|ListItem)\\("
+        },
+        {
           "name": "constant.language.otterscript",
           "match": "\\b(true|false)\\b"
         },

@@ -24,6 +24,7 @@ const ctx = {
   knownVectorFunctions: new Set(Object.keys(data.vectorFunctionDocs)),
   scalarFunctionDocs: data.scalarFunctionDocs,
   vectorFunctionDocs: data.vectorFunctionDocs,
+  mapFunctionDocs: data.mapFunctionDocs,
   knownOperations: new Set(Object.keys(data.operationDocs)),
   knownNamespaces: data.NAMESPACES,
   ...createRegexPatterns(new Set(Object.keys(data.operationDocs))),
@@ -231,9 +232,20 @@ describe("updateDiagnostics — too many arguments", () => {
     assert.equal(d.message, "'@Split' takes at most 3 arguments, got 4.");
   });
 
+  it("flags a fixed-arity map function called with an extra argument", () => {
+    const [d] = only("set %m = %FromJson($a, $b);", "too-many-arguments");
+    assert.ok(d);
+    assert.equal(d.message, "'%FromJson' takes at most 1 argument, got 2.");
+  });
+
   it("does not flag a call within the documented argument count", () => {
     assert.deepEqual(only('$r = $ToJson($a);', "too-many-arguments"), []);
     assert.deepEqual(only("$r = @Split($a, $b, $c);", "too-many-arguments"), []);
+    assert.deepEqual(only("set %m = %ListItem(@x, 0);", "too-many-arguments"), []);
+  });
+
+  it("does not treat a %( map literal as a function call", () => {
+    assert.deepEqual(only("set %m = %(a: 1, b: 2, c: 3);", "too-many-arguments"), []);
   });
 
   it("does not flag implicit-string juxtaposition as extra arguments", () => {

@@ -33,6 +33,7 @@ const ctx = {
   knownVectorFunctions: new Set(Object.keys(data.vectorFunctionDocs)),
   scalarFunctionDocs: data.scalarFunctionDocs,
   vectorFunctionDocs: data.vectorFunctionDocs,
+  mapFunctionDocs: data.mapFunctionDocs,
   knownOperations: new Set(Object.keys(data.operationDocs)),
   knownNamespaces: data.NAMESPACES,
   ...createRegexPatterns(new Set(Object.keys(data.operationDocs))),

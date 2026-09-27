@@ -31,6 +31,8 @@ const { findAdaptiveCardDiagnostics } = require("./adaptivecard");
  * @property {Set<string>} knownVectorFunctions - Known vector function names
  * @property {Record<string, {signature?: string}>} scalarFunctionDocs - Scalar function docs, keyed by name
  * @property {Record<string, {signature?: string}>} vectorFunctionDocs - Vector function docs, keyed by name
+ * @property {Record<string, {signature?: string}>} [mapFunctionDocs] - Map (`%Name(...)`)
+ *   function docs, keyed by name; used only for the argument-count check
  * @property {Set<string>} knownOperations - Known operation names
  * @property {ReadonlySet<string>} knownNamespaces - Valid OtterScript namespace tokens
  * @property {() => RegExp} scalarCallRegex - Regex factory for scalar function calls
@@ -258,6 +260,7 @@ function updateDiagnostics(document, collection, ctx) {
     knownVectorFunctions,
     scalarFunctionDocs,
     vectorFunctionDocs,
+    mapFunctionDocs = {},
     knownOperations,
     knownNamespaces,
     scalarCallRegex,
@@ -512,7 +515,7 @@ function updateDiagnostics(document, collection, ctx) {
   const joinedMasked = maskedLines.join("\n");
   try {
     issues.push(...findDuplicateMapKeyDiagnosticsFromMasked(document, joinedMasked));
-    issues.push(...findArgumentCountDiagnosticsFromMasked(document, joinedMasked, scalarFunctionDocs, vectorFunctionDocs));
+    issues.push(...findArgumentCountDiagnosticsFromMasked(document, joinedMasked, scalarFunctionDocs, vectorFunctionDocs, mapFunctionDocs));
     if (templateAware) {
       // Triggered by a literal "type": "AdaptiveCard" in the literal output.
       issues.push(...findAdaptiveCardDiagnostics(document, text));

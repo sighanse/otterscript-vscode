@@ -337,10 +337,11 @@ function isValidCompletionPosition(document, position, completionEnabled) {
   return !isInStringOrCommentDoc(document, position);
 }
 
-/** @type {Readonly<Record<"$" | "@", RegExp>>} */
+/** @type {Readonly<Record<"$" | "@" | "%", RegExp>>} */
 const TYPED_IDENTIFIER_PATTERNS = Object.freeze({
   "$": /\$([a-zA-Z]*)$/,
   "@": /@([a-zA-Z]*)$/,
+  "%": /%([a-zA-Z]*)$/,
 });
 
 /**
@@ -349,10 +350,11 @@ const TYPED_IDENTIFIER_PATTERNS = Object.freeze({
  * Examples:
  * - "$To" -> "To"
  * - "@Spl" -> "Spl"
+ * - "%From" -> "From"
  *
  * @param {vscode.TextDocument} document
  * @param {vscode.Position} position
- * @param {"$" | "@"} triggerChar
+ * @param {"$" | "@" | "%"} triggerChar
  * @returns {string | null}
  */
 function getTypedIdentifier(document, position, triggerChar) {
@@ -406,6 +408,7 @@ function buildWordRegex(names) {
  *   operationCallRegex: () => RegExp,
  *   scalarSignatureRegex: () => RegExp,
  *   vectorSignatureRegex: () => RegExp,
+ *   mapSignatureRegex: () => RegExp,
  *   operationSignatureRegex: () => RegExp,
  *   operationRegex: () => RegExp
  * }}
@@ -417,6 +420,8 @@ function createRegexPatterns(knownOperations) {
     operationCallRegex: () => /\b([A-Za-z][A-Za-z-]*)\b/g,
     scalarSignatureRegex: () => /\$([A-Za-z][A-Za-z0-9_]*)\s*\(([^()]*)$/,
     vectorSignatureRegex: () => /@([A-Za-z][A-Za-z0-9_]*)\s*\(([^()]*)$/,
+    // Requires a name after `%`, so a `%(` map literal never matches.
+    mapSignatureRegex: () => /%([A-Za-z][A-Za-z0-9_]*)\s*\(([^()]*)$/,
     // Group 1: operation name. Group 2: argument text typed so far (cursor at end).
     // The optional segment after the name allows one default/positional argument
     // between the name and the "(" -- a quoted string or a single bare token --
@@ -907,7 +912,7 @@ function findDuplicateMapKeyDiagnosticsFromMasked(document, maskedText) {
 }
 
 /**
- * Parses a `$Name(...)` / `@Name(...)` doc signature and returns the maximum
+ * Parses a `$Name(...)` / `@Name(...)` / `%Name(...)` doc signature and returns the maximum
  * number of arguments the call can take, or `null` when the signature isn't a
  * fixed-arity parenthesized call (a bare property like `$ExecutionId`, or a
  * vararg signature containing a literal `...` parameter such as
@@ -921,7 +926,7 @@ function findDuplicateMapKeyDiagnosticsFromMasked(document, maskedText) {
  * @returns {number | null}
  */
 function parseFixedMaxArity(signature) {
-  const m = signature.match(/^[$@][A-Za-z]\w*\(([\s\S]*)\)$/);
+  const m = signature.match(/^[$@%][A-Za-z]\w*\(([\s\S]*)\)$/);
   if (!m) return null;
 
   const argsText = m[1].trim();
@@ -934,7 +939,7 @@ function parseFixedMaxArity(signature) {
 }
 
 /**
- * Finds calls to known scalar/vector functions that pass more arguments than
+ * Finds calls to known scalar/vector/map functions that pass more arguments than
  * their documented signature allows, given text already masked by
  * {@link maskNonCodeSpans} (and, for template-aware documents,
  * {@link maskOutsideTemplateTags}). Only functions with a fixed-arity,
@@ -949,9 +954,10 @@ function parseFixedMaxArity(signature) {
  * @param {string} maskedText - Full document text, already masked.
  * @param {Record<string, {signature?: string}>} scalarFunctionDocs
  * @param {Record<string, {signature?: string}>} vectorFunctionDocs
+ * @param {Record<string, {signature?: string}>} [mapFunctionDocs] - `%Name(...)` functions
  * @returns {vscode.Diagnostic[]}
  */
-function findArgumentCountDiagnosticsFromMasked(document, maskedText, scalarFunctionDocs, vectorFunctionDocs) {
+function findArgumentCountDiagnosticsFromMasked(document, maskedText, scalarFunctionDocs, vectorFunctionDocs, mapFunctionDocs = {}) {
   /** @type {vscode.Diagnostic[]} */
   const issues = [];
 
@@ -977,7 +983,7 @@ function findArgumentCountDiagnosticsFromMasked(document, maskedText, scalarFunc
   /**
    * @param {RegExp} nameRegex - Global regex; group 1 is the function name
    * @param {Record<string, {signature?: string}>} docs
-   * @param {string} sigil - `"$"` or `"@"`, for the diagnostic message
+   * @param {string} sigil - `"$"`, `"@"`, or `"%"`, for the diagnostic message
    */
   function scan(nameRegex, docs, sigil) {
     for (const match of maskedText.matchAll(nameRegex)) {
@@ -1012,6 +1018,7 @@ function findArgumentCountDiagnosticsFromMasked(document, maskedText, scalarFunc
 
   scan(/\$([A-Za-z][A-Za-z0-9_]*)\s*\(/g, scalarFunctionDocs, "$");
   scan(/@([A-Za-z][A-Za-z0-9_]*)\s*\(/g, vectorFunctionDocs, "@");
+  scan(/%([A-Za-z][A-Za-z0-9_]*)\s*\(/g, mapFunctionDocs, "%");
 
   return issues;
 }
