@@ -204,6 +204,11 @@ describe("updateDiagnostics — unknown vector function", () => {
   it("does not flag a known vector function", () => {
     assert.deepEqual(only("foreach $s in @AllServers() { }", "unknown-vector-function"), []);
   });
+
+  it("does not flag the @ form of sigil-polymorphic functions ($FromJson, $ListItem)", () => {
+    assert.deepEqual(only("set @v = @FromJson($json);", "unknown-vector-function"), []);
+    assert.deepEqual(only("set @v = @ListItem(@nested, 0);", "unknown-vector-function"), []);
+  });
 });
 
 // ============================================================

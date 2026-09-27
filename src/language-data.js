@@ -3,7 +3,7 @@
 /**
  * OtterScript language documentation model.
  *
- * IMPORTANT:
+ * IMPORTANT:$
  * - This file contains plain data ONLY.
  * - No vscode imports, no MarkdownString, no runtime logic.
  * - All documentation values are plain strings.
@@ -3563,6 +3563,23 @@ const vectorFunctionDocs = {
 # Result: @("one", "two,three,four")
 \`\`\`
 `
+  },
+  // -- Sigil-polymorphic functions: the same function as the scalar entry, called
+  //    with `@` to get a vector back. Documentation is shared with the `$` entry
+  //    (which explains all sigil forms) so the two cannot drift apart.
+  "FromJson": {
+    ...scalarFunctionDocs.FromJson,
+    name: "@FromJson",
+    signature: "@FromJson(jsonString)",
+    snippet: "@FromJson(${1:jsonString})",
+    description: "Parses a JSON array string into an OtterScript vector.",
+  },
+  "ListItem": {
+    ...scalarFunctionDocs.ListItem,
+    name: "@ListItem",
+    signature: "@ListItem(vector, index)",
+    snippet: "@ListItem(${1:@vector}, ${2:index})",
+    description: "Gets an item that is itself a vector from a vector by index.",
   },
   "ListConcat": {
     namespace: null,
