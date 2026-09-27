@@ -3,7 +3,7 @@
 /**
  * OtterScript language documentation model.
  *
- * IMPORTANT:$
+ * IMPORTANT:
  * - This file contains plain data ONLY.
  * - No vscode imports, no MarkdownString, no runtime logic.
  * - All documentation values are plain strings.
