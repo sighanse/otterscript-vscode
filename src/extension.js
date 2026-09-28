@@ -997,6 +997,10 @@ function activate(context) {
   // it is off, no scanning, disk reads, or index mutations happen.
 
   const OTTER_FILE_GLOB = "**/*.{otter,oscript}";
+  // Documents that belong in the index: files on disk, plus untitled ones
+  // while they're open. Other schemes (a Git diff's old side, a PR review,
+  // ...) are extra views of a file and would show up as duplicates.
+  const INDEXED_SCHEMES = new Set(["file", "untitled"]);
   // Cap on the workspace scan: files matched, and concurrent reads in flight.
   const WORKSPACE_SCAN_FILE_LIMIT = 5000;
   const WORKSPACE_SCAN_CONCURRENCY = 20;
@@ -1018,7 +1022,7 @@ function activate(context) {
    * @returns {void}
    */
   function setModuleIndexEntry(uri, text) {
-    if (!workspaceSymbolsEnabled) return;
+    if (!workspaceSymbolsEnabled || !INDEXED_SCHEMES.has(uri.scheme)) return;
     const symbols = findModuleDeclarations(text).map(hit => ({
       name: hit.name,
       range: new vscode.Range(
@@ -1351,6 +1355,9 @@ function activate(context) {
 
     // -- Clean up diagnostics and module navigation cache when a file is closed.
     vscode.workspace.onDidCloseTextDocument(doc => {
+      // A file's index entry stays (it's still on disk); an untitled
+      // document's goes with it.
+      if (doc.uri.scheme !== "file") workspaceModuleIndex.delete(doc.uri.toString());
       diagnostics.delete(doc.uri);
       clearModuleInfoCache(doc.uri);
       clearTimerForUri(diagnosticTimers, doc.uri);

@@ -8,7 +8,7 @@
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const vscode = require("vscode");
-const { WORKSPACE_DIR, closeAllEditors, openFile, positionOf, waitFor } = require("./helpers");
+const { WORKSPACE_DIR, closeAllEditors, openContent, openFile, otterDiagnostics, positionOf, waitFor } = require("./helpers");
 
 describe("navigation and highlighting (main.otter)", () => {
   /** @type {vscode.TextDocument} */
@@ -100,5 +100,48 @@ describe("navigation and highlighting (main.otter)", () => {
     const found = await highlights(positionOf(document, "call Greet(name: world", 6));
     assert.equal(found.length, 3);
     assert.equal(found.filter((h) => h.endsWith(":w")).length, 1);
+  });
+});
+
+describe("documents that aren't files on disk", () => {
+  afterEach(closeAllEditors);
+
+  /**
+   * The URI schemes of the workspace symbols named `name`.
+   *
+   * @param {string} name
+   * @returns {Promise<string[]>}
+   */
+  async function symbolSchemes(name) {
+    /** @type {vscode.SymbolInformation[]} */
+    const found = await vscode.commands.executeCommand("vscode.executeWorkspaceSymbolProvider", name);
+    return found.filter((s) => s.name === name).map((s) => s.location.uri.scheme);
+  }
+
+  it("a read-only review/diff view gets no diagnostics and no workspace symbols", async () => {
+    // "pr" is one of the read-only view schemes (the old side of a Git diff
+    // uses "git", which the built-in Git extension already owns here).
+    const registration = vscode.workspace.registerTextDocumentContentProvider("pr", {
+      provideTextDocumentContent: () => "module ReviewOnly {\n}\nif count == 1 {\n}\n",
+    });
+    try {
+      let document = await vscode.workspace.openTextDocument(vscode.Uri.parse("pr:/review.otter"));
+      document = await vscode.languages.setTextDocumentLanguage(document, "otterscript");
+      await vscode.window.showTextDocument(document);
+      await vscode.commands.executeCommand("otterscript.refreshDiagnostics", document.uri);
+
+      assert.deepEqual(otterDiagnostics(document), []);
+      assert.deepEqual(await symbolSchemes("ReviewOnly"), []);
+    } finally {
+      registration.dispose();
+    }
+  });
+
+  it("an untitled document's modules leave Go to Symbol in Workspace when it closes", async () => {
+    await openContent("module UntitledOnly {\n}\n");
+    assert.deepEqual(await symbolSchemes("UntitledOnly"), ["untitled"]);
+
+    await closeAllEditors();
+    await waitFor(async () => (await symbolSchemes("UntitledOnly")).length === 0, "the untitled module to leave the index");
   });
 });

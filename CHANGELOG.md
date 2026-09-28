@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- Read-only views of another version of a file — the old side of a Git diff, a pull-request review — no longer get diagnostics or add duplicate modules to Go to Symbol in Workspace; an untitled document's modules now leave it when the document closes
 - Signature help no longer disappears once an earlier argument contains a nested call or a parenthesis inside a string (e.g. `$Substring($Trim($x), …`)
 - Snippets that insert an OtterScript `$` literally: the `Execute-PowerShell` completion lost `$_` and a `}` (inserting `Where-Object { .Status -eq "Running"  | Out-String}`), and `Acquire-Server` lost `$AcquiredServerName`. The `ifMatchesRegex`, `joinIntoString`, `ifexists` and `ifdirexists` snippets had an extra tab stop on the function name, and caused VS Code's "snippets very likely confuse snippet-variables and snippet-placeholders" warning
 - Adaptive Card check no longer flags `TextRun` inlines in a `RichTextBlock`, or the free-form `"type"` of `Authentication` sign-in buttons, as unknown types

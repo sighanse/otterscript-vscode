@@ -18,6 +18,7 @@ const {
   maskOutsideTemplateTags,
   documentUsesTemplateTags,
   getDiagnosticCode,
+  isReadOnlyView,
   log,
 } = require("./helpers");
 const { findAdaptiveCardDiagnostics } = require("./adaptivecard");
@@ -318,7 +319,7 @@ function checkTemplateTags(tagView, lineIndex, issues, tagBalance, exprState, ta
  * @returns {void}
  */
 function updateDiagnostics(document, collection, ctx) {
-  if (document.languageId !== "otterscript") return;
+  if (document.languageId !== "otterscript" || isReadOnlyView(document)) return;
 
   const text = document.getText();
 

@@ -86,6 +86,27 @@ function loadConfig() {
 // ============================================================
 
 /**
+ * URI schemes of read-only views of a document's other versions -- the old
+ * side of a Git diff (`git`, `gitlens`) or a pull-request review (`pr`,
+ * `review`). Diagnostics are not reported for them: they would duplicate or
+ * contradict the problems of the real file in the Problems panel.
+ * @readonly
+ * @type {ReadonlySet<string>}
+ */
+const READ_ONLY_VIEW_SCHEMES = new Set(["git", "gitlens", "pr", "review"]);
+
+/**
+ * Whether a document is a read-only view of another version of a file (see
+ * {@link READ_ONLY_VIEW_SCHEMES}) rather than a file the user edits.
+ *
+ * @param {vscode.TextDocument} document
+ * @returns {boolean}
+ */
+function isReadOnlyView(document) {
+  return READ_ONLY_VIEW_SCHEMES.has(document.uri.scheme);
+}
+
+/**
  * Set of identifier names that are valid without a '$' prefix in conditions.
  * These are language literals, not user-defined variables.
  *
@@ -1400,6 +1421,7 @@ module.exports = {
   clearTimerForUri,
 
   // -- Helpers
+  isReadOnlyView,
   isValidCompletionPosition,
   getTypedIdentifier,
   isInStringOrCommentDoc,
