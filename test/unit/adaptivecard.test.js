@@ -12,7 +12,7 @@ const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
 const { Position } = require("../vscode-stub");
-const { findAdaptiveCardDiagnostics } = require("../../src/adaptivecard.js");
+const { findAdaptiveCardDiagnostics, createCardVersionFix } = require("../../src/adaptivecard.js");
 
 /**
  * @param {string} source
@@ -203,5 +203,87 @@ describe("findAdaptiveCardDiagnostics — <% %> template regions", () => {
       '] }',
     ].join("\n");
     assert.deepEqual(diagnose(src), []);
+  });
+});
+
+describe("findAdaptiveCardDiagnostics — version too low", () => {
+  it("flags an element newer than the card's declared version, with the declaration as related info", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "Table", "rows": [] } ] }';
+    const [d] = only(src, "adaptivecard-version-too-low");
+    assert.ok(d);
+    assert.equal(d.message, "'Table' requires Adaptive Card version 1.5 or later, but this card declares version 1.2.");
+    assert.equal(d.range.start.character, src.indexOf("Table"));
+    assert.equal(d.relatedInformation[0].location.range.start.character, src.indexOf("1.2"));
+  });
+
+  it("does not flag elements the declared version supports", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.5", "body": [ { "type": "Table" }, { "type": "ActionSet" } ], "actions": [ { "type": "Action.Execute" } ] }';
+    assert.deepEqual(only(src, "adaptivecard-version-too-low"), []);
+  });
+
+  it("compares versions numerically (1.10 is newer than 1.5)", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.10", "body": [ { "type": "Table" } ] }';
+    assert.deepEqual(only(src, "adaptivecard-version-too-low"), []);
+  });
+
+  it("skips an element that has its own fallback", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "Table", "fallback": "drop" } ] }';
+    assert.deepEqual(only(src, "adaptivecard-version-too-low"), []);
+  });
+
+  it("skips the children of an element that has a fallback", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "Table", "fallback": "drop", "columns": [ { "type": "TableColumnDefinition" } ] } ] }';
+    assert.deepEqual(only(src, "adaptivecard-version-too-low"), []);
+  });
+
+  it("does not skip an element just because a child has a fallback", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "Table", "rows": [ { "type": "TableRow", "fallback": "drop" } ] } ] }';
+    assert.deepEqual(only(src, "adaptivecard-version-too-low").map((d) => d.message.split("'")[1]), ["Table"]);
+  });
+
+  it("skips the check when the version is templated or not major.minor", () => {
+    for (const version of ["$CardVersion", "latest", "1"]) {
+      const src = `{ "type": "AdaptiveCard", "version": "${version}", "body": [ { "type": "Table" } ] }`;
+      assert.deepEqual(only(src, "adaptivecard-version-too-low"), [], version);
+    }
+  });
+
+  it("uses only the card's own version, not a nested one", () => {
+    const src = '{ "type": "AdaptiveCard", "body": [ { "type": "Container", "version": "1.5", "items": [ { "type": "Table" } ] } ], "version": "1.0" }';
+    assert.equal(only(src, "adaptivecard-version-too-low").length, 1);
+  });
+
+  it("ignores types inside free-form payloads", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.0", "actions": [ { "type": "Action.Submit", "data": { "type": "Table" } } ] }';
+    assert.deepEqual(only(src, "adaptivecard-version-too-low"), []);
+  });
+});
+
+describe("createCardVersionFix", () => {
+  /** @param {string} source */
+  function fixFor(source) {
+    const [d] = only(source, "adaptivecard-version-too-low");
+    const document = /** @type {any} */ ({
+      uri: "file:///card.otter",
+      getText: () => source,
+      positionAt: (/** @type {number} */ offset) => new Position(0, offset),
+    });
+    return createCardVersionFix(document, d);
+  }
+
+  it("raises the version to the highest one any element needs", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.0", "body": [ { "type": "Table" }, { "type": "Media" } ] }';
+    const fix = /** @type {any} */ (fixFor(src));
+    assert.equal(fix.title, "Change card version to 1.5");
+    const [[op, , range, text]] = fix.edit.edits;
+    assert.equal(op, "replace");
+    assert.equal(range.start.character, src.indexOf("1.0"));
+    assert.equal(range.end.character, src.indexOf("1.0") + 3);
+    assert.equal(text, "1.5");
+  });
+
+  it("returns null once nothing needs a newer version", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.5", "body": [ { "type": "Table" } ] }';
+    assert.equal(createCardVersionFix(/** @type {any} */ ({ uri: "u", getText: () => src, positionAt: () => new Position(0, 0) }), /** @type {any} */ ({})), null);
   });
 });

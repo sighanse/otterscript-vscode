@@ -31,6 +31,7 @@
 // -- VS Code Extension API
 const vscode = require("vscode");
 const { updateDiagnostics, DIAGNOSTIC_CODES } = require("./diagnostics");
+const { createCardVersionFix } = require("./adaptivecard");
 
 // -- Language documentation (functions, variables, operations, keywords).
 // Plain strings only; any conversion to MarkdownString happens in this file.
@@ -689,6 +690,7 @@ function activate(context) {
     "incorrect-for-usage":     createForToForeachFix,
     "unknown-namespace":       createUnknownNamespaceFix,
     "template-end-keyword":    createTemplateEndFix,
+    "adaptivecard-version-too-low": createCardVersionFix,
   });
 
   // ============================================================
@@ -785,6 +787,10 @@ function activate(context) {
       // -- Sort from end to start to avoid position shifts
       const sorted = [...fixableDiagnostics].sort((a, b) => b.range.start.compareTo(a.range.start));
       const workspaceEdit = new vscode.WorkspaceEdit();
+      // Several diagnostics can share one fix (e.g. every version-too-low in
+      // a card raises the same "version" value); applying an identical edit
+      // twice would be rejected as overlapping, so each is added once.
+      const addedEdits = new Set();
       let fixedCount = 0;
 
       for (const diagnostic of sorted) {
@@ -800,6 +806,9 @@ function activate(context) {
         for (const [uri, uriEdits] of action.edit.entries()) {
           if (uriEdits.length) hasEdits = true;
           for (const { range, newText } of uriEdits) {
+            const key = `${uri.toString()}:${document.offsetAt(range.start)}:${document.offsetAt(range.end)}:${newText}`;
+            if (addedEdits.has(key)) continue;
+            addedEdits.add(key);
             workspaceEdit.replace(uri, range, newText);
           }
         }

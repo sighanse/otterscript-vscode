@@ -5,6 +5,7 @@
 ### Added
 
 - `otterscript.diagnostics.rules` setting to turn individual diagnostics off or change their severity, keyed by diagnostic code; every diagnostic also gets a **Turn off '&lt;code&gt;' diagnostics** quick fix. Unbalanced-symbol and unmatched/unclosed `<% %>` diagnostics now have codes too (`unbalanced-symbol`, `template-unexpected-close`, `template-unclosed`)
+- `adaptivecard-version-too-low` diagnostic: an Adaptive Card element or action that needs a newer card version than the card's declared `"version"` (e.g. a 1.5 `Table` in a 1.2 card) is flagged, unless it or an enclosing element has a `"fallback"`. The quick fix **Change card version to X** raises the version to the highest one the card needs
 
 ### Fixed
 

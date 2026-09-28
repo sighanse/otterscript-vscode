@@ -14,7 +14,9 @@
  * value inside the Adaptive Card object must be a real element/action type
  * name (see adaptivecard-data.js) -- except inside free-form payloads such as
  * an action's `data`, Teams' `msteams` extension or `Authentication.buttons`,
- * where `"type"` is arbitrary -- and that object must have a `"version"` property.
+ * where `"type"` is arbitrary -- that object must have a `"version"` property,
+ * and no element or action may need a newer card version than it declares
+ * (unless it, or an element around it, provides a `"fallback"`).
  *
  * @module adaptivecard
  */
@@ -222,21 +224,60 @@ function findEnclosingBraceStart(text, index) {
 }
 
 /**
- * Runs the Adaptive Card checks over one document. Content-triggered: does
- * nothing unless the literal (non-`<% %>`) text contains `"type": "AdaptiveCard"`
- * somewhere -- everything outside that object (e.g. a Teams message
- * envelope's own `"type": "message"`) is never checked. Only the FIRST such
- * object is checked; a nested `Action.ShowCard`'s own Adaptive Card is out
- * of scope for now.
+ * Parses a `"major.minor"` card version. Anything else -- a templated value
+ * such as `"$CardVersion"`, or a malformed one -- yields null, which turns
+ * the version comparison off rather than guessing.
  *
- * @param {vscode.TextDocument} document
- * @param {string} text - `document.getText()`, passed in to avoid recomputing
- * @returns {vscode.Diagnostic[]}
+ * @param {string} value
+ * @returns {[number, number] | null}
  */
-function findAdaptiveCardDiagnostics(document, text) {
-  /** @type {vscode.Diagnostic[]} */
-  const issues = [];
+function parseCardVersion(value) {
+  const match = /^(\d+)\.(\d+)$/.exec(value.trim());
+  return match ? [Number(match[1]), Number(match[2])] : null;
+}
 
+/**
+ * Compares two parsed card versions.
+ *
+ * @param {[number, number]} a
+ * @param {[number, number]} b
+ * @returns {number} Negative, zero, or positive, like a sort comparator.
+ */
+function compareCardVersions(a, b) {
+  return a[0] - b[0] || a[1] - b[1];
+}
+
+/**
+ * Finds the `[start, end]` span of every object in `text` that has its own
+ * `"fallback"` key. A host that doesn't support such an element replaces the
+ * whole object -- children included -- with its fallback, so nothing inside
+ * the span needs the card's declared version.
+ *
+ * @param {string} text
+ * @returns {{ start: number, end: number }[]}
+ */
+function findFallbackSpans(text) {
+  const spans = [];
+  for (const token of findJsonStringTokens(text)) {
+    if (token.value !== "fallback" || valueStartAfterKey(text, token) === -1) continue;
+    const start = findEnclosingBraceStart(text, token.start);
+    const end = start === -1 ? -1 : findMatchingClose(text, start);
+    if (end !== -1) spans.push({ start, end });
+  }
+  return spans;
+}
+
+/**
+ * Locates the Adaptive Card in a document: the first literal (non-`<% %>`)
+ * object with `"type": "AdaptiveCard"` that isn't a lookalike inside a
+ * free-form payload.
+ *
+ * @param {string} text - Full document text
+ * @returns {{ objStart: number, span: string } | null} `span` is the card
+ *   object's literal text, from its `{` to its matching `}`; offsets inside
+ *   it are relative to `objStart`.
+ */
+function locateCard(text) {
   const state = createTemplateScanState();
   const literalText = text.split("\n").map((line) => maskTemplateTagContents(line, state)).join("\n");
 
@@ -247,48 +288,177 @@ function findAdaptiveCardDiagnostics(document, text) {
   const root = findStringProperties(literalText, "type").find(
     (t) => t.value === "AdaptiveCard" && !isInsideAny(literalFreeFormSpans, t.valueStart)
   );
-  if (!root) return issues;
+  if (!root) return null;
 
   const objStart = findEnclosingBraceStart(literalText, root.valueStart);
-  if (objStart === -1) return issues; // malformed JSON -- the unbalanced-symbol check owns this
+  if (objStart === -1) return null; // malformed JSON -- the unbalanced-symbol check owns this
   const objEnd = findMatchingClose(literalText, objStart);
-  if (objEnd === -1) return issues;
+  if (objEnd === -1) return null;
 
-  const span = literalText.slice(objStart, objEnd + 1);
+  return { objStart, span: literalText.slice(objStart, objEnd + 1) };
+}
 
-  if (!hasKeyProperty(span, "version")) {
+/**
+ * The card's own `"version"` string property (not one belonging to a nested
+ * object), with its value's offsets relative to the card span.
+ *
+ * @param {string} span - Card object text, as returned by {@link locateCard}
+ * @returns {{ value: string, valueStart: number, valueEnd: number } | undefined}
+ */
+function findOwnVersionProperty(span) {
+  return findStringProperties(span, "version").find(
+    (p) => findEnclosingBraceStart(span, p.valueStart) === 0
+  );
+}
+
+/**
+ * Every element/action `"type"` in the card that needs a newer card version
+ * than `cardVersion`. Skipped: free-form payloads, and any element that has
+ * a `"fallback"` (or sits inside one that does) -- that's the standard way to
+ * use a newer element on purpose while still targeting older hosts.
+ *
+ * @param {string} span - Card object text
+ * @param {[number, number]} cardVersion
+ * @returns {{ value: string, valueStart: number, valueEnd: number, required: string }[]}
+ */
+function findTooNewTypes(span, cardVersion) {
+  const skippedSpans = [...findFreeFormSpans(span), ...findFallbackSpans(span)];
+  const results = [];
+  for (const property of findStringProperties(span, "type")) {
+    const required = ADAPTIVE_CARD_TYPES.get(property.value);
+    if (!required || isInsideAny(skippedSpans, property.valueStart)) continue;
+
+    const requiredVersion = parseCardVersion(required);
+    if (!requiredVersion || compareCardVersions(requiredVersion, cardVersion) <= 0) continue;
+
+    results.push({ ...property, required });
+  }
+  return results;
+}
+
+/**
+ * Runs the Adaptive Card checks over one document. Content-triggered: does
+ * nothing unless the literal (non-`<% %>`) text contains `"type": "AdaptiveCard"`
+ * somewhere -- everything outside that object (e.g. a Teams message
+ * envelope's own `"type": "message"`) is never checked. Only the FIRST such
+ * object is the card; an `Action.ShowCard`'s nested card is checked as part
+ * of it (its elements against the outer card's `"version"`).
+ *
+ * @param {vscode.TextDocument} document
+ * @param {string} text - `document.getText()`, passed in to avoid recomputing
+ * @returns {vscode.Diagnostic[]}
+ */
+function findAdaptiveCardDiagnostics(document, text) {
+  /** @type {vscode.Diagnostic[]} */
+  const issues = [];
+
+  const card = locateCard(text);
+  if (!card) return issues;
+  const { objStart, span } = card;
+
+  /**
+   * Adds a warning spanning `[start, end)` of the card span.
+   *
+   * @param {number} start
+   * @param {number} end
+   * @param {string} message
+   * @param {string} code
+   * @returns {vscode.Diagnostic}
+   */
+  const addIssue = (start, end, message, code) => {
     const diagnostic = new vscode.Diagnostic(
-      new vscode.Range(document.positionAt(objStart), document.positionAt(objStart + 1)),
-      'Adaptive Card is missing its required "version" property.',
+      new vscode.Range(document.positionAt(objStart + start), document.positionAt(objStart + end)),
+      message,
       vscode.DiagnosticSeverity.Warning
     );
-    diagnostic.code = "adaptivecard-missing-version";
+    diagnostic.code = code;
     diagnostic.source = "OtterScript";
     issues.push(diagnostic);
+    return diagnostic;
+  };
+
+  if (!hasKeyProperty(span, "version")) {
+    addIssue(0, 1, 'Adaptive Card is missing its required "version" property.', "adaptivecard-missing-version");
   }
 
   const freeFormSpans = findFreeFormSpans(span);
   for (const { value, valueStart, valueEnd } of findStringProperties(span, "type")) {
     if (ADAPTIVE_CARD_TYPES.has(value)) continue;
     if (isInsideAny(freeFormSpans, valueStart)) continue;
+    addIssue(valueStart, valueEnd, `Unknown Adaptive Card type '${value}'.`, "adaptivecard-unknown-type");
+  }
 
-    const absoluteStart = objStart + valueStart;
-    const diagnostic = new vscode.Diagnostic(
+  const versionProperty = findOwnVersionProperty(span);
+  const cardVersion = versionProperty && parseCardVersion(versionProperty.value);
+  if (versionProperty && cardVersion) {
+    const versionLocation = new vscode.Location(
+      document.uri,
       new vscode.Range(
-        document.positionAt(absoluteStart),
-        document.positionAt(absoluteStart + (valueEnd - valueStart))
-      ),
-      `Unknown Adaptive Card type '${value}'.`,
-      vscode.DiagnosticSeverity.Warning
+        document.positionAt(objStart + versionProperty.valueStart),
+        document.positionAt(objStart + versionProperty.valueEnd)
+      )
     );
-    diagnostic.code = "adaptivecard-unknown-type";
-    diagnostic.source = "OtterScript";
-    issues.push(diagnostic);
+    for (const { value, valueStart, valueEnd, required } of findTooNewTypes(span, cardVersion)) {
+      const diagnostic = addIssue(
+        valueStart, valueEnd,
+        `'${value}' requires Adaptive Card version ${required} or later, but this card declares version ${versionProperty.value.trim()}.`,
+        "adaptivecard-version-too-low"
+      );
+      diagnostic.relatedInformation = [
+        new vscode.DiagnosticRelatedInformation(versionLocation, "Card version declared here"),
+      ];
+    }
   }
 
   return issues;
 }
 
+/**
+ * Quick fix for `adaptivecard-version-too-low`: raises the card's declared
+ * `"version"` to the highest version any of its elements needs, so one fix
+ * clears every such diagnostic in the card. Re-derives everything from the
+ * document text (diagnostics handed back by VS Code keep only their public
+ * fields), so repeated calls -- e.g. once per diagnostic in Fix All --
+ * produce the identical edit.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Diagnostic} diagnostic
+ * @returns {vscode.CodeAction | null}
+ */
+function createCardVersionFix(document, diagnostic) {
+  const card = locateCard(document.getText());
+  if (!card) return null;
+  const versionProperty = findOwnVersionProperty(card.span);
+  const cardVersion = versionProperty && parseCardVersion(versionProperty.value);
+  if (!versionProperty || !cardVersion) return null;
+
+  let highest = cardVersion;
+  let highestText = "";
+  for (const { required } of findTooNewTypes(card.span, cardVersion)) {
+    const parsed = parseCardVersion(required);
+    if (parsed && compareCardVersions(parsed, highest) > 0) {
+      highest = parsed;
+      highestText = required;
+    }
+  }
+  if (!highestText) return null;
+
+  const action = new vscode.CodeAction(`Change card version to ${highestText}`, vscode.CodeActionKind.QuickFix);
+  action.diagnostics = [diagnostic];
+  action.isPreferred = true;
+  action.edit = new vscode.WorkspaceEdit();
+  action.edit.replace(
+    document.uri,
+    new vscode.Range(
+      document.positionAt(card.objStart + versionProperty.valueStart),
+      document.positionAt(card.objStart + versionProperty.valueEnd)
+    ),
+    highestText
+  );
+  return action;
+}
+
 module.exports = {
+  createCardVersionFix,
   findAdaptiveCardDiagnostics,
 };

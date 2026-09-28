@@ -1,0 +1,40 @@
+# SAMPLE-CARD-VERSION.OTTER
+#
+# Manual-review corpus for the adaptivecard-version-too-low check. It lives in
+# its own file because only the FIRST Adaptive Card in a document is checked,
+# and test/sample-template.otter's card deliberately has no "version".
+#
+# The <% %> tag below makes this a text template, which is what switches the
+# Adaptive Card checks on. Every `# EXPECT:` note marks a line that must raise
+# exactly the named diagnostic.
+#
+# Expected total: 4 diagnostics (pinned by test/unit/fixtures.test.js) -
+#   adaptivecard-version-too-low x4. The quick fix "Change card version to 1.5"
+#   on any of them raises "version" to the highest version the card needs.
+
+<% if $Notify { %>
+{
+  "type": "AdaptiveCard",
+  "version": "1.2",
+  "body": [
+    { "type": "RichTextBlock", "inlines": [ { "type": "TextRun", "text": "ok" } ] },
+    { "type": "Table", "rows": [] },
+    { "type": "Table", "fallback": "drop", "columns": [ { "type": "TableColumnDefinition" } ] }
+  ],
+  "actions": [
+    { "type": "Action.Execute", "title": "Run" },
+    { "type": "Action.Submit", "data": { "type": "Table" } }
+  ],
+  "refresh": { "type": "Refresh", "action": { "type": "Action.Execute" } }
+}
+<% } %>
+
+# Line by line:
+#   RichTextBlock / TextRun (1.2)           -- not flagged: supported by 1.2
+#   first Table (1.5)                       -- EXPECT: adaptivecard-version-too-low
+#   second Table (1.5) with "fallback"      -- not flagged, and neither is its
+#                                              TableColumnDefinition child: an older
+#                                              host replaces the whole element
+#   Action.Execute (1.4)                    -- EXPECT: adaptivecard-version-too-low
+#   "type": "Table" inside "data"           -- not flagged: free-form payload
+#   Refresh (1.4) and its Action.Execute    -- EXPECT: adaptivecard-version-too-low x2

@@ -99,10 +99,17 @@ describe("manual-review fixtures", () => {
     assert.equal(diagnoseFixture("sample-template.otter").length, 13);
   });
 
+  it("sample-card-version.otter IS template-aware and flags exactly its four version-too-low diagnostics", () => {
+    const source = fs.readFileSync(path.join(__dirname, "..", "sample-card-version.otter"), "utf8");
+    assert.equal(documentUsesTemplateTags(source), true);
+    const found = diagnoseFixture("sample-card-version.otter");
+    assert.deepEqual(found.map((d) => d.code), Array(4).fill("adaptivecard-version-too-low"));
+  });
+
   it("every diagnostic in the error fixtures carries a code listed in DIAGNOSTIC_CODES", () => {
     // A code is what the otterscript.diagnostics.rules setting keys on, so a
     // check emitted without one could never be turned off.
-    for (const fixture of ["sample.otter", "sample-template.otter"]) {
+    for (const fixture of ["sample.otter", "sample-template.otter", "sample-card-version.otter"]) {
       for (const d of diagnoseFixture(fixture)) {
         assert.ok(DIAGNOSTIC_CODES.includes(d.code), `${fixture}: '${d.message}' has code ${d.code}`);
       }
