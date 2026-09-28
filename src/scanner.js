@@ -203,6 +203,91 @@ function isModuleCallContext(lineText, wordStart) {
 // ============================================================
 
 /**
+ * What {@link stepCodeScan} found at a position:
+ * - `code` -- one character of real code
+ * - `stringDelimiter` -- a quote, or a swim-string's opening/closing fish
+ * - `stringContent` -- one character inside a quoted string or swim-string
+ * - `blockComment` -- part of a `/* ... *\/` comment, delimiters included
+ * - `lineComment` -- a `#` or `//` comment running to the end of the line
+ *
+ * @typedef {"code" | "stringDelimiter" | "stringContent" | "blockComment" | "lineComment"} ScanKind
+ */
+
+/**
+ * The one OtterScript string/comment state machine, one step at a time.
+ * Classifies whatever starts at `line[i]`, advances `state` past it, and
+ * returns where the next step starts. Every scanner in this module
+ * ({@link scanLineState}, {@link isInStringOrComment}, and the inside-tag
+ * parts of {@link maskOutsideTemplateTags} / {@link maskTemplateTagContents})
+ * is a loop over this, so they cannot disagree on what is a string or comment.
+ *
+ * Recognized: `"..."` and `'...'` strings (backslash-escaped quotes), swim
+ * strings (`>>...>>`, `>END>...>END>`: `>`, up to 5 non-`>` chars, `>`, with
+ * the body running until the same fish appears again, possibly lines later),
+ * `/* *\/` block comments, and `#` / `//` line comments.
+ *
+ * @param {string} line
+ * @param {number} i - Position to classify
+ * @param {CodeScanState} state - Mutated in place.
+ * @returns {{ kind: ScanKind, next: number }} `next` is the index just past
+ *   the classified piece (`line.length` for a line comment).
+ */
+function stepCodeScan(line, i, state) {
+  const ch = line[i];
+
+  if (state.inBlockComment) {
+    if (ch === "*" && line[i + 1] === "/") {
+      state.inBlockComment = false;
+      return { kind: "blockComment", next: i + 2 };
+    }
+    return { kind: "blockComment", next: i + 1 };
+  }
+
+  if (state.swimDelimiter) {
+    if (line.startsWith(state.swimDelimiter, i)) {
+      const next = i + state.swimDelimiter.length;
+      state.swimDelimiter = null;
+      return { kind: "stringDelimiter", next };
+    }
+    return { kind: "stringContent", next: i + 1 };
+  }
+
+  if (state.inString) {
+    if (ch === state.quote && isUnescapedQuoteAt(line, i)) {
+      state.inString = false;
+      state.quote = null;
+      return { kind: "stringDelimiter", next: i + 1 };
+    }
+    return { kind: "stringContent", next: i + 1 };
+  }
+
+  if (ch === "/" && line[i + 1] === "*") {
+    state.inBlockComment = true;
+    return { kind: "blockComment", next: i + 2 };
+  }
+
+  if (ch === ">") {
+    const swimMatch = /^>[^>]{0,5}>/.exec(line.slice(i, i + 7));
+    if (swimMatch) {
+      state.swimDelimiter = swimMatch[0];
+      return { kind: "stringDelimiter", next: i + swimMatch[0].length };
+    }
+  }
+
+  if (ch === '"' || ch === "'") {
+    state.inString = true;
+    state.quote = ch;
+    return { kind: "stringDelimiter", next: i + 1 };
+  }
+
+  if (ch === "#" || (ch === "/" && line[i + 1] === "/")) {
+    return { kind: "lineComment", next: line.length };
+  }
+
+  return { kind: "code", next: i + 1 };
+}
+
+/**
  * Core line scanner shared by {@link maskNonCodeSpans} and {@link advanceScanState}.
  *
  * Advances `state` by processing every character of `lineText`.  When `chars`
@@ -223,87 +308,13 @@ function isModuleCallContext(lineText, wordStart) {
  * @internal
  */
 function scanLineState(lineText, state, chars, keepStrings = false) {
-  for (let i = 0; i < lineText.length; i++) {
-    const ch = lineText[i];
-
-    if (state.inBlockComment) {
-      if (chars) chars[i] = " ";
-      if (ch === "*" && lineText[i + 1] === "/") {
-        if (chars) chars[i + 1] = " ";
-        state.inBlockComment = false;
-        i++;
-      }
-      continue;
+  let i = 0;
+  while (i < lineText.length) {
+    const { kind, next } = stepCodeScan(lineText, i, state);
+    if (chars && kind !== "code" && !(keepStrings && kind === "stringContent")) {
+      for (let j = i; j < next && j < chars.length; j++) chars[j] = " ";
     }
-
-    if (state.swimDelimiter) {
-      if (chars && !keepStrings) chars[i] = " ";
-      if (lineText.startsWith(state.swimDelimiter, i)) {
-        if (chars) {
-          for (let j = 0; j < state.swimDelimiter.length; j++) {
-            if (i + j < chars.length) chars[i + j] = " ";
-          }
-        }
-        i += state.swimDelimiter.length - 1;
-        state.swimDelimiter = null;
-      }
-      continue;
-    }
-
-    if (state.inString) {
-      if (chars && !keepStrings) chars[i] = " ";
-      if (ch === state.quote && isUnescapedQuoteAt(lineText, i)) {
-        if (chars) chars[i] = " ";
-        state.inString = false;
-        state.quote = null;
-      }
-      continue;
-    }
-
-    if (ch === "/" && lineText[i + 1] === "*") {
-      if (chars) {
-        chars[i] = " ";
-        if (i + 1 < chars.length) chars[i + 1] = " ";
-      }
-      state.inBlockComment = true;
-      i++;
-      continue;
-    }
-
-    // Swim-string opener: `>`, up to 5 non-`>` chars, `>` (e.g. `>>`, `>END>`).
-    // The body runs until the same delimiter appears again, possibly lines later.
-    if (ch === ">") {
-      const swimMatch = lineText.slice(i).match(/^>[^>]{0,5}>/);
-      if (swimMatch) {
-        const delimiter = swimMatch[0];
-        if (chars) {
-          for (let j = 0; j < delimiter.length; j++) {
-            if (i + j < chars.length) chars[i + j] = " ";
-          }
-        }
-        state.swimDelimiter = delimiter;
-        i += delimiter.length - 1;
-        continue;
-      }
-    }
-
-    if (ch === '"' || ch === "'") {
-      if (chars) chars[i] = " ";
-      state.inString = true;
-      state.quote = ch;
-      continue;
-    }
-
-    // Line comments (`#` or `//`): blank the rest of the line and stop.
-    if (ch === "#") {
-      if (chars) { for (let j = i; j < chars.length; j++) chars[j] = " "; }
-      break;
-    }
-
-    if (ch === "/" && lineText[i + 1] === "/") {
-      if (chars) { for (let j = i; j < chars.length; j++) chars[j] = " "; }
-      break;
-    }
+    i = next;
   }
 }
 
@@ -372,6 +383,21 @@ function createTemplateScanState() {
 }
 
 /**
+ * Whether a `%>` at `line[i]` closes the current template tag: only when the
+ * tag's code is not inside a string, block comment or swim-string (a line
+ * comment never gets here -- the scan stops at it).
+ *
+ * @param {string} line
+ * @param {number} i
+ * @param {CodeScanState} code - The inside-tag scan state
+ * @returns {boolean}
+ */
+function isTemplateTagClose(line, i, code) {
+  return line[i] === "%" && line[i + 1] === ">" &&
+    !code.inString && !code.inBlockComment && !code.swimDelimiter;
+}
+
+/**
  * Blanks every character that is NOT inside a `<% ... %>` template tag AND NOT
  * part of an embedded `$` value expression in the literal text (see
  * {@link findEmbeddedExpressionEnd}), length-preserving, so downstream code
@@ -436,52 +462,16 @@ function maskOutsideTemplateTags(line, state) {
     // ---- Inside a tag: keep the code; `%>` closes only when it is real code --
     // A tag never closes mid string/comment/swim, so on the next `<%` `code` is
     // already clean; no reset needed.
-    if (code.inBlockComment) {
-      if (ch === "*" && line[i + 1] === "/") { code.inBlockComment = false; i++; }
-      continue;
-    }
-    if (code.swimDelimiter) {
-      if (line.startsWith(code.swimDelimiter, i)) {
-        i += code.swimDelimiter.length - 1;
-        code.swimDelimiter = null;
-      }
-      continue;
-    }
-    if (code.inString) {
-      if (ch === code.quote && isUnescapedQuoteAt(line, i)) {
-        code.inString = false;
-        code.quote = null;
-      }
-      continue;
-    }
-    if (ch === "%" && line[i + 1] === ">") {
+    if (isTemplateTagClose(line, i, code)) {
       chars[i] = " ";
       chars[i + 1] = " ";
       state.inTemplateTag = false;
       i++;
       continue;
     }
-    if (ch === "/" && line[i + 1] === "*") {
-      code.inBlockComment = true;
-      i++;
-      continue;
-    }
-    if (ch === ">") {
-      const swimMatch = line.slice(i).match(/^>[^>]{0,5}>/);
-      if (swimMatch) {
-        code.swimDelimiter = swimMatch[0];
-        i += swimMatch[0].length - 1;
-        continue;
-      }
-    }
-    if (ch === '"' || ch === "'") {
-      code.inString = true;
-      code.quote = ch;
-      continue;
-    }
-    if (ch === "#" || (ch === "/" && line[i + 1] === "/")) {
-      break; // rest of the line is a comment; nothing after can close the tag
-    }
+    const { kind, next } = stepCodeScan(line, i, code);
+    if (kind === "lineComment") break; // nothing after it can close the tag
+    i = next - 1; // the loop's i++ lands on `next`
   }
 
   return chars.join("");
@@ -539,57 +529,17 @@ function maskTemplateTagContents(line, state) {
     }
 
     // ---- Inside a tag: blank everything; `%>` closes only when it is real
-    // code, mirroring maskOutsideTemplateTags's inside-tag branch exactly. --
-    chars[i] = " ";
-    if (code.inBlockComment) {
-      if (ch === "*" && line[i + 1] === "/") { chars[i + 1] = " "; code.inBlockComment = false; i++; }
-      continue;
-    }
-    if (code.swimDelimiter) {
-      if (line.startsWith(code.swimDelimiter, i)) {
-        for (let k = 1; k < code.swimDelimiter.length; k++) chars[i + k] = " ";
-        i += code.swimDelimiter.length - 1;
-        code.swimDelimiter = null;
-      }
-      continue;
-    }
-    if (code.inString) {
-      if (ch === code.quote && isUnescapedQuoteAt(line, i)) {
-        code.inString = false;
-        code.quote = null;
-      }
-      continue;
-    }
-    if (ch === "%" && line[i + 1] === ">") {
+    // code, using the same rule as maskOutsideTemplateTags. -----------------
+    if (isTemplateTagClose(line, i, code)) {
+      chars[i] = " ";
       chars[i + 1] = " ";
       state.inTemplateTag = false;
       i++;
       continue;
     }
-    if (ch === "/" && line[i + 1] === "*") {
-      chars[i + 1] = " ";
-      code.inBlockComment = true;
-      i++;
-      continue;
-    }
-    if (ch === ">") {
-      const swimMatch = line.slice(i).match(/^>[^>]{0,5}>/);
-      if (swimMatch) {
-        for (let k = 1; k < swimMatch[0].length; k++) chars[i + k] = " ";
-        code.swimDelimiter = swimMatch[0];
-        i += swimMatch[0].length - 1;
-        continue;
-      }
-    }
-    if (ch === '"' || ch === "'") {
-      code.inString = true;
-      code.quote = ch;
-      continue;
-    }
-    if (ch === "#" || (ch === "/" && line[i + 1] === "/")) {
-      for (let k = i; k < line.length; k++) chars[k] = " ";
-      break; // rest of the line is a comment; nothing after can close the tag
-    }
+    const { next } = stepCodeScan(line, i, code);
+    for (let k = i; k < next && k < line.length; k++) chars[k] = " ";
+    i = next - 1; // the loop's i++ lands on `next`
   }
 
   return chars.join("");
@@ -727,57 +677,11 @@ function isInStringOrComment(line, position, initialState) {
   // Shallow-copy so callers that pass a carried state are not mutated.
   const scanState = initialState ? { ...initialState } : createCodeScanState();
 
-  for (let i = 0; i < limit; i++) {
-    const ch = line[i];
-
-    if (scanState.inBlockComment) {
-      if (ch === "*" && line[i + 1] === "/") {
-        scanState.inBlockComment = false;
-        i++;
-      }
-      continue;
-    }
-
-    if (scanState.swimDelimiter) {
-      if (line.startsWith(scanState.swimDelimiter, i)) {
-        i += scanState.swimDelimiter.length - 1;
-        scanState.swimDelimiter = null;
-      }
-      continue;
-    }
-
-    if (scanState.inString) {
-      if (ch === scanState.quote && isUnescapedQuoteAt(line, i)) {
-        scanState.inString = false;
-        scanState.quote = null;
-      }
-      continue;
-    }
-
-    if (ch === "/" && line[i + 1] === "*") {
-      scanState.inBlockComment = true;
-      i++;
-      continue;
-    }
-
-    if (ch === ">") {
-      const swimMatch = line.slice(i).match(/^>[^>]{0,5}>/);
-      if (swimMatch) {
-        scanState.swimDelimiter = swimMatch[0];
-        i += scanState.swimDelimiter.length - 1;
-        continue;
-      }
-    }
-
-    if (ch === '"' || ch === "'") {
-      scanState.inString = true;
-      scanState.quote = ch;
-      continue;
-    }
-
-    if (ch === "#" || (ch === "/" && line[i + 1] === "/")) {
-      return true;
-    }
+  let i = 0;
+  while (i < limit) {
+    const { kind, next } = stepCodeScan(line, i, scanState);
+    if (kind === "lineComment") return true; // the comment starts before `position`
+    i = next;
   }
 
   return scanState.inString || scanState.inBlockComment || scanState.swimDelimiter !== null;
