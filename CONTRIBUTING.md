@@ -21,6 +21,10 @@ npm run lint      # ESLint only
 npm run test:integration   # integration tests in real VS Code (see below)
 ```
 
+Optionally, install the [pre-commit](https://pre-commit.com) hooks once with
+`pre-commit install`. Each commit then gets the file, Markdown, workflow and
+ESLint checks, and each push runs `npm run check`.
+
 Press <kbd>F5</kbd> in VS Code to launch an Extension Development Host with this
 repo loaded as the test workspace. The same checks run in CI
 (`.github/workflows/sanity.yml`) on every pull request.
