@@ -15,7 +15,7 @@ permissions:
 jobs:
   sanity:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v7
@@ -101,7 +101,7 @@ jobs:
           echo ""
 
           # Check every tracked text file (binaries are skipped by grep -I)
-          CRLF_FILES=$(grep -rlI $'\r' --exclude-dir=.git --exclude-dir=.vscode --exclude-dir=node_modules . 2>/dev/null || true)
+          CRLF_FILES=$(grep -rlI $'\r' --exclude-dir=.git --exclude-dir=.vscode --exclude-dir=.vscode-test --exclude-dir=node_modules . 2>/dev/null || true)
 
           if [ -n "$CRLF_FILES" ]; then
             echo "❌ Files with CRLF line endings:"
@@ -114,11 +114,34 @@ jobs:
           echo "✅ All source files have LF line endings"
 
       # Catches manifest / .vscodeignore mistakes before merge rather than in
-      # the post-merge Build workflow. Runs last so the .vsix it writes is not
-      # scanned by the checks above.
+      # the post-merge Build workflow. Runs after the file checks so the .vsix
+      # it writes is not scanned by them.
       - name: Package extension (validation only)
         id: package
         run: npm run package
+        continue-on-error: true
+
+      # The VS Code builds the integration tests download (~130 MB each). The
+      # key rolls over weekly so a newer "stable" gets cached too; the pinned
+      # minimum version is restored from the previous week's cache.
+      - name: Compute VS Code cache key
+        id: vscodeCacheKey
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache VS Code test builds
+        uses: actions/cache@v6
+        with:
+          path: .vscode-test
+          key: vscode-test-${{ runner.os }}-${{ hashFiles('.vscode-test.mjs') }}-${{ steps.vscodeCacheKey.outputs.week }}
+          restore-keys: |
+            vscode-test-${{ runner.os }}-${{ hashFiles('.vscode-test.mjs') }}-
+
+      # Loads the extension in real VS Code (the minimum supported version and
+      # current stable) and drives hover, completion, diagnostics, quick fixes
+      # and navigation. xvfb provides the display VS Code needs on Linux.
+      - name: Integration tests
+        id: integration
+        run: xvfb-run -a npm run test:integration
         continue-on-error: true
 
       - name: Summary
@@ -183,6 +206,13 @@ jobs:
             echo "❌ Package: failed" >> "$GITHUB_STEP_SUMMARY"
           fi
 
+          # Integration tests
+          if [ "${{ steps.integration.outcome }}" == "success" ]; then
+            echo "✅ Integration tests: passed" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ Integration tests: failed" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
           # npm audit (informational only -- does not block the PR)
           if [ "${{ steps.audit.outcome }}" == "success" ]; then
             echo "✅ npm audit: passed (no vulnerabilities)" >> "$GITHUB_STEP_SUMMARY"
@@ -206,6 +236,7 @@ jobs:
             JSONC=${{ steps.jsonc.outcome }}
             Line-endings=${{ steps.lineEndings.outcome }}
             Package=${{ steps.package.outcome }}
+            Integration-tests=${{ steps.integration.outcome }}
         run: |
           failed=0
           for entry in $OUTCOMES; do
