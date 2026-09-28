@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- Adaptive Card check no longer flags `TextRun` inlines in a `RichTextBlock`, or the free-form `"type"` of `Authentication` sign-in buttons, as unknown types
+
 ## [0.4.0] - 2026-09-27
 
 ### Added

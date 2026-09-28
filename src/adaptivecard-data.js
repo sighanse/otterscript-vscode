@@ -49,6 +49,7 @@ const ADAPTIVE_CARD_TYPES = new Set([
   "TableColumnDefinition",
   "TableRow",
   "TextBlock",
+  "TextRun",
   "Authentication",
   "BackgroundImage",
   "Refresh",

@@ -13,8 +13,8 @@
  * of what any template hole evaluates to: every literal `"type": "..."`
  * value inside the Adaptive Card object must be a real element/action type
  * name (see adaptivecard-data.js) -- except inside free-form payloads such as
- * an action's `data` or Teams' `msteams` extension, where `"type"` is
- * arbitrary -- and that object must have a `"version"` property.
+ * an action's `data`, Teams' `msteams` extension or `Authentication.buttons`,
+ * where `"type"` is arbitrary -- and that object must have a `"version"` property.
  *
  * @module adaptivecard
  */
@@ -151,9 +151,11 @@ function findMatchingClose(text, openIndex) {
  * - `data` — the arbitrary payload of `Action.Submit` / `Action.Execute`
  * - `msteams` — Teams' card extension, e.g. mention entities
  *   (`"entities": [{ "type": "mention", ... }]`)
+ * - `buttons` — `Authentication.buttons`, whose `"type"` is a free-form
+ *   sign-in kind (e.g. `"signin"`), not an element/action name
  * @type {ReadonlySet<string>}
  */
-const FREE_FORM_KEYS = new Set(["data", "msteams"]);
+const FREE_FORM_KEYS = new Set(["data", "msteams", "buttons"]);
 
 /**
  * Finds the `[start, end]` spans of every object/array value belonging to a

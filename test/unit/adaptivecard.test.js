@@ -153,6 +153,16 @@ describe("findAdaptiveCardDiagnostics — unknown type", () => {
     assert.deepEqual(only(src, "adaptivecard-unknown-type"), []);
   });
 
+  it("does not flag TextRun inlines inside a RichTextBlock", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "RichTextBlock", "inlines": [ { "type": "TextRun", "text": "hi" } ] } ] }';
+    assert.deepEqual(only(src, "adaptivecard-unknown-type"), []);
+  });
+
+  it("does not flag Authentication sign-in buttons", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.4", "authentication": { "type": "Authentication", "buttons": [ { "type": "signin", "title": "Sign in", "value": "x" } ] } }';
+    assert.deepEqual(only(src, "adaptivecard-unknown-type"), []);
+  });
+
   it("still flags a typo'd type after a free-form payload closes", () => {
     const src = '{ "type": "AdaptiveCard", "version": "1.4", "actions": [ { "type": "Action.Submit", "data": { "type": "ok" } } ], "body": [ { "type": "TextBlok" } ] }';
     const flagged = only(src, "adaptivecard-unknown-type").map((d) => d.message);
