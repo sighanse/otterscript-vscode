@@ -18,11 +18,26 @@ npm install       # dev dependencies
 npm run check     # ESLint + JSDoc type-check + grammar/language-data sync + unit tests
 npm test          # unit tests only (node:test)
 npm run lint      # ESLint only
+npm run test:integration   # integration tests in real VS Code (see below)
 ```
 
 Press <kbd>F5</kbd> in VS Code to launch an Extension Development Host with this
 repo loaded as the test workspace. The same checks run in CI
 (`.github/workflows/sanity.yml`) on every pull request.
+
+### Integration tests
+
+`npm run test:integration` runs `test/integration/` inside real VS Code, once on
+the oldest supported version (1.85.0) and once on current stable. The first run
+downloads each version into `.vscode-test/` (about 130 MB each). To run just one:
+
+```sh
+npm run test:integration -- --label minimum   # or: --label stable
+```
+
+To debug them, pick **Extension Tests** in the Run and Debug view. With the
+[Extension Test Runner](https://marketplace.visualstudio.com/items?itemName=ms-vscode.extension-test-runner)
+extension installed, they also appear in the Testing view.
 
 ## Questions
 
