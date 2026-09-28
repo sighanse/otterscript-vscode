@@ -1,34 +1,21 @@
-# Default behavior
+# Every text file is stored and checked out with LF line endings (Git detects
+# binaries by itself; the common ones are also declared below). This one rule
+# covers all file types, so none are listed separately for line endings.
 * text=auto eol=lf
 
-# Source Files
-*.js text eol=lf
-src/**/*.js text eol=lf
-*.json text eol=lf
-*.jsonc text eol=lf
-*.sh text eol=lf
+# Markdown: Git's built-in diff driver shows the section heading
+# (e.g. "## [Unreleased]") in each diff hunk header.
+*.md diff=markdown linguist-documentation=true
 
-# OtterScript
-*.otter text eol=lf
-*.oscript text eol=lf
-
-# Documentation
-*.txt text eol=lf
-*.md text eol=lf linguist-documentation=true
-
-# YAML (Github Actions, configs)
-*.yml  text eol=lf
-*.yaml text eol=lf
-
-# Other
-.vscodeignore text eol=lf
-.vscode/** text eol=lf
-.gitignore text eol=lf
-.gitattributes text eol=lf
-*.code-workspace text eol=lf
-package-lock.json text eol=lf linguist-generated=true
+# Generated: collapsed in pull-request diffs, left out of language stats.
+package-lock.json linguist-generated=true
 
 # Binaries
 *.png binary
-*.vsix binary linguist-generated=true
+*.gif binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.webp binary
 *.zip binary
+*.vsix binary linguist-generated=true
