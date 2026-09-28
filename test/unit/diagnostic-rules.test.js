@@ -56,6 +56,15 @@ describe("applyDiagnosticRules", () => {
     const kept = applyDiagnosticRules(/** @type {any} */ (issues), { "missing-dollar": "loud" });
     assert.deepEqual(kept.map((d) => d.severity), [DiagnosticSeverity.Warning, DiagnosticSeverity.Error]);
   });
+
+  it("ignores rule values that name inherited Object properties", () => {
+    const issues = [diag("unknown-operation"), diag("missing-dollar")];
+    const kept = applyDiagnosticRules(/** @type {any} */ (issues), {
+      "unknown-operation": "constructor",
+      "missing-dollar": "toString",
+    });
+    assert.deepEqual(kept.map((d) => d.severity), [DiagnosticSeverity.Warning, DiagnosticSeverity.Warning]);
+  });
 });
 
 describe("otterscript.diagnostics.rules schema", () => {

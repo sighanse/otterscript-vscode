@@ -1365,9 +1365,12 @@ function activate(context) {
 
     // -- Clean up diagnostics and module navigation cache when a file is closed.
     vscode.workspace.onDidCloseTextDocument(doc => {
-      // A file's index entry stays (it's still on disk); an untitled
-      // document's goes with it.
+      // A file stays in the index (it's still on disk), but its entry came
+      // from the live buffer, so re-read it from disk: closing without saving
+      // must drop unsaved module declarations. An untitled document's entry
+      // goes with it.
       if (doc.uri.scheme !== "file") workspaceModuleIndex.delete(doc.uri.toString());
+      else if (doc.languageId === "otterscript") void indexModuleFile(doc.uri);
       diagnostics.delete(doc.uri);
       clearDocumentCaches(doc.uri);
       clearTimerForUri(diagnosticTimers, doc.uri);

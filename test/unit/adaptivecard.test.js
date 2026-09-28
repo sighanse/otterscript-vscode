@@ -110,6 +110,18 @@ describe("findAdaptiveCardDiagnostics — missing version", () => {
       []
     );
   });
+
+  it("does not flag a non-string 'version' (it's present, just not a string)", () => {
+    assert.deepEqual(
+      only('{ "type": "AdaptiveCard", "version": 1.2, "body": [] }', "adaptivecard-missing-version"),
+      []
+    );
+  });
+
+  it("still flags when 'version' appears only on a nested object", () => {
+    const src = '{ "type": "AdaptiveCard", "actions": [ { "type": "Action.Submit", "data": { "version": "2" } } ] }';
+    assert.equal(only(src, "adaptivecard-missing-version").length, 1);
+  });
 });
 
 describe("findAdaptiveCardDiagnostics — unknown type", () => {

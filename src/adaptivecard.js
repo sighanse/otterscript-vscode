@@ -159,19 +159,24 @@ function findStringProperties(json, keyName) {
 }
 
 /**
- * Whether `keyName` is used as a JSON key anywhere, regardless of what its
- * value is (string, number, object, ...). A string token followed by nothing
- * but whitespace and then `:` can only be a key in well-formed JSON, so -- as
- * with {@link findStringProperties} -- this can't be triggered by unrelated
- * string content.
+ * Whether the root object (the `{` at offset 0) has its own `keyName` key,
+ * regardless of what its value is (string, number, `<% %>` template, ...).
+ * The same key on a nested object, e.g. inside an `Action.Submit` `data`
+ * payload, doesn't count. A string token followed by nothing but whitespace
+ * and then `:` can only be a key in well-formed JSON, so -- as with
+ * {@link findStringProperties} -- this can't be triggered by unrelated string
+ * content.
  *
  * @param {JsonView} json
  * @param {string} keyName
  * @returns {boolean}
  */
-function hasKeyProperty(json, keyName) {
+function hasOwnKeyProperty(json, keyName) {
   return json.tokens.some(
-    (token) => token.value === keyName && valueStartAfterKey(json.text, token) !== -1
+    (token, i) =>
+      token.value === keyName &&
+      json.enclosing[i] === 0 &&
+      valueStartAfterKey(json.text, token) !== -1
   );
 }
 
@@ -376,7 +381,7 @@ function findAdaptiveCardDiagnostics(document, text) {
     return diagnostic;
   };
 
-  if (!hasKeyProperty(card, "version")) {
+  if (!hasOwnKeyProperty(card, "version")) {
     addIssue(0, 1, 'Adaptive Card is missing its required "version" property.', "adaptivecard-missing-version");
   }
 

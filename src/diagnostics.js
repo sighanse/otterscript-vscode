@@ -104,7 +104,9 @@ function applyDiagnosticRules(issues, rules) {
   return issues.filter((issue) => {
     const rule = rules[getDiagnosticCode(issue)];
     if (rule === "off") return false;
-    if (rule !== undefined && rule in RULE_SEVERITIES) issue.severity = RULE_SEVERITIES[rule];
+    // Own keys only: `in` would also match inherited names such as
+    // "constructor" and assign a function as the severity.
+    if (rule !== undefined && Object.hasOwn(RULE_SEVERITIES, rule)) issue.severity = RULE_SEVERITIES[rule];
     return true;
   });
 }
