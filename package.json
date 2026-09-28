@@ -371,7 +371,7 @@
     "lint": "eslint . --cache",
     "lint:fix": "eslint . --fix --cache",
     "lint:ci": "eslint . --max-warnings=0 --cache",
-    "check:js": "npx -y -p typescript@6.0.3 tsc -p jsconfig.json --noEmit && npx -y -p typescript@6.0.3 tsc -p jsconfig.test.json --noEmit",
+    "check:js": "npx -y -p typescript@6.0.3 tsc --noEmit -p jsconfig.json && npx -y -p typescript@6.0.3 tsc --noEmit -p test/jsconfig.json && npx -y -p typescript@6.0.3 tsc --noEmit -p scripts/jsconfig.json",
     "check:lang": "node scripts/check-language-sync.js",
     "test": "node --test \"test/unit/*.test.js\"",
     "test:integration": "vscode-test",

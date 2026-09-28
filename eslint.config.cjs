@@ -168,7 +168,7 @@ module.exports = [
   },
   {
     // scanner.js is the pure, dependency-free text layer -- keep it vscode-free
-    // (see its @fileoverview and jsconfig.test.json). Enforce, don't just document.
+    // (see its @fileoverview and test/jsconfig.json). Enforce, don't just document.
     files: ["src/scanner.js"],
     rules: {
       "no-restricted-syntax": ["error", {
