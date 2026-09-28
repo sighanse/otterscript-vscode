@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- `otterscript.diagnostics.rules` setting to turn individual diagnostics off or change their severity, keyed by diagnostic code; every diagnostic also gets a **Turn off '&lt;code&gt;' diagnostics** quick fix. Unbalanced-symbol and unmatched/unclosed `<% %>` diagnostics now have codes too (`unbalanced-symbol`, `template-unexpected-close`, `template-unclosed`)
+
 ### Fixed
 
 - Adaptive Card check no longer flags `TextRun` inlines in a `RichTextBlock`, or the free-form `"type"` of `Authentication` sign-in buttons, as unknown types

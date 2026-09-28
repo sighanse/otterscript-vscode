@@ -106,6 +106,223 @@
           "type": "boolean",
           "default": true,
           "description": "Index module declarations across .otter/.oscript files for 'Go to Symbol in Workspace' (Ctrl+T)"
+        },
+        "otterscript.diagnostics.rules": {
+          "type": "object",
+          "default": {},
+          "markdownDescription": "Turn off individual OtterScript diagnostics, or change how severe they are, by diagnostic code (shown in the Problems panel). Set a code to `\"off\"` to hide it, or to `\"error\"`, `\"warning\"`, `\"information\"` or `\"hint\"` to change its severity. Codes not listed keep their default.",
+          "properties": {
+            "unbalanced-symbol": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "Unclosed or unexpected `{` `}`, `(` `)` or `[` `]`."
+            },
+            "missing-dollar": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "A variable in a condition is missing its `$` sigil."
+            },
+            "assignment-in-condition": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "`=` used in a condition where `==` was probably meant."
+            },
+            "invalid-operator": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "A single `&` or `|` used where `&&` or `||` is required."
+            },
+            "incorrect-for-usage": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "`for` used as a loop (OtterScript loops use `foreach`)."
+            },
+            "duplicate-map-key": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "The same key appears twice in a `%(...)` map expression."
+            },
+            "unknown-scalar-function": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "A `$Name(...)` call to a function this extension doesn't know."
+            },
+            "unknown-vector-function": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "An `@Name(...)` call to a function this extension doesn't know."
+            },
+            "unknown-operation": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "An operation call this extension doesn't know."
+            },
+            "unknown-namespace": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "An unknown `Namespace::` qualifier on an operation."
+            },
+            "too-many-arguments": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "A function call with more arguments than the function accepts."
+            },
+            "template-unexpected-close": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "A `%>` with no matching `<%` in a text template."
+            },
+            "template-unclosed": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "A `<%` that is never closed in a text template."
+            },
+            "template-end-keyword": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "`<% end %>` (or similar) where `<% } %>` is required."
+            },
+            "template-missing-brace": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "A block tag such as `<% if ... %>` missing its `{`."
+            },
+            "template-in-expression": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "A `<% %>` tag inside an unclosed OtterScript expression."
+            },
+            "adaptivecard-missing-version": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "An Adaptive Card without its required `\"version\"` property."
+            },
+            "adaptivecard-unknown-type": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "An unrecognized Adaptive Card element or action `\"type\"`."
+            },
+            "adaptivecard-version-too-low": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "An Adaptive Card element or action newer than the card's declared `\"version\"`."
+            }
+          },
+          "additionalProperties": false
         }
       }
     },

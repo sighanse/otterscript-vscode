@@ -54,14 +54,16 @@ const { NAMESPACES } = require("./language-data");
  *   hoverEnabled: boolean,
  *   signatureHelpEnabled: boolean,
  *   codeLensEnabled: boolean,
- *   workspaceSymbolsEnabled: boolean
+ *   workspaceSymbolsEnabled: boolean,
+ *   diagnosticRules: Readonly<Record<string, string>>
  * }}
  *
  * @example
  * // .vscode/settings.json
  * // {
  * //   "otterscript.completion.enable": false,
- * //   "otterscript.hover.enable": true
+ * //   "otterscript.hover.enable": true,
+ * //   "otterscript.diagnostics.rules": { "unknown-operation": "off" }
  * // }
  */
 function loadConfig() {
@@ -72,7 +74,8 @@ function loadConfig() {
     hoverEnabled: config.get("hover.enable", true),
     signatureHelpEnabled: config.get("signatureHelp.enable", true),
     codeLensEnabled: config.get("codeLens.enable", true),
-    workspaceSymbolsEnabled: config.get("workspaceSymbols.enable", true)
+    workspaceSymbolsEnabled: config.get("workspaceSymbols.enable", true),
+    diagnosticRules: config.get("diagnostics.rules", {})
   };
 }
 
@@ -1259,6 +1262,7 @@ function createUnbalancedDiagnostic(count, lastPos, openChar, closeChar, name, d
     message,
     vscode.DiagnosticSeverity.Error
   );
+  diagnostic.code = "unbalanced-symbol";
   diagnostic.source = "OtterScript";
   return diagnostic;
 }

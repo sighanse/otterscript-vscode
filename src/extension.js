@@ -30,7 +30,7 @@
 
 // -- VS Code Extension API
 const vscode = require("vscode");
-const { updateDiagnostics } = require("./diagnostics");
+const { updateDiagnostics, DIAGNOSTIC_CODES } = require("./diagnostics");
 
 // -- Language documentation (functions, variables, operations, keywords).
 // Plain strings only; any conversion to MarkdownString happens in this file.
@@ -84,6 +84,8 @@ const {
 /** @type {Map<string, ReturnType<typeof setTimeout>>} */
 const diagnosticTimers = new Map();
 const REFRESH_DIAGNOSTICS_COMMAND = "otterscript.refreshDiagnostics";
+/** Internal command behind the "Turn off '<code>'" quick fix; not in the palette. */
+const DISABLE_DIAGNOSTIC_RULE_COMMAND = "otterscript.disableDiagnosticRule";
 
 // ============================================================
 // ACTIVATION
@@ -717,6 +719,30 @@ function activate(context) {
             }
           }
 
+          // -- One "Turn off '<code>'" action per distinct code under the
+          //    cursor, listed after the real fixes. Writes to the workspace
+          //    settings when a folder is open, otherwise to user settings.
+          const scope = vscode.workspace.workspaceFolders?.length ? "workspace" : "user";
+          const offeredCodes = new Set();
+          for (const diagnostic of codeActionContext.diagnostics) {
+            if (diagnostic.source !== "OtterScript") continue;
+            const code = getDiagnosticCode(diagnostic);
+            if (!DIAGNOSTIC_CODES.includes(code) || offeredCodes.has(code)) continue;
+            offeredCodes.add(code);
+
+            const action = new vscode.CodeAction(
+              `Turn off '${code}' diagnostics in ${scope} settings`,
+              vscode.CodeActionKind.QuickFix
+            );
+            action.diagnostics = [diagnostic];
+            action.command = {
+              command: DISABLE_DIAGNOSTIC_RULE_COMMAND,
+              title: action.title,
+              arguments: [code]
+            };
+            actions.push(action);
+          }
+
           return actions;
         }
       },
@@ -1160,9 +1186,43 @@ function activate(context) {
     scalarCallRegex,
     vectorCallRegex,
     operationCallRegex,
+    diagnosticRules: loadConfig().diagnosticRules,
   };
 
   context.subscriptions.push(diagnostics);
+
+  // -- Re-run diagnostics in every open file when the per-code rules change,
+  //    so turning a check off (or re-ranking it) applies without an edit.
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(e => {
+      if (!e.affectsConfiguration("otterscript.diagnostics.rules")) return;
+      diagnosticsContext.diagnosticRules = loadConfig().diagnosticRules;
+      for (const document of vscode.workspace.textDocuments) {
+        updateDiagnostics(document, diagnostics, diagnosticsContext);
+      }
+    })
+  );
+
+  /**
+   * Sets one diagnostic code to "off" in `otterscript.diagnostics.rules`,
+   * keeping the other rules already at that settings level. The
+   * configuration listener above then refreshes every open file.
+   */
+  const disableDiagnosticRuleCommand = vscode.commands.registerCommand(
+    DISABLE_DIAGNOSTIC_RULE_COMMAND,
+    async (code) => {
+      if (typeof code !== "string" || !DIAGNOSTIC_CODES.includes(code)) return;
+
+      const config = vscode.workspace.getConfiguration("otterscript");
+      const useWorkspace = Boolean(vscode.workspace.workspaceFolders?.length);
+      const target = useWorkspace ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
+      const inspected = config.inspect("diagnostics.rules");
+      const current = (useWorkspace ? inspected?.workspaceValue : inspected?.globalValue) ?? {};
+
+      await config.update("diagnostics.rules", { ...current, [code]: "off" }, target);
+      log.info(`Turned off '${code}' diagnostics in ${useWorkspace ? "workspace" : "user"} settings`);
+    }
+  );
 
   const refreshDiagnosticsCommand = vscode.commands.registerCommand(
     REFRESH_DIAGNOSTICS_COMMAND,
@@ -1232,6 +1292,7 @@ function activate(context) {
     codeActionsProvider,
     codeLensProvider,
     definitionProvider,
+    disableDiagnosticRuleCommand,
     documentSymbolProvider,
     fixAllCommand,
     foldingRangeProvider,

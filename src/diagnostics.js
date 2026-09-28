@@ -17,6 +17,7 @@ const {
   maskNonCodeSpans,
   maskOutsideTemplateTags,
   documentUsesTemplateTags,
+  getDiagnosticCode,
   log,
 } = require("./helpers");
 const { findAdaptiveCardDiagnostics } = require("./adaptivecard");
@@ -38,7 +39,74 @@ const { findAdaptiveCardDiagnostics } = require("./adaptivecard");
  * @property {() => RegExp} scalarCallRegex - Regex factory for scalar function calls
  * @property {() => RegExp} vectorCallRegex - Regex factory for vector function calls
  * @property {() => RegExp} operationCallRegex - Regex factory for operation-like tokens
+ * @property {Readonly<Record<string, string>>} [diagnosticRules] - The
+ *   `otterscript.diagnostics.rules` setting: diagnostic code -> `"off"` or a
+ *   severity override (see {@link applyDiagnosticRules})
  */
+
+/**
+ * Every diagnostic code this extension emits. Each one can be switched off or
+ * re-ranked via the `otterscript.diagnostics.rules` setting, whose schema in
+ * package.json must list exactly these codes (guarded by a unit test).
+ * @type {ReadonlyArray<string>}
+ */
+const DIAGNOSTIC_CODES = Object.freeze([
+  // -- Syntax & balance
+  "unbalanced-symbol",
+  "missing-dollar",
+  "assignment-in-condition",
+  "invalid-operator",
+  "incorrect-for-usage",
+  "duplicate-map-key",
+  // -- Unknown names & arity
+  "unknown-scalar-function",
+  "unknown-vector-function",
+  "unknown-operation",
+  "unknown-namespace",
+  "too-many-arguments",
+  // -- Text templates (`<% %>`)
+  "template-unexpected-close",
+  "template-unclosed",
+  "template-end-keyword",
+  "template-missing-brace",
+  "template-in-expression",
+  // -- Adaptive Cards
+  "adaptivecard-missing-version",
+  "adaptivecard-unknown-type",
+  "adaptivecard-version-too-low",
+]);
+
+/**
+ * `otterscript.diagnostics.rules` values other than `"off"`, mapped to the
+ * severity they force.
+ * @type {Readonly<Record<string, vscode.DiagnosticSeverity>>}
+ */
+const RULE_SEVERITIES = Object.freeze({
+  error: vscode.DiagnosticSeverity.Error,
+  warning: vscode.DiagnosticSeverity.Warning,
+  information: vscode.DiagnosticSeverity.Information,
+  hint: vscode.DiagnosticSeverity.Hint,
+});
+
+/**
+ * Applies the user's per-code rules: drops diagnostics whose code is set to
+ * `"off"` and overrides the severity of those set to a severity name.
+ * Diagnostics with no rule, or an unrecognized rule value, pass through
+ * unchanged. Mutates the severity of the surviving diagnostics in place.
+ *
+ * @param {vscode.Diagnostic[]} issues
+ * @param {Readonly<Record<string, string>> | undefined} rules
+ * @returns {vscode.Diagnostic[]}
+ */
+function applyDiagnosticRules(issues, rules) {
+  if (!rules || Object.keys(rules).length === 0) return issues;
+  return issues.filter((issue) => {
+    const rule = rules[getDiagnosticCode(issue)];
+    if (rule === "off") return false;
+    if (rule !== undefined && rule in RULE_SEVERITIES) issue.severity = RULE_SEVERITIES[rule];
+    return true;
+  });
+}
 
 /**
  * Matches a `Namespace::` qualifier: a bare identifier followed by `::` and then
@@ -69,7 +137,7 @@ const TEMPLATE_BLOCK_OPENER_REGEX =
  * @param {number} end
  * @param {string} message
  * @param {vscode.DiagnosticSeverity} severity
- * @param {string} [code] - Diagnostic code; omitted for checks with no quick-fix/code
+ * @param {string} code - Diagnostic code; one of {@link DIAGNOSTIC_CODES}
  * @returns {vscode.Diagnostic}
  */
 function lineDiagnostic(lineIndex, start, end, message, severity, code) {
@@ -78,7 +146,7 @@ function lineDiagnostic(lineIndex, start, end, message, severity, code) {
     message,
     severity
   );
-  if (code) d.code = code;
+  d.code = code;
   d.source = "OtterScript";
   return d;
 }
@@ -198,7 +266,8 @@ function checkTemplateTags(tagView, lineIndex, issues, tagBalance, exprState, ta
         issues.push(lineDiagnostic(
           lineIndex, col, col + 2,
           "Unexpected '%>' - no matching '<%'",
-          vscode.DiagnosticSeverity.Error
+          vscode.DiagnosticSeverity.Error,
+          "template-unexpected-close"
         ));
       } else {
         tagBalance.count--;
@@ -266,6 +335,7 @@ function updateDiagnostics(document, collection, ctx) {
     scalarCallRegex,
     vectorCallRegex,
     operationCallRegex,
+    diagnosticRules,
   } = ctx;
 
   // Lower-cased view of the namespace allowlist for lenient matching (Inedo
@@ -503,7 +573,8 @@ function updateDiagnostics(document, collection, ctx) {
     issues.push(lineDiagnostic(
       tagBalance.lastLine, tagBalance.lastCol, tagBalance.lastCol + 2,
       `Unclosed template tag: '<%' not closed (first at line ${tagBalance.lastLine + 1}, col ${tagBalance.lastCol + 1})`,
-      vscode.DiagnosticSeverity.Error
+      vscode.DiagnosticSeverity.Error,
+      "template-unclosed"
     ));
   }
 
@@ -524,9 +595,11 @@ function updateDiagnostics(document, collection, ctx) {
     log.error(`Cross-line diagnostic scan failed for ${document.uri.toString()}:`, err);
   }
 
-  collection.set(document.uri, issues);
+  collection.set(document.uri, applyDiagnosticRules(issues, diagnosticRules));
 }
 
 module.exports = {
+  DIAGNOSTIC_CODES,
+  applyDiagnosticRules,
   updateDiagnostics,
 };

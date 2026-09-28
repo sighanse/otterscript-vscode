@@ -22,7 +22,7 @@ const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
 const { Position } = require("../vscode-stub");
-const { updateDiagnostics } = require("../../src/diagnostics.js");
+const { updateDiagnostics, DIAGNOSTIC_CODES } = require("../../src/diagnostics.js");
 const { createRegexPatterns, NON_VARIABLE_IDENTIFIERS, documentUsesTemplateTags } = require("../../src/helpers.js");
 const data = require("../../src/language-data.js");
 
@@ -97,6 +97,16 @@ describe("manual-review fixtures", () => {
     const source = fs.readFileSync(path.join(__dirname, "..", "sample-template.otter"), "utf8");
     assert.equal(documentUsesTemplateTags(source), true);
     assert.equal(diagnoseFixture("sample-template.otter").length, 13);
+  });
+
+  it("every diagnostic in the error fixtures carries a code listed in DIAGNOSTIC_CODES", () => {
+    // A code is what the otterscript.diagnostics.rules setting keys on, so a
+    // check emitted without one could never be turned off.
+    for (const fixture of ["sample.otter", "sample-template.otter"]) {
+      for (const d of diagnoseFixture(fixture)) {
+        assert.ok(DIAGNOSTIC_CODES.includes(d.code), `${fixture}: '${d.message}' has code ${d.code}`);
+      }
+    }
   });
 
   it("sample-template-valid.otter IS template-aware and stays clean", () => {

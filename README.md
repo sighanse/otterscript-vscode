@@ -72,6 +72,45 @@ All features are enabled by default and can be toggled individually:
 - `otterscript.codeLens.enable` — CodeLens reference counts above module declarations
 - `otterscript.workspaceSymbols.enable` — index module declarations for "Go to Symbol in Workspace" (`Ctrl+T`)
 
+### Turning individual diagnostics off
+
+Every diagnostic has a code, shown in the Problems panel. Use
+`otterscript.diagnostics.rules` to turn a check off (`"off"`) or change its
+severity (`"error"`, `"warning"`, `"information"`, `"hint"`):
+
+```jsonc
+"otterscript.diagnostics.rules": {
+  "unknown-operation": "off",
+  "assignment-in-condition": "hint"
+}
+```
+
+Each diagnostic's lightbulb menu also offers **Turn off '&lt;code&gt;' diagnostics**,
+which adds the `"off"` entry to your workspace settings (or user settings
+when no folder is open).
+
+| Code | Flags |
+| --- | --- |
+| `unbalanced-symbol` | Unclosed or unexpected `{` `}`, `(` `)` or `[` `]` |
+| `missing-dollar` | A variable in a condition without its `$` |
+| `assignment-in-condition` | `=` in a condition where `==` was probably meant |
+| `invalid-operator` | `&` or `\|` where `&&` or `\|\|` is required |
+| `incorrect-for-usage` | `for` used as a loop (use `foreach`) |
+| `duplicate-map-key` | The same key twice in a `%(...)` map |
+| `unknown-scalar-function` | Unknown `$Name(...)` function |
+| `unknown-vector-function` | Unknown `@Name(...)` function |
+| `unknown-operation` | Unknown operation |
+| `unknown-namespace` | Unknown `Namespace::` prefix |
+| `too-many-arguments` | More arguments than the function accepts |
+| `template-unexpected-close` | `%>` with no matching `<%` |
+| `template-unclosed` | `<%` that is never closed |
+| `template-end-keyword` | `<% end %>` where `<% } %>` is required |
+| `template-missing-brace` | Block tag such as `<% if ... %>` missing its `{` |
+| `template-in-expression` | `<% %>` inside an unclosed OtterScript expression |
+| `adaptivecard-missing-version` | Adaptive Card without a `"version"` |
+| `adaptivecard-unknown-type` | Unrecognized Adaptive Card `"type"` |
+| `adaptivecard-version-too-low` | Card element or action newer than the card's `"version"` |
+
 ## Language Support Coverage
 
 The extension provides hover documentation, completion, and signature help
@@ -97,7 +136,8 @@ Diagnostics are best‑effort and designed to catch common mistakes
 (e.g. missing `$`, unknown functions, invalid operators).
 
 They do not attempt full semantic analysis and may prefer false negatives
-over false positives.
+over false positives. If a check misfires for your scripts, turn it off with
+`otterscript.diagnostics.rules` (see [Settings](#settings)).
 
 ## Contributing
 

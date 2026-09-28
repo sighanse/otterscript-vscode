@@ -743,13 +743,14 @@ describe("isValidCompletionPosition", () => {
 // ============================================================
 
 describe("loadConfig", () => {
-  it("defaults every feature to enabled", () => {
+  it("defaults every feature to enabled, with no diagnostic rules", () => {
     assert.deepEqual(loadConfig(), {
       completionEnabled: true,
       hoverEnabled: true,
       signatureHelpEnabled: true,
       codeLensEnabled: true,
       workspaceSymbolsEnabled: true,
+      diagnosticRules: {},
     });
   });
 
