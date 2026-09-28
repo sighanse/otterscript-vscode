@@ -991,24 +991,33 @@ const ASSIGNMENT_SUFFIX_REGEX = /^\s*=(?!=)/;
  */
 
 /**
- * Finds every reference to one variable in a document. OtterScript variable
- * names are treated as case-insensitive, and the sigil is part of the
- * identity (`$x` and `@x` are different variables); `${x}` is the same
- * variable as `$x` (and `@{x}` as `@x`). The whole document is searched: modules are not treated
- * as separate scopes.
+ * The key {@link indexVariableOccurrences} files a variable under: its sigil
+ * plus its lower-cased name (OtterScript variable names are treated as
+ * case-insensitive; the sigil is part of the identity).
  *
- * @param {string} text - Full document text
  * @param {string} sigil - `$`, `@`, or `%`
  * @param {string} name - Variable name without its sigil
- * @returns {VariableOccurrence[]}
+ * @returns {string}
  */
-function findVariableOccurrences(text, sigil, name) {
+function variableKey(sigil, name) {
+  return sigil + name.toLowerCase();
+}
+
+/**
+ * Finds every variable reference in a document in one pass, grouped by
+ * {@link variableKey}. `$x` and `@x` are different variables; `${x}` is the
+ * same variable as `$x` (and `@{x}` as `@x`). The whole document is one
+ * scope: modules are not treated separately.
+ *
+ * @param {string} text - Full document text
+ * @returns {Map<string, VariableOccurrence[]>}
+ */
+function indexVariableOccurrences(text) {
   const lines = text.split(/\r?\n/);
-  const wanted = name.toLowerCase();
   const views = documentUsesTemplateTags(text) ? templateVariableViews(lines) : scriptVariableViews(lines);
 
-  /** @type {VariableOccurrence[]} */
-  const hits = [];
+  /** @type {Map<string, VariableOccurrence[]>} */
+  const index = new Map();
   let inParameterList = false;
   views.forEach(({ view, code }, line) => {
     // -- The part of this line inside a module's `< ... >` parameter list, if any
@@ -1025,8 +1034,6 @@ function findVariableOccurrences(text, sigil, name) {
     for (const match of view.matchAll(VARIABLE_TOKEN_REGEX)) {
       const tokenSigil = match[1];
       const tokenName = match[2] ?? match[3];
-      if (tokenSigil !== sigil || tokenName.toLowerCase() !== wanted) continue;
-
       const character = match.index ?? 0;
       const before = view.slice(0, character);
       // Inside a string, `@` / `%` are variables only within `$( ... )`.
@@ -1042,10 +1049,29 @@ function findVariableOccurrences(text, sigil, name) {
         FOREACH_VARIABLE_PREFIX_REGEX.test(before) ||
         (ASSIGNMENT_PREFIX_REGEX.test(before) && ASSIGNMENT_SUFFIX_REGEX.test(after))
       );
-      hits.push({ line, character, length: match[0].length, write });
+
+      const key = variableKey(tokenSigil, tokenName);
+      const occurrence = { line, character, length: match[0].length, write };
+      const existing = index.get(key);
+      if (existing) existing.push(occurrence);
+      else index.set(key, [occurrence]);
     }
   });
-  return hits;
+  return index;
+}
+
+/**
+ * Finds every reference to one variable in a document (see
+ * {@link indexVariableOccurrences} for the rules). For repeated lookups on
+ * the same text, build the index once and use {@link variableKey} instead.
+ *
+ * @param {string} text - Full document text
+ * @param {string} sigil - `$`, `@`, or `%`
+ * @param {string} name - Variable name without its sigil
+ * @returns {VariableOccurrence[]}
+ */
+function findVariableOccurrences(text, sigil, name) {
+  return indexVariableOccurrences(text).get(variableKey(sigil, name)) ?? [];
 }
 
 // ============================================================
@@ -1077,6 +1103,8 @@ module.exports = {
   // -- Variable occurrences
   maskCommentSpans,
   findVariableOccurrences,
+  indexVariableOccurrences,
+  variableKey,
 
   // -- Argument helpers
   getActiveParameterIndex,

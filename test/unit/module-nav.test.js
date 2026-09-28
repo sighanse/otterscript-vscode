@@ -2,7 +2,9 @@
 /**
  * @fileoverview Unit tests for the module-navigation surface of src/helpers.js
  * (`getModuleInfo` and friends): declaration discovery, `call` reference
- * discovery, raft-qualified calls, and the per-document-version cache.
+ * discovery, raft-qualified calls, and the per-document-version cache --
+ * plus the matching per-version cache of the variable index used by
+ * highlight all occurrences.
  *
  * Guards the behaviour before/after `getModuleInfo` is refactored to reuse
  * `scanner.findModuleDeclarations`.
@@ -21,7 +23,8 @@ const {
   findModuleReferences,
   findModuleDeclarationRange,
   getModuleCallReferencesByName,
-  clearModuleInfoCache,
+  clearDocumentCaches,
+  getVariableOccurrences,
 } = require("../../src/helpers.js");
 
 let nextDocId = 0;
@@ -169,10 +172,41 @@ describe("module info cache", () => {
     assert.deepEqual(second.map((d) => d.name), ["A"]);
   });
 
-  it("clearModuleInfoCache forces a fresh scan for a uri", () => {
+  it("clearDocumentCaches forces a fresh scan for a uri", () => {
     const doc = makeDoc("module A {\n}", 9);
     const first = getModuleDeclarations(doc);
-    clearModuleInfoCache(doc.uri);
+    clearDocumentCaches(doc.uri);
     assert.notEqual(getModuleDeclarations(doc), first);
+  });
+});
+
+// ============================================================
+// getVariableOccurrences (per-version cache of the variable index)
+// ============================================================
+
+describe("getVariableOccurrences", () => {
+  it("reuses the index while the document version is unchanged", () => {
+    const doc = makeDoc("set $x = 1;\nLog $x;");
+    const first = getVariableOccurrences(doc, "$", "x");
+    assert.deepEqual(first.map((o) => o.line), [0, 1]);
+    assert.equal(getVariableOccurrences(doc, "$", "X"), first, "same cached array, names ignore case");
+    assert.deepEqual(getVariableOccurrences(doc, "@", "x"), []);
+  });
+
+  it("rebuilds the index when the version changes or the caches are cleared", () => {
+    let text = "set $x = 1;";
+    const doc = makeDoc(text);
+    doc.getText = () => text;
+    const first = getVariableOccurrences(doc, "$", "x");
+    assert.equal(first.length, 1);
+
+    text = "set $x = 1;\nLog $x;";
+    assert.equal(getVariableOccurrences(doc, "$", "x"), first, "stale until the version changes");
+    doc.version = 2;
+    assert.equal(getVariableOccurrences(doc, "$", "x").length, 2);
+
+    const cached = getVariableOccurrences(doc, "$", "x");
+    clearDocumentCaches(doc.uri);
+    assert.notEqual(getVariableOccurrences(doc, "$", "x"), cached);
   });
 });

@@ -68,12 +68,12 @@ const {
   findModuleDeclarationRange,
   findModuleDeclarations,
   findModuleReferences,
-  findVariableOccurrences,
+  getVariableOccurrences,
   isModuleCallContext,
   isModuleDeclarationContext,
   isValidCompletionPosition,
   isInStringOrCommentDoc,
-  clearModuleInfoCache,
+  clearDocumentCaches,
   clearTimerForUri,
   loadConfig,
   MODULE_NAME_TOKEN_REGEX,
@@ -918,7 +918,7 @@ function activate(context) {
         if (variableRange) {
           const token = document.getText(variableRange);
           const name = token[1] === "{" ? token.slice(2, -1) : token.slice(1);
-          const occurrences = findVariableOccurrences(document.getText(), token[0], name);
+          const occurrences = getVariableOccurrences(document, token[0], name);
           // The token under the cursor must itself be a reference -- not in a
           // comment or single-quoted string, and not a function call.
           const isReference = occurrences.some(
@@ -1359,7 +1359,7 @@ function activate(context) {
       // document's goes with it.
       if (doc.uri.scheme !== "file") workspaceModuleIndex.delete(doc.uri.toString());
       diagnostics.delete(doc.uri);
-      clearModuleInfoCache(doc.uri);
+      clearDocumentCaches(doc.uri);
       clearTimerForUri(diagnosticTimers, doc.uri);
     }),
 

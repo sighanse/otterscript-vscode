@@ -34,7 +34,8 @@ const {
   isModuleDeclarationContext,
   isModuleCallContext,
   findModuleDeclarations,
-  findVariableOccurrences,
+  indexVariableOccurrences,
+  variableKey,
 } = require("./scanner");
 
 // Namespace allowlist — the single source of truth lives with the data it
@@ -480,7 +481,7 @@ function createRegexPatterns(knownOperations) {
 
 /**
  * Per-document module analysis, keyed by `uri.toString()` and invalidated by
- * `document.version`. Entries are dropped on close via {@link clearModuleInfoCache}.
+ * `document.version`. Entries are dropped on close via {@link clearDocumentCaches}.
  * @type {Map<string, ModuleInfoCacheEntry>}
  */
 const moduleInfoCache = new Map();
@@ -609,13 +610,43 @@ function getModuleCallReferencesByName(document, allowedModuleNames) {
 }
 
 /**
- * Clears cached module info for a document URI.
+ * Per-document variable index ({@link indexVariableOccurrences}), keyed by
+ * `uri.toString()` and invalidated by `document.version`, so highlighting on
+ * every cursor move doesn't rescan an unchanged document. Entries are dropped
+ * on close via {@link clearDocumentCaches}.
+ * @type {Map<string, { version: number, index: Map<string, import("./scanner").VariableOccurrence[]> }>}
+ */
+const variableIndexCache = new Map();
+
+/**
+ * Every reference to one variable in a document (see
+ * {@link indexVariableOccurrences}), from a per-version cache.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {string} sigil - `$`, `@`, or `%`
+ * @param {string} name - Variable name without its sigil
+ * @returns {import("./scanner").VariableOccurrence[]}
+ */
+function getVariableOccurrences(document, sigil, name) {
+  const cacheKey = document.uri.toString();
+  let cached = variableIndexCache.get(cacheKey);
+  if (!cached || cached.version !== document.version) {
+    cached = { version: document.version, index: indexVariableOccurrences(document.getText()) };
+    variableIndexCache.set(cacheKey, cached);
+  }
+  return cached.index.get(variableKey(sigil, name)) ?? [];
+}
+
+/**
+ * Clears the per-document caches (module info and variable index) for a
+ * document URI.
  *
  * @param {import('vscode').Uri} uri
  * @returns {void}
  */
-function clearModuleInfoCache(uri) {
+function clearDocumentCaches(uri) {
   moduleInfoCache.delete(uri.toString());
+  variableIndexCache.delete(uri.toString());
 }
 
 /**
@@ -1454,7 +1485,7 @@ module.exports = {
   isModuleCallContext,
   getModuleDeclarations,
   findModuleDeclarations,
-  findVariableOccurrences,
+  getVariableOccurrences,
   createCodeScanState,
   createTemplateScanState,
   maskNonCodeSpans,
@@ -1465,7 +1496,7 @@ module.exports = {
   // ./scanner above but not re-exported -- no external caller needs them here.
   findModuleDeclarationRange,
   getModuleCallReferencesByName,
-  clearModuleInfoCache,
+  clearDocumentCaches,
   findModuleReferences,
 
   // -- Regex
