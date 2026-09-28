@@ -103,6 +103,25 @@ describe("navigation and highlighting (main.otter)", () => {
   });
 });
 
+describe("highlighting braced variable names", () => {
+  after(closeAllEditors);
+
+  it("highlights ${name with spaces} and @{name} forms from the cursor", async () => {
+    const document = await openContent("set ${my var} = 1;\nLog ${my var};\nforeach $i in @{list} {}\nset @list = @(1);\n");
+    /** @type {vscode.DocumentHighlight[] | undefined} */
+    const braced = await vscode.commands.executeCommand(
+      "vscode.executeDocumentHighlights", document.uri, positionOf(document, "Log ${my var}", 8)
+    );
+    assert.equal(braced?.length, 2);
+
+    /** @type {vscode.DocumentHighlight[] | undefined} */
+    const list = await vscode.commands.executeCommand(
+      "vscode.executeDocumentHighlights", document.uri, positionOf(document, "@{list}", 3)
+    );
+    assert.equal(list?.length, 2);
+  });
+});
+
 describe("documents that aren't files on disk", () => {
   afterEach(closeAllEditors);
 

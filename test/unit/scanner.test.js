@@ -769,6 +769,15 @@ describe("findVariableOccurrences", () => {
     assert.deepEqual(find([`Log "a %p and $(%p.Name)";`, "Log %p;"], "%", "p"), ["0:16:r", "1:4:r"]);
   });
 
+  it("treats @{name} / %{name} as the same variable as @name / %name", () => {
+    assert.deepEqual(find(["set @list = @(1);", "foreach $i in @{list} {}"], "@", "list"), ["0:4:w", "1:14:r"]);
+    assert.deepEqual(find(["Log %{cfg}.Name;"], "%", "cfg"), ["0:4:r"]);
+  });
+
+  it("finds a braced name that contains spaces", () => {
+    assert.deepEqual(find(["set ${my var} = 1;", "Log ${my var};", "Log $my;"], "$", "my var"), ["0:4:w", "1:4:r"]);
+  });
+
   it("treats ${name} as the same variable as $name", () => {
     assert.deepEqual(find(["set $host = x;", "Log ${host}/api;"], "$", "host"), ["0:4:w", "1:4:r"]);
   });

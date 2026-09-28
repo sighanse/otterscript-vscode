@@ -902,8 +902,8 @@ function activate(context) {
   // Clicking a variable or module name highlights every use of it in the
   // file; declarations and assignment targets are marked as writes.
 
-  /** A `${name}`, `$name`, `@name` or `%name` token under the cursor. */
-  const VARIABLE_AT_CURSOR_REGEX = /\$\{[A-Za-z_][A-Za-z0-9_]*\}|[$@%][A-Za-z_][A-Za-z0-9_]*/;
+  /** A `$name` / `@name` / `%name` token, or its braced `${name}` form, under the cursor. */
+  const VARIABLE_AT_CURSOR_REGEX = /[$@%](?:\{[A-Za-z_][A-Za-z0-9_ ]*\}|[A-Za-z_][A-Za-z0-9_]*)/;
 
   const documentHighlightProvider = vscode.languages.registerDocumentHighlightProvider(
     "otterscript",
@@ -917,7 +917,7 @@ function activate(context) {
         const variableRange = document.getWordRangeAtPosition(position, VARIABLE_AT_CURSOR_REGEX);
         if (variableRange) {
           const token = document.getText(variableRange);
-          const name = token.startsWith("${") ? token.slice(2, -1) : token.slice(1);
+          const name = token[1] === "{" ? token.slice(2, -1) : token.slice(1);
           const occurrences = findVariableOccurrences(document.getText(), token[0], name);
           // The token under the cursor must itself be a reference -- not in a
           // comment or single-quoted string, and not a function call.

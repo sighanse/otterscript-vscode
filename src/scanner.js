@@ -955,15 +955,17 @@ function templateVariableViews(lines) {
 }
 
 /**
- * A variable token: `$name`, `@name`, `%name` (groups 1-2), or `${name}`
- * (group 3). The char before must not be part of an identifier (so `a$b` and
+ * A variable token: a sigil (group 1), then either a plain name (group 2) or
+ * an explicit name in braces (group 3) -- `$name` or `${name}`, likewise for
+ * `@` / `%`. Per Inedo's formal grammar an explicit name may also contain
+ * spaces (`${my var}`). The char before must not be part of an identifier (so `a$b` and
  * `%>` never match) or the grave-accent escape, and a name directly followed
  * by `(` is a function call, not a variable (the lookahead also stops
  * backtracking into a shorter name like `$Fo` of `$Foo(`).
  * @type {RegExp}
  */
 const VARIABLE_TOKEN_REGEX =
-  /(?<![A-Za-z0-9_`$@%])(?:([$@%])([A-Za-z_][A-Za-z0-9_]*)(?![A-Za-z0-9_(])|\$\{([A-Za-z_][A-Za-z0-9_]*)\})/g;
+  /(?<![A-Za-z0-9_`$@%])([$@%])(?:([A-Za-z_][A-Za-z0-9_]*)(?![A-Za-z0-9_(])|\{([A-Za-z_][A-Za-z0-9_ ]*)\})/g;
 
 /** Text before a token that makes it a `foreach` loop variable. */
 const FOREACH_VARIABLE_PREFIX_REGEX = /\bforeach\s+$/i;
@@ -992,7 +994,7 @@ const ASSIGNMENT_SUFFIX_REGEX = /^\s*=(?!=)/;
  * Finds every reference to one variable in a document. OtterScript variable
  * names are treated as case-insensitive, and the sigil is part of the
  * identity (`$x` and `@x` are different variables); `${x}` is the same
- * variable as `$x`. The whole document is searched: modules are not treated
+ * variable as `$x` (and `@{x}` as `@x`). The whole document is searched: modules are not treated
  * as separate scopes.
  *
  * @param {string} text - Full document text
@@ -1021,7 +1023,7 @@ function findVariableOccurrences(text, sigil, name) {
     }
 
     for (const match of view.matchAll(VARIABLE_TOKEN_REGEX)) {
-      const tokenSigil = match[1] ?? "$";
+      const tokenSigil = match[1];
       const tokenName = match[2] ?? match[3];
       if (tokenSigil !== sigil || tokenName.toLowerCase() !== wanted) continue;
 
