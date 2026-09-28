@@ -788,6 +788,42 @@ function isInStringOrComment(line, position, initialState) {
 // ============================================================
 
 /**
+ * Prepares the text before the cursor for signature-help matching: blanks
+ * strings and comments, then every fully closed `( ... )` group, so only the
+ * still-open calls keep their parentheses. Length-preserving (blanked chars
+ * become spaces).
+ *
+ * This is what lets signature help find the call the cursor is really in
+ * when an earlier argument contains a nested call or a parenthesis inside a
+ * string -- e.g. `$Substring($Trim($x), ` or `$Substring("a(b", ` -- and
+ * keeps commas inside those closed groups from shifting the active parameter.
+ *
+ * @param {string} text - Document text up to the cursor
+ * @returns {string}
+ */
+function maskClosedGroups(text) {
+  const state = createCodeScanState();
+  const chars = text
+    .split("\n")
+    .map((line) => maskNonCodeSpans(line, state))
+    .join("\n")
+    .split("");
+
+  /** @type {number[]} indexes of the currently open '(' */
+  const open = [];
+  for (let i = 0; i < chars.length; i++) {
+    if (chars[i] === "(") {
+      open.push(i);
+    } else if (chars[i] === ")") {
+      const start = open.pop();
+      if (start === undefined) continue; // stray ')' -- not this helper's concern
+      for (let k = start; k <= i; k++) if (chars[k] !== "\n") chars[k] = " ";
+    }
+  }
+  return chars.join("");
+}
+
+/**
  * Counts the active parameter index from a partial argument string.
  *
  * The input should be the text between an opening `(` and the cursor.
@@ -1042,6 +1078,7 @@ module.exports = {
 
   // -- Argument helpers
   getActiveParameterIndex,
+  maskClosedGroups,
 
   // -- Module-name regexes & context predicates
   MODULE_NAME_TOKEN_REGEX,

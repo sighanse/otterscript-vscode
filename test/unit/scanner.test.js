@@ -30,6 +30,7 @@ const {
   getActiveParameterIndex,
   maskCommentSpans,
   findVariableOccurrences,
+  maskClosedGroups,
   MODULE_NAME_TOKEN_REGEX,
   MODULE_DECLARATION_REGEX,
   MODULE_CALL_TARGET_REGEX,
@@ -800,5 +801,24 @@ describe("findVariableOccurrences", () => {
     ];
     // The bare "%p" in literal text is plain output, not an expression.
     assert.deepEqual(find(lines, "%", "p"), ["0:11:w", "1:16:r", "1:42:r"]);
+  });
+});
+
+// ============================================================
+// maskClosedGroups
+// ============================================================
+
+describe("maskClosedGroups", () => {
+  it("blanks closed groups so only still-open calls keep their '('", () => {
+    const text = "$Substring($Trim($x), ";
+    assert.equal(maskClosedGroups(text), "$Substring($Trim    , ");
+  });
+
+  it("blanks strings first, so a '(' inside one doesn't count", () => {
+    assert.equal(maskClosedGroups('$Substring("a(b", '), "$Substring(     , ");
+  });
+
+  it("keeps line breaks and ignores a stray ')'", () => {
+    assert.equal(maskClosedGroups("x)\n$F(a,\n(b)"), "x)\n$F(a,\n   ");
   });
 });

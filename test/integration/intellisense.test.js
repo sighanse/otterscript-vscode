@@ -153,6 +153,15 @@ describe("signature help", () => {
     assert.equal(help.activeParameter, 2);
   });
 
+  it("still finds the outer call after a nested call or a '(' in a string", async () => {
+    for (const source of ["set $s = $Substring($Trim($x), ", 'set $s = $Substring("a(b", ']) {
+      const document = await openContent(source);
+      const help = await signatureHelp(document, document.positionAt(source.length));
+      assert.equal(help?.signatures[0].label, "$Substring(text, startIndex, [length])", source);
+      assert.equal(help?.activeParameter, 1, source);
+    }
+  });
+
   it("works for the map form of FromJson", async () => {
     const document = await openContent("set %m = %FromJson(");
     const help = await signatureHelp(document, positionOf(document, "%FromJson(", 10));

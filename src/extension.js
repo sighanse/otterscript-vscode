@@ -61,6 +61,7 @@ const {
   getOutputChannel,
   getDiagnosticCode,
   getActiveParameterIndex,
+  maskClosedGroups,
   getTypedIdentifier,
   getModuleDeclarations,
   getModuleCallReferencesByName,
@@ -168,11 +169,13 @@ function activate(context) {
           if (!signatureHelpEnabled) return null;
 
           // -- Get the text before the cursor, up to 10 lines back, so a call
-          // whose arguments span several lines is still detected
-          const textBeforeCursor = document.getText(new vscode.Range(
+          // whose arguments span several lines is still detected. Closed
+          // groups and strings are blanked, so an earlier nested call such as
+          // `$Substring($Trim($x), ` doesn't hide the call the cursor is in.
+          const textBeforeCursor = maskClosedGroups(document.getText(new vscode.Range(
             new vscode.Position(Math.max(0, position.line - 10), 0),
             position
-          ));
+          )));
           // -- Try each pattern to find the call the cursor is inside; the first
           // pattern whose name is documented wins
           let match = null;
