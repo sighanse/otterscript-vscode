@@ -287,3 +287,15 @@ describe("createCardVersionFix", () => {
     assert.equal(createCardVersionFix(/** @type {any} */ ({ uri: "u", getText: () => src, positionAt: () => new Position(0, 0) }), /** @type {any} */ ({})), null);
   });
 });
+
+describe("findAdaptiveCardDiagnostics — performance", () => {
+  it("stays fast on a large card (each lookup used to rescan the whole text)", () => {
+    // 2,000 elements with a fallback took ~1 s before the one-pass JsonView;
+    // it now takes ~10 ms. The bound is loose so slow CI machines don't flake.
+    const element = '{ "type": "Table", "fallback": "drop", "rows": [] }';
+    const src = '{ "type": "AdaptiveCard", "version": "1.2", "body": [' + Array(2000).fill(element).join(",") + "] }";
+    const started = Date.now();
+    assert.deepEqual(diagnose(src), []);
+    assert.ok(Date.now() - started < 300, `took ${Date.now() - started} ms`);
+  });
+});

@@ -8,6 +8,10 @@
 - `otterscript.diagnostics.rules` setting to turn individual diagnostics off or change their severity, keyed by diagnostic code; every diagnostic also gets a **Turn off '&lt;code&gt;' diagnostics** quick fix. Unbalanced-symbol and unmatched/unclosed `<% %>` diagnostics now have codes too (`unbalanced-symbol`, `template-unexpected-close`, `template-unclosed`)
 - `adaptivecard-version-too-low` diagnostic: an Adaptive Card element or action that needs a newer card version than the card's declared `"version"` (e.g. a 1.5 `Table` in a 1.2 card) is flagged, unless it or an enclosing element has a `"fallback"`. The quick fix **Change card version to X** raises the version to the highest one the card needs
 
+### Changed
+
+- The Adaptive Card checks are much faster on large cards: each card is now parsed once per check instead of being re-scanned for every lookup (a 2,000-element card went from about 1 s to about 10 ms)
+
 ### Fixed
 
 - Read-only views of another version of a file — the old side of a Git diff, a pull-request review — no longer get diagnostics or add duplicate modules to Go to Symbol in Workspace; an untitled document's modules now leave it when the document closes

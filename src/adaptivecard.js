@@ -54,48 +54,56 @@ function findJsonStringTokens(text) {
 }
 
 /**
- * Finds every `"<keyName>": "<value>"` property in `text` -- i.e. every
- * place a string token equal to `keyName` is immediately followed (only
- * whitespace and a `:` between) by another string token. Two JSON string
- * tokens separated by nothing but a colon can only mean a key/value pair in
- * well-formed JSON (a value is never followed directly by a bare colon), so
- * this can't be fooled by unrelated string content the way a plain regex
- * scanning raw characters can.
+ * One text's JSON structure, computed once so every lookup below is cheap
+ * (re-scanning the text per lookup made a large card quadratic):
+ * - `tokens` -- its string tokens ({@link findJsonStringTokens})
+ * - `enclosing[i]` -- index of the innermost `{` containing `tokens[i]`, or -1
+ * - `closeOf` -- each `{` / `[` index mapped to its matching `}` / `]`
  *
- * @param {string} text
- * @param {string} keyName
- * @returns {{ value: string, valueStart: number, valueEnd: number }[]}
- *   `valueStart`/`valueEnd` bracket just the value's content, excluding
- *   its surrounding quotes.
+ * Braces and brackets are matched independently (a `}` only closes a `{`),
+ * and string tokens are skipped whole, so brackets inside string values
+ * don't count.
+ *
+ * @typedef {{
+ *   text: string,
+ *   tokens: { value: string, start: number, end: number }[],
+ *   enclosing: number[],
+ *   closeOf: Map<number, number>
+ * }} JsonView
  */
-function findStringProperties(text, keyName) {
-  const tokens = findJsonStringTokens(text);
-  const results = [];
-  for (let i = 0; i < tokens.length - 1; i++) {
-    if (tokens[i].value !== keyName) continue;
-    const between = text.slice(tokens[i].end + 1, tokens[i + 1].start);
-    if (!/^\s*:\s*$/.test(between)) continue;
-    const valueToken = tokens[i + 1];
-    results.push({ value: valueToken.value, valueStart: valueToken.start + 1, valueEnd: valueToken.end });
-  }
-  return results;
-}
 
 /**
- * Whether `text` contains `keyName` used as a JSON key at all, regardless of
- * what its value is (string, number, object, ...). A string token followed
- * by nothing but whitespace and then `:` can only be a key in well-formed
- * JSON, so -- as with {@link findStringProperties} -- this can't be
- * triggered by unrelated string content.
+ * Builds the {@link JsonView} of `text` in one pass.
  *
  * @param {string} text
- * @param {string} keyName
- * @returns {boolean}
+ * @returns {JsonView}
  */
-function hasKeyProperty(text, keyName) {
-  return findJsonStringTokens(text).some(
-    (token) => token.value === keyName && valueStartAfterKey(text, token) !== -1
-  );
+function analyzeJson(text) {
+  const tokens = findJsonStringTokens(text);
+  /** @type {number[]} */
+  const enclosing = [];
+  /** @type {Map<number, number>} */
+  const closeOf = new Map();
+  /** @type {number[]} */
+  const braces = [];
+  /** @type {number[]} */
+  const brackets = [];
+
+  let t = 0;
+  for (let i = 0; i < text.length; i++) {
+    if (t < tokens.length && i === tokens[t].start) {
+      enclosing.push(braces.length ? braces[braces.length - 1] : -1);
+      i = tokens[t].end; // skip the string; the loop's i++ lands just past it
+      t++;
+      continue;
+    }
+    const ch = text[i];
+    if (ch === "{") braces.push(i);
+    else if (ch === "[") brackets.push(i);
+    else if (ch === "}") { const open = braces.pop(); if (open !== undefined) closeOf.set(open, i); }
+    else if (ch === "]") { const open = brackets.pop(); if (open !== undefined) closeOf.set(open, i); }
+  }
+  return { text, tokens, enclosing, closeOf };
 }
 
 /**
@@ -117,34 +125,54 @@ function valueStartAfterKey(text, token) {
 }
 
 /**
- * Finds the matching `}` / `]` for the `{` / `[` at `openIndex`, scanning
- * forward and skipping quoted-string content (so a bracket inside a JSON
- * string value doesn't confuse the depth count).
+ * Finds every `"<keyName>": "<value>"` property -- i.e. every place a string
+ * token equal to `keyName` is immediately followed (only whitespace and a
+ * `:` between) by another string token. Two JSON string tokens separated by
+ * nothing but a colon can only mean a key/value pair in well-formed JSON (a
+ * value is never followed directly by a bare colon), so this can't be fooled
+ * by unrelated string content the way a plain regex scanning raw characters
+ * can.
  *
- * @param {string} text
- * @param {number} openIndex - Index of a `{` or `[`
- * @returns {number} Matching closer's index, or -1 if unclosed.
+ * @param {JsonView} json
+ * @param {string} keyName
+ * @returns {{ value: string, valueStart: number, valueEnd: number, objectStart: number }[]}
+ *   `valueStart`/`valueEnd` bracket just the value's content, excluding its
+ *   surrounding quotes; `objectStart` is the `{` of the object the property
+ *   belongs to (-1 if none).
  */
-function findMatchingClose(text, openIndex) {
-  const open = text[openIndex];
-  const close = open === "[" ? "]" : "}";
-  let depth = 1;
-  /** @type {string | null} */
-  let quote = null;
-  for (let i = openIndex + 1; i < text.length; i++) {
-    const ch = text[i];
-    if (quote) {
-      if (ch === quote && isUnescapedQuoteAt(text, i)) quote = null;
-      continue;
-    }
-    if (ch === '"' || ch === "'") { quote = ch; continue; }
-    if (ch === open) depth++;
-    else if (ch === close) {
-      depth--;
-      if (depth === 0) return i;
-    }
+function findStringProperties(json, keyName) {
+  const { text, tokens, enclosing } = json;
+  const results = [];
+  for (let i = 0; i < tokens.length - 1; i++) {
+    if (tokens[i].value !== keyName) continue;
+    const between = text.slice(tokens[i].end + 1, tokens[i + 1].start);
+    if (!/^\s*:\s*$/.test(between)) continue;
+    const valueToken = tokens[i + 1];
+    results.push({
+      value: valueToken.value,
+      valueStart: valueToken.start + 1,
+      valueEnd: valueToken.end,
+      objectStart: enclosing[i + 1],
+    });
   }
-  return -1;
+  return results;
+}
+
+/**
+ * Whether `keyName` is used as a JSON key anywhere, regardless of what its
+ * value is (string, number, object, ...). A string token followed by nothing
+ * but whitespace and then `:` can only be a key in well-formed JSON, so -- as
+ * with {@link findStringProperties} -- this can't be triggered by unrelated
+ * string content.
+ *
+ * @param {JsonView} json
+ * @param {string} keyName
+ * @returns {boolean}
+ */
+function hasKeyProperty(json, keyName) {
+  return json.tokens.some(
+    (token) => token.value === keyName && valueStartAfterKey(json.text, token) !== -1
+  );
 }
 
 /**
@@ -161,27 +189,49 @@ const FREE_FORM_KEYS = new Set(["data", "msteams", "buttons"]);
 
 /**
  * Finds the `[start, end]` spans of every object/array value belonging to a
- * {@link FREE_FORM_KEYS} key in `text`. A scalar value (e.g. `"data": "x"`)
- * contains nothing nested, so it yields no span.
+ * {@link FREE_FORM_KEYS} key. A scalar value (e.g. `"data": "x"`) contains
+ * nothing nested, so it yields no span.
  *
- * @param {string} text
+ * @param {JsonView} json
  * @returns {{ start: number, end: number }[]}
  */
-function findFreeFormSpans(text) {
+function findFreeFormSpans(json) {
+  /** @type {{ start: number, end: number }[]} */
   const spans = [];
-  for (const token of findJsonStringTokens(text)) {
+  for (const token of json.tokens) {
     if (!FREE_FORM_KEYS.has(token.value)) continue;
-    const valueStart = valueStartAfterKey(text, token);
-    if (valueStart === -1 || (text[valueStart] !== "{" && text[valueStart] !== "[")) continue;
-    const end = findMatchingClose(text, valueStart);
-    if (end !== -1) spans.push({ start: valueStart, end });
+    const valueStart = valueStartAfterKey(json.text, token);
+    if (valueStart === -1) continue;
+    const end = json.closeOf.get(valueStart); // only set for a '{' or '['
+    if (end !== undefined) spans.push({ start: valueStart, end });
   }
   return spans;
 }
 
 /**
+ * Finds the `[start, end]` span of every object that has its own
+ * `"fallback"` key. A host that doesn't support such an element replaces the
+ * whole object -- children included -- with its fallback, so nothing inside
+ * the span needs the card's declared version.
+ *
+ * @param {JsonView} json
+ * @returns {{ start: number, end: number }[]}
+ */
+function findFallbackSpans(json) {
+  /** @type {{ start: number, end: number }[]} */
+  const spans = [];
+  json.tokens.forEach((token, i) => {
+    if (token.value !== "fallback" || valueStartAfterKey(json.text, token) === -1) return;
+    const start = json.enclosing[i];
+    const end = json.closeOf.get(start);
+    if (end !== undefined) spans.push({ start, end });
+  });
+  return spans;
+}
+
+/**
  * Whether `index` falls strictly inside any of `spans` (as returned by
- * {@link findFreeFormSpans}).
+ * {@link findFreeFormSpans} / {@link findFallbackSpans}).
  *
  * @param {{ start: number, end: number }[]} spans
  * @param {number} index
@@ -189,38 +239,6 @@ function findFreeFormSpans(text) {
  */
 function isInsideAny(spans, index) {
   return spans.some((s) => index > s.start && index < s.end);
-}
-
-/**
- * Finds the nearest unmatched `{` at or before `index`, scanning backward --
- * i.e. the JSON object that directly contains whatever text is at `index`.
- * String tokens (see {@link findJsonStringTokens}) are skipped whole, so a
- * `{`/`}` inside a sibling string value doesn't confuse the depth count --
- * the backward counterpart of {@link findMatchingClose}'s quote handling.
- *
- * @param {string} text
- * @param {number} index
- * @returns {number} Matching `{` index, or -1 if none found.
- */
-function findEnclosingBraceStart(text, index) {
-  const tokens = findJsonStringTokens(text);
-  let t = tokens.length - 1;
-  let depth = 0;
-  for (let i = index; i >= 0; i--) {
-    while (t >= 0 && tokens[t].start > i) t--;
-    if (t >= 0 && tokens[t].end >= i) {
-      i = tokens[t].start; // loop's i-- then lands just before the opening quote
-      t--;
-      continue;
-    }
-    const ch = text[i];
-    if (ch === "}") depth++;
-    else if (ch === "{") {
-      if (depth === 0) return i;
-      depth--;
-    }
-  }
-  return -1;
 }
 
 /**
@@ -248,67 +266,45 @@ function compareCardVersions(a, b) {
 }
 
 /**
- * Finds the `[start, end]` span of every object in `text` that has its own
- * `"fallback"` key. A host that doesn't support such an element replaces the
- * whole object -- children included -- with its fallback, so nothing inside
- * the span needs the card's declared version.
- *
- * @param {string} text
- * @returns {{ start: number, end: number }[]}
- */
-function findFallbackSpans(text) {
-  const spans = [];
-  for (const token of findJsonStringTokens(text)) {
-    if (token.value !== "fallback" || valueStartAfterKey(text, token) === -1) continue;
-    const start = findEnclosingBraceStart(text, token.start);
-    const end = start === -1 ? -1 : findMatchingClose(text, start);
-    if (end !== -1) spans.push({ start, end });
-  }
-  return spans;
-}
-
-/**
  * Locates the Adaptive Card in a document: the first literal (non-`<% %>`)
  * object with `"type": "AdaptiveCard"` that isn't a lookalike inside a
  * free-form payload.
  *
  * @param {string} text - Full document text
- * @returns {{ objStart: number, span: string } | null} `span` is the card
- *   object's literal text, from its `{` to its matching `}`; offsets inside
- *   it are relative to `objStart`.
+ * @returns {{ objStart: number, card: JsonView } | null} `card` is the
+ *   {@link JsonView} of the card object's literal text, from its `{` to its
+ *   matching `}`; offsets inside it are relative to `objStart`.
  */
 function locateCard(text) {
   const state = createTemplateScanState();
-  const literalText = text.split("\n").map((line) => maskTemplateTagContents(line, state)).join("\n");
+  const literal = analyzeJson(text.split("\n").map((line) => maskTemplateTagContents(line, state)).join("\n"));
 
   // A payload that merely looks like a card (e.g. an Action.Submit "data"
   // object with "type": "AdaptiveCard") is not the card -- skip such
   // candidates so they neither trigger the checks nor shadow the real root.
-  const literalFreeFormSpans = findFreeFormSpans(literalText);
-  const root = findStringProperties(literalText, "type").find(
+  const literalFreeFormSpans = findFreeFormSpans(literal);
+  const root = findStringProperties(literal, "type").find(
     (t) => t.value === "AdaptiveCard" && !isInsideAny(literalFreeFormSpans, t.valueStart)
   );
   if (!root) return null;
 
-  const objStart = findEnclosingBraceStart(literalText, root.valueStart);
+  const objStart = root.objectStart;
   if (objStart === -1) return null; // malformed JSON -- the unbalanced-symbol check owns this
-  const objEnd = findMatchingClose(literalText, objStart);
-  if (objEnd === -1) return null;
+  const objEnd = literal.closeOf.get(objStart);
+  if (objEnd === undefined) return null;
 
-  return { objStart, span: literalText.slice(objStart, objEnd + 1) };
+  return { objStart, card: analyzeJson(literal.text.slice(objStart, objEnd + 1)) };
 }
 
 /**
  * The card's own `"version"` string property (not one belonging to a nested
- * object), with its value's offsets relative to the card span.
+ * object), with its value's offsets relative to the card text.
  *
- * @param {string} span - Card object text, as returned by {@link locateCard}
+ * @param {JsonView} card - As returned by {@link locateCard}
  * @returns {{ value: string, valueStart: number, valueEnd: number } | undefined}
  */
-function findOwnVersionProperty(span) {
-  return findStringProperties(span, "version").find(
-    (p) => findEnclosingBraceStart(span, p.valueStart) === 0
-  );
+function findOwnVersionProperty(card) {
+  return findStringProperties(card, "version").find((p) => p.objectStart === 0);
 }
 
 /**
@@ -317,21 +313,24 @@ function findOwnVersionProperty(span) {
  * a `"fallback"` (or sits inside one that does) -- that's the standard way to
  * use a newer element on purpose while still targeting older hosts.
  *
- * @param {string} span - Card object text
+ * @param {JsonView} card
  * @param {[number, number]} cardVersion
  * @returns {{ value: string, valueStart: number, valueEnd: number, required: string }[]}
  */
-function findTooNewTypes(span, cardVersion) {
-  const skippedSpans = [...findFreeFormSpans(span), ...findFallbackSpans(span)];
+function findTooNewTypes(card, cardVersion) {
+  /** @type {{ value: string, valueStart: number, valueEnd: number, required: string }[]} */
   const results = [];
-  for (const property of findStringProperties(span, "type")) {
-    const required = ADAPTIVE_CARD_TYPES.get(property.value);
-    if (!required || isInsideAny(skippedSpans, property.valueStart)) continue;
+  /** @type {{ start: number, end: number }[] | null} computed only if something is too new */
+  let skippedSpans = null;
+  for (const { value, valueStart, valueEnd } of findStringProperties(card, "type")) {
+    const required = ADAPTIVE_CARD_TYPES.get(value);
+    const requiredVersion = required && parseCardVersion(required);
+    if (!required || !requiredVersion || compareCardVersions(requiredVersion, cardVersion) <= 0) continue;
 
-    const requiredVersion = parseCardVersion(required);
-    if (!requiredVersion || compareCardVersions(requiredVersion, cardVersion) <= 0) continue;
+    skippedSpans ??= [...findFreeFormSpans(card), ...findFallbackSpans(card)];
+    if (isInsideAny(skippedSpans, valueStart)) continue;
 
-    results.push({ ...property, required });
+    results.push({ value, valueStart, valueEnd, required });
   }
   return results;
 }
@@ -352,12 +351,12 @@ function findAdaptiveCardDiagnostics(document, text) {
   /** @type {vscode.Diagnostic[]} */
   const issues = [];
 
-  const card = locateCard(text);
-  if (!card) return issues;
-  const { objStart, span } = card;
+  const located = locateCard(text);
+  if (!located) return issues;
+  const { objStart, card } = located;
 
   /**
-   * Adds a warning spanning `[start, end)` of the card span.
+   * Adds a warning spanning `[start, end)` of the card text.
    *
    * @param {number} start
    * @param {number} end
@@ -377,18 +376,18 @@ function findAdaptiveCardDiagnostics(document, text) {
     return diagnostic;
   };
 
-  if (!hasKeyProperty(span, "version")) {
+  if (!hasKeyProperty(card, "version")) {
     addIssue(0, 1, 'Adaptive Card is missing its required "version" property.', "adaptivecard-missing-version");
   }
 
-  const freeFormSpans = findFreeFormSpans(span);
-  for (const { value, valueStart, valueEnd } of findStringProperties(span, "type")) {
+  const freeFormSpans = findFreeFormSpans(card);
+  for (const { value, valueStart, valueEnd } of findStringProperties(card, "type")) {
     if (ADAPTIVE_CARD_TYPES.has(value)) continue;
     if (isInsideAny(freeFormSpans, valueStart)) continue;
     addIssue(valueStart, valueEnd, `Unknown Adaptive Card type '${value}'.`, "adaptivecard-unknown-type");
   }
 
-  const versionProperty = findOwnVersionProperty(span);
+  const versionProperty = findOwnVersionProperty(card);
   const cardVersion = versionProperty && parseCardVersion(versionProperty.value);
   if (versionProperty && cardVersion) {
     const versionLocation = new vscode.Location(
@@ -398,7 +397,7 @@ function findAdaptiveCardDiagnostics(document, text) {
         document.positionAt(objStart + versionProperty.valueEnd)
       )
     );
-    for (const { value, valueStart, valueEnd, required } of findTooNewTypes(span, cardVersion)) {
+    for (const { value, valueStart, valueEnd, required } of findTooNewTypes(card, cardVersion)) {
       const diagnostic = addIssue(
         valueStart, valueEnd,
         `'${value}' requires Adaptive Card version ${required} or later, but this card declares version ${versionProperty.value.trim()}.`,
@@ -426,15 +425,15 @@ function findAdaptiveCardDiagnostics(document, text) {
  * @returns {vscode.CodeAction | null}
  */
 function createCardVersionFix(document, diagnostic) {
-  const card = locateCard(document.getText());
-  if (!card) return null;
-  const versionProperty = findOwnVersionProperty(card.span);
+  const located = locateCard(document.getText());
+  if (!located) return null;
+  const versionProperty = findOwnVersionProperty(located.card);
   const cardVersion = versionProperty && parseCardVersion(versionProperty.value);
   if (!versionProperty || !cardVersion) return null;
 
   let highest = cardVersion;
   let highestText = "";
-  for (const { required } of findTooNewTypes(card.span, cardVersion)) {
+  for (const { required } of findTooNewTypes(located.card, cardVersion)) {
     const parsed = parseCardVersion(required);
     if (parsed && compareCardVersions(parsed, highest) > 0) {
       highest = parsed;
@@ -450,8 +449,8 @@ function createCardVersionFix(document, diagnostic) {
   action.edit.replace(
     document.uri,
     new vscode.Range(
-      document.positionAt(card.objStart + versionProperty.valueStart),
-      document.positionAt(card.objStart + versionProperty.valueEnd)
+      document.positionAt(located.objStart + versionProperty.valueStart),
+      document.positionAt(located.objStart + versionProperty.valueEnd)
     ),
     highestText
   );
