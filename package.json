@@ -1,7 +1,7 @@
 {
   "name": "otterscript-vscode",
   "displayName": "OtterScript Language Extension",
-  "description": "Syntax highlighting, snippets, and function support for OtterScript",
+  "description": "OtterScript language support: syntax highlighting, IntelliSense (hover, completion, signature help), diagnostics with quick fixes, navigation, and snippets.",
   "publisher": "sighanse",
   "author": {
     "name": "Sigurd Hansen",
@@ -39,7 +39,8 @@
   },
   "categories": [
     "Programming Languages",
-    "Snippets"
+    "Snippets",
+    "Linters"
   ],
   "keywords": [
     "otterscript",
@@ -48,7 +49,11 @@
     "proget",
     "automation",
     "devops",
-    "configuration-management"
+    "configuration-management",
+    "buildmaster",
+    "adaptive-cards",
+    "teams",
+    "webhook"
   ],
   "main": "./src/extension.js",
   "activationEvents": [
