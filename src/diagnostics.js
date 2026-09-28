@@ -26,7 +26,7 @@ const { findAdaptiveCardDiagnostics } = require("./adaptivecard");
 /**
  * Context object passed to updateDiagnostics to avoid hidden closures.
  *
- * @typedef {Object} DiagnosticsContext
+ * @typedef {object} DiagnosticsContext
  * @property {Set<string>} nonVariableIdentifiers - Identifiers valid without '$'
  * @property {Set<string>} knownKeywords - Known language keywords
  * @property {Set<string>} knownScalarFunctions - Known scalar function names
@@ -118,7 +118,10 @@ function applyDiagnosticRules(issues, rules) {
 const NAMESPACE_QUALIFIER_REGEX = /(^|[^A-Za-z0-9_$@:])([A-Za-z][A-Za-z0-9]*)::(?=[A-Za-z])/g;
 
 // -- Text-template (`<% ... %>`) structural checks --------------------------
-/** Tag body that is only a block-terminator keyword (`end`, `endforeach`, ...). @type {RegExp} */
+/**
+ * Tag body that is only a block-terminator keyword (`end`, `endforeach`, ...).
+ * @type {RegExp}
+ */
 const TEMPLATE_END_KEYWORD_REGEX = /^\s*(end(?:if|for|foreach|while)?)\s*$/i;
 /**
  * Tag body that opens a `{ }` block: `if` / `foreach` / `while`, optionally

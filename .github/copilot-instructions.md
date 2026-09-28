@@ -70,7 +70,7 @@ and editor UI (lightbulb, auto-closing) still need a manual `F5` check.
 - Use `const`/`let`; never use `var`.
 - Keep edits focused; avoid unrelated refactors or formatting churn.
 - Preserve existing behavior unless task explicitly requires change.
-- Add complete JSDoc for all functions in `.js` files (`// @ts-check` is enforced style).
+- Add complete JSDoc for all functions in `.js` files (`// @ts-check` is enforced style). ESLint (`eslint-plugin-jsdoc`) requires a JSDoc block on every function declaration outside `test/`, and checks that `@param` / `@returns` match the code everywhere.
 - Prefer early returns for validation.
 - Use `Object.freeze()` for constant language-data objects.
 - Do not hardcode extension version; use `context.extension.packageJSON.version`.

@@ -451,7 +451,10 @@ describe("findModuleDeclarations", () => {
 // ============================================================
 
 describe("maskOutsideTemplateTags", () => {
-  /** @param {string} line @param {ReturnType<typeof createTemplateScanState>} [st] */
+  /**
+   * @param {string} line
+   * @param {ReturnType<typeof createTemplateScanState>} [st]
+   */
   const mask = (line, st = createTemplateScanState()) => maskOutsideTemplateTags(line, st);
 
   it("keeps only the tag body on a single-line tag; blanks text and delimiters", () => {

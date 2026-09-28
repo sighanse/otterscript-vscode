@@ -604,7 +604,10 @@ describe("buildCompletionItem", () => {
 // ============================================================
 
 describe("quick-fix factories", () => {
-  /** @param {number} s @param {number} e */
+  /**
+   * @param {number} s
+   * @param {number} e
+   */
   const diagAt = (s, e) => /** @type {any} */ ({
     range: { start: new Position(0, s), end: new Position(0, e) },
   });

@@ -179,28 +179,28 @@ function appendOutputLine(line) {
  * log.debug('Processing line', lineIndex);
  */
 const log = {
-  /** @param {...any} args - @example log.info('Extension activated') */
+  /** @param {...any} args - e.g. `log.info('Extension activated')` */
   info: (...args) => {
     const now = timestamp();
     console.log(LOGPREFIX, `[${now}]`, ...args);
     appendOutputLine(`[${now}] ${args.join(' ')}`);
   },
 
-  /** @param {...any} args - @example log.warn('Missing field') */
+  /** @param {...any} args - e.g. `log.warn('Missing field')` */
   warn: (...args) => {
     const now = timestamp();
     console.warn(LOGPREFIX, `[${now}]`, ...args);
     appendOutputLine(`⚠️ [${now}] ${args.join(' ')}`);
   },
 
-  /** @param {...any} args - @example log.error('Failed', err) */
+  /** @param {...any} args - e.g. `log.error('Failed', err)` */
   error: (...args) => {
     const now = timestamp();
     console.error(LOGPREFIX, `[${now}]`, ...args);
     appendOutputLine(`❌ [${now}] ${args.join(' ')}`);
   },
 
-  /** @param {...any} args - @example log.debug('Processing', lineIndex) */
+  /** @param {...any} args - e.g. `log.debug('Processing', lineIndex)` */
   debug: (...args) => {
     const now = timestamp();
     // Debug logs go to console only - intentionally excluded from Output Channel

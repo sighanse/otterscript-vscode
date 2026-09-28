@@ -41,7 +41,10 @@ function diagnose(source) {
   return findAdaptiveCardDiagnostics(document, source);
 }
 
-/** @param {string} source @param {string} code */
+/**
+ * @param {string} source
+ * @param {string} code
+ */
 const only = (source, code) => diagnose(source).filter((d) => d.code === code);
 
 describe("findAdaptiveCardDiagnostics — card detection", () => {

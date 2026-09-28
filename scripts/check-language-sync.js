@@ -19,8 +19,8 @@
  * CI catch it.
  *
  * Scope: call-style functions and operations only. Runtime *variables*
- * (entries whose `signature` has no `(` -- e.g. $WorkingDirectory,
- * @AffectedPackages) are matched by different grammar rules and are not
+ * (entries whose `signature` has no `(` -- e.g. `$WorkingDirectory`,
+ * `@AffectedPackages`) are matched by different grammar rules and are not
  * checked here yet.
  *
  * Usage: node scripts/check-language-sync.js   (exit 0 = in sync, 1 = drift)

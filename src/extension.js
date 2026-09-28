@@ -680,6 +680,31 @@ function activate(context) {
   );
 
   // ============================================================
+  // DIAGNOSTICS COLLECTION & CONTEXT
+  // ============================================================
+  // Created before the quick fixes and Fix All below, which re-run
+  // diagnostics after applying edits. The listeners that keep diagnostics
+  // current are registered in the DIAGNOSTICS section further down.
+
+  const diagnostics = vscode.languages.createDiagnosticCollection("otterscript");
+  /** @type {import("./diagnostics").DiagnosticsContext} */
+  const diagnosticsContext = {
+    nonVariableIdentifiers: NON_VARIABLE_IDENTIFIERS,
+    knownKeywords,
+    knownScalarFunctions,
+    knownVectorFunctions,
+    scalarFunctionDocs,
+    vectorFunctionDocs,
+    mapFunctionDocs,
+    knownOperations,
+    knownNamespaces: NAMESPACES,
+    scalarCallRegex,
+    vectorCallRegex,
+    operationCallRegex,
+    diagnosticRules: loadConfig().diagnosticRules,
+  };
+
+  // ============================================================
   // FIX DISPATCH TABLE
   // ============================================================
   // Single source of truth for all quick-fix factories.
@@ -1245,23 +1270,8 @@ function activate(context) {
   //   - Invalid logical operators (& instead of &&)
   //   - Unbalanced braces, parentheses, brackets, and <% %> tags
 
-  const diagnostics = vscode.languages.createDiagnosticCollection("otterscript");
-  const diagnosticsContext = {
-    nonVariableIdentifiers: NON_VARIABLE_IDENTIFIERS,
-    knownKeywords,
-    knownScalarFunctions,
-    knownVectorFunctions,
-    scalarFunctionDocs,
-    vectorFunctionDocs,
-    mapFunctionDocs,
-    knownOperations,
-    knownNamespaces: NAMESPACES,
-    scalarCallRegex,
-    vectorCallRegex,
-    operationCallRegex,
-    diagnosticRules: loadConfig().diagnosticRules,
-  };
-
+  // The collection and its context are created further up, before the quick
+  // fixes (the first code that uses them).
   context.subscriptions.push(diagnostics);
 
   // -- Re-run diagnostics in every open file when the per-code rules change,
@@ -1399,7 +1409,13 @@ function activate(context) {
 // ============================================================
 // DEACTIVATION
 // ============================================================
-// Called when the extension is disabled or VS Code shuts down.
+/**
+ * Called when the extension is disabled or VS Code shuts down: cancels any
+ * pending debounced diagnostics runs. Everything registered in
+ * `context.subscriptions` is disposed by VS Code itself.
+ *
+ * @returns {void}
+ */
 function deactivate() {
   for (const timer of diagnosticTimers.values()) {
     clearTimeout(timer);

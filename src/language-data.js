@@ -36,7 +36,7 @@
  * - snippet
  * - documentation
  *
- * @typedef {Object} DocEntry
+ * @typedef {object} DocEntry
  * @property {string} name Human-readable name shown in completion and hover
  * @property {string} description Short summary shown in IntelliSense
  * @property {string | null} namespace The `[ScriptNamespace]` token declared on
@@ -75,8 +75,8 @@
  *
  * A `DocEntry.namespace` is either `null` (no `[ScriptNamespace]` on the class
  * or its assembly — the common case; such constructs are `Core::` built-ins and
- * are shown without a namespace) or one of the tokens below. NOTE: the extension
- * *name* is not a namespace — e.g. the InedoCore extension declares only
+ * are shown without a namespace) or one of the tokens below. NOTE: an extension's
+ * name is not a namespace — e.g. the InedoCore extension declares only
  * `Files`, `HTTP`, `Network`, `ProGet`, `UPack`, `Otter`; there is no
  * `InedoCore::` prefix.
  *
