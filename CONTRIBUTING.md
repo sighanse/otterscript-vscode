@@ -23,7 +23,9 @@ npm run test:integration   # integration tests in real VS Code (see below)
 
 Optionally, install the [pre-commit](https://pre-commit.com) hooks once with
 `pre-commit install`. Each commit then gets the file, Markdown, workflow and
-ESLint checks, and each push runs `npm run check`.
+ESLint checks, and each push runs `npm run check`. The hook tools install
+themselves on first use (the workflow linter, actionlint, is built with Go,
+which pre-commit downloads if it isn't installed), so the first commit is slow.
 
 Press <kbd>F5</kbd> in VS Code to launch an Extension Development Host with this
 repo loaded as the test workspace. The same checks run in CI

@@ -57,12 +57,13 @@ repos:
   # ---------------------------------------------------------------------------
   # GITHUB ACTIONS - ACTIONLINT (same linter the Lint workflow runs in CI)
   # ---------------------------------------------------------------------------
-  # `actionlint-system` uses the actionlint binary on PATH, e.g. from
-  # `go install github.com/rhysd/actionlint/cmd/actionlint@latest`.
+  # The managed `actionlint` hook builds the pinned version itself, so nothing
+  # needs installing first: pre-commit uses Go from PATH if present and
+  # downloads it otherwise. The first run takes a minute; later runs are cached.
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.12
     hooks:
-      - id: actionlint-system
+      - id: actionlint
 
   # ---------------------------------------------------------------------------
   # PROJECT GATES - run the repo's own tooling so pre-commit and CI never diverge
