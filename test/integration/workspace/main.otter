@@ -1,0 +1,19 @@
+# Integration-test fixture (see test/integration/). Tests find positions by
+# searching for the snippets below, so keep each snippet they use unique.
+
+set $greeting = "hello";
+Log-Information "$greeting world";
+set %settings = %FromJson('{"level": "high"}');
+
+module Greet<$name> {
+    Log-Information $name;
+}
+
+call Greet(name: $greeting);
+call Greet(name: world);
+
+#region Loop
+foreach $item in @Split("a,b", ",") {
+    Log-Information $ToJson($item);
+}
+#endregion

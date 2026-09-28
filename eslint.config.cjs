@@ -6,6 +6,8 @@ module.exports = [
   {
     ignores: [
       "node_modules/**",
+      // VS Code builds downloaded by the integration tests
+      ".vscode-test/**",
       "*.vsix"
     ]
   },
@@ -100,6 +102,13 @@ module.exports = [
         { name: "sessionStorage", message: "Use vscode.workspace.state or memento" }
       ],
     },
+  },
+  {
+    // Integration tests run under mocha inside VS Code (see .vscode-test.mjs).
+    files: ["test/integration/**/*.js"],
+    languageOptions: {
+      globals: globals.mocha
+    }
   },
   {
     files: ["src/language-data.js"],

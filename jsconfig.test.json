@@ -1,7 +1,7 @@
 {
   "extends": "./jsconfig.json",
   "compilerOptions": {
-    "types": ["node"],
+    "types": ["node", "mocha"],
     "maxNodeModuleJsDepth": 0
   },
   "include": [

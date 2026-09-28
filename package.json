@@ -26,8 +26,11 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/mocha": "^10.0.10",
     "@types/node": "^24.19.0",
     "@types/vscode": "1.85.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^3.9.2",
     "eslint": "^10.11.0",
     "globals": "^17.12.0",
@@ -365,6 +368,7 @@
     "check:js": "npx -y -p typescript@6.0.3 tsc -p jsconfig.json --noEmit && npx -y -p typescript@6.0.3 tsc -p jsconfig.test.json --noEmit",
     "check:lang": "node scripts/check-language-sync.js",
     "test": "node --test \"test/unit/*.test.js\"",
+    "test:integration": "vscode-test",
     "test:cov": "node --test --experimental-test-coverage \"test/unit/*.test.js\"",
     "check": "npm run lint:ci && npm run check:js && npm run check:lang && npm test",
     "package": "vsce package --no-yarn",
@@ -374,5 +378,11 @@
   },
   "allowScripts": {
     "@vscode/vsce-sign": true
+  },
+  "overrides": {
+    "mocha": {
+      "diff": "^8.0.4",
+      "serialize-javascript": "^7.1.2"
+    }
   }
 }

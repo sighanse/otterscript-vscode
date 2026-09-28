@@ -13,6 +13,15 @@
         "${workspaceFolder}"
       ],
       "outFiles": ["${workspaceFolder}/src/**/*.js"]
+    },
+    {
+      // Runs the integration tests (test/integration/) under the debugger,
+      // using the configuration in .vscode-test.mjs.
+      "name": "Extension Tests",
+      "type": "extensionHost",
+      "request": "launch",
+      "testConfiguration": "${workspaceFolder}/.vscode-test.mjs",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}"]
     }
   ]
 }

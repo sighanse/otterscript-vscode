@@ -1,6 +1,8 @@
 .git/
 .github/
 .vscode/
+.vscode-test/
+.vscode-test.mjs
 node_modules/
 test/
 docs/
