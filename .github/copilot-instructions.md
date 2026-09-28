@@ -46,7 +46,7 @@ samples, and calls VS Code's `vscode.execute*Provider` commands to check hover,
 completion, signature help, diagnostics, the rules setting, quick fixes, Fix All,
 navigation, folding and highlighting. The first run downloads VS Code into
 `.vscode-test/`. It is not part of `npm run check` (too slow for the pre-commit
-hook) but is a blocking step in the Sanity workflow. Grammar colours, snippets
+hook) but is a blocking step in the Sanity workflow. Grammar colors, snippets
 and editor UI (lightbulb, auto-closing) still need a manual `F5` check.
 
 `npm run check:lang` (script: [scripts/check-language-sync.js](../scripts/check-language-sync.js)) fails when a scalar/vector/map function or operation is added to `src/language-data.js` without updating the matching regex alternation in `syntaxes/otterscript.tmLanguage.json` (or vice versa), or when an entry carries a `namespace` outside the `NAMESPACES` allowlist. It runs as a blocking step in the Sanity workflow.
@@ -109,7 +109,7 @@ Run these when applicable:
 3. `npm run test:integration` when provider behavior changes (hover, completion, signature help, diagnostics wiring, quick fixes, navigation, highlighting); add or update `test/integration/*.test.js` for new provider behavior
 4. `npm run package` when behavior changes
 5. Manual smoke test (`F5`) for what the integration tests can't see:
-   - Syntax highlighting colours look right (grammar changes)
+   - Syntax highlighting colors look right (grammar changes)
    - Snippets expand as expected
    - The lightbulb shows quick fixes on a diagnostic
    - `>>` auto-closes swim string

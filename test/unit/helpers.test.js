@@ -684,7 +684,7 @@ describe("createUnbalancedDiagnostic", () => {
 // ============================================================
 
 describe("getDiagnosticCode", () => {
-  it("normalises string / {value} / number / missing", () => {
+  it("normalizes string / {value} / number / missing", () => {
     assert.equal(getDiagnosticCode(/** @type {any} */ ({ code: "missing-dollar" })), "missing-dollar");
     assert.equal(getDiagnosticCode(/** @type {any} */ ({ code: { value: "x", target: {} } })), "x");
     assert.equal(getDiagnosticCode(/** @type {any} */ ({ code: 42 })), "42");

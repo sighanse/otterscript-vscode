@@ -718,7 +718,7 @@ function isInStringOrCommentDoc(document, position) {
 // ============================================================
 
 /**
- * Builds a standardised hover MarkdownString from a documentation entry.
+ * Builds a standardized hover MarkdownString from a documentation entry.
  *
  * This creates the formatted tooltip content shown when hovering over
  * symbols, keywords, operations, and syntax elements.
@@ -1246,7 +1246,7 @@ function editDistance(a, b) {
  * wins (canonical casing), otherwise the smallest edit distance within a small
  * threshold. Returns null when nothing is close enough to suggest.
  *
- * @param {string} token - The unrecognised namespace as written
+ * @param {string} token - The unrecognized namespace as written
  * @returns {string | null}
  */
 function nearestNamespace(token) {

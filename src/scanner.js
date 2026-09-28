@@ -6,7 +6,7 @@
  * tested with plain Node (`node:test`) and reused outside the extension host
  * (e.g. a future CLI linter).
  *
- * It owns the single source of truth for how the extension recognises non-code
+ * It owns the single source of truth for how the extension recognizes non-code
  * spans — quoted strings, line comments, block comments, and swim-strings — plus
  * the `<% %>` text-template tag masking, the argument-index helper, and the
  * module-name regexes that build on that scan. Everything here operates on plain

@@ -6,7 +6,7 @@
  * plus the matching per-version cache of the variable index used by
  * highlight all occurrences.
  *
- * Guards the behaviour before/after `getModuleInfo` is refactored to reuse
+ * Guards the behavior before/after `getModuleInfo` is refactored to reuse
  * `scanner.findModuleDeclarations`.
  *
  * Requires the vscode stub before helpers.js loads.
