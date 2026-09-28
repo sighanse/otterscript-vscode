@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- Snippets that insert an OtterScript `$` literally: the `Execute-PowerShell` completion lost `$_` and a `}` (inserting `Where-Object { .Status -eq "Running"  | Out-String}`), and `Acquire-Server` lost `$AcquiredServerName`. The `ifMatchesRegex`, `joinIntoString`, `ifexists` and `ifdirexists` snippets had an extra tab stop on the function name, and caused VS Code's "snippets very likely confuse snippet-variables and snippet-placeholders" warning
 - Adaptive Card check no longer flags `TextRun` inlines in a `RichTextBlock`, or the free-form `"type"` of `Authentication` sign-in buttons, as unknown types
 
 ## [0.4.0] - 2026-09-27

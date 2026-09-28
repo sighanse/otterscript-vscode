@@ -77,7 +77,7 @@
   "If Match Regex": {
     "prefix": "ifMatchesRegex",
     "body": [
-      "if $$MatchesRegex(${1:text}, \"${2:pattern}\") {",
+      "if \\$MatchesRegex(${1:text}, \"${2:pattern}\") {",
       "    ${3:# matched}",
       "}"
     ],
@@ -92,13 +92,13 @@
   },
   "Join Vector to String": {
     "prefix": "joinIntoString",
-    "body": ["$${1:result} = $$Join(\"${2:, }\", @${3:vector});"],
+    "body": ["$${1:result} = \\$Join(\"${2:, }\", @${3:vector});"],
     "description": "Join vector elements into a string"
   },
   "File Exists Check": {
     "prefix": "ifexists",
     "body": [
-      "if $$FileExists(\"${1:C:\\\\path\\\\to\\\\file}\") {",
+      "if \\$FileExists(\"${1:C:\\\\path\\\\to\\\\file}\") {",
       "    ${2:# file exists}",
       "}"
     ],
@@ -107,7 +107,7 @@
   "Directory Exists Check": {
     "prefix": "ifdirexists",
     "body": [
-      "if $$DirectoryExists(\"${1:C:\\\\path\\\\to\\\\directory}\") {",
+      "if \\$DirectoryExists(\"${1:C:\\\\path\\\\to\\\\directory}\") {",
       "    ${2:# directory exists}",
       "}"
     ],

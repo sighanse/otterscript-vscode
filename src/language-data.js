@@ -346,7 +346,7 @@ Upload-Http file.txt
     namespace: "PowerShell",
     name: "Execute-PowerShell",
     signature: "Execute-PowerShell(Text: <text>, [Debug: <true/false>], [Verbose: <true/false>], [RunOnSimulation: <true/false>], [Isolated: <true/false>], [SuccessExitCode: <text>], [PreferWindowsPowerShell: <text>]);",
-    snippet: "Execute-PowerShell >>\n    ${1:Get-Service | Where-Object { $_.Status -eq \"Running\" } | Out-String}\n>> (\n    Verbose: ${2:false},\n    Debug: ${3:false},\n    RunOnSimulation: ${4:false}\n);$0",
+    snippet: "Execute-PowerShell >>\n    ${1:Get-Service | Where-Object { \\$_.Status -eq \"Running\" \\} | Out-String}\n>> (\n    Verbose: ${2:false},\n    Debug: ${3:false},\n    RunOnSimulation: ${4:false}\n);$0",
     description: "Executes a specified PowerShell script.",
     documentation: `
 **Script Usage:**
@@ -589,7 +589,7 @@ Ensure-HostsEntry(
     namespace: null,
     name: "Acquire-Server",
     signature: "Acquire-Server([Role: <text>], [ServerName: <text>], [Verbose: <true/false>]);",
-    snippet: "Acquire-Server(\n   Role: ${1:build-servers},\n   ServerName => ${2:\$AcquiredServerName}\n);$0",
+    snippet: "Acquire-Server(\n   Role: ${1:build-servers},\n   ServerName => ${2:\\$AcquiredServerName}\n);$0",
     description: "Acquires a server from a resource pool defined by a server role.",
     documentation: `
 **Script Usage:**

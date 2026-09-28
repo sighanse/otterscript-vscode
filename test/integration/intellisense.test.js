@@ -165,3 +165,44 @@ describe("signature help", () => {
     assert.equal(help?.signatures.length ?? 0, 0);
   });
 });
+
+describe("snippets", () => {
+  afterEach(closeAllEditors);
+
+  /**
+   * Inserts a snippet into a new document and returns the resulting text.
+   *
+   * @param {(editor: vscode.TextEditor) => Thenable<unknown>} insert
+   * @returns {Promise<{ text: string, editor: vscode.TextEditor }>}
+   */
+  async function insertInto(insert) {
+    const document = await openContent("");
+    const editor = /** @type {vscode.TextEditor} */ (vscode.window.activeTextEditor);
+    await insert(editor);
+    return { text: document.getText().replace(/\r\n/g, "\n"), editor };
+  }
+
+  it("inserts completion snippets with their literal $ and } intact", async () => {
+    const { operationDocs } = require("../../src/language-data.js");
+    const powerShell = await insertInto((e) => e.insertSnippet(new vscode.SnippetString(operationDocs["Execute-PowerShell"].snippet)));
+    assert.ok(powerShell.text.includes('Where-Object { $_.Status -eq "Running" } | Out-String'), powerShell.text);
+    await closeAllEditors();
+
+    const acquire = await insertInto((e) => e.insertSnippet(new vscode.SnippetString(operationDocs["Acquire-Server"].snippet)));
+    assert.ok(acquire.text.includes("ServerName => $AcquiredServerName"), acquire.text);
+  });
+
+  it("a snippets-file snippet has only its intended tab stops", async () => {
+    const { text, editor } = await insertInto(() =>
+      vscode.commands.executeCommand("editor.action.insertSnippet", { langId: "otterscript", name: "If Match Regex" })
+    );
+    assert.ok(text.startsWith('if $MatchesRegex(text, "pattern") {'), text);
+
+    const visited = [editor.document.getText(editor.selection)];
+    for (let i = 0; i < 4; i++) {
+      await vscode.commands.executeCommand("jumpToNextSnippetPlaceholder");
+      visited.push(editor.document.getText(editor.selection));
+    }
+    assert.ok(!visited.includes("MatchesRegex"), `tab stops visited: ${JSON.stringify(visited)}`);
+  });
+});
