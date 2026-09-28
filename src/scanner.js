@@ -207,7 +207,9 @@ function isModuleCallContext(lineText, wordStart) {
  *
  * Advances `state` by processing every character of `lineText`.  When `chars`
  * is non-null it is treated as a split-string output buffer: every character
- * that belongs to a non-code span is replaced with a space in that buffer.
+ * that belongs to a non-code span is replaced with a space in that buffer --
+ * except, with `keepStrings`, the contents of quoted strings and swim-strings
+ * (see {@link maskCommentSpans}).
  *
  * Exported (rather than kept file-private) so unit tests can exercise the
  * character-classification logic directly.
@@ -215,10 +217,12 @@ function isModuleCallContext(lineText, wordStart) {
  * @param {string} lineText
  * @param {CodeScanState} state - Mutated in place.
  * @param {string[] | null} chars - Output buffer, or null for state-only mode.
+ * @param {boolean} [keepStrings] - Leave quoted-string and swim-string
+ *   contents unmasked (their delimiters are still blanked).
  * @returns {void}
  * @internal
  */
-function scanLineState(lineText, state, chars) {
+function scanLineState(lineText, state, chars, keepStrings = false) {
   for (let i = 0; i < lineText.length; i++) {
     const ch = lineText[i];
 
@@ -233,7 +237,7 @@ function scanLineState(lineText, state, chars) {
     }
 
     if (state.swimDelimiter) {
-      if (chars) chars[i] = " ";
+      if (chars && !keepStrings) chars[i] = " ";
       if (lineText.startsWith(state.swimDelimiter, i)) {
         if (chars) {
           for (let j = 0; j < state.swimDelimiter.length; j++) {
@@ -247,8 +251,9 @@ function scanLineState(lineText, state, chars) {
     }
 
     if (state.inString) {
-      if (chars) chars[i] = " ";
+      if (chars && !keepStrings) chars[i] = " ";
       if (ch === state.quote && isUnescapedQuoteAt(lineText, i)) {
+        if (chars) chars[i] = " ";
         state.inString = false;
         state.quote = null;
       }
@@ -836,6 +841,176 @@ function getActiveParameterIndex(argsText) {
 }
 
 // ============================================================
+// VARIABLE OCCURRENCES
+// ============================================================
+// Where a `$name` / `@name` / `%name` / `${name}` token is a real variable
+// reference. Per Inedo's strings-and-literals docs, variables expand in every
+// literal expression -- quoted (single or double) and swim strings included --
+// but inside a string only `$name` is recognized on its own: `@` / `%` mid-
+// string count only inside the `$( ... )` wrapper. Comments never count, and
+// a grave accent (`` ` ``) escapes the sigil. In a text template, the tag code
+// and the `$` expressions in the literal output are what count.
+
+/**
+ * Length-preserving mask that blanks only comments, keeping string and
+ * swim-string contents (where OtterScript expands variables). String and
+ * swim-string delimiters are blanked.
+ *
+ * @param {string} lineText
+ * @param {CodeScanState} state - Mutated in place.
+ * @returns {string}
+ */
+function maskCommentSpans(lineText, state) {
+  const chars = lineText.split("");
+  scanLineState(lineText, state, chars, true);
+  return chars.join("");
+}
+
+/**
+ * @typedef {{ view: string, code: string }} VariableLineView
+ *   `view` is the line with comments (and, in a template, non-expression
+ *   literal output) blanked. `code` additionally blanks string contents, so a
+ *   non-space char there means that position is code, not inside a string.
+ */
+
+/**
+ * Builds the {@link VariableLineView} of every line of a plain script.
+ *
+ * @param {string[]} lines
+ * @returns {VariableLineView[]}
+ */
+function scriptVariableViews(lines) {
+  const viewState = createCodeScanState();
+  const codeState = createCodeScanState();
+  return lines.map((raw) => ({
+    view: maskCommentSpans(raw, viewState),
+    code: maskNonCodeSpans(raw, codeState),
+  }));
+}
+
+/**
+ * Builds the {@link VariableLineView} of every line of a text template: the
+ * tag code, plus every `$` expression in the literal output -- including one
+ * inside literal-text quotes, since a template expands `$...` anywhere in its
+ * output (e.g. `"title": "$(%p.Name)"`). Those expressions count as code.
+ *
+ * @param {string[]} lines
+ * @returns {VariableLineView[]}
+ */
+function templateVariableViews(lines) {
+  const tagState = createTemplateScanState();
+  const literalState = createTemplateScanState();
+  const viewState = createCodeScanState();
+  const codeState = createCodeScanState();
+  return lines.map((raw) => {
+    const tagCode = maskOutsideTemplateTags(raw, tagState);
+    const view = maskCommentSpans(tagCode, viewState).split("");
+    const code = maskNonCodeSpans(tagCode, codeState).split("");
+    const literal = maskTemplateTagContents(raw, literalState);
+    for (let i = 0; i < literal.length; i++) {
+      if (literal[i] !== "$" || literal[i - 1] === "`") continue;
+      const end = findEmbeddedExpressionEnd(literal, i);
+      if (end === -1) continue;
+      for (let k = i; k < end; k++) view[k] = code[k] = raw[k];
+      i = end - 1;
+    }
+    return { view: view.join(""), code: code.join("") };
+  });
+}
+
+/**
+ * A variable token: `$name`, `@name`, `%name` (groups 1-2), or `${name}`
+ * (group 3). The char before must not be part of an identifier (so `a$b` and
+ * `%>` never match) or the grave-accent escape, and a name directly followed
+ * by `(` is a function call, not a variable (the lookahead also stops
+ * backtracking into a shorter name like `$Fo` of `$Foo(`).
+ * @type {RegExp}
+ */
+const VARIABLE_TOKEN_REGEX =
+  /(?<![A-Za-z0-9_`$@%])(?:([$@%])([A-Za-z_][A-Za-z0-9_]*)(?![A-Za-z0-9_(])|\$\{([A-Za-z_][A-Za-z0-9_]*)\})/g;
+
+/** Text before a token that makes it a `foreach` loop variable. */
+const FOREACH_VARIABLE_PREFIX_REGEX = /\bforeach\s+$/i;
+/** A module header up to the `<` that opens its parameter list. */
+const MODULE_PARAMETER_LIST_OPEN_REGEX = /^\s*module\s+[A-Za-z][\w-]*\s*</i;
+/**
+ * Text before a token, within a module parameter list, that makes it a
+ * parameter name (`<$a`, `, $b`, `in $c`, `out $d`) rather than a default value.
+ */
+const MODULE_PARAMETER_PREFIX_REGEX = /(?:^|,|\b(?:in|out|ref))\s*$/i;
+/** Text before a token at statement start (optionally after `set` / `global`). */
+const ASSIGNMENT_PREFIX_REGEX = /(?:^|[;{}]|\bset|\bglobal)\s*$/i;
+/** Text after a token that makes it an assignment target (`=` but not `==`). */
+const ASSIGNMENT_SUFFIX_REGEX = /^\s*=(?!=)/;
+
+/**
+ * @typedef {{ line: number, character: number, length: number, write: boolean }} VariableOccurrence
+ *   `line`/`character` are 0-based and point at the sigil; `length` covers
+ *   the whole token (`$name` or `${name}`). `write` is true for a declaration
+ *   or assignment target (`set $x = ...`, `$x = ...`, `global $x = ...`,
+ *   `foreach %p in ...`, or a module parameter, whose list may span several
+ *   lines).
+ */
+
+/**
+ * Finds every reference to one variable in a document. OtterScript variable
+ * names are treated as case-insensitive, and the sigil is part of the
+ * identity (`$x` and `@x` are different variables); `${x}` is the same
+ * variable as `$x`. The whole document is searched: modules are not treated
+ * as separate scopes.
+ *
+ * @param {string} text - Full document text
+ * @param {string} sigil - `$`, `@`, or `%`
+ * @param {string} name - Variable name without its sigil
+ * @returns {VariableOccurrence[]}
+ */
+function findVariableOccurrences(text, sigil, name) {
+  const lines = text.split(/\r?\n/);
+  const wanted = name.toLowerCase();
+  const views = documentUsesTemplateTags(text) ? templateVariableViews(lines) : scriptVariableViews(lines);
+
+  /** @type {VariableOccurrence[]} */
+  const hits = [];
+  let inParameterList = false;
+  views.forEach(({ view, code }, line) => {
+    // -- The part of this line inside a module's `< ... >` parameter list, if any
+    let paramStart = -1;
+    let paramEnd = -1;
+    const header = inParameterList ? null : MODULE_PARAMETER_LIST_OPEN_REGEX.exec(code);
+    if (inParameterList || header) {
+      paramStart = header ? header[0].length : 0;
+      const close = code.indexOf(">", paramStart);
+      paramEnd = close === -1 ? code.length : close;
+      inParameterList = close === -1;
+    }
+
+    for (const match of view.matchAll(VARIABLE_TOKEN_REGEX)) {
+      const tokenSigil = match[1] ?? "$";
+      const tokenName = match[2] ?? match[3];
+      if (tokenSigil !== sigil || tokenName.toLowerCase() !== wanted) continue;
+
+      const character = match.index ?? 0;
+      const before = view.slice(0, character);
+      // Inside a string, `@` / `%` are variables only within `$( ... )`.
+      const inString = code[character] === " ";
+      if (inString && tokenSigil !== "$" && !before.endsWith("$(")) continue;
+
+      const after = view.slice(character + match[0].length);
+      const isParameter =
+        paramStart !== -1 && character >= paramStart && character < paramEnd &&
+        MODULE_PARAMETER_PREFIX_REGEX.test(code.slice(paramStart, character));
+      const write = !inString && (
+        isParameter ||
+        FOREACH_VARIABLE_PREFIX_REGEX.test(before) ||
+        (ASSIGNMENT_PREFIX_REGEX.test(before) && ASSIGNMENT_SUFFIX_REGEX.test(after))
+      );
+      hits.push({ line, character, length: match[0].length, write });
+    }
+  });
+  return hits;
+}
+
+// ============================================================
 // EXPORTS
 // ============================================================
 
@@ -860,6 +1035,10 @@ module.exports = {
 
   // -- String & comment detection
   isInStringOrComment,
+
+  // -- Variable occurrences
+  maskCommentSpans,
+  findVariableOccurrences,
 
   // -- Argument helpers
   getActiveParameterIndex,

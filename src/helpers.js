@@ -33,6 +33,7 @@ const {
   isModuleDeclarationContext,
   isModuleCallContext,
   findModuleDeclarations,
+  findVariableOccurrences,
 } = require("./scanner");
 
 // Namespace allowlist — the single source of truth lives with the data it
@@ -1429,6 +1430,7 @@ module.exports = {
   isModuleCallContext,
   getModuleDeclarations,
   findModuleDeclarations,
+  findVariableOccurrences,
   createCodeScanState,
   createTemplateScanState,
   maskNonCodeSpans,

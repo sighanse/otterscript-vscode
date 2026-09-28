@@ -22,6 +22,7 @@ This extension started as a learning project while implementing [custom webhook 
 - Adaptive Card checks for Teams webhook bodies, automatically triggered when a literal `"type": "AdaptiveCard"` object is found: an unrecognized `"type"` value, a missing `"version"`, or an element/action that needs a newer card version than the card declares (e.g. a 1.5 `Table` in a 1.2 card, unless it has a `"fallback"`) is flagged, with a quick fix to raise the version. Best-effort only — it does not validate full card structure against the schema, since a template's `<% %>` control flow means there's no single concrete JSON document to validate against
 - Quick‑fix code actions, plus a **Fix All Issues** command (`Ctrl+Shift+Alt+F`) that applies every available fix in the file
 - Go to Definition (F12) and Find All References (Shift+F12) for document-local module calls
+- Highlight all occurrences: clicking a variable (`$x`, `@list`, `%map`, `${x}`) or module name highlights every use of it in the file, with declarations and assignments marked as writes
 - Outline and breadcrumbs via document symbols
 - Go to Symbol in Workspace (`Ctrl+T`) — jump to any `module` declaration across all OtterScript files
 - CodeLens reference counts above module declarations

@@ -67,6 +67,7 @@ const {
   findModuleDeclarationRange,
   findModuleDeclarations,
   findModuleReferences,
+  findVariableOccurrences,
   isModuleCallContext,
   isModuleDeclarationContext,
   isValidCompletionPosition,
@@ -893,6 +894,62 @@ function activate(context) {
   );
 
   // ============================================================
+  // DOCUMENT HIGHLIGHT PROVIDER (Variables & Modules)
+  // ============================================================
+  // Clicking a variable or module name highlights every use of it in the
+  // file; declarations and assignment targets are marked as writes.
+
+  /** A `${name}`, `$name`, `@name` or `%name` token under the cursor. */
+  const VARIABLE_AT_CURSOR_REGEX = /\$\{[A-Za-z_][A-Za-z0-9_]*\}|[$@%][A-Za-z_][A-Za-z0-9_]*/;
+
+  const documentHighlightProvider = vscode.languages.registerDocumentHighlightProvider(
+    "otterscript",
+    {
+      /**
+       * @param {vscode.TextDocument} document
+       * @param {vscode.Position} position
+       * @returns {vscode.DocumentHighlight[] | undefined}
+       */
+      provideDocumentHighlights(document, position) {
+        const variableRange = document.getWordRangeAtPosition(position, VARIABLE_AT_CURSOR_REGEX);
+        if (variableRange) {
+          const token = document.getText(variableRange);
+          const name = token.startsWith("${") ? token.slice(2, -1) : token.slice(1);
+          const occurrences = findVariableOccurrences(document.getText(), token[0], name);
+          // The token under the cursor must itself be a reference -- not in a
+          // comment or single-quoted string, and not a function call.
+          const isReference = occurrences.some(
+            (o) => o.line === variableRange.start.line && o.character === variableRange.start.character
+          );
+          if (!isReference) return undefined;
+          return occurrences.map((o) => new vscode.DocumentHighlight(
+            new vscode.Range(o.line, o.character, o.line, o.character + o.length),
+            o.write ? vscode.DocumentHighlightKind.Write : vscode.DocumentHighlightKind.Read
+          ));
+        }
+
+        const wordRange = document.getWordRangeAtPosition(position, MODULE_NAME_TOKEN_REGEX);
+        if (!wordRange || isInStringOrCommentDoc(document, wordRange.start)) return undefined;
+
+        const lineText = document.lineAt(position.line).text;
+        if (!isModuleDeclarationContext(lineText, wordRange.start.character) &&
+            !isModuleCallContext(lineText, wordRange.start.character)) {
+          return undefined;
+        }
+
+        const moduleName = document.getText(wordRange);
+        const declarationRange = findModuleDeclarationRange(document, moduleName);
+        return findModuleReferences(document, moduleName, true).map((location) => new vscode.DocumentHighlight(
+          location.range,
+          declarationRange && location.range.isEqual(declarationRange)
+            ? vscode.DocumentHighlightKind.Write
+            : vscode.DocumentHighlightKind.Read
+        ));
+      }
+    }
+  );
+
+  // ============================================================
   // DOCUMENT SYMBOL PROVIDER (Outline / Go to Symbol)
   // ============================================================
   // Populates the Outline panel and breadcrumbs with module declarations.
@@ -1302,6 +1359,7 @@ function activate(context) {
     codeLensProvider,
     definitionProvider,
     disableDiagnosticRuleCommand,
+    documentHighlightProvider,
     documentSymbolProvider,
     fixAllCommand,
     foldingRangeProvider,

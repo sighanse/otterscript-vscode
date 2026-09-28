@@ -45,10 +45,10 @@ Provider/grammar/snippet behaviour still needs a manual Extension Host (`F5`) sm
 
 - `src/extension.js`: activation and provider wiring
 - `src/language-data.js`: language docs model for IntelliSense/snippets; also exports the `NAMESPACES` allowlist
-- `src/diagnostics.js`: diagnostic analysis/rules
+- `src/diagnostics.js`: diagnostic analysis/rules; `DIAGNOSTIC_CODES` lists every code, and must match the `otterscript.diagnostics.rules` schema in `package.json` (a unit test checks this)
 - `src/adaptivecard.js`: best-effort Adaptive Card checks for JSON bodies in text templates; its type list lives in `src/adaptivecard-data.js`
 - `src/helpers.js`: VS Code-facing helpers (builds `vscode.*` objects); re-exports the `src/scanner.js` members its callers need
-- `src/scanner.js`: pure, `vscode`-free text primitives (non-code masking, string/comment detection, `<% %>` template-tag masking, module-name scan, arg-index)
+- `src/scanner.js`: pure, `vscode`-free text primitives (non-code masking, string/comment detection, `<% %>` template-tag masking, module-name scan, variable-occurrence scan, arg-index)
 - `test/unit/*.test.js`: `node:test` unit suite; `test/vscode-stub.js` is the `vscode` module stub
 - `syntaxes/otterscript.tmLanguage.json`: TextMate grammar
 - `snippets/otterscript.json`: snippets (JSONC-valid)
@@ -101,6 +101,8 @@ Run these when applicable:
    - `@` vector completion appears
    - `%` completion offers `%FromJson` / `%ListItem` and the `%( )` snippet
    - Hover shows docs
+   - Clicking a variable or module name highlights its other uses
+   - An `otterscript.diagnostics.rules` entry set to `"off"` removes that diagnostic from open files
    - `if condition =` warns about missing `$`
    - `>>` auto-closes swim string
 5. Confirm no unrelated files were modified

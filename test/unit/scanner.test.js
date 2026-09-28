@@ -28,6 +28,8 @@ const {
   findEmbeddedExpressionEnd,
   isInStringOrComment,
   getActiveParameterIndex,
+  maskCommentSpans,
+  findVariableOccurrences,
   MODULE_NAME_TOKEN_REGEX,
   MODULE_DECLARATION_REGEX,
   MODULE_CALL_TARGET_REGEX,
@@ -710,5 +712,93 @@ describe("findTemplateTagDelimiters", () => {
       { index: 0, open: true },
       { index: 2, open: false },
     ]);
+  });
+});
+
+// ============================================================
+// maskCommentSpans / findVariableOccurrences
+// ============================================================
+
+describe("maskCommentSpans", () => {
+  it("keeps quoted-string contents (blanking the quotes) and blanks comments", () => {
+    const line = `Log "a $x" 'b $y' # $z`;
+    assert.equal(maskCommentSpans(line, createCodeScanState()), "Log  a $x   b $y ".padEnd(line.length));
+  });
+
+  it("keeps swim-string contents across lines", () => {
+    const state = createCodeScanState();
+    maskCommentSpans("$t = >>", state);
+    assert.equal(maskCommentSpans("hi $x", state), "hi $x");
+    assert.equal(maskCommentSpans(">>;", state), "  ;");
+  });
+});
+
+describe("findVariableOccurrences", () => {
+  /**
+   * @param {string[]} lines
+   * @param {string} sigil
+   * @param {string} name
+   * @returns {string[]} `line:character:w|r` per hit
+   */
+  const find = (lines, sigil, name) =>
+    findVariableOccurrences(lines.join("\n"), sigil, name).map(
+      (o) => `${o.line}:${o.character}:${o.write ? "w" : "r"}`
+    );
+
+  it("finds reads and writes, ignoring case", () => {
+    assert.deepEqual(find(["set $x = 1;", "$X = $x + 1;", "if $x == 2 {}"], "$", "x"), [
+      "0:4:w", "1:0:w", "1:5:r", "2:3:r",
+    ]);
+  });
+
+  it("treats the sigil as part of the variable's identity", () => {
+    assert.deepEqual(find(["set $x = 1;", "set @x = @(1);", "set %x = %(a: 1);"], "@", "x"), ["1:4:w"]);
+  });
+
+  it("does not match a longer name, a function call, or an escaped sigil", () => {
+    assert.deepEqual(find(["$xy; $x(1); `$x; a$x; $x"], "$", "x"), ["0:22:r"]);
+  });
+
+  it("counts quoted strings and swim-strings but not comments", () => {
+    const lines = [`Log "v $x";`, `Log 'v $x';`, "# $x", "/* $x */", "$t = >>", "$x", ">>;"];
+    assert.deepEqual(find(lines, "$", "x"), ["0:7:r", "1:7:r", "5:0:r"]);
+  });
+
+  it("inside a string, counts @ / % only within $( ... )", () => {
+    assert.deepEqual(find([`Log "a %p and $(%p.Name)";`, "Log %p;"], "%", "p"), ["0:16:r", "1:4:r"]);
+  });
+
+  it("treats ${name} as the same variable as $name", () => {
+    assert.deepEqual(find(["set $host = x;", "Log ${host}/api;"], "$", "host"), ["0:4:w", "1:4:r"]);
+  });
+
+  it("marks foreach loop variables and module parameters as writes", () => {
+    assert.deepEqual(find(["module M<%p> {", "  foreach %p in @list { Log %p.Name; }", "}"], "%", "p"), [
+      "0:9:w", "1:10:w", "1:28:r",
+    ]);
+  });
+
+  it("marks parameters in a multi-line module parameter list as writes, but not their default values", () => {
+    const lines = ["module M <", "    in $path,", "    out $x = $path", "> {", "  Log $path;", "}"];
+    assert.deepEqual(find(lines, "$", "path"), ["1:7:w", "2:13:r", "4:6:r"]);
+    assert.deepEqual(find(lines, "$", "x"), ["2:8:w"]);
+  });
+
+  it("marks global assignments as writes", () => {
+    assert.deepEqual(find(["global $x = 1;"], "$", "x"), ["0:7:w"]);
+  });
+
+  it("does not treat == as an assignment", () => {
+    assert.deepEqual(find(["$x == 1;"], "$", "x"), ["0:0:r"]);
+  });
+
+  it("in a text template, finds tag code and $ expressions in literal output, even inside quotes", () => {
+    const lines = [
+      "<% foreach %p in @items { %>",
+      '  { "title": "$(%p.Name)", "raw": $ToJson(%p.Id), "note": "100% %p" }',
+      "<% } %>",
+    ];
+    // The bare "%p" in literal text is plain output, not an expression.
+    assert.deepEqual(find(lines, "%", "p"), ["0:11:w", "1:16:r", "1:42:r"]);
   });
 });
