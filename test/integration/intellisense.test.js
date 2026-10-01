@@ -69,6 +69,7 @@ describe("hover", () => {
       "# a comment mentioning $ToJson",
       "#endregion",
       "set $x = $constructor;",
+      'Log-Information "#region in a string"; # #endregion in a comment',
     ].join("\n"));
   });
 
@@ -91,6 +92,11 @@ describe("hover", () => {
   it("documents a #region directive, but only on the directive itself", async () => {
     assert.match(await hoverText(document, positionOf(document, "#region", 2)), /region/i);
     assert.equal(await hoverText(document, positionOf(document, "Setup", 1)), "");
+  });
+
+  it("documents #region only at the start of a line, not in a string or trailing comment", async () => {
+    assert.equal(await hoverText(document, positionOf(document, '"#region in', 3)), "");
+    assert.equal(await hoverText(document, positionOf(document, "# #endregion", 4)), "");
   });
 
   it("shows nothing for names that are only inherited Object members", async () => {

@@ -1466,6 +1466,21 @@ Exec c:\\tools\\7za.exe (
 
 /** @type {DocsTable} */
 const syntaxDocs = {
+  // `#region` / `#endregion` are an editor convention, not OtterScript syntax:
+  // to OtterScript they are ordinary `#` comments. The extension uses them as
+  // folding markers when they start a line (see computeFoldingRanges).
+  "regionStart": {
+    namespace: null,
+    name: "#region",
+    description: "Marks a collapsible editor region.",
+    documentation: "An editor convention, not OtterScript syntax: to OtterScript this line is an ordinary `#` comment. At the start of a line, `#region` / `#endregion` create a collapsible section in the editor."
+  },
+  "regionEnd": {
+    namespace: null,
+    name: "#endregion",
+    description: "Ends a collapsible editor region.",
+    documentation: "An editor convention, not OtterScript syntax: to OtterScript this line is an ordinary `#` comment. Closes the collapsible section a `#region` line opened."
+  },
   "swimString": {
     namespace: null,
     name: "Swim string",
@@ -2092,18 +2107,6 @@ Forces the execution status back to **Normal**, overriding a previous Warn or Fa
 force normal;
 \`\`\`
 `
-  },
-  "#region": {
-    namespace: null,
-    name: "#region",
-    description: "Marks a collapsible editor region.",
-    documentation: "Editor-only folding directive. `#region` / `#endregion` create a collapsible section in the editor and have no effect on OtterScript execution."
-  },
-  "#endregion": {
-    namespace: null,
-    name: "#endregion",
-    description: "Ends a collapsible editor region.",
-    documentation: "Editor-only folding directive. Used to close a `#region` block. This affects editor folding only and has no runtime meaning."
   }
 };
 

@@ -35,13 +35,18 @@ function registerHover(settings, operationRegex) {
           return null;
         }
 
-        // -- Match #region / #endregion at the cursor position (checked before
-        // the string/comment guard below, since `#` itself starts a comment)
-        const regionRange = document.getWordRangeAtPosition(position, /#(?:end)?region\b/);
-        if (regionRange) {
-          const doc = lookupOwn(keywordDocs, document.getText(regionRange));
-          if (doc) {
-            return new vscode.Hover(buildHoverMarkdown(doc), regionRange);
+        // -- `#region` / `#endregion`: an editor folding marker, not OtterScript
+        // syntax (to OtterScript it's a `#` comment). Only at the start of a
+        // line, the same rule folding uses -- not inside a string such as
+        // `Log "#region";` or a trailing comment. Checked before the
+        // string/comment guard below, which would treat the line as a comment.
+        const regionMatch = /^(\s*)(#(?:end)?region)\b/i.exec(document.lineAt(position.line).text);
+        if (regionMatch) {
+          const start = regionMatch[1].length;
+          const end = start + regionMatch[2].length;
+          if (position.character >= start && position.character <= end) {
+            const doc = regionMatch[2].toLowerCase() === "#region" ? syntaxDocs.regionStart : syntaxDocs.regionEnd;
+            return new vscode.Hover(buildHoverMarkdown(doc), new vscode.Range(position.line, start, position.line, end));
           }
         }
 
