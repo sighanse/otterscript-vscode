@@ -622,6 +622,16 @@ function getModuleCallReferencesByName(document, allowedModuleNames) {
 const variableIndexCache = new Map();
 
 /**
+ * Scan states at the start of each line, per document version: `states[i]`
+ * is the state on entering line `i`. Filled in lazily, only as far as a
+ * request has needed, so hover, completion and highlight on every keystroke
+ * don't rescan the document from line 1. Dropped on close via
+ * {@link clearDocumentCaches}.
+ * @type {Map<string, { version: number, states: import("./scanner").CodeScanState[] }>}
+ */
+const lineStartStateCache = new Map();
+
+/**
  * Every reference to one variable in a document (see
  * {@link indexVariableOccurrences}), from a per-version cache.
  *
@@ -641,8 +651,8 @@ function getVariableOccurrences(document, sigil, name) {
 }
 
 /**
- * Clears the per-document caches (module info and variable index) for a
- * document URI.
+ * Clears the per-document caches (module info, variable index and line-start
+ * scan states) for a document URI.
  *
  * @param {import('vscode').Uri} uri
  * @returns {void}
@@ -650,6 +660,7 @@ function getVariableOccurrences(document, sigil, name) {
 function clearDocumentCaches(uri) {
   moduleInfoCache.delete(uri.toString());
   variableIndexCache.delete(uri.toString());
+  lineStartStateCache.delete(uri.toString());
 }
 
 /**
@@ -721,19 +732,36 @@ function findModuleReferences(document, moduleName, includeDeclaration) {
  * @returns {boolean} true if the position is inside a string, comment, or swim-string
  */
 function isInStringOrCommentDoc(document, position) {
-  const state = createCodeScanState();
-
-  // Use advanceScanState (not maskNonCodeSpans) for preceding lines — we only
-  // need the state side-effect and want to avoid the split/join allocations.
-  for (let i = 0; i < position.line; i++) {
-    advanceScanState(document.lineAt(i).text, state);
-  }
-
   return isInStringOrComment(
     document.lineAt(position.line).text,
     position.character,
-    state
+    getLineStartScanState(document, position.line)
   );
+}
+
+/**
+ * The scan state on entering `line` (a fresh copy the caller may change).
+ *
+ * @param {vscode.TextDocument} document
+ * @param {number} line
+ * @returns {import("./scanner").CodeScanState}
+ */
+function getLineStartScanState(document, line) {
+  const cacheKey = document.uri.toString();
+  let cached = lineStartStateCache.get(cacheKey);
+  if (!cached || cached.version !== document.version) {
+    cached = { version: document.version, states: [createCodeScanState()] };
+    lineStartStateCache.set(cacheKey, cached);
+  }
+  const { states } = cached;
+  // Use advanceScanState (not maskNonCodeSpans) for the lines in between: only
+  // the state is needed, not the masked text.
+  while (states.length <= line) {
+    const state = { ...states[states.length - 1] };
+    advanceScanState(document.lineAt(states.length - 1).text, state);
+    states.push(state);
+  }
+  return { ...states[line] };
 }
 
 // ============================================================

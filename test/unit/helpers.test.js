@@ -30,6 +30,8 @@ const {
   FoldingRangeKind,
 } = require("../vscode-stub");
 const stub = require("../vscode-stub");
+const { makeDocument } = require("./fake-document");
+const { advanceScanState, createCodeScanState, isInStringOrComment } = require("../../src/scanner.js");
 const {
   checkMissingDollar,
   findDuplicateMapKeyDiagnosticsFromMasked,
@@ -71,41 +73,12 @@ const LITERALS = new Set(["true", "false", "null"]);
 const pos = (line, character) => new Position(line, character);
 
 /**
- * Builds a stand-in for `vscode.TextDocument` backed by a plain string.
- * Returned as `any` so call sites don't need the full TextDocument shape.
+ * A fake `vscode.TextDocument` backed by a plain string (see fake-document.js).
  *
  * @param {string} text
  * @returns {any}
  */
-function makeDoc(text) {
-  const lines = text.split("\n");
-  /** @param {{ line: number, character: number }} p */
-  const offsetAt = (p) => {
-    let offset = 0;
-    for (let i = 0; i < p.line; i++) offset += lines[i].length + 1;
-    return offset + p.character;
-  };
-  /** @param {number} offset */
-  const positionAt = (offset) => {
-    let remaining = Math.max(0, offset);
-    let line = 0;
-    while (line < lines.length - 1 && remaining > lines[line].length) {
-      remaining -= lines[line].length + 1; // +1 for the '\n'
-      line++;
-    }
-    return new Position(line, remaining);
-  };
-  return {
-    uri: { toString: () => "file:///t.otter", fsPath: "/t.otter" },
-    lineCount: lines.length,
-    offsetAt,
-    positionAt,
-    /** @param {{ start: { line: number, character: number }, end: { line: number, character: number } }} [range] */
-    getText: (range) => (range ? text.slice(offsetAt(range.start), offsetAt(range.end)) : text),
-    /** @param {number} i */
-    lineAt: (i) => ({ text: lines[i], range: { start: new Position(i, 0), end: new Position(i, lines[i].length) } }),
-  };
-}
+const makeDoc = (text) => makeDocument(text);
 
 // ============================================================
 // checkMissingDollar
@@ -770,6 +743,44 @@ describe("isInStringOrCommentDoc", () => {
   it("is true inside a string, false in code", () => {
     assert.equal(isInStringOrCommentDoc(makeDoc('a = "bcd'), pos(0, 6)), true);
     assert.equal(isInStringOrCommentDoc(makeDoc("if $x == 5"), pos(0, 5)), false);
+  });
+
+  it("matches a fresh scan at every position, whatever order lines are asked in (cached states)", () => {
+    const text = [
+      'set $a = "one /* not a comment";',
+      "/* block",
+      "   still comment */ Log-Information $a;",
+      "set $b = >>swim",
+      "text >> + 'q';",
+      "# line comment \"x\"",
+      "end",
+    ].join("\n");
+    const doc = makeDoc(text);
+    const lines = text.split("\n");
+    /**
+     * @param {number} line
+     * @param {number} character
+     */
+    const fresh = (line, character) => {
+      const state = createCodeScanState();
+      for (let i = 0; i < line; i++) advanceScanState(lines[i], state);
+      return isInStringOrComment(lines[line], character, state);
+    };
+    const positions = lines.flatMap((l, line) => [...Array(l.length + 1).keys()].map((c) => [line, c]));
+    for (const [line, character] of [...positions].reverse()) {
+      assert.equal(isInStringOrCommentDoc(doc, pos(line, character)), fresh(line, character), `${line}:${character}`);
+    }
+  });
+
+  it("rescans when the document version changes", () => {
+    let text = "/* open\nx";
+    const doc = makeDoc(text);
+    doc.getText = () => text;
+    doc.lineAt = (/** @type {number} */ i) => ({ text: text.split("\n")[i] });
+    assert.equal(isInStringOrCommentDoc(doc, pos(1, 0)), true);
+    text = "// closed\nx";
+    doc.version = 2;
+    assert.equal(isInStringOrCommentDoc(doc, pos(1, 0)), false);
   });
 
   it("carries a block comment opened on a previous line", () => {

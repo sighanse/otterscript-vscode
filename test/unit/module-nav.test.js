@@ -17,7 +17,7 @@ require("../vscode-stub");
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
-const { Position, Range } = require("../vscode-stub");
+const { makeDocument } = require("./fake-document");
 const {
   getModuleDeclarations,
   findModuleReferences,
@@ -27,30 +27,14 @@ const {
   getVariableOccurrences,
 } = require("../../src/helpers.js");
 
-let nextDocId = 0;
-
 /**
- * Minimal `vscode.TextDocument` stand-in for the module-nav helpers.
+ * A fake `vscode.TextDocument` (see fake-document.js), each with its own URI.
  *
  * @param {string} text
  * @param {number} [version]
  * @returns {any}
  */
-function makeDoc(text, version = 1) {
-  const lines = text.split("\n");
-  const uriString = `file:///module-nav-${nextDocId++}.otter`;
-  return {
-    version,
-    uri: { toString: () => uriString },
-    lineCount: lines.length,
-    getText: () => text,
-    /** @param {number} i */
-    lineAt: (i) => ({
-      text: lines[i],
-      range: new Range(new Position(i, 0), new Position(i, lines[i].length)),
-    }),
-  };
-}
+const makeDoc = (text, version = 1) => makeDocument(text, { version });
 
 // ============================================================
 // getModuleDeclarations

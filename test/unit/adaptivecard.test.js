@@ -11,7 +11,7 @@ require("../vscode-stub");
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
-const { Position } = require("../vscode-stub");
+const { makeDocument } = require("./fake-document");
 const {
   findAdaptiveCardDiagnostics,
   createCardVersionFix,
@@ -21,20 +21,12 @@ const {
 } = require("../../src/adaptivecard.js");
 
 /**
- * A one-line document for the quick-fix factories: offsets are characters
- * on line 0.
+ * A fake document for the quick-fix factories (see fake-document.js).
  *
  * @param {string} source
  * @returns {any}
  */
-function oneLineDocument(source) {
-  return {
-    uri: "file:///card.otter",
-    getText: (/** @type {any} */ range) => (range ? source.slice(range.start.character, range.end.character) : source),
-    positionAt: (/** @type {number} */ offset) => new Position(0, offset),
-    offsetAt: (/** @type {{ character: number }} */ p) => p.character,
-  };
-}
+const oneLineDocument = (source) => makeDocument(source);
 
 /**
  * @param {string} source
@@ -42,25 +34,7 @@ function oneLineDocument(source) {
  * @returns {any[]}
  */
 function diagnose(source, options) {
-  const lines = source.split("\n");
-  /** @param {{ line: number, character: number }} p */
-  const offsetAt = (p) => {
-    let offset = 0;
-    for (let i = 0; i < p.line; i++) offset += lines[i].length + 1;
-    return offset + p.character;
-  };
-  const document = /** @type {any} */ ({
-    positionAt: (/** @type {number} */ offset) => {
-      let remaining = Math.max(0, offset);
-      let line = 0;
-      while (line < lines.length - 1 && remaining > lines[line].length) {
-        remaining -= lines[line].length + 1;
-        line++;
-      }
-      return new Position(line, remaining);
-    },
-    offsetAt,
-  });
+  const document = makeDocument(source);
   return findAdaptiveCardDiagnostics(document, source, options);
 }
 
@@ -455,12 +429,7 @@ describe("createCardVersionFix", () => {
   /** @param {string} source */
   function fixFor(source) {
     const [d] = only(source, "adaptivecard-version-too-low");
-    const document = /** @type {any} */ ({
-      uri: "file:///card.otter",
-      getText: () => source,
-      positionAt: (/** @type {number} */ offset) => new Position(0, offset),
-    });
-    return createCardVersionFix(document, d);
+    return createCardVersionFix(oneLineDocument(source), d);
   }
 
   it("counts properties too when choosing the version", () => {
@@ -481,7 +450,7 @@ describe("createCardVersionFix", () => {
 
   it("returns null once nothing needs a newer version", () => {
     const src = '{ "type": "AdaptiveCard", "version": "1.5", "body": [ { "type": "Table" } ] }';
-    assert.equal(createCardVersionFix(/** @type {any} */ ({ uri: "u", getText: () => src, positionAt: () => new Position(0, 0) }), /** @type {any} */ ({})), null);
+    assert.equal(createCardVersionFix(oneLineDocument(src), /** @type {any} */ ({})), null);
   });
 });
 

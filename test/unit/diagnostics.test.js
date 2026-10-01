@@ -11,8 +11,9 @@ require("../vscode-stub");
 
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
+const { makeDocument } = require("./fake-document");
 
-const { Position, DiagnosticSeverity } = require("../vscode-stub");
+const { DiagnosticSeverity } = require("../vscode-stub");
 const { updateDiagnostics } = require("../../src/diagnostics.js");
 const { createRegexPatterns, NON_VARIABLE_IDENTIFIERS } = require("../../src/helpers.js");
 const data = require("../../src/language-data.js");
@@ -40,30 +41,7 @@ const ctx = {
  * @returns {any[]}
  */
 function diagnose(source, languageId = "otterscript") {
-  const lines = source.split("\n");
-  /** @param {{ line: number, character: number }} p */
-  const offsetAt = (p) => {
-    let offset = 0;
-    for (let i = 0; i < p.line; i++) offset += lines[i].length + 1;
-    return offset + p.character;
-  };
-  const document = /** @type {any} */ ({
-    languageId,
-    uri: { toString: () => "file:///test.otter" },
-    lineCount: lines.length,
-    getText: () => source,
-    lineAt: (/** @type {number} */ i) => ({ text: lines[i] }),
-    offsetAt,
-    positionAt: (/** @type {number} */ offset) => {
-      let remaining = Math.max(0, offset);
-      let line = 0;
-      while (line < lines.length - 1 && remaining > lines[line].length) {
-        remaining -= lines[line].length + 1;
-        line++;
-      }
-      return new Position(line, remaining);
-    },
-  });
+  const document = makeDocument(source, { languageId });
   /** @type {any[]} */
   let collected = [];
   const collection = /** @type {any} */ ({
