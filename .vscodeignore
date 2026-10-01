@@ -15,17 +15,18 @@ docs/
 scripts/
 *.vsix
 *.ps1
-*.log
-*.tmp
-*.map
+**/*.log
+**/*.tmp
+**/*.map
 CONTRIBUTING.md
 CODE_OF_CONDUCT.md
 eslint.config.cjs
 package-lock.json
 SECURITY.md
 jsconfig.json
-# Exclude source etc.
-!src/
+# Always ship the extension's own files. Named by file type, not whole
+# folders: re-including a folder would also bring back stray files in it,
+# such as a crash log VS Code leaves in src/.
 !src/**/*.js
-!syntaxes/
-!snippets/
+!syntaxes/*.json
+!snippets/*.json
