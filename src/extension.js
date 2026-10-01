@@ -31,7 +31,12 @@
 // -- VS Code Extension API
 const vscode = require("vscode");
 const { updateDiagnostics, DIAGNOSTIC_CODES } = require("./diagnostics");
-const { createCardVersionFix, createInvalidValueFix } = require("./adaptivecard");
+const {
+  createCardVersionFix,
+  createContentTypeFix,
+  createInvalidValueFix,
+  createTemplatingKeywordFix,
+} = require("./adaptivecard");
 
 // -- Language documentation (functions, variables, operations, keywords).
 // Plain strings only; any conversion to MarkdownString happens in this file.
@@ -720,8 +725,11 @@ function activate(context) {
     "incorrect-for-usage":     createForToForeachFix,
     "unknown-namespace":       createUnknownNamespaceFix,
     "template-end-keyword":    createTemplateEndFix,
-    "adaptivecard-version-too-low": createCardVersionFix,
+    "adaptivecard-version-too-low": (document, diagnostic) =>
+      createCardVersionFix(document, diagnostic, { maxVersion: diagnosticsContext.adaptiveCardMaxVersion }),
     "adaptivecard-invalid-value":   createInvalidValueFix,
+    "adaptivecard-templating-keyword": createTemplatingKeywordFix,
+    "adaptivecard-content-type":    createContentTypeFix,
   });
 
   // ============================================================
@@ -828,7 +836,9 @@ function activate(context) {
         const factory = FIX_FACTORIES[getDiagnosticCode(diagnostic)];
         const action = factory?.(document, diagnostic) ?? null;
 
-        if (!action?.edit) continue;
+        // A fix that isn't preferred trades this problem for another (e.g.
+        // a card version above the host's maximum), so it's left to the user.
+        if (!action?.edit || action.isPreferred === false) continue;
 
         // -- Copy the action's edits into the combined edit. entries() yields
         // TextEdits; an insert is a TextEdit with an empty range, so replace()

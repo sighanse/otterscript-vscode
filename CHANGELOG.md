@@ -9,7 +9,9 @@
 - `adaptivecard-version-too-low` diagnostic: an Adaptive Card element or action that needs a newer card version than the card's declared `"version"` (e.g. a 1.5 `Table` in a 1.2 card) is flagged, unless it or an enclosing element has a `"fallback"`. The quick fix **Change card version to X** raises the version to the highest one the card needs
 - `adaptivecard-invalid-value` diagnostic: an Adaptive Card property value that the property doesn't allow, such as `"weight": "bold"` or `"color": "red"`, with a quick fix to the closest allowed value (`bolder`). Values are compared case-insensitively, as hosts do, and values filled in by OtterScript are skipped
 - `adaptivecard-version-too-high` diagnostic and `otterscript.adaptiveCards.maxVersion` setting (default `1.6`, what Microsoft Teams supports): a card whose `"version"` is newer than the host supports is flagged, since the host would show its `fallbackText` instead
-- The `adaptivecard-version-too-low` check also covers properties, such as `"rtl"` (1.5) or an input's `"label"` (1.3)
+- The `adaptivecard-version-too-low` check also covers properties, such as `"rtl"` (1.5) or an input's `"label"` (1.3). When the version its quick fix would set is above `otterscript.adaptiveCards.maxVersion`, the fix says so and **Fix All** skips it
+- `adaptivecard-templating-keyword` diagnostic: an Adaptive Card Templating key such as `"$data"` or `"$when"`, which OtterScript expands as its own variable in a text template, with a quick fix to escape it (`` "`$data" ``)
+- Teams message checks, when the card is sent as an attachment of a `"type": "message"` body: `adaptivecard-content-type` flags a missing or wrong `"contentType"` (with a quick fix), and `adaptivecard-webhook-submit` flags `Action.Submit`, which Teams incoming webhooks and Workflows don't support
 
 ### Changed
 

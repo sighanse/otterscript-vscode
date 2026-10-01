@@ -12,7 +12,29 @@ const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
 const { Position } = require("../vscode-stub");
-const { findAdaptiveCardDiagnostics, createCardVersionFix, createInvalidValueFix } = require("../../src/adaptivecard.js");
+const {
+  findAdaptiveCardDiagnostics,
+  createCardVersionFix,
+  createContentTypeFix,
+  createInvalidValueFix,
+  createTemplatingKeywordFix,
+} = require("../../src/adaptivecard.js");
+
+/**
+ * A one-line document for the quick-fix factories: offsets are characters
+ * on line 0.
+ *
+ * @param {string} source
+ * @returns {any}
+ */
+function oneLineDocument(source) {
+  return {
+    uri: "file:///card.otter",
+    getText: (/** @type {any} */ range) => (range ? source.slice(range.start.character, range.end.character) : source),
+    positionAt: (/** @type {number} */ offset) => new Position(0, offset),
+    offsetAt: (/** @type {{ character: number }} */ p) => p.character,
+  };
+}
 
 /**
  * @param {string} source
@@ -70,7 +92,7 @@ describe("findAdaptiveCardDiagnostics — card detection", () => {
       '{',
       '  "type": "message",',
       '  "attachments": [',
-      '    { "contentType": "x", "content": {',
+      '    { "contentType": "application/vnd.microsoft.card.adaptive", "content": {',
       '      "type": "AdaptiveCard",',
       '      "version": "1.2",',
       '      "body": []',
@@ -366,13 +388,7 @@ describe("createInvalidValueFix", () => {
   /** @param {string} source */
   function fixFor(source) {
     const [d] = only(source, "adaptivecard-invalid-value");
-    const document = /** @type {any} */ ({
-      uri: "file:///card.otter",
-      getText: () => source,
-      positionAt: (/** @type {number} */ offset) => new Position(0, offset),
-      offsetAt: (/** @type {{ character: number }} */ p) => p.character,
-    });
-    return createInvalidValueFix(document, d);
+    return createInvalidValueFix(oneLineDocument(source), d);
   }
 
   it("offers the closest allowed value", () => {
@@ -411,6 +427,27 @@ describe("findAdaptiveCardDiagnostics — version too high", () => {
     assert.deepEqual(diagnose(card("1.6")), []);
     assert.deepEqual(diagnose(card("1.6"), { maxVersion: "latest" }), []);
     assert.deepEqual(diagnose(card("$CardVersion"), { maxVersion: "1.5" }), []);
+  });
+});
+
+describe("createCardVersionFix — host maximum", () => {
+  const src = '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "Table" } ] }';
+  /** @param {string | undefined} maxVersion */
+  const fixWith = (maxVersion) => {
+    const [d] = only(src, "adaptivecard-version-too-low");
+    return /** @type {any} */ (createCardVersionFix(oneLineDocument(src), d, { maxVersion }));
+  };
+
+  it("is the preferred fix when the new version is within the host's maximum", () => {
+    const fix = fixWith("1.6");
+    assert.equal(fix.title, "Change card version to 1.5");
+    assert.equal(fix.isPreferred, true);
+  });
+
+  it("says so, and isn't preferred (Fix All skips it), when the new version is above the maximum", () => {
+    const fix = fixWith("1.4");
+    assert.equal(fix.title, "Change card version to 1.5 (above the host's maximum, 1.4)");
+    assert.equal(fix.isPreferred, false);
   });
 });
 
@@ -457,5 +494,83 @@ describe("findAdaptiveCardDiagnostics — performance", () => {
     const started = Date.now();
     assert.deepEqual(diagnose(src), []);
     assert.ok(Date.now() - started < 300, `took ${Date.now() - started} ms`);
+  });
+});
+
+describe("findAdaptiveCardDiagnostics — templating keywords", () => {
+  it("flags a templating key, on the key", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "Container", "$data": "x", "items": [] } ] }';
+    const [d] = only(src, "adaptivecard-templating-keyword");
+    assert.ok(d);
+    assert.match(d.message, /^'\$data' is an Adaptive Card Templating keyword, but OtterScript expands it here/);
+    assert.equal(d.range.start.character, src.indexOf("$data"));
+    assert.equal(d.range.end.character, src.indexOf("$data") + 5);
+  });
+
+  it("finds every keyword, but not an escaped one or a value", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "TextBlock", "$when": "x", "`$root": "y", "text": "$data" } ] }';
+    assert.deepEqual(only(src, "adaptivecard-templating-keyword").map((d) => d.message.split("'")[1]), ["$when"]);
+  });
+
+  it("escapes the keyword with a backtick", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.2", "$data": "x" }';
+    const [d] = only(src, "adaptivecard-templating-keyword");
+    const fix = /** @type {any} */ (createTemplatingKeywordFix(oneLineDocument(src), d));
+    assert.equal(fix.title, "Escape as '`$data'");
+    const [[op, , position, text]] = fix.edit.edits;
+    assert.equal(op, "insert");
+    assert.equal(position.character, src.indexOf("$data"));
+    assert.equal(text, "`");
+  });
+});
+
+describe("findAdaptiveCardDiagnostics — Teams message", () => {
+  const CARD = '{ "type": "AdaptiveCard", "version": "1.2", "actions": [ { "type": "Action.Submit", "title": "OK", "data": { "type": "Action.Submit" } } ] }';
+  /**
+   * @param {string} attachment - The attachment's properties before "content"
+   * @param {string} [card]
+   */
+  const message = (attachment, card = CARD) =>
+    `{ "type": "message", "attachments": [ { ${attachment}"content": ${card} } ] }`;
+
+  it("flags a wrong contentType, on its value, and fixes it", () => {
+    const src = message('"contentType": "application/json", ');
+    const [d] = only(src, "adaptivecard-content-type");
+    assert.ok(d);
+    assert.equal(d.range.start.character, src.indexOf("application/json"));
+    const fix = /** @type {any} */ (createContentTypeFix(oneLineDocument(src), d));
+    assert.deepEqual(fix.edit.edits[0][3], "application/vnd.microsoft.card.adaptive");
+  });
+
+  it("flags a missing contentType on the content key, and adds it", () => {
+    const src = message("");
+    const [d] = only(src, "adaptivecard-content-type");
+    assert.ok(d);
+    assert.equal(d.range.start.character, src.indexOf("content"));
+    const fix = /** @type {any} */ (createContentTypeFix(oneLineDocument(src), d));
+    const [[op, , position, text]] = fix.edit.edits;
+    assert.equal(op, "insert");
+    assert.equal(position.character, src.indexOf('"content"'));
+    assert.equal(text, '"contentType": "application/vnd.microsoft.card.adaptive", ');
+  });
+
+  it("accepts the right contentType in any case, and a templated one", () => {
+    for (const value of ["application/vnd.microsoft.card.adaptive", "Application/Vnd.Microsoft.Card.Adaptive", "$ContentType"]) {
+      assert.deepEqual(only(message(`"contentType": "${value}", `), "adaptivecard-content-type"), [], value);
+    }
+  });
+
+  it("flags Action.Submit in a Teams message, but not inside a data payload", () => {
+    const src = message('"contentType": "application/vnd.microsoft.card.adaptive", ');
+    const found = only(src, "adaptivecard-webhook-submit");
+    assert.equal(found.length, 1);
+    assert.equal(found[0].range.start.character, src.indexOf("Action.Submit"));
+  });
+
+  it("leaves a card that isn't sent as a Teams message alone", () => {
+    assert.deepEqual(diagnose(CARD), []);
+    // An attachment, but not in a "type": "message" object.
+    const src = `{ "attachments": [ { "contentType": "application/vnd.microsoft.card.adaptive", "content": ${CARD} } ] }`;
+    assert.deepEqual(only(src, "adaptivecard-webhook-submit"), []);
   });
 });

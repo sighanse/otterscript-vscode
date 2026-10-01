@@ -80,6 +80,9 @@ const DIAGNOSTIC_CODES = Object.freeze([
   "adaptivecard-invalid-value",
   "adaptivecard-version-too-low",
   "adaptivecard-version-too-high",
+  "adaptivecard-templating-keyword",
+  "adaptivecard-content-type",
+  "adaptivecard-webhook-submit",
 ]);
 
 /**

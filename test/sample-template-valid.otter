@@ -18,10 +18,11 @@
 # for this exact scenario (foreach %p in @AffectedPackages -> $(%p.Name)).
 #
 # The card also carries the shapes the Adaptive Card check must NOT flag: an
-# Action.Submit "data" payload and a Teams "msteams" mention entity, both of
-# which use "type" for something other than a card element. It also uses
-# RichTextBlock/TextRun (supported by the declared 1.2), and a 1.5 Table that
-# is allowed because it has its own "fallback" for older hosts.
+# action's "data" payload and a Teams "msteams" mention entity, both of which
+# use "type" for something other than a card element. It also uses
+# RichTextBlock/TextRun (supported by the declared 1.2), and a 1.5 Table and a
+# 1.4 Action.Execute that are allowed because each has its own "fallback" for
+# older hosts. (Not Action.Submit: Teams webhooks don't support it.)
 
 {
   "type": "message",
@@ -64,7 +65,7 @@
         ],
         "actions": [
           { "type": "Action.OpenUrl", "title": "View", "url": $ToJson($VulnerabilityUrl) },
-          { "type": "Action.Submit", "title": "Acknowledge", "data": { "type": "ack", "id": $ToJson($VulnerabilityId) } }
+          { "type": "Action.Execute", "title": "Acknowledge", "fallback": "drop", "data": { "type": "ack", "id": $ToJson($VulnerabilityId) } }
         ],
         "msteams": {
           "entities": [

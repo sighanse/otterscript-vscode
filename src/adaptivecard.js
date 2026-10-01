@@ -20,7 +20,12 @@
  * - no element, action or property may need a newer card version than the
  *   card declares (unless it, or an element around it, has a `"fallback"`);
  * - a property limited to a fixed list (`"weight"`, `"spacing"`, ...) must
- *   have one of its values, unless the value is filled in by OtterScript.
+ *   have one of its values, unless the value is filled in by OtterScript;
+ * - Adaptive Card Templating keys (`"$data"`, ...) are flagged, since
+ *   OtterScript expands them as its own variables;
+ * - when the card is sent as a Teams message attachment, the attachment
+ *   needs the Adaptive Card `contentType`, and `Action.Submit` (unsupported
+ *   by incoming webhooks and Workflows) is flagged.
  *
  * @module adaptivecard
  */
@@ -281,9 +286,11 @@ function compareCardVersions(a, b) {
  * free-form payload.
  *
  * @param {string} text - Full document text
- * @returns {{ objStart: number, card: JsonView } | null} `card` is the
- *   {@link JsonView} of the card object's literal text, from its `{` to its
- *   matching `}`; offsets inside it are relative to `objStart`.
+ * @returns {{ objStart: number, card: JsonView, literal: JsonView } | null}
+ *   `card` is the {@link JsonView} of the card object's literal text, from
+ *   its `{` to its matching `}`; offsets inside it are relative to
+ *   `objStart`. `literal` is the whole document's literal text, for looking
+ *   at what surrounds the card (see {@link findWebhookEnvelope}).
  */
 function locateCard(text) {
   const state = createTemplateScanState();
@@ -303,7 +310,7 @@ function locateCard(text) {
   const objEnd = literal.closeOf.get(objStart);
   if (objEnd === undefined) return null;
 
-  return { objStart, card: analyzeJson(literal.text.slice(objStart, objEnd + 1)) };
+  return { objStart, card: analyzeJson(literal.text.slice(objStart, objEnd + 1)), literal };
 }
 
 /**
@@ -511,6 +518,79 @@ function findInvalidValues(card) {
 }
 
 /**
+ * Adaptive Card Templating's reserved keys. In a text template OtterScript
+ * expands `$data` & co. in the literal output as its own variables, so a card
+ * copied from a templating example breaks when the template runs.
+ * @type {ReadonlySet<string>}
+ */
+const TEMPLATING_KEYWORDS = new Set(["$data", "$when", "$root", "$index", "$host"]);
+
+/**
+ * Every templating keyword used as a key in the card. An escaped one
+ * (`` "`$data" ``) is a different token value, so it isn't found.
+ *
+ * @param {JsonView} card
+ * @returns {{ value: string, start: number, end: number }[]} `start`/`end`
+ *   bracket the key without its quotes.
+ */
+function findTemplatingKeywords(card) {
+  return card.tokens
+    .filter((token) => TEMPLATING_KEYWORDS.has(token.value) && valueStartAfterKey(card.text, token) !== -1)
+    .map((token) => ({ value: token.value, start: token.start + 1, end: token.end }));
+}
+
+/** The `contentType` a Teams message attachment needs for an Adaptive Card. */
+const ADAPTIVE_CARD_CONTENT_TYPE = "application/vnd.microsoft.card.adaptive";
+
+/**
+ * The Teams message around the card, when the card is the `"content"` of an
+ * attachment -- the shape a Teams incoming webhook or Workflows trigger takes:
+ *
+ *     { "type": "message", "attachments": [
+ *         { "contentType": "application/vnd.microsoft.card.adaptive", "content": { card } } ] }
+ *
+ * All offsets are in the document's literal text.
+ *
+ * @param {JsonView} literal - From {@link locateCard}
+ * @param {number} objStart - The card's `{`
+ * @returns {{
+ *   contentKey: { start: number, end: number },
+ *   contentType: { value: string, valueStart: number, valueEnd: number } | undefined,
+ *   isMessage: boolean
+ * } | null} `contentKey` is the `content` key without its quotes;
+ *   `contentType` is undefined when the attachment has none; `isMessage`
+ *   tells whether the attachment sits in a `"type": "message"` object's
+ *   `attachments`. Null when the card isn't an attachment's `content`.
+ */
+function findWebhookEnvelope(literal, objStart) {
+  const { tokens, enclosing, closeOf, text } = literal;
+
+  // The key right before the card's `{` must be "content".
+  let k = tokens.length - 1;
+  while (k >= 0 && tokens[k].start > objStart) k--;
+  if (k < 0 || tokens[k].value !== "content" || valueStartAfterKey(text, tokens[k]) !== objStart) return null;
+  const attachment = enclosing[k];
+  if (attachment === -1) return null;
+
+  const contentType = findStringProperties(literal, "contentType").find((p) => p.objectStart === attachment);
+
+  // An object around the attachment with "type": "message" and an
+  // "attachments" key of its own.
+  const isMessage = findStringProperties(literal, "type").some(({ value, objectStart: o }) => {
+    if (value !== "message" || o === -1 || o >= attachment) return false;
+    const end = closeOf.get(o);
+    return end !== undefined && end > attachment &&
+      tokens.some((t, i) => t.value === "attachments" && enclosing[i] === o && valueStartAfterKey(text, t) !== -1);
+  });
+
+  return {
+    contentKey: { start: tokens[k].start + 1, end: tokens[k].end },
+    contentType: contentType && { value: contentType.value, valueStart: contentType.valueStart, valueEnd: contentType.valueEnd },
+    isMessage,
+  };
+}
+
+/**
  * Runs the Adaptive Card checks over one document. Content-triggered: does
  * nothing unless the literal (non-`<% %>`) text contains `"type": "AdaptiveCard"`
  * somewhere -- everything outside that object (e.g. a Teams message
@@ -532,7 +612,7 @@ function findAdaptiveCardDiagnostics(document, text, options = {}) {
 
   const located = locateCard(text);
   if (!located) return issues;
-  const { objStart, card } = located;
+  const { objStart, card, literal } = located;
 
   /**
    * Adds a warning spanning `[start, end)` of the card text.
@@ -572,6 +652,45 @@ function findAdaptiveCardDiagnostics(document, text, options = {}) {
       `'${value}' is not a valid value for '${key}' on ${type}. Expected one of: ${allowed.join(", ")}.`,
       "adaptivecard-invalid-value"
     );
+  }
+
+  for (const { value, start, end } of findTemplatingKeywords(card)) {
+    addIssue(
+      start, end,
+      `'${value}' is an Adaptive Card Templating keyword, but OtterScript expands it here as the variable ` +
+      `'${value}'. Teams webhooks don't run templating; if a templating host expands this card, write '\`${value}'.`,
+      "adaptivecard-templating-keyword"
+    );
+  }
+
+  // -- Teams message checks: only when the card is an attachment's "content".
+  const envelope = findWebhookEnvelope(literal, objStart);
+  if (envelope) {
+    const { contentKey, contentType } = envelope;
+    if (!contentType) {
+      addIssue(
+        contentKey.start - objStart, contentKey.end - objStart,
+        `This attachment has no "contentType". Teams shows the card only with "contentType": "${ADAPTIVE_CARD_CONTENT_TYPE}".`,
+        "adaptivecard-content-type"
+      );
+    } else if (!isTemplatedValue(contentType.value) && contentType.value.trim().toLowerCase() !== ADAPTIVE_CARD_CONTENT_TYPE) {
+      addIssue(
+        contentType.valueStart - objStart, contentType.valueEnd - objStart,
+        `'${contentType.value}' is not the Adaptive Card content type. Teams shows the card only with "${ADAPTIVE_CARD_CONTENT_TYPE}".`,
+        "adaptivecard-content-type"
+      );
+    }
+  }
+  if (envelope?.isMessage) {
+    for (const { value, valueStart, valueEnd } of findStringProperties(card, "type")) {
+      if (value !== "Action.Submit" || isInsideAny(freeFormSpans, valueStart)) continue;
+      addIssue(
+        valueStart, valueEnd,
+        "Teams incoming webhooks and Workflows don't support 'Action.Submit': the button is shown, but there's nothing " +
+        "to receive what it sends. Use 'Action.OpenUrl', 'Action.ShowCard' or 'Action.ToggleVisibility' instead.",
+        "adaptivecard-webhook-submit"
+      );
+    }
   }
 
   const versionProperty = findOwnVersionProperty(card);
@@ -618,11 +737,17 @@ function findAdaptiveCardDiagnostics(document, text, options = {}) {
  * fields), so repeated calls -- e.g. once per diagnostic in Fix All --
  * produce the identical edit.
  *
+ * When that version is above the host's maximum, the fix is still offered
+ * (it's the only way to keep the feature) but says so in its title and is
+ * not preferred, so Fix All leaves it to the user: applying it would trade
+ * these warnings for `adaptivecard-version-too-high`.
+ *
  * @param {vscode.TextDocument} document
  * @param {vscode.Diagnostic} diagnostic
+ * @param {{ maxVersion?: string }} [options] - As for {@link findAdaptiveCardDiagnostics}
  * @returns {vscode.CodeAction | null}
  */
-function createCardVersionFix(document, diagnostic) {
+function createCardVersionFix(document, diagnostic, options = {}) {
   const located = locateCard(document.getText());
   if (!located) return null;
   const versionProperty = findOwnVersionProperty(located.card);
@@ -640,9 +765,15 @@ function createCardVersionFix(document, diagnostic) {
   }
   if (!highestText) return null;
 
-  const action = new vscode.CodeAction(`Change card version to ${highestText}`, vscode.CodeActionKind.QuickFix);
+  const maxVersion = options.maxVersion ? parseCardVersion(options.maxVersion) : null;
+  const aboveMax = maxVersion !== null && compareCardVersions(highest, maxVersion) > 0;
+  const title = aboveMax
+    ? `Change card version to ${highestText} (above the host's maximum, ${options.maxVersion?.trim()})`
+    : `Change card version to ${highestText}`;
+
+  const action = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
   action.diagnostics = [diagnostic];
-  action.isPreferred = true;
+  action.isPreferred = !aboveMax;
   action.edit = new vscode.WorkspaceEdit();
   action.edit.replace(
     document.uri,
@@ -680,8 +811,54 @@ function createInvalidValueFix(document, diagnostic) {
   return action;
 }
 
+/**
+ * Quick fix for `adaptivecard-templating-keyword`: escapes the keyword with a
+ * backtick (`` "`$data" ``), so OtterScript outputs it literally for a
+ * templating host to expand.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Diagnostic} diagnostic - Its range is the key without quotes
+ * @returns {vscode.CodeAction}
+ */
+function createTemplatingKeywordFix(document, diagnostic) {
+  const keyword = document.getText(diagnostic.range);
+  const action = new vscode.CodeAction(`Escape as '\`${keyword}'`, vscode.CodeActionKind.QuickFix);
+  action.diagnostics = [diagnostic];
+  action.isPreferred = true;
+  action.edit = new vscode.WorkspaceEdit();
+  action.edit.insert(document.uri, diagnostic.range.start, "`");
+  return action;
+}
+
+/**
+ * Quick fix for `adaptivecard-content-type`: sets the attachment's
+ * `contentType` to the Adaptive Card one -- replacing a wrong value, or
+ * adding the property before `"content"` when it's missing (the diagnostic
+ * is then on the `content` key).
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Diagnostic} diagnostic
+ * @returns {vscode.CodeAction}
+ */
+function createContentTypeFix(document, diagnostic) {
+  const action = new vscode.CodeAction(`Set contentType to '${ADAPTIVE_CARD_CONTENT_TYPE}'`, vscode.CodeActionKind.QuickFix);
+  action.diagnostics = [diagnostic];
+  action.isPreferred = true;
+  action.edit = new vscode.WorkspaceEdit();
+  if (document.getText(diagnostic.range) === "content") {
+    // Before the key's opening quote.
+    const keyQuote = document.positionAt(document.offsetAt(diagnostic.range.start) - 1);
+    action.edit.insert(document.uri, keyQuote, `"contentType": "${ADAPTIVE_CARD_CONTENT_TYPE}", `);
+  } else {
+    action.edit.replace(document.uri, diagnostic.range, ADAPTIVE_CARD_CONTENT_TYPE);
+  }
+  return action;
+}
+
 module.exports = {
   createCardVersionFix,
+  createContentTypeFix,
   createInvalidValueFix,
+  createTemplatingKeywordFix,
   findAdaptiveCardDiagnostics,
 };

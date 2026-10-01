@@ -24,6 +24,8 @@ This extension started as a learning project while implementing [custom webhook 
   - a value a property doesn't allow, such as `"weight": "bold"` (should be `"bolder"`), with a quick fix to the closest allowed value
   - an element, action or property that needs a newer card version than the card declares (e.g. a 1.5 `Table` or `"rtl"` in a 1.2 card, unless it has a `"fallback"`), with a quick fix to raise the version
   - a card version newer than the host supports (`otterscript.adaptiveCards.maxVersion`, 1.6 by default, the version Teams supports)
+  - Adaptive Card Templating keys such as `"$data"`, which OtterScript would expand as its own variables, with a quick fix to escape them
+  - in a Teams message (`"type": "message"` with `attachments`): a missing or wrong `"contentType"`, and `Action.Submit`, which Teams webhooks don't support
 
   The checks know the official Adaptive Card schema (1.6) and the Teams-only elements such as `Badge`, `Icon` and the charts. Best-effort only — they don't validate the full card structure, since a template's `<% %>` control flow means there's no single concrete JSON document to validate against
 - Quick‑fix code actions, plus a **Fix All Issues** command (`Ctrl+Shift+Alt+F`) that applies every available fix in the file
@@ -123,6 +125,9 @@ when no folder is open).
 | `adaptivecard-invalid-value` | Card property value that isn't allowed, e.g. `"weight": "bold"` |
 | `adaptivecard-version-too-low` | Card element, action or property newer than the card's `"version"` |
 | `adaptivecard-version-too-high` | Card `"version"` newer than `otterscript.adaptiveCards.maxVersion` |
+| `adaptivecard-templating-keyword` | Adaptive Card Templating key (`"$data"`, `"$when"`, ...) that OtterScript expands |
+| `adaptivecard-content-type` | Teams message attachment without the Adaptive Card `"contentType"` |
+| `adaptivecard-webhook-submit` | `Action.Submit` in a Teams message (webhooks don't support it) |
 
 ## Language Support Coverage
 

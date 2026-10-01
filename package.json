@@ -351,6 +351,39 @@
                 "hint"
               ],
               "markdownDescription": "An Adaptive Card property value that isn't one of the property's allowed values, such as `\"weight\": \"bold\"` (should be `\"bolder\"`)."
+            },
+            "adaptivecard-templating-keyword": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "An Adaptive Card Templating key such as `\"$data\"` or `\"$when\"`, which OtterScript expands as a variable in a text template."
+            },
+            "adaptivecard-content-type": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "A Teams message attachment holding an Adaptive Card without `\"contentType\": \"application/vnd.microsoft.card.adaptive\"`."
+            },
+            "adaptivecard-webhook-submit": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "`Action.Submit` in a card sent as a Teams message (incoming webhooks and Workflows don't support it)."
             }
           },
           "additionalProperties": false
