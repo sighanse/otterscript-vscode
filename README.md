@@ -35,7 +35,7 @@ This extension started as a learning project while implementing [custom webhook 
 - Go to Symbol in Workspace (`Ctrl+T`) — jump to any `module` declaration across all OtterScript files
 - CodeLens reference counts above module declarations
 - Code folding via `#region` / `#endregion` and block structure
-- Code snippets for common patterns
+- Code snippets for common patterns, including `teamscard`: a complete Teams webhook body with an Adaptive Card, values filled in through `$ToJson(...)` and a `<% foreach %>` loop for rows
 
 ## Status
 

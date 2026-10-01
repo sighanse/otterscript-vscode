@@ -4,6 +4,7 @@
 
 ### Added
 
+- `teamscard` snippet: a complete text-template body for a Teams incoming webhook or Workflows trigger — the message envelope with the right `contentType`, an Adaptive Card whose values come from OtterScript through `$ToJson(...)`, and a `<% foreach %>` loop that adds fact rows while keeping the JSON valid
 - Highlight all occurrences for variables and modules: clicking `$x`, `@list`, `%map` (or the braced `${x}` / `@{list}` forms, whose names may contain spaces) highlights every reference in the file — including inside strings, where OtterScript expands them, but not in comments — and marks declarations and assignments as writes. Clicking a module name highlights its declaration and every `call` to it
 - `otterscript.diagnostics.rules` setting to turn individual diagnostics off or change their severity, keyed by diagnostic code; every diagnostic also gets a **Turn off '&lt;code&gt;' diagnostics** quick fix. Unbalanced-symbol and unmatched/unclosed `<% %>` diagnostics now have codes too (`unbalanced-symbol`, `template-unexpected-close`, `template-unclosed`)
 - `adaptivecard-version-too-low` diagnostic: an Adaptive Card element or action that needs a newer card version than the card's declared `"version"` (e.g. a 1.5 `Table` in a 1.2 card) is flagged, unless it or an enclosing element has a `"fallback"`. The quick fix **Change card version to X** raises the version to the highest one the card needs
