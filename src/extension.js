@@ -3,20 +3,25 @@
  * @fileoverview OtterScript Language Extension entry point.
  *
  * RESPONSIBILITIES
- * 1. Register language features (completion, hover, signature help, quick
- *    fixes, navigation, symbols, CodeLens, folding)
- * 2. Bridge plain languageData (language-data.js) into VS Code UI objects
- * 3. Schedule diagnostics runs (the checks themselves live in diagnostics.js)
+ * 1. Register the language features, each in its own module under
+ *    src/providers/ (completion, hover, signature help, quick fixes,
+ *    navigation, workspace symbols)
+ * 2. Schedule diagnostics runs (the checks themselves live in diagnostics.js)
+ * 3. Keep settings, diagnostics and the workspace index current as documents
+ *    and settings change
  *
  * DESIGN PRINCIPLES
  * - language-data.js and scanner.js are vscode-free (plain data / plain text)
- * - Provider wiring and editor event handling live here; reusable logic that
- *   builds vscode objects lives in helpers.js / diagnostics.js / adaptivecard.js
+ * - Each provider module receives what it needs from here (the live settings,
+ *   regex patterns, a way to re-run diagnostics) instead of reaching for
+ *   shared globals; reusable logic that builds vscode objects lives in
+ *   helpers.js / diagnostics.js / adaptivecard.js
  * - Snippets own insertion text; providers never guess prefixes
  *
  * DOCUMENTATION
  * @author Sigurd Hansen <sigurd.hansen@gmail.com>
  * @license MIT
+ * @see src/providers/ - One module per group of language features
  * @see src/language-data.js - Plain data documentation module
  * @see src/helpers.js - Helpers, functions, constants
  * @see src/scanner.js - vscode-free text scanning (strings, comments, template tags)
@@ -33,7 +38,6 @@ const vscode = require("vscode");
 const { updateDiagnostics } = require("./diagnostics");
 
 // -- Language documentation (functions, variables, operations, keywords).
-// Plain strings only; any conversion to MarkdownString happens in this file.
 const {
   NAMESPACES,
   operationDocs,
@@ -45,45 +49,28 @@ const {
   mapFunctionDocs
 } = require("./language-data");
 
-// -- Import helpers
 const {
   NON_VARIABLE_IDENTIFIERS,
   log,
-  buildCompletionItem,
-  buildHoverMarkdown,
-  createAssignmentInConditionFix,
-  createForToForeachFix,
-  createInvalidOperatorFix,
-  createMissingDollarFix,
-  createTemplateEndFix,
-  createUnknownNamespaceFix,
   getOutputChannel,
-  getDiagnosticCode,
-  getActiveParameterIndex,
-  getTypedIdentifier,
-  getModuleDeclarations,
-  getModuleCallReferencesByName,
-  findModuleDeclarationRange,
-  findModuleDeclarations,
-  findModuleReferences,
-  isModuleCallContext,
-  isModuleDeclarationContext,
-  isValidCompletionPosition,
-  isInStringOrCommentDoc,
-  clearModuleInfoCache,
+  clearDocumentCaches,
   clearTimerForUri,
   loadConfig,
-  MODULE_NAME_TOKEN_REGEX,
   validateDocs,
   scheduleTimerForUri,
-  mapWithConcurrency,
   createRegexPatterns,
-  computeFoldingRanges
-} = require('./helpers');
+} = require("./helpers");
+
+// -- Language features
+const { registerCodeActions } = require("./providers/code-actions");
+const { registerCompletion } = require("./providers/completion");
+const { registerHover } = require("./providers/hover");
+const { registerNavigation } = require("./providers/navigation");
+const { registerSignatureHelp } = require("./providers/signature-help");
+const { registerWorkspaceSymbols } = require("./providers/workspace-symbols");
 
 /** @type {Map<string, ReturnType<typeof setTimeout>>} */
 const diagnosticTimers = new Map();
-const REFRESH_DIAGNOSTICS_COMMAND = "otterscript.refreshDiagnostics";
 
 // ============================================================
 // ACTIVATION
@@ -99,20 +86,17 @@ function activate(context) {
 
   log.info(`${extensionName} v${version} activated`);
 
-  // -- Load initial configuration
-  let { completionEnabled, hoverEnabled, signatureHelpEnabled, codeLensEnabled, workspaceSymbolsEnabled } = loadConfig();
-  log.info(`Settings loaded: completion=${completionEnabled}, hover=${hoverEnabled}, signatureHelp=${signatureHelpEnabled}, codeLens=${codeLensEnabled}, workspaceSymbols=${workspaceSymbolsEnabled}`);
-
-  // -- Watch for settings changes while extension is running
-  context.subscriptions.push(
-    vscode.workspace.onDidChangeConfiguration(e => {
-      // -- Only reload if OtterScript settings changed
-      if (e.affectsConfiguration("otterscript")) {
-        ({ completionEnabled, hoverEnabled, signatureHelpEnabled, codeLensEnabled, workspaceSymbolsEnabled } = loadConfig());
-        log.info(`Settings reloaded: completion=${completionEnabled}, hover=${hoverEnabled}, signatureHelp=${signatureHelpEnabled}, codeLens=${codeLensEnabled}, workspaceSymbols=${workspaceSymbolsEnabled}`);
-      }
-    })
-  );
+  // -- Settings. One object, shared with every provider module and updated
+  //    in place by the settings listener below (SETTINGS CHANGES), so a
+  //    provider always reads the current value.
+  /** @type {import("./helpers").Settings} */
+  const settings = loadConfig();
+  /** @returns {string} */
+  const describeSettings = () =>
+    `completion=${settings.completionEnabled}, hover=${settings.hoverEnabled}, ` +
+    `signatureHelp=${settings.signatureHelpEnabled}, codeLens=${settings.codeLensEnabled}, ` +
+    `workspaceSymbols=${settings.workspaceSymbolsEnabled}`;
+  log.info(`Settings loaded: ${describeSettings()}`);
 
   // -- Validate all documentation sources (intentionally ignore return value)
   for (const [label, table] of Object.entries({
@@ -127,1141 +111,154 @@ function activate(context) {
     void validateDocs(label, table);
   }
 
-  // -- Knowledge bases (Fast Lookup Sets)
-  const knownKeywords = new Set(Object.keys(keywordDocs));
-  const knownScalarFunctions = new Set(Object.keys(scalarFunctionDocs));
-  const knownVectorFunctions = new Set(Object.keys(vectorFunctionDocs));
+  // -- Knowledge bases (fast lookup sets) and the regex patterns built from them
   const knownOperations = new Set(Object.keys(operationDocs));
-
-  // -- Regex pattern for symbol detection
-  const {
-    scalarCallRegex,
-    vectorCallRegex,
-    operationCallRegex,
-    scalarSignatureRegex,
-    vectorSignatureRegex,
-    mapSignatureRegex,
-    operationSignatureRegex,
-    operationRegex,
-  } = createRegexPatterns(knownOperations);
-
-  const cachedOperationRegex = operationRegex();
+  const patterns = createRegexPatterns(knownOperations);
 
   // ============================================================
-  // SIGNATURE HELP PROVIDER
+  // DIAGNOSTICS
   // ============================================================
-  // Shows parameter hints for:
-  //   - Scalar functions: $ToJson(value)
-  //   - Vector functions: @Split(text, delimiter)
-  //   - Operations: Post-Http(Url: ..., [options...])
-
-  const signatureHelpProvider =
-    vscode.languages.registerSignatureHelpProvider(
-      "otterscript",
-      {
-        provideSignatureHelp(document, position) {
-          // -- Check if the signature help provider is enabled in settings
-          if (!signatureHelpEnabled) return null;
-
-          // -- Get the text before the cursor, up to 10 lines back, so a call
-          // whose arguments span several lines is still detected
-          const textBeforeCursor = document.getText(new vscode.Range(
-            new vscode.Position(Math.max(0, position.line - 10), 0),
-            position
-          ));
-          // -- Try each pattern to find the call the cursor is inside; the first
-          // pattern whose name is documented wins
-          let match = null;
-          let fn = null;
-          let args = null;
-
-          let isOperation = false;
-
-          const candidates = [
-            { regex: scalarSignatureRegex,    table: scalarFunctionDocs, operation: false }, // ($Func)
-            { regex: vectorSignatureRegex,    table: vectorFunctionDocs, operation: false }, // (@Func)
-            { regex: mapSignatureRegex,       table: mapFunctionDocs,    operation: false }, // (%Func)
-            { regex: operationSignatureRegex, table: operationDocs,       operation: true  }, // (Log-Information etc...)
-          ];
-
-          for (const { regex, table, operation } of candidates) {
-            const m = textBeforeCursor.match(regex());
-            if (m && table[m[1]]) { match = m; fn = table[m[1]]; args = m[2]; isOperation = operation; break; }
-          }
-
-          // -- Validate we have everything needed
-          if (!fn?.signature || !match) return null;
-          if (typeof args !== 'string') return null;
-
-          // ------------------------------------------------------------
-          // Active parameter detection
-          // ------------------------------------------------------------
-
-          const activeParam = getActiveParameterIndex(args);
-
-          // ------------------------------------------------------------
-          // Build signature help UI
-          // ------------------------------------------------------------
-          // Parse signature to extract individual parameters
-          // Handles nested parentheses in signature (e.g., "Func(a, (b + c), d)")
-
-          // -- Qualify the displayed signature with its namespace when it belongs
-          // to one and the stored signature string doesn't already spell it out.
-          // Operations only: "Namespace::Operation" is grammatically valid, whereas
-          // the syntax for namespaced $/@ functions is not surfaced here.
-          const signatureLabel =
-            isOperation && fn.namespace && !fn.signature.includes("::")
-              ? `${fn.namespace}::${fn.signature}`
-              : fn.signature;
-
-          const sig = new vscode.SignatureInformation(signatureLabel, fn.documentation);
-
-          const paramMatch = fn.signature.match(/\(([\s\S]*)\)/);
-          if (paramMatch) {
-            const paramText = paramMatch[1];
-            const params = [];
-            let depth = 0;
-            let start = 0;
-
-            for (let i = 0; i < paramText.length; i++) {
-              const ch = paramText[i];
-              if (ch === '(') depth++;
-              if (ch === ')') depth--;
-              if (ch === ',' && depth === 0) {
-                params.push(paramText.substring(start, i).trim());
-                start = i + 1;
-              }
-            }
-            params.push(paramText.substring(start).trim());
-
-            sig.parameters = params.map(p => new vscode.ParameterInformation(p));
-          }
-
-          // -- Prepare the response
-          const help = new vscode.SignatureHelp();
-          help.signatures = [sig];
-          help.activeSignature = 0;
-
-          // -- Only set activeParameter when parameters were extracted
-          if (sig.parameters.length > 0) {
-            help.activeParameter = Math.min(activeParam, sig.parameters.length - 1);
-          }
-
-          return help;
-        }
-      },
-      "(",  // -- Trigger on opening parenthesis
-      ","   // -- Trigger on comma (when moving to next parameter)
-    );
-
-  // ============================================================
-  // SCALAR FUNCTION COMPLETION PROVIDER ($Function)
-  // ============================================================
-  // Shows completions for scalar functions when user types '$'.
-  // Examples: $ToJson, $Base64Encode, $Trim
-  //
-  // Trigger character: '$'
-  // After selection: Inserts function name and optionally parentheses
-  // Then triggers signature help for parameter hints
-
-  const functionCompletionProvider =
-    vscode.languages.registerCompletionItemProvider(
-      "otterscript",
-      {
-        provideCompletionItems(document, position) {
-          // -- Check if completion is enabled and not in a string/comment
-          if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
-
-          const typed = getTypedIdentifier(document, position, "$");
-          if (typed === null) return [];
-
-          return Object.entries(scalarFunctionDocs)
-              .filter(([key]) => key.toLowerCase().startsWith(typed.toLowerCase()))
-              .map(([_key, doc]) => {
-                  // -- Some entries in scalarFunctionDocs are runtime variables,
-                  // not call-style functions (signature has no '('). Classify and
-                  // sort those as variables so they interleave with variableDocs.
-                  const isFunction = doc.signature?.includes("(") ?? false;
-                  const snippet = doc.snippet
-                    ? new vscode.SnippetString(doc.snippet.replace(/^\\\$/, ""))
-                    : new vscode.SnippetString(doc.name.replace(/^\$/, ""));
-                  const kind = isFunction
-                    ? vscode.CompletionItemKind.Function
-                    : vscode.CompletionItemKind.Variable;
-                  const sortPrefix = isFunction ? '1_' : '2_';
-                  const item = buildCompletionItem(doc, kind, sortPrefix, snippet, isFunction);
-                  return item;
-              });
-        }
-      },
-      "$"   // Trigger on dollar
-    );
-
-  // ============================================================
-  // VARIABLE COMPLETION PROVIDER ($Variable)
-  // ============================================================
-  // Shows completions for predefined OtterScript variables when user types '$'.
-  // Examples: $BuildId, $FeedName, $PackageVersion
-  //
-  // Note: This provider shares the same trigger character ($) as scalar functions.
-  // VS Code shows both types in the completion list automatically.
-
-  const variableCompletionProvider =
-    vscode.languages.registerCompletionItemProvider(
-      "otterscript",
-      {
-        provideCompletionItems(document, position) {
-          // -- Check if completion is enabled and not in a string/comment
-          if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
-
-          const typed = getTypedIdentifier(document, position, "$");
-          if (typed === null) return [];
-
-          // -- Filter variables by what user typed and create completion items
-          return Object.entries(variableDocs)
-              .filter(([key]) => key.toLowerCase().startsWith(typed.toLowerCase()))
-              .map(([_key, doc]) => {
-                  // -- Remove leading $ for insertion (user already typed it).
-                  // Snippets escape it as `\$`, same as scalarFunctionDocs.
-                  const snippet = doc.snippet
-                    ? new vscode.SnippetString(doc.snippet.replace(/^\\?\$/, ""))
-                    : new vscode.SnippetString(doc.name.replace(/^\$/, ""));
-                  return buildCompletionItem(doc, vscode.CompletionItemKind.Variable, '2_', snippet, false);
-          });
-        }
-      },
-      "$"   // Trigger character - same as scalar function provider
-    );
-
-  // ============================================================
-  // VECTOR COMPLETION PROVIDER (@Function / @Variable)
-  // ============================================================
-  // Triggered after typing '@'.
-
-  const vectorCompletionProvider =
-    vscode.languages.registerCompletionItemProvider(
-      "otterscript",
-      {
-        provideCompletionItems(document, position) {
-          // -- Check if completion is enabled and not in a string/comment
-          if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
-
-          const typed = getTypedIdentifier(document, position, "@");
-          if (typed === null) return [];
-
-          // -- Filter vector languageData by what user typed
-          return Object.entries(vectorFunctionDocs)
-              .filter(([key]) => key.toLowerCase().startsWith(typed.toLowerCase()))
-              .map(([_key, doc]) => {
-                  const isFunction = doc.signature?.includes("(");
-                  const insertName = doc.name.replace(/^@/, "");
-                  // -- Prefer doc.snippet if it exists, otherwise fall back to default pattern
-                  const insertText = isFunction
-                      ? new vscode.SnippetString(
-                          (doc.snippet?.replace(/^@/, "") || `${insertName}(\${0})`))
-                      : new vscode.SnippetString(
-                          (doc.snippet?.replace(/^@/, "") || `${insertName}\${0}`));
-                  const kind = isFunction
-                      ? vscode.CompletionItemKind.Function
-                      : vscode.CompletionItemKind.Variable;
-                  const sortPrefix = isFunction ? '2_' : '1_';
-                  return buildCompletionItem(doc, kind, sortPrefix, insertText, isFunction);
-              });
-        }
-      },
-      "@"   // Trigger character - provider runs when user types this
-    );
-
-  // ============================================================
-  // MAP COMPLETION PROVIDER (%Function / %( ... ) expression)
-  // ============================================================
-  // Map variables are user-defined and cannot be enumerated; offers the
-  // map-returning functions (%FromJson, ...) plus the %( ... ) literal snippet.
-
-  const mapCompletionProvider =
-    vscode.languages.registerCompletionItemProvider(
-      "otterscript",
-      {
-        provideCompletionItems(document, position) {
-          // -- Check if completion is enabled and not in a string/comment
-          if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
-
-          const typed = getTypedIdentifier(document, position, "%");
-          if (typed === null) return [];
-
-          // -- Map functions, filtered by what the user typed after '%'
-          const items = Object.entries(mapFunctionDocs)
-            .filter(([key]) => key.toLowerCase().startsWith(typed.toLowerCase()))
-            .map(([_key, doc]) => {
-              // -- Remove leading % for insertion (user already typed it)
-              const snippet = new vscode.SnippetString(
-                (doc.snippet ?? `${doc.name}(\${0})`).replace(/^%/, ""));
-              return buildCompletionItem(doc, vscode.CompletionItemKind.Function, "1_", snippet, true);
-            });
-
-          // -- The %( ... ) map literal, sorted last
-          if (syntaxDocs?.mapExpr) {
-            const snippet = syntaxDocs.mapExpr.snippet
-              ? new vscode.SnippetString(syntaxDocs.mapExpr.snippet)
-              : new vscode.SnippetString(`${syntaxDocs.mapExpr.name} "(\${0})"`);
-            items.push(buildCompletionItem(syntaxDocs.mapExpr, vscode.CompletionItemKind.Snippet, "~", snippet, false));
-          }
-
-          return items;
-        }
-      },
-      "%"
-    );
-
-  // ============================================================
-  // OPERATION COMPLETION PROVIDER
-  // ============================================================
-  // Provides completions for OtterScript operations and keywords.
-  //
-  // Unlike scalar ($) and vector (@) completions, operations have NO prefix.
-
-  const operationCompletionProvider =
-    vscode.languages.registerCompletionItemProvider(
-      "otterscript",
-      {
-        provideCompletionItems(document, position, _token, localContext) {
-          // -- Check if completion is enabled and not in a string/comment
-          if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
-
-          const line = document.lineAt(position.line).text;
-          const cursor = position.character;
-          const prefix = line.slice(0, cursor);
-
-          // -- Match the identifier fragment immediately before the cursor (letters +
-          // hyphens), plus an optional "Namespace::" prefix the user may have already
-          // typed (e.g. "ProGet::Cr").
-          // Manual invoke (Ctrl+Space) should still return suggestions even when typed is empty.
-          const match = prefix.match(/(?:([A-Za-z][A-Za-z0-9]*)::)?([A-Za-z][A-Za-z-]*)?$/);
-          const namespaceTyped = match?.[1] ?? "";
-          const typed = match?.[2] ?? "";
-          const isManualInvoke = localContext.triggerKind === vscode.CompletionTriggerKind.Invoke;
-
-          // -- For auto-triggered suggestions, require at least 2 typed characters to
-          // avoid noise -- unless a "Namespace::" prefix was typed, which is signal enough.
-          if (!isManualInvoke && typed.length < 2 && !namespaceTyped) {
-            return [];
-          }
-
-          const lowerTyped = typed.toLowerCase();
-          const lowerNamespaceTyped = namespaceTyped.toLowerCase();
-
-          // -- Replace only the identifier fragment after any "::". VS Code treats "::"
-          // as a word boundary, so extending the range back over the namespace would
-          // make VS Code filter the items out. Instead, when the user has already typed
-          // a "Namespace::" prefix, strip that exact prefix off the snippet so it does
-          // not double up ("ProGet::ProGet::Create-Directory"). Only strip the prefix
-          // the user actually typed -- never rewrite a different namespace.
-          const replaceRange = new vscode.Range(
-            new vscode.Position(position.line, cursor - typed.length),
-            position
-          );
-          const typedNamespacePrefixRegex = namespaceTyped
-            ? new RegExp(`^${namespaceTyped}::`, "i")
-            : null;
-          const stripTypedNamespace = (/** @type {string} */ text) =>
-            typedNamespacePrefixRegex ? text.replace(typedNamespacePrefixRegex, "") : text;
-
-          const items = [];
-
-          // -- Operations (priority 0_)
-          for (const [name, doc] of Object.entries(operationDocs)) {
-              // -- When a "Namespace::" prefix is typed, only offer operations that
-              // belong to that namespace -- inserting a core/other-namespace operation
-              // after the prefix would produce invalid code ("ProGet::Log-Information").
-              if (namespaceTyped && (doc.namespace ?? "").toLowerCase() !== lowerNamespaceTyped) {
-                  continue;
-              }
-              if (!typed || name.toLowerCase().startsWith(lowerTyped)) {
-                  const snippetText = doc.snippet ?? `${name} "\${0}";`;
-                  const snippet = new vscode.SnippetString(stripTypedNamespace(snippetText));
-                  const item = buildCompletionItem(doc, vscode.CompletionItemKind.Function, '0_', snippet, true);
-                  item.range = replaceRange;
-                  items.push(item);
-              }
-          }
-
-          // -- Keywords (priority 1_). Skipped once a "Namespace::" prefix is typed --
-          // only operations are valid there.
-          if (!namespaceTyped) {
-            for (const [name, doc] of Object.entries(keywordDocs)) {
-                if (!typed || name.toLowerCase().startsWith(lowerTyped)) {
-                    const snippet = doc.snippet
-                      ? new vscode.SnippetString(doc.snippet)
-                      : name;
-                    const item = buildCompletionItem(doc, vscode.CompletionItemKind.Keyword, '1_', snippet, false);
-                    item.range = replaceRange;
-                    items.push(item);
-                }
-            }
-          }
-
-          return items;
-        }
-      }
-      // Manual invoke (Ctrl+Space) can return all operations/keywords.
-      // Auto-trigger still requires a short typed prefix to reduce noise.
-    );
-
-  // ============================================================
-  // HOVER PROVIDER
-  // ============================================================
-  // Shows documentation when user hovers over code elements.
-  // Triggered by mouse hover or Ctrl+K Ctrl+I (keyboard).
-  //
-  // Hover resolution order matters (MOST specific FIRST)
-
-  const hoverProvider = vscode.languages.registerHoverProvider(
-    "otterscript",
-    {
-      provideHover(document, position) {
-        // -- Check if hover is enabled in settings
-        if (!hoverEnabled) {
-          return null;
-        }
-
-        // -- Match #region / #endregion at the cursor position (checked before
-        // the string/comment guard below, since `#` itself starts a comment)
-        const regionRange = document.getWordRangeAtPosition(position, /#(?:end)?region\b/);
-        if (regionRange) {
-          const doc = keywordDocs[document.getText(regionRange)];
-          if (doc) {
-            return new vscode.Hover(buildHoverMarkdown(doc), regionRange);
-          }
-        }
-
-        // -- Prevent hover inside strings or comments
-        if (isInStringOrCommentDoc(document, position)) {
-          return null;
-        }
-
-        // -- Template tags (<% and %>)
-        // OtterScript uses ASP-style template tags for embedding code
-
-        const templateRange = document.getWordRangeAtPosition(position, /<%|%>/);
-        if (templateRange) {
-          const text = document.getText(templateRange);
-          if (text === '<%') {
-            return new vscode.Hover(
-              buildHoverMarkdown(syntaxDocs.templateOpen), templateRange);
-          }
-          if (text === '%>') {
-            return new vscode.Hover(
-              buildHoverMarkdown(syntaxDocs.templateClose), templateRange);
-          }
-        }
-
-        // -- Expression Delimiters (%(), @(), $())
-        // These delimiters start special expression types:
-        //   %( ) - Map expression (key-value pairs)
-        //   @( ) - Vector expression (arrays/lists)
-        //   $( ) - Nested evaluation (evaluate inner expression first)
-
-        const exprRange = document.getWordRangeAtPosition(position, /%\(|@\(|\$\(/);
-        if (exprRange) {
-            const text = document.getText(exprRange);
-            if (text === '%(') {
-              return new vscode.Hover(
-                buildHoverMarkdown(syntaxDocs.mapExpr), exprRange);
-            }
-            if (text === '@(') {
-              return new vscode.Hover(
-                buildHoverMarkdown(syntaxDocs.vectorExpr), exprRange);
-            }
-            if (text === '$(') {
-              return new vscode.Hover(
-                buildHoverMarkdown(syntaxDocs.nestedEval), exprRange);
-            }
-        }
-        // -- Keywords (if, foreach, with, set, etc.)
-        // Control flow and language keywords.
-
-        // -- Special-case multi-word keyword: "force normal"
-        const forceRange = document.getWordRangeAtPosition(
-          position,
-          /\bforce\s+normal\b/
-        );
-
-        const wordRange = forceRange
-          ?? document.getWordRangeAtPosition(
-              position,
-              /\b[a-zA-Z]+(?:-[a-zA-Z]+)*\b/ // Single token, hyphens allowed; NEVER spaces
-            );
-
-        if (wordRange) {
-          const word = document.getText(wordRange);
-
-          // -- Check if it's a known keyword
-          if (knownKeywords.has(word)) {
-            const doc = keywordDocs[word];
-            // -- Make hover
-            return new vscode.Hover(buildHoverMarkdown(doc), wordRange);
-          }
-        }
-
-        // -- Swim-string delimiters (Fish Sentinels)
-        // OtterScript's unique string syntax: >>, >==8>, >--=>
-        // Any characters between two identical fish-shaped delimiters
-
-        const swimRange = document.getWordRangeAtPosition(
-          position,
-          />[^>]{0,5}>/
-        );
-
-        if (swimRange) {
-          return new vscode.Hover(
-            buildHoverMarkdown(syntaxDocs.swimString), swimRange);
-        }
-
-        // -- Operations (Log-Information, Log-Warning, Log-Error, etc.)
-        // Built-in operations. Distinguished by hyphenated names.
-        const operationRange = document.getWordRangeAtPosition(
-          position,
-          cachedOperationRegex
-        );
-
-        if (operationRange) {
-          const opName = document.getText(operationRange);
-          const doc = operationDocs[opName];
-
-          // -- No documentation found
-          if (!doc) return null;
-
-          // -- Make hover
-          return new vscode.Hover(buildHoverMarkdown(doc), operationRange);
-        }
-
-        // -- Symbols ($function, @vector, %map function, $variable)
-        // Most general case - matches any $, @, or % prefixed identifier
-        // Checks scalar/vector/map functions and variables
-        // Must be LAST because it matches many things
-        const symbolRange = document.getWordRangeAtPosition(
-          position,
-          /[@$%][A-Za-z][A-Za-z0-9]*/  // $Name, @Name, or %Name (no spaces)
-        );
-        if (!symbolRange) return null;
-
-        const text = document.getText(symbolRange);
-        const prefix = text[0];         // '$', '@', or '%'
-        const name = text.substring(1); // The identifier without prefix
-
-        // -- Look up documentation based on prefix type
-        let doc;
-        if (prefix === "$") {
-          // -- $ can be either a scalar function OR a variable
-          // Check functions first (more specific), then variables
-          doc = scalarFunctionDocs[name] || variableDocs[name];
-        } else if (prefix === "@") {
-          // -- @ is a vector function
-          doc = vectorFunctionDocs[name];
-        } else if (prefix === "%") {
-          // -- % is a map function (a plain %map variable has no doc -> no hover)
-          doc = mapFunctionDocs[name];
-        }
-
-        // -- No documentation found
-        if (!doc) return null;
-
-        // -- Make hover
-        return new vscode.Hover(buildHoverMarkdown(doc), symbolRange);
-      }
-    }
-  );
-
-  // ============================================================
-  // FIX DISPATCH TABLE
-  // ============================================================
-  // Single source of truth for all quick-fix factories.
-  // Add a new entry here to expose a fix in both the lightbulb
-  // menu (provideCodeActions) and the "Fix All" command.
-
-  /** @type {Record<string, (doc: vscode.TextDocument, diag: vscode.Diagnostic) => vscode.CodeAction | null>} */
-  const FIX_FACTORIES = Object.freeze({
-    "missing-dollar":          createMissingDollarFix,
-    "invalid-operator":        createInvalidOperatorFix,
-    "assignment-in-condition": createAssignmentInConditionFix,
-    "incorrect-for-usage":     createForToForeachFix,
-    "unknown-namespace":       createUnknownNamespaceFix,
-    "template-end-keyword":    createTemplateEndFix,
-  });
-
-  // ============================================================
-  // QUICK FIX CODE ACTION PROVIDER
-  // ============================================================
-  // Provides lightbulb (💡) quick-fix actions for selected
-  // diagnostics emitted by this extension.
-
-  const codeActionsProvider = vscode.languages.registerCodeActionsProvider(
-      "otterscript",
-      {
-        provideCodeActions(document, _range, codeActionContext) {
-          /** @type {vscode.CodeAction[]} */
-          const actions = [];
-
-          for (const diagnostic of codeActionContext.diagnostics) {
-            if (diagnostic.source !== "OtterScript") continue;
-
-            const factory = FIX_FACTORIES[getDiagnosticCode(diagnostic)];
-            const fix = factory?.(document, diagnostic);
-            if (fix) {
-              fix.command = {
-                command: REFRESH_DIAGNOSTICS_COMMAND,
-                title: "Refresh OtterScript diagnostics",
-                arguments: [document.uri]
-              };
-              actions.push(fix);
-            }
-          }
-
-          return actions;
-        }
-      },
-      {
-        providedCodeActionKinds: [vscode.CodeActionKind.QuickFix]
-      }
-  );
-
-  // ============================================================
-  // FIX ALL COMMAND
-  // ============================================================
-  /**
-   * Command to fix all auto-fixable diagnostics in the current OtterScript document.
-   * All fixes are applied in a single WorkspaceEdit (single undo step).
-   *
-   * Triggered by: Command Palette or Ctrl+Shift+Alt+F
-   *
-   * @see FIX_FACTORIES - the diagnostic-code -> fix-factory dispatch table
-   */
-  const fixAllCommand = vscode.commands.registerCommand(
-    'otterscript.fixAll',
-    async () => {
-      const editor = vscode.window.activeTextEditor;
-      if (!editor || editor.document.languageId !== "otterscript") return;
-
-      const document = editor.document;
-      const docDiagnostics = vscode.languages
-        .getDiagnostics(document.uri)
-        .filter(diagnostic => diagnostic.source === "OtterScript");
-      // -- Filter to fixable diagnostic codes (keys of FIX_FACTORIES)
-      const fixableDiagnostics = docDiagnostics.filter(d => getDiagnosticCode(d) in FIX_FACTORIES);
-
-      if (fixableDiagnostics.length === 0) {
-        const msg = `No fixable OtterScript issues found in ${document.fileName}`;
-        vscode.window.showInformationMessage(msg);
-        log.info(msg);
-        return;
-      }
-
-      // -- Sort from end to start to avoid position shifts
-      const sorted = [...fixableDiagnostics].sort((a, b) => b.range.start.compareTo(a.range.start));
-      const workspaceEdit = new vscode.WorkspaceEdit();
-      let fixedCount = 0;
-
-      for (const diagnostic of sorted) {
-        const factory = FIX_FACTORIES[getDiagnosticCode(diagnostic)];
-        const action = factory?.(document, diagnostic) ?? null;
-
-        if (!action?.edit) continue;
-
-        // -- Copy the action's edits into the combined edit. entries() yields
-        // TextEdits; an insert is a TextEdit with an empty range, so replace()
-        // reproduces inserts and replacements alike.
-        let hasEdits = false;
-        for (const [uri, uriEdits] of action.edit.entries()) {
-          if (uriEdits.length) hasEdits = true;
-          for (const { range, newText } of uriEdits) {
-            workspaceEdit.replace(uri, range, newText);
-          }
-        }
-        if (hasEdits) fixedCount++;
-      }
-
-      if (fixedCount) {
-        await vscode.workspace.applyEdit(workspaceEdit);
-        updateDiagnostics(document, diagnostics, diagnosticsContext);
-        const msg = `Fixed ${fixedCount} issue(s) in ${document.fileName}`;
-        vscode.window.showInformationMessage(msg);
-        log.info(msg);
-      }
-    }
-  );
-
-  // ============================================================
-  // GO TO DEFINITION PROVIDER (Modules)
-  // ============================================================
-  // Enables Go-to-Definition (F12 / Ctrl+Click) for calls like:
-  // call MyHelper(...) by navigating to the corresponding module MyHelper
-
-  const definitionProvider = vscode.languages.registerDefinitionProvider(
-    "otterscript", {
-      provideDefinition(document, position) {
-
-        const wordRange = document.getWordRangeAtPosition(position, MODULE_NAME_TOKEN_REGEX);
-        if (!wordRange) return null;
-
-        const calledName = document.getText(wordRange);
-
-        // -- Verify this is actually a 'call' statement
-        const lineText = document.lineAt(position.line).text;
-        if (isInStringOrCommentDoc(document, wordRange.start)) {
-          return null;
-        }
-
-        if (!isModuleCallContext(lineText, wordRange.start.character)) {
-          return null;  // Not a 'call' statement - ignore
-        }
-
-        const declarationRange = findModuleDeclarationRange(document, calledName);
-        return declarationRange ? new vscode.Location(document.uri, declarationRange) : null;
-      }
-    }
-  );
-
-  // ============================================================
-  // FIND REFERENCES PROVIDER (Modules)
-  // ============================================================
-  // Enables Shift+F12 and powers CodeLens reference counts for module calls.
-
-  const referenceProvider = vscode.languages.registerReferenceProvider(
-    "otterscript",
-    {
-      /**
-       * Resolves references for a module symbol from either declaration or call sites.
-       *
-       * @param {vscode.TextDocument} document
-       * @param {vscode.Position} position
-       * @param {vscode.ReferenceContext} refContext
-       * @returns {vscode.Location[]}
-       */
-      provideReferences(document, position, refContext) {
-        const wordRange = document.getWordRangeAtPosition(position, MODULE_NAME_TOKEN_REGEX);
-        if (!wordRange) return [];
-
-        const moduleName = document.getText(wordRange);
-
-        const currentLine = document.lineAt(position.line).text;
-        if (isInStringOrCommentDoc(document, wordRange.start)) {
-          return [];
-        }
-
-        const isModuleDecl = isModuleDeclarationContext(currentLine, wordRange.start.character);
-        const isCallSite = isModuleCallContext(currentLine, wordRange.start.character);
-        if (!isModuleDecl && !isCallSite) return [];
-
-        return findModuleReferences(document, moduleName, refContext.includeDeclaration);
-      }
-    }
-  );
-
-  // ============================================================
-  // DOCUMENT SYMBOL PROVIDER (Outline / Go to Symbol)
-  // ============================================================
-  // Populates the Outline panel and breadcrumbs with module declarations.
-  // Enables Ctrl+Shift+O (Go to Symbol) to jump to any module in the file.
-
-  const documentSymbolProvider = vscode.languages.registerDocumentSymbolProvider(
-    "otterscript",
-    {
-      /**
-       * Scans the document for module declarations and returns them as symbols.
-       *
-       * @param {vscode.TextDocument} document
-       * @returns {vscode.DocumentSymbol[]}
-       */
-      provideDocumentSymbols(document) {
-        return getModuleDeclarations(document).map(entry =>
-          new vscode.DocumentSymbol(
-            entry.name,
-            "",
-            vscode.SymbolKind.Module,
-            entry.lineRange,
-            entry.range
-          )
-        );
-      }
-    }
-  );
-
-  // ============================================================
-  // WORKSPACE SYMBOL PROVIDER (module declarations across files)
-  // ============================================================
-  // Powers "Go to Symbol in Workspace" (Ctrl+T): every `module` declaration in
-  // every .otter/.oscript file in the workspace. Backed by an in-memory index
-  // and kept fresh by a file-system watcher. The open editor's live/unsaved view
-  // is still served by the document symbol provider.
-  //
-  // The index is built lazily: activation does NO disk I/O for it. The first
-  // Ctrl+T (provideWorkspaceSymbols) triggers the one-time scan; the watcher
-  // then keeps it current. Workspaces that never use Ctrl+T never pay for it.
-  //
-  // All index work is also gated on `otterscript.workspaceSymbols.enable`: when
-  // it is off, no scanning, disk reads, or index mutations happen.
-
-  const OTTER_FILE_GLOB = "**/*.{otter,oscript}";
-  // Cap on the workspace scan: files matched, and concurrent reads in flight.
-  const WORKSPACE_SCAN_FILE_LIMIT = 5000;
-  const WORKSPACE_SCAN_CONCURRENCY = 20;
-
-  /**
-   * @typedef {{ uri: vscode.Uri, symbols: { name: string, range: vscode.Range }[] }} ModuleIndexEntry
-   */
-  /** @type {Map<string, ModuleIndexEntry>} keyed by uri.toString() */
-  const workspaceModuleIndex = new Map();
-  /** @type {Map<string, ReturnType<typeof setTimeout>>} */
-  const workspaceIndexTimers = new Map();
-
-  /**
-   * Applies (or clears, when it declares no modules) one file's module-index
-   * entry from its text.
-   *
-   * @param {vscode.Uri} uri
-   * @param {string} text
-   * @returns {void}
-   */
-  function setModuleIndexEntry(uri, text) {
-    if (!workspaceSymbolsEnabled) return;
-    const symbols = findModuleDeclarations(text).map(hit => ({
-      name: hit.name,
-      range: new vscode.Range(
-        hit.line, hit.character, hit.line, hit.character + hit.name.length
-      ),
-    }));
-
-    if (symbols.length > 0) {
-      workspaceModuleIndex.set(uri.toString(), { uri, symbols });
-    } else {
-      workspaceModuleIndex.delete(uri.toString());
-    }
-  }
-
-  /**
-   * Reads one file from disk and refreshes (or removes) its module-index entry.
-   *
-   * @param {vscode.Uri} uri
-   * @returns {Promise<void>}
-   */
-  async function indexModuleFile(uri) {
-    if (!workspaceSymbolsEnabled) return;
-    try {
-      const bytes = await vscode.workspace.fs.readFile(uri);
-      setModuleIndexEntry(uri, new TextDecoder("utf-8").decode(bytes));
-    } catch {
-      // Gone or unreadable -- drop it.
-      workspaceModuleIndex.delete(uri.toString());
-    }
-  }
-
-  /**
-   * Rescans every OtterScript file in the workspace from scratch.
-   *
-   * @returns {Promise<void>}
-   */
-  async function rebuildWorkspaceModuleIndex() {
-    workspaceModuleIndex.clear();
-    if (!workspaceSymbolsEnabled) return;
-
-    const files = await vscode.workspace.findFiles(
-      OTTER_FILE_GLOB, undefined, WORKSPACE_SCAN_FILE_LIMIT
-    );
-    // Bounded concurrency -- avoid firing thousands of fs.readFile at once.
-    await mapWithConcurrency(files, WORKSPACE_SCAN_CONCURRENCY, indexModuleFile);
-
-    // Also cover already-open OtterScript documents. This is what makes the
-    // provider work for loose files and for a window with no folder open, where
-    // findFiles returns nothing.
-    for (const doc of vscode.workspace.textDocuments) {
-      if (doc.languageId === "otterscript") setModuleIndexEntry(doc.uri, doc.getText());
-    }
-
-    const moduleCount = [...workspaceModuleIndex.values()].reduce((n, e) => n + e.symbols.length, 0);
-    log.info(
-      `Workspace module index: ${moduleCount} module(s) in ${workspaceModuleIndex.size} file(s) ` +
-      `(${files.length} on disk)`
-    );
-  }
-
-  // Lazily-built index. `null` until the first workspace-symbol query (or a
-  // watcher event once a build has happened) kicks off rebuildWorkspaceModuleIndex.
-  // Reset to `null` on failure so the next query retries, and when the enable
-  // setting is toggled (see the config listener below).
-  /** @type {Promise<void> | null} */
-  let workspaceIndexReady = null;
-
-  /**
-   * Ensures the workspace module index has been built (once), returning the
-   * in-flight or settled build promise. Callers await this before reading
-   * `workspaceModuleIndex`.
-   *
-   * @returns {Promise<void>}
-   */
-  function ensureWorkspaceIndex() {
-    if (!workspaceIndexReady) {
-      workspaceIndexReady = rebuildWorkspaceModuleIndex().catch(err => {
-        log.error("Failed to build workspace module index", err);
-        workspaceIndexReady = null; // let the next query retry
-      });
-    }
-    return workspaceIndexReady;
-  }
-
-  const workspaceSymbolProvider = vscode.languages.registerWorkspaceSymbolProvider({
-    /**
-     * @param {string} query
-     * @returns {Promise<vscode.SymbolInformation[]>}
-     */
-    async provideWorkspaceSymbols(query) {
-      if (!workspaceSymbolsEnabled) return [];
-      await ensureWorkspaceIndex();
-
-      const needle = query.toLowerCase();
-      /** @type {vscode.SymbolInformation[]} */
-      const results = [];
-      for (const { uri, symbols } of workspaceModuleIndex.values()) {
-        for (const { name, range } of symbols) {
-          if (needle && !name.toLowerCase().includes(needle)) continue;
-          results.push(new vscode.SymbolInformation(
-            name,
-            vscode.SymbolKind.Module,
-            "",
-            new vscode.Location(uri, range)
-          ));
-        }
-      }
-      return results;
-    }
-  });
-
-  // Watcher events only matter once the index has actually been built: before
-  // the first Ctrl+T there is nothing to keep fresh, and touching it here would
-  // leave a misleading partial index. `!workspaceIndexReady` covers both "never
-  // built" and "last build failed"; the next query rebuilds from scratch anyway.
-  const otterFileWatcher = vscode.workspace.createFileSystemWatcher(OTTER_FILE_GLOB);
-  otterFileWatcher.onDidCreate(uri => {
-    if (!workspaceSymbolsEnabled || !workspaceIndexReady) return;
-    void indexModuleFile(uri);
-  });
-  otterFileWatcher.onDidDelete(uri => {
-    workspaceModuleIndex.delete(uri.toString());
-    clearTimerForUri(workspaceIndexTimers, uri);
-  });
-  otterFileWatcher.onDidChange(uri => {
-    // Gated so no debounce timers accumulate in workspaceIndexTimers when the
-    // feature is off or the index has not been built yet.
-    if (!workspaceSymbolsEnabled || !workspaceIndexReady) return;
-    // Debounced -- a save can arrive alongside editor change events.
-    scheduleTimerForUri(workspaceIndexTimers, uri, 400, () => { void indexModuleFile(uri); });
-  });
-
-  // -- React to `otterscript.workspaceSymbols.enable` flipping at runtime.
-  //    Either way we just reset the lazy state: enabling does NOT eagerly scan
-  //    (the next Ctrl+T builds it, like a fresh activation); disabling drops the
-  //    index and any pending debounce timers. Reads the setting here so it does
-  //    not depend on any other listener's ordering.
-  context.subscriptions.push(
-    vscode.workspace.onDidChangeConfiguration(e => {
-      if (!e.affectsConfiguration("otterscript.workspaceSymbols.enable")) return;
-      workspaceSymbolsEnabled = vscode.workspace
-        .getConfiguration("otterscript")
-        .get("workspaceSymbols.enable", true);
-      workspaceModuleIndex.clear();
-      for (const timer of workspaceIndexTimers.values()) clearTimeout(timer);
-      workspaceIndexTimers.clear();
-      workspaceIndexReady = null;
-    })
-  );
-
-  // ============================================================
-  // CODE LENS PROVIDER (Module References)
-  // ============================================================
-  // Shows reference counts above module declarations and links to
-  // VS Code's reference peek UI.
-
-  const codeLensProvider = vscode.languages.registerCodeLensProvider(
-    "otterscript",
-    {
-      /**
-       * Builds code lenses for module declarations.
-       *
-       * @param {vscode.TextDocument} document
-       * @returns {vscode.CodeLens[]}
-       */
-      provideCodeLenses(document) {
-        if (!codeLensEnabled) return [];
-        /** @type {vscode.CodeLens[]} */
-        const lenses = [];
-        const declarations = getModuleDeclarations(document);
-        const declarationNames = new Set(declarations.map(declaration => declaration.name));
-        const refsByName = getModuleCallReferencesByName(document, declarationNames);
-
-        for (const declaration of declarations) {
-          const range = declaration.range;
-          const usageRefs = refsByName.get(declaration.name) ?? [];
-
-          lenses.push(
-            new vscode.CodeLens(range, {
-              title: `${usageRefs.length} reference${usageRefs.length === 1 ? "" : "s"}`,
-              command: "editor.action.showReferences",
-              arguments: [document.uri, range.start, usageRefs]
-            })
-          );
-        }
-
-        return lenses;
-      }
-    }
-  );
-
-  // ============================================================
-  // FOLDING RANGE PROVIDER
-  // ============================================================
-  // Lets users collapse { } blocks, %(...), @(... ), <% %> template tags,
-  // /* */ block comments, and #region/#endregion.
-  // Reuses the same CodeScanState masking pass as diagnostics, so folding
-  // never disagrees with what diagnostics/hover treat as real code.
-
-  const foldingRangeProvider = vscode.languages.registerFoldingRangeProvider(
-    "otterscript",
-    {
-      /**
-       * @param {vscode.TextDocument} document
-       * @returns {vscode.FoldingRange[]}
-       */
-      provideFoldingRanges(document) {
-        return computeFoldingRanges(document);
-      }
-    }
-  );
-
-  // ============================================================
-  // DIAGNOSTICS (ERRORS & WARNINGS)
-  // ============================================================
-  // Provides real-time syntax checking and problem detection (see
-  // diagnostics.js for the full list). Examples:
-  //   - Missing $ before variables in if conditions
-  //   - Unknown functions / operations / namespaces
-  //   - Invalid logical operators (& instead of &&)
-  //   - Unbalanced braces, parentheses, brackets, and <% %> tags
+  // The checks live in diagnostics.js (see there for the full list); this
+  // only decides when they run: on open and save at once, on edits after a
+  // 400 ms pause, and on demand (quick fixes, Fix All, settings changes).
 
   const diagnostics = vscode.languages.createDiagnosticCollection("otterscript");
+  /** @type {import("./diagnostics").DiagnosticsContext} */
   const diagnosticsContext = {
     nonVariableIdentifiers: NON_VARIABLE_IDENTIFIERS,
-    knownKeywords,
-    knownScalarFunctions,
-    knownVectorFunctions,
+    knownKeywords: new Set(Object.keys(keywordDocs)),
+    knownScalarFunctions: new Set(Object.keys(scalarFunctionDocs)),
+    knownVectorFunctions: new Set(Object.keys(vectorFunctionDocs)),
     scalarFunctionDocs,
     vectorFunctionDocs,
     mapFunctionDocs,
     knownOperations,
     knownNamespaces: NAMESPACES,
-    scalarCallRegex,
-    vectorCallRegex,
-    operationCallRegex,
+    scalarCallRegex: patterns.scalarCallRegex,
+    vectorCallRegex: patterns.vectorCallRegex,
+    operationCallRegex: patterns.operationCallRegex,
+    diagnosticRules: settings.diagnosticRules,
+    adaptiveCardMaxVersion: settings.adaptiveCardMaxVersion,
   };
 
-  context.subscriptions.push(diagnostics);
+  /**
+   * Checks a document now, cancelling any pending debounced run for it.
+   *
+   * @param {vscode.TextDocument} document
+   * @returns {void}
+   */
+  const runDiagnostics = (document) => {
+    clearTimerForUri(diagnosticTimers, document.uri);
+    updateDiagnostics(document, diagnostics, diagnosticsContext);
+  };
 
-  const refreshDiagnosticsCommand = vscode.commands.registerCommand(
-    REFRESH_DIAGNOSTICS_COMMAND,
-    async (uri) => {
-      if (!uri) return;
+  // ============================================================
+  // LANGUAGE FEATURES
+  // ============================================================
 
-      const existing = vscode.workspace.textDocuments.find(doc => doc.uri.toString() === uri.toString());
-      const document = existing ?? await vscode.workspace.openTextDocument(uri);
-      if (document.languageId !== "otterscript") return;
-
-      clearTimerForUri(diagnosticTimers, document.uri);
-      updateDiagnostics(document, diagnostics, diagnosticsContext);
-    }
+  const workspaceSymbols = registerWorkspaceSymbols(settings);
+  context.subscriptions.push(
+    diagnostics,
+    ...registerCodeActions(settings, diagnostics, runDiagnostics),
+    ...registerCompletion(settings),
+    ...registerHover(settings, patterns.operationRegex()),
+    ...registerNavigation(settings),
+    ...registerSignatureHelp(settings, patterns),
+    ...workspaceSymbols.disposables,
   );
 
   // ============================================================
-  // INITIAL DIAGNOSTICS & SUBSCRIPTION REGISTRATION
+  // SETTINGS CHANGES
   // ============================================================
-  // Run initial diagnostics for already-open files
-  // This handles files that were open before the extension activated
-  // Without this, users would need to retype or reopen files to see errors
-  vscode.workspace.textDocuments.forEach(document => updateDiagnostics(document, diagnostics, diagnosticsContext));
-
-  // Register all extension subscriptions in a single batch
-  // VS Code automatically disposes these when the extension deactivates
+  // The one listener for `otterscript.*` settings: reloads them all at once,
+  // then does what a particular change needs -- reset the workspace index, or
+  // re-run diagnostics in every open file so new rules or a new Adaptive Card
+  // version limit apply without an edit.
   context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(e => {
+      if (!e.affectsConfiguration("otterscript")) return;
+      Object.assign(settings, loadConfig());
+      log.info(`Settings reloaded: ${describeSettings()}`);
 
+      if (e.affectsConfiguration("otterscript.workspaceSymbols.enable")) workspaceSymbols.resetWorkspaceIndex();
+
+      if (e.affectsConfiguration("otterscript.diagnostics.rules") ||
+          e.affectsConfiguration("otterscript.adaptiveCards.maxVersion")) {
+        diagnosticsContext.diagnosticRules = settings.diagnosticRules;
+        diagnosticsContext.adaptiveCardMaxVersion = settings.adaptiveCardMaxVersion;
+        for (const document of vscode.workspace.textDocuments) runDiagnostics(document);
+      }
+    })
+  );
+
+  // ============================================================
+  // DOCUMENT EVENTS
+  // ============================================================
+  // Run initial diagnostics for files that were open before the extension
+  // activated; without this, they'd show nothing until edited or reopened.
+  vscode.workspace.textDocuments.forEach(runDiagnostics);
+
+  context.subscriptions.push(
     // -- Output channel used for logging
     getOutputChannel(),
 
-    // -- Re-run diagnostics whenever text changes (every keystroke)
-
+    // -- After a pause in typing, re-run diagnostics and refresh the
+    //    document's entry in the workspace module index, so Go to Symbol in
+    //    Workspace follows unsaved edits (an added, renamed or removed module)
+    //    without waiting for a save.
     vscode.workspace.onDidChangeTextDocument(e => {
       if (e.document.languageId !== "otterscript") return;
-
       scheduleTimerForUri(diagnosticTimers, e.document.uri, 400, () => {
         updateDiagnostics(e.document, diagnostics, diagnosticsContext);
+        workspaceSymbols.setModuleIndexEntry(e.document.uri, e.document.getText());
       });
     }),
-    // -- Run diagnostics when a new file is opened (handles files opened after
-    // activation), and index its modules for Go to Symbol in Workspace
+
+    // -- Run diagnostics when a file is opened after activation, and index
+    //    its modules for Go to Symbol in Workspace
     vscode.workspace.onDidOpenTextDocument(document => {
-      updateDiagnostics(document, diagnostics, diagnosticsContext);
-      if (document.languageId === "otterscript") setModuleIndexEntry(document.uri, document.getText());
+      runDiagnostics(document);
+      if (document.languageId === "otterscript") {
+        workspaceSymbols.setModuleIndexEntry(document.uri, document.getText());
+      }
     }),
 
-    // -- Re-run diagnostics (and refresh the module index) on save. The
-    // onDidChangeTextDocument handler above is debounced, so this gives an
-    // immediate refresh on explicit/auto save and covers the case where a save
-    // reconciles the buffer with on-disk changes.
+    // -- Re-run diagnostics (and refresh the module index) on save. The change
+    //    handler above is debounced, so this gives an immediate refresh on
+    //    explicit/auto save and covers a save that reconciles the buffer with
+    //    on-disk changes.
     vscode.workspace.onDidSaveTextDocument(document => {
       if (document.languageId === "otterscript") {
-        updateDiagnostics(document, diagnostics, diagnosticsContext);
-        setModuleIndexEntry(document.uri, document.getText());
+        runDiagnostics(document);
+        workspaceSymbols.setModuleIndexEntry(document.uri, document.getText());
       }
     }),
 
-    // -- Clean up diagnostics and module navigation cache when a file is closed.
+    // -- Clean up diagnostics and per-document caches when a file is closed.
     vscode.workspace.onDidCloseTextDocument(doc => {
+      // A file stays in the index (it's still on disk), but its entry came
+      // from the live buffer, so re-read it from disk: closing without saving
+      // must drop unsaved module declarations. An untitled document's entry
+      // goes with it.
+      if (doc.uri.scheme !== "file") workspaceSymbols.removeModuleIndexEntry(doc.uri);
+      else if (doc.languageId === "otterscript") void workspaceSymbols.indexModuleFile(doc.uri);
       diagnostics.delete(doc.uri);
-      clearModuleInfoCache(doc.uri);
+      clearDocumentCaches(doc.uri);
       clearTimerForUri(diagnosticTimers, doc.uri);
     }),
-
-    // -- Providers, commands, and watchers (alphabetical). VS Code disposes
-    //    everything pushed here automatically on deactivation.
-    codeActionsProvider,
-    codeLensProvider,
-    definitionProvider,
-    documentSymbolProvider,
-    fixAllCommand,
-    foldingRangeProvider,
-    functionCompletionProvider,
-    hoverProvider,
-    mapCompletionProvider,
-    operationCompletionProvider,
-    otterFileWatcher,
-    referenceProvider,
-    refreshDiagnosticsCommand,
-    signatureHelpProvider,
-    variableCompletionProvider,
-    vectorCompletionProvider,
-    workspaceSymbolProvider,
-
-    // -- Cancel any pending workspace-index debounce timers on deactivation
-    //    (mirrors the diagnosticTimers cleanup in deactivate()).
-    {
-      dispose() {
-        for (const timer of workspaceIndexTimers.values()) clearTimeout(timer);
-        workspaceIndexTimers.clear();
-      }
-    }
   );
 }
 
 // ============================================================
 // DEACTIVATION
 // ============================================================
-// Called when the extension is disabled or VS Code shuts down.
+/**
+ * Called when the extension is disabled or VS Code shuts down: cancels any
+ * pending debounced diagnostics runs. Everything registered in
+ * `context.subscriptions` is disposed by VS Code itself.
+ *
+ * @returns {void}
+ */
 function deactivate() {
   for (const timer of diagnosticTimers.values()) {
     clearTimeout(timer);

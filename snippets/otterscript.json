@@ -74,10 +74,58 @@
     ],
     "description": "Template if/else block"
   },
+  // A whole text-template body for a Teams incoming webhook or Workflows
+  // trigger. Values come from OtterScript through $ToJson(...), which adds the
+  // JSON quotes and escaping; the <% foreach %> rows start with a comma so the
+  // array stays valid JSON however many items there are.
+  "Teams Adaptive Card Message": {
+    "prefix": "teamscard",
+    "body": [
+      "{",
+      "  \"type\": \"message\",",
+      "  \"attachments\": [",
+      "    {",
+      "      \"contentType\": \"application/vnd.microsoft.card.adaptive\",",
+      "      \"content\": {",
+      "        \"type\": \"AdaptiveCard\",",
+      "        \"version\": \"${1|1.5,1.6,1.4,1.2|}\",",
+      "        \"body\": [",
+      "          {",
+      "            \"type\": \"TextBlock\",",
+      "            \"text\": \"${2:Title}\",",
+      "            \"size\": \"large\",",
+      "            \"weight\": \"bolder\",",
+      "            \"wrap\": true",
+      "          },",
+      "          {",
+      "            \"type\": \"TextBlock\",",
+      "            \"text\": \\$ToJson(\\$${3:Message}),",
+      "            \"wrap\": true",
+      "          },",
+      "          {",
+      "            \"type\": \"FactSet\",",
+      "            \"facts\": [",
+      "              { \"title\": \"${4:Name}\", \"value\": \\$ToJson(\\$${5:Value}) }",
+      "<% foreach %${6:item} in @${7:Items} { %>",
+      "              ,{ \"title\": \\$ToJson(%${6:item}.${8:Name}), \"value\": \\$ToJson(%${6:item}.${9:Value}) }",
+      "<% } %>",
+      "            ]",
+      "          }",
+      "        ],",
+      "        \"actions\": [",
+      "          { \"type\": \"Action.OpenUrl\", \"title\": \"${10:Open}\", \"url\": \\$ToJson(\\$${11:Url}) }",
+      "        ]",
+      "      }",
+      "    }",
+      "  ]",
+      "}$0"
+    ],
+    "description": "Text-template body that posts an Adaptive Card to a Teams incoming webhook or Workflows trigger"
+  },
   "If Match Regex": {
     "prefix": "ifMatchesRegex",
     "body": [
-      "if $$MatchesRegex(${1:text}, \"${2:pattern}\") {",
+      "if \\$MatchesRegex(${1:text}, \"${2:pattern}\") {",
       "    ${3:# matched}",
       "}"
     ],
@@ -92,13 +140,13 @@
   },
   "Join Vector to String": {
     "prefix": "joinIntoString",
-    "body": ["$${1:result} = $$Join(\"${2:, }\", @${3:vector});"],
+    "body": ["$${1:result} = \\$Join(\"${2:, }\", @${3:vector});"],
     "description": "Join vector elements into a string"
   },
   "File Exists Check": {
     "prefix": "ifexists",
     "body": [
-      "if $$FileExists(\"${1:C:\\\\path\\\\to\\\\file}\") {",
+      "if \\$FileExists(\"${1:C:\\\\path\\\\to\\\\file}\") {",
       "    ${2:# file exists}",
       "}"
     ],
@@ -107,7 +155,7 @@
   "Directory Exists Check": {
     "prefix": "ifdirexists",
     "body": [
-      "if $$DirectoryExists(\"${1:C:\\\\path\\\\to\\\\directory}\") {",
+      "if \\$DirectoryExists(\"${1:C:\\\\path\\\\to\\\\directory}\") {",
       "    ${2:# directory exists}",
       "}"
     ],

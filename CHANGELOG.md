@@ -1,5 +1,40 @@
 # Changelog
 
+## [0.5.0] - 2026-10-01
+
+### Added
+
+- Highlight all occurrences for variables and modules: clicking `$x`, `@list`, `%map` (or the braced `${x}` / `@{list}` forms, whose names may contain spaces) highlights every reference in the file — including inside strings, where OtterScript expands them, but not in comments — and marks declarations and assignments as writes. Clicking a module name highlights its declaration and every `call` to it
+- `otterscript.diagnostics.rules` setting to turn individual diagnostics off or change their severity, keyed by diagnostic code; every diagnostic also gets a **Turn off '&lt;code&gt;' diagnostics** quick fix. Unbalanced-symbol and unmatched/unclosed `<% %>` diagnostics now have codes too (`unbalanced-symbol`, `template-unexpected-close`, `template-unclosed`)
+- `teamscard` snippet: a complete text-template body for a Teams incoming webhook or Workflows trigger — the message envelope with the right `contentType`, an Adaptive Card whose values come from OtterScript through `$ToJson(...)`, and a `<% foreach %>` loop that adds fact rows while keeping the JSON valid
+- `adaptivecard-version-too-low` diagnostic: an Adaptive Card element, action or property that needs a newer card version than the card's declared `"version"` (e.g. a 1.5 `Table` or `"rtl"`, or an input's 1.3 `"label"`, in a 1.2 card) is flagged, unless it or an enclosing element has a `"fallback"`. The quick fix **Change card version to X** raises the version to the highest one the card needs; when that is above `otterscript.adaptiveCards.maxVersion`, the fix says so and **Fix All** leaves it to you
+- `adaptivecard-invalid-value` diagnostic: an Adaptive Card property value that the property doesn't allow, such as `"weight": "bold"` or `"color": "red"`, with a quick fix to the closest allowed value (`bolder`). Values are compared case-insensitively, as hosts do, and values filled in by OtterScript are skipped
+- `adaptivecard-version-too-high` diagnostic and `otterscript.adaptiveCards.maxVersion` setting (default `1.6`, what Microsoft Teams supports): a card whose `"version"` is newer than the host supports is flagged, since the host would show its `fallbackText` instead
+- `adaptivecard-templating-keyword` diagnostic: an Adaptive Card Templating key such as `"$data"` or `"$when"`, which OtterScript expands as its own variable in a text template, with a quick fix to escape it (`` "`$data" ``)
+- Teams message checks, when the card is sent as an attachment of a `"type": "message"` body: `adaptivecard-content-type` flags a missing or wrong `"contentType"` (with a quick fix), and `adaptivecard-webhook-submit` flags `Action.Submit`, which Teams incoming webhooks and Workflows don't support
+
+### Changed
+
+- The Adaptive Card checks now cover the whole Adaptive Card 1.6 schema plus the Teams-only elements it leaves out, such as `Badge`, `Icon`, `CodeBlock` and the charts, which were previously flagged as unknown types
+- The Adaptive Card checks are much faster on large cards: each card is now parsed once per check instead of being re-scanned for every lookup (a 2,000-element card went from about 1 s to about 10 ms)
+- Hover, completion and highlighting no longer rescan a large file from the top on every request
+
+### Fixed
+
+- The `assignment-in-condition` and `invalid-operator` checks looked at the whole `if` line, so `if $Debug { set $Level = 2; }` was flagged, and the quick fix (also run by **Fix All**) turned the body's `=` into `==`. Only the condition is checked now
+- **Replace 'for' with 'foreach'** is no longer offered for a counting loop (`for $i = 1 to 10`), where it produced `foreach $i = 1 to 10`, which is still invalid; the warning stays
+- `unknown-operation` flagged dashed names that aren't operations — variables (`$my-var`), map keys and parameter names (`my-key: 1`), module names (`call My-Module`) and arguments (`Log-Information My-Arg`). Only the first word of a statement is checked now
+- `incorrect-for-usage` on a capitalized `For` was placed at column -1, and a loop over a dashed name (`for $item-name in @list`) wasn't flagged
+- Completion after `Core::` offered no operations; it now offers the built-in ones
+- **Fix All** right after typing could apply fixes at positions from before the edit; it now re-checks the document first
+- Variable names now follow Inedo's grammar: syntax highlighting no longer runs on past a plain name into the following words (`"Deploying $Name to $Server"` colored "$Name to " as one variable; only a braced `${my var}` may contain spaces). Indexed expressions such as `@list[1]` and `%map.key` now get their own color
+- Signature help no longer disappears once an earlier argument contains a nested call or a parenthesis inside a string (e.g. `$Substring($Trim($x), …`), and no longer shows one empty parameter for functions that take none, such as `$ServerName()`
+- Hovering `$constructor`, `$toString` or similar names showed a bogus "Object" entry
+- The `#region` / `#endregion` hover appeared for the text anywhere on a line, even inside a string; it now appears only at the start of a line, where the marker folds. Its text now says it's an editor convention (a comment to OtterScript), and Ctrl+Space no longer lists it among the keywords (the `region` snippet still inserts it)
+- Snippets that insert an OtterScript `$` literally: the `Execute-PowerShell` completion lost `$_` and a `}` (inserting `Where-Object { .Status -eq "Running"  | Out-String}`), and `Acquire-Server` lost `$AcquiredServerName`. The `ifMatchesRegex`, `joinIntoString`, `ifexists` and `ifdirexists` snippets had an extra tab stop on the function name, and caused VS Code's "snippets very likely confuse snippet-variables and snippet-placeholders" warning
+- Go to Symbol in Workspace: modules added, renamed or removed in an open document now show up as you type, not only after saving; read-only views of another version of a file — the old side of a Git diff, a pull-request review — no longer add duplicate modules (or get diagnostics); closing a file without saving no longer leaves its unsaved modules in the list; and an untitled document's modules leave it when the document closes
+- Adaptive Card checks: a `"version"` key inside a nested object (such as an action's `data` payload) no longer hides a card's missing `"version"`; `TextRun` inlines in a `RichTextBlock` and the free-form `"type"` of `Authentication` sign-in buttons are no longer flagged as unknown types
+
 ## [0.4.0] - 2026-09-27
 
 ### Added

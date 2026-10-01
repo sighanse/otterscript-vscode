@@ -3,6 +3,9 @@ node_modules/
 .eslintcache
 *.tgz
 .vscode/*
+.vscode-test/
+# Settings the integration tests write while they run
+test/integration/workspace/.vscode/
 !.vscode/settings.json
 !.vscode/launch.json
 *.log

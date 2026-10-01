@@ -30,12 +30,15 @@ const {
   FoldingRangeKind,
 } = require("../vscode-stub");
 const stub = require("../vscode-stub");
+const { makeDocument } = require("./fake-document");
+const { advanceScanState, createCodeScanState, isInStringOrComment } = require("../../src/scanner.js");
 const {
   checkMissingDollar,
   findDuplicateMapKeyDiagnosticsFromMasked,
   computeFoldingRanges,
   buildHoverMarkdown,
   buildCompletionItem,
+  buildSigilCompletionItems,
   nearestNamespace,
   createUnknownNamespaceFix,
   createMissingDollarFix,
@@ -51,6 +54,7 @@ const {
   isInStringOrCommentDoc,
   isValidCompletionPosition,
   loadConfig,
+  lookupOwn,
   scheduleTimerForUri,
   clearTimerForUri,
   mapWithConcurrency,
@@ -69,41 +73,12 @@ const LITERALS = new Set(["true", "false", "null"]);
 const pos = (line, character) => new Position(line, character);
 
 /**
- * Builds a stand-in for `vscode.TextDocument` backed by a plain string.
- * Returned as `any` so call sites don't need the full TextDocument shape.
+ * A fake `vscode.TextDocument` backed by a plain string (see fake-document.js).
  *
  * @param {string} text
  * @returns {any}
  */
-function makeDoc(text) {
-  const lines = text.split("\n");
-  /** @param {{ line: number, character: number }} p */
-  const offsetAt = (p) => {
-    let offset = 0;
-    for (let i = 0; i < p.line; i++) offset += lines[i].length + 1;
-    return offset + p.character;
-  };
-  /** @param {number} offset */
-  const positionAt = (offset) => {
-    let remaining = Math.max(0, offset);
-    let line = 0;
-    while (line < lines.length - 1 && remaining > lines[line].length) {
-      remaining -= lines[line].length + 1; // +1 for the '\n'
-      line++;
-    }
-    return new Position(line, remaining);
-  };
-  return {
-    uri: { toString: () => "file:///t.otter", fsPath: "/t.otter" },
-    lineCount: lines.length,
-    offsetAt,
-    positionAt,
-    /** @param {{ start: { line: number, character: number }, end: { line: number, character: number } }} [range] */
-    getText: (range) => (range ? text.slice(offsetAt(range.start), offsetAt(range.end)) : text),
-    /** @param {number} i */
-    lineAt: (i) => ({ text: lines[i], range: { start: new Position(i, 0), end: new Position(i, lines[i].length) } }),
-  };
-}
+const makeDoc = (text) => makeDocument(text);
 
 // ============================================================
 // checkMissingDollar
@@ -559,6 +534,39 @@ describe("createRegexPatterns", () => {
 // buildCompletionItem
 // ============================================================
 
+describe("buildSigilCompletionItems", () => {
+  const table = {
+    ToJson: { name: "$ToJson", signature: "$ToJson(data)", snippet: "\\$ToJson(${1:data})" },
+    Trim: { name: "$Trim", signature: "$Trim(text)" },
+    TargetDirectory: { name: "$TargetDirectory", signature: "$TargetDirectory" },
+    Other: { name: "$Other", signature: "$Other()" },
+  };
+  const items = (/** @type {string} */ typed) =>
+    buildSigilCompletionItems(/** @type {any} */ (table), typed, { functionSort: "1_", variableSort: "2_" })
+      .map((i) => /** @type {any} */ (i));
+
+  it("filters by the typed prefix, ignoring case", () => {
+    assert.deepEqual(items("t").map((i) => i.label.label), ["$ToJson", "$Trim", "$TargetDirectory"]);
+  });
+
+  it("inserts without the sigil the user already typed, escaped or not", () => {
+    const [toJson, trim, target] = items("t");
+    assert.equal(toJson.insertText.value, "ToJson(${1:data})");
+    assert.equal(trim.insertText.value, "Trim(${0})");
+    assert.equal(target.insertText.value, "TargetDirectory");
+  });
+
+  it("makes functions Function items that open signature help, and the rest variables", () => {
+    const [toJson, , target] = items("t");
+    assert.equal(toJson.kind, "function");
+    assert.equal(toJson.sortText, "1_$ToJson");
+    assert.ok(toJson.command);
+    assert.equal(target.kind, "variable");
+    assert.equal(target.sortText, "2_$TargetDirectory");
+    assert.equal(target.command, undefined);
+  });
+});
+
 describe("buildCompletionItem", () => {
   const doc = {
     name: "$ToJson",
@@ -604,7 +612,10 @@ describe("buildCompletionItem", () => {
 // ============================================================
 
 describe("quick-fix factories", () => {
-  /** @param {number} s @param {number} e */
+  /**
+   * @param {number} s
+   * @param {number} e
+   */
   const diagAt = (s, e) => /** @type {any} */ ({
     range: { start: new Position(0, s), end: new Position(0, e) },
   });
@@ -640,6 +651,14 @@ describe("quick-fix factories", () => {
     const fix = /** @type {any} */ (createForToForeachFix(makeDoc("for $x in y"), diagAt(0, 3)));
     assert.equal(fix.title, "Replace 'for' with 'foreach'");
     assert.equal(fix.edit.edits[0][3], "foreach");
+  });
+
+  it("createForToForeachFix also works for a dashed loop variable", () => {
+    assert.ok(createForToForeachFix(makeDoc("for $item-name in @list {"), diagAt(0, 3)));
+  });
+
+  it("createForToForeachFix offers nothing for the counting form, which has no foreach equivalent", () => {
+    assert.equal(createForToForeachFix(makeDoc("for $i = 1 to 10 {"), diagAt(0, 3)), null);
   });
 
   it("createTemplateEndFix replaces the diagnostic range with '}'", () => {
@@ -680,8 +699,18 @@ describe("createUnbalancedDiagnostic", () => {
 // getDiagnosticCode
 // ============================================================
 
+describe("lookupOwn", () => {
+  it("returns a table's own entries only, never inherited Object members", () => {
+    const table = { ToJson: { name: "$ToJson" } };
+    assert.equal(lookupOwn(table, "ToJson"), table.ToJson);
+    for (const inherited of ["constructor", "toString", "valueOf", "hasOwnProperty", "__proto__"]) {
+      assert.equal(lookupOwn(table, inherited), undefined, inherited);
+    }
+  });
+});
+
 describe("getDiagnosticCode", () => {
-  it("normalises string / {value} / number / missing", () => {
+  it("normalizes string / {value} / number / missing", () => {
     assert.equal(getDiagnosticCode(/** @type {any} */ ({ code: "missing-dollar" })), "missing-dollar");
     assert.equal(getDiagnosticCode(/** @type {any} */ ({ code: { value: "x", target: {} } })), "x");
     assert.equal(getDiagnosticCode(/** @type {any} */ ({ code: 42 })), "42");
@@ -720,6 +749,44 @@ describe("isInStringOrCommentDoc", () => {
     assert.equal(isInStringOrCommentDoc(makeDoc("if $x == 5"), pos(0, 5)), false);
   });
 
+  it("matches a fresh scan at every position, whatever order lines are asked in (cached states)", () => {
+    const text = [
+      'set $a = "one /* not a comment";',
+      "/* block",
+      "   still comment */ Log-Information $a;",
+      "set $b = >>swim",
+      "text >> + 'q';",
+      "# line comment \"x\"",
+      "end",
+    ].join("\n");
+    const doc = makeDoc(text);
+    const lines = text.split("\n");
+    /**
+     * @param {number} line
+     * @param {number} character
+     */
+    const fresh = (line, character) => {
+      const state = createCodeScanState();
+      for (let i = 0; i < line; i++) advanceScanState(lines[i], state);
+      return isInStringOrComment(lines[line], character, state);
+    };
+    const positions = lines.flatMap((l, line) => [...Array(l.length + 1).keys()].map((c) => [line, c]));
+    for (const [line, character] of [...positions].reverse()) {
+      assert.equal(isInStringOrCommentDoc(doc, pos(line, character)), fresh(line, character), `${line}:${character}`);
+    }
+  });
+
+  it("rescans when the document version changes", () => {
+    let text = "/* open\nx";
+    const doc = makeDoc(text);
+    doc.getText = () => text;
+    doc.lineAt = (/** @type {number} */ i) => ({ text: text.split("\n")[i] });
+    assert.equal(isInStringOrCommentDoc(doc, pos(1, 0)), true);
+    text = "// closed\nx";
+    doc.version = 2;
+    assert.equal(isInStringOrCommentDoc(doc, pos(1, 0)), false);
+  });
+
   it("carries a block comment opened on a previous line", () => {
     const doc = makeDoc("/* c\nstill inside\n*/ code");
     assert.equal(isInStringOrCommentDoc(doc, pos(1, 3)), true);
@@ -743,13 +810,15 @@ describe("isValidCompletionPosition", () => {
 // ============================================================
 
 describe("loadConfig", () => {
-  it("defaults every feature to enabled", () => {
+  it("defaults every feature to enabled, with no diagnostic rules and Teams' card version", () => {
     assert.deepEqual(loadConfig(), {
       completionEnabled: true,
       hoverEnabled: true,
       signatureHelpEnabled: true,
       codeLensEnabled: true,
       workspaceSymbolsEnabled: true,
+      diagnosticRules: {},
+      adaptiveCardMaxVersion: "1.6",
     });
   });
 

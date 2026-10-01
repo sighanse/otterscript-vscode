@@ -69,6 +69,17 @@ class Location {
   }
 }
 
+class DiagnosticRelatedInformation {
+  /**
+   * @param {Location} location
+   * @param {string} message
+   */
+  constructor(location, message) {
+    this.location = location;
+    this.message = message;
+  }
+}
+
 /** Mirrors `vscode.DiagnosticSeverity`. */
 const DiagnosticSeverity = Object.freeze({ Error: 0, Warning: 1, Information: 2, Hint: 3 });
 
@@ -86,6 +97,8 @@ class Diagnostic {
     this.code = undefined;
     /** @type {string | undefined} */
     this.source = undefined;
+    /** @type {DiagnosticRelatedInformation[] | undefined} */
+    this.relatedInformation = undefined;
   }
 }
 
@@ -204,17 +217,35 @@ const outputChannel = {
   appendLine() {},
   name: "OtterScript (stub)",
 };
+/** Mirrors `vscode.CompletionItemKind` (only the members the providers use). */
+const CompletionItemKind = Object.freeze({
+  Function: "function",
+  Variable: "variable",
+  Keyword: "keyword",
+  Snippet: "snippet",
+});
+
+/** Mirrors `vscode.SnippetString`: the snippet text is on `.value`. */
+class SnippetString {
+  /** @param {string} [value] */
+  constructor(value = "") {
+    this.value = value;
+  }
+}
 
 const vscode = {
   Position,
   Range,
   Diagnostic,
+  DiagnosticRelatedInformation,
   DiagnosticSeverity,
   FoldingRange,
   FoldingRangeKind,
   Location,
   MarkdownString,
   CompletionItem,
+  CompletionItemKind,
+  SnippetString,
   CodeAction,
   CodeActionKind,
   WorkspaceEdit,

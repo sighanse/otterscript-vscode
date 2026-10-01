@@ -6,16 +6,19 @@
  * tested with plain Node (`node:test`) and reused outside the extension host
  * (e.g. a future CLI linter).
  *
- * It owns the single source of truth for how the extension recognises non-code
+ * It owns the single source of truth for how the extension recognizes non-code
  * spans — quoted strings, line comments, block comments, and swim-strings — plus
- * the `<% %>` text-template tag masking, the argument-index helper, and the
- * module-name regexes that build on that scan. Everything here operates on plain
- * strings, numbers, and plain state objects ({@link CodeScanState},
- * {@link TemplateScanState}); nothing here constructs a `vscode.*` value.
+ * what builds on that scan: the `<% %>` text-template tag masking, the
+ * signature-help helpers (active parameter, parameter splitting), the
+ * variable-occurrence index behind highlighting, and the module-name regexes.
+ * Everything here operates on plain strings, numbers, and plain state objects
+ * ({@link CodeScanState}, {@link TemplateScanState}); nothing here constructs a
+ * `vscode.*` value.
  *
- * `helpers.js` re-exports the members its own callers need (extension.js and
- * diagnostics.js import them from there); the rest — used only internally, by
- * adaptivecard.js, or by tests — are imported from this module directly.
+ * `helpers.js` re-exports the members its own callers need (the provider
+ * modules and diagnostics.js import them from there); the rest — used only
+ * internally, by adaptivecard.js / json-view.js, or by tests — are imported
+ * from this module directly.
  *
  * @module scanner
  */
@@ -203,11 +206,98 @@ function isModuleCallContext(lineText, wordStart) {
 // ============================================================
 
 /**
+ * What {@link stepCodeScan} found at a position:
+ * - `code` -- one character of real code
+ * - `stringDelimiter` -- a quote, or a swim-string's opening/closing fish
+ * - `stringContent` -- one character inside a quoted string or swim-string
+ * - `blockComment` -- part of a `/* ... *\/` comment, delimiters included
+ * - `lineComment` -- a `#` or `//` comment running to the end of the line
+ *
+ * @typedef {"code" | "stringDelimiter" | "stringContent" | "blockComment" | "lineComment"} ScanKind
+ */
+
+/**
+ * The one OtterScript string/comment state machine, one step at a time.
+ * Classifies whatever starts at `line[i]`, advances `state` past it, and
+ * returns where the next step starts. Every scanner in this module
+ * ({@link scanLineState}, {@link isInStringOrComment}, and the inside-tag
+ * parts of {@link maskOutsideTemplateTags} / {@link maskTemplateTagContents})
+ * is a loop over this, so they cannot disagree on what is a string or comment.
+ *
+ * Recognized: `"..."` and `'...'` strings (backslash-escaped quotes), swim
+ * strings (`>>...>>`, `>END>...>END>`: `>`, up to 5 non-`>` chars, `>`, with
+ * the body running until the same fish appears again, possibly lines later),
+ * `/* *\/` block comments, and `#` / `//` line comments.
+ *
+ * @param {string} line
+ * @param {number} i - Position to classify
+ * @param {CodeScanState} state - Mutated in place.
+ * @returns {{ kind: ScanKind, next: number }} `next` is the index just past
+ *   the classified piece (`line.length` for a line comment).
+ */
+function stepCodeScan(line, i, state) {
+  const ch = line[i];
+
+  if (state.inBlockComment) {
+    if (ch === "*" && line[i + 1] === "/") {
+      state.inBlockComment = false;
+      return { kind: "blockComment", next: i + 2 };
+    }
+    return { kind: "blockComment", next: i + 1 };
+  }
+
+  if (state.swimDelimiter) {
+    if (line.startsWith(state.swimDelimiter, i)) {
+      const next = i + state.swimDelimiter.length;
+      state.swimDelimiter = null;
+      return { kind: "stringDelimiter", next };
+    }
+    return { kind: "stringContent", next: i + 1 };
+  }
+
+  if (state.inString) {
+    if (ch === state.quote && isUnescapedQuoteAt(line, i)) {
+      state.inString = false;
+      state.quote = null;
+      return { kind: "stringDelimiter", next: i + 1 };
+    }
+    return { kind: "stringContent", next: i + 1 };
+  }
+
+  if (ch === "/" && line[i + 1] === "*") {
+    state.inBlockComment = true;
+    return { kind: "blockComment", next: i + 2 };
+  }
+
+  if (ch === ">") {
+    const swimMatch = /^>[^>]{0,5}>/.exec(line.slice(i, i + 7));
+    if (swimMatch) {
+      state.swimDelimiter = swimMatch[0];
+      return { kind: "stringDelimiter", next: i + swimMatch[0].length };
+    }
+  }
+
+  if (ch === '"' || ch === "'") {
+    state.inString = true;
+    state.quote = ch;
+    return { kind: "stringDelimiter", next: i + 1 };
+  }
+
+  if (ch === "#" || (ch === "/" && line[i + 1] === "/")) {
+    return { kind: "lineComment", next: line.length };
+  }
+
+  return { kind: "code", next: i + 1 };
+}
+
+/**
  * Core line scanner shared by {@link maskNonCodeSpans} and {@link advanceScanState}.
  *
  * Advances `state` by processing every character of `lineText`.  When `chars`
  * is non-null it is treated as a split-string output buffer: every character
- * that belongs to a non-code span is replaced with a space in that buffer.
+ * that belongs to a non-code span is replaced with a space in that buffer --
+ * except, with `keepStrings`, the contents of quoted strings and swim-strings
+ * (see {@link maskCommentSpans}).
  *
  * Exported (rather than kept file-private) so unit tests can exercise the
  * character-classification logic directly.
@@ -215,90 +305,19 @@ function isModuleCallContext(lineText, wordStart) {
  * @param {string} lineText
  * @param {CodeScanState} state - Mutated in place.
  * @param {string[] | null} chars - Output buffer, or null for state-only mode.
+ * @param {boolean} [keepStrings] - Leave quoted-string and swim-string
+ *   contents unmasked (their delimiters are still blanked).
  * @returns {void}
  * @internal
  */
-function scanLineState(lineText, state, chars) {
-  for (let i = 0; i < lineText.length; i++) {
-    const ch = lineText[i];
-
-    if (state.inBlockComment) {
-      if (chars) chars[i] = " ";
-      if (ch === "*" && lineText[i + 1] === "/") {
-        if (chars) chars[i + 1] = " ";
-        state.inBlockComment = false;
-        i++;
-      }
-      continue;
+function scanLineState(lineText, state, chars, keepStrings = false) {
+  let i = 0;
+  while (i < lineText.length) {
+    const { kind, next } = stepCodeScan(lineText, i, state);
+    if (chars && kind !== "code" && !(keepStrings && kind === "stringContent")) {
+      for (let j = i; j < next && j < chars.length; j++) chars[j] = " ";
     }
-
-    if (state.swimDelimiter) {
-      if (chars) chars[i] = " ";
-      if (lineText.startsWith(state.swimDelimiter, i)) {
-        if (chars) {
-          for (let j = 0; j < state.swimDelimiter.length; j++) {
-            if (i + j < chars.length) chars[i + j] = " ";
-          }
-        }
-        i += state.swimDelimiter.length - 1;
-        state.swimDelimiter = null;
-      }
-      continue;
-    }
-
-    if (state.inString) {
-      if (chars) chars[i] = " ";
-      if (ch === state.quote && isUnescapedQuoteAt(lineText, i)) {
-        state.inString = false;
-        state.quote = null;
-      }
-      continue;
-    }
-
-    if (ch === "/" && lineText[i + 1] === "*") {
-      if (chars) {
-        chars[i] = " ";
-        if (i + 1 < chars.length) chars[i + 1] = " ";
-      }
-      state.inBlockComment = true;
-      i++;
-      continue;
-    }
-
-    // Swim-string opener: `>`, up to 5 non-`>` chars, `>` (e.g. `>>`, `>END>`).
-    // The body runs until the same delimiter appears again, possibly lines later.
-    if (ch === ">") {
-      const swimMatch = lineText.slice(i).match(/^>[^>]{0,5}>/);
-      if (swimMatch) {
-        const delimiter = swimMatch[0];
-        if (chars) {
-          for (let j = 0; j < delimiter.length; j++) {
-            if (i + j < chars.length) chars[i + j] = " ";
-          }
-        }
-        state.swimDelimiter = delimiter;
-        i += delimiter.length - 1;
-        continue;
-      }
-    }
-
-    if (ch === '"' || ch === "'") {
-      if (chars) chars[i] = " ";
-      state.inString = true;
-      state.quote = ch;
-      continue;
-    }
-
-    // Line comments (`#` or `//`): blank the rest of the line and stop.
-    if (ch === "#") {
-      if (chars) { for (let j = i; j < chars.length; j++) chars[j] = " "; }
-      break;
-    }
-
-    if (ch === "/" && lineText[i + 1] === "/") {
-      if (chars) { for (let j = i; j < chars.length; j++) chars[j] = " "; }
-      break;
-    }
+    i = next;
   }
 }
 
@@ -367,6 +386,21 @@ function createTemplateScanState() {
 }
 
 /**
+ * Whether a `%>` at `line[i]` closes the current template tag: only when the
+ * tag's code is not inside a string, block comment or swim-string (a line
+ * comment never gets here -- the scan stops at it).
+ *
+ * @param {string} line
+ * @param {number} i
+ * @param {CodeScanState} code - The inside-tag scan state
+ * @returns {boolean}
+ */
+function isTemplateTagClose(line, i, code) {
+  return line[i] === "%" && line[i + 1] === ">" &&
+    !code.inString && !code.inBlockComment && !code.swimDelimiter;
+}
+
+/**
  * Blanks every character that is NOT inside a `<% ... %>` template tag AND NOT
  * part of an embedded `$` value expression in the literal text (see
  * {@link findEmbeddedExpressionEnd}), length-preserving, so downstream code
@@ -431,52 +465,16 @@ function maskOutsideTemplateTags(line, state) {
     // ---- Inside a tag: keep the code; `%>` closes only when it is real code --
     // A tag never closes mid string/comment/swim, so on the next `<%` `code` is
     // already clean; no reset needed.
-    if (code.inBlockComment) {
-      if (ch === "*" && line[i + 1] === "/") { code.inBlockComment = false; i++; }
-      continue;
-    }
-    if (code.swimDelimiter) {
-      if (line.startsWith(code.swimDelimiter, i)) {
-        i += code.swimDelimiter.length - 1;
-        code.swimDelimiter = null;
-      }
-      continue;
-    }
-    if (code.inString) {
-      if (ch === code.quote && isUnescapedQuoteAt(line, i)) {
-        code.inString = false;
-        code.quote = null;
-      }
-      continue;
-    }
-    if (ch === "%" && line[i + 1] === ">") {
+    if (isTemplateTagClose(line, i, code)) {
       chars[i] = " ";
       chars[i + 1] = " ";
       state.inTemplateTag = false;
       i++;
       continue;
     }
-    if (ch === "/" && line[i + 1] === "*") {
-      code.inBlockComment = true;
-      i++;
-      continue;
-    }
-    if (ch === ">") {
-      const swimMatch = line.slice(i).match(/^>[^>]{0,5}>/);
-      if (swimMatch) {
-        code.swimDelimiter = swimMatch[0];
-        i += swimMatch[0].length - 1;
-        continue;
-      }
-    }
-    if (ch === '"' || ch === "'") {
-      code.inString = true;
-      code.quote = ch;
-      continue;
-    }
-    if (ch === "#" || (ch === "/" && line[i + 1] === "/")) {
-      break; // rest of the line is a comment; nothing after can close the tag
-    }
+    const { kind, next } = stepCodeScan(line, i, code);
+    if (kind === "lineComment") break; // nothing after it can close the tag
+    i = next - 1; // the loop's i++ lands on `next`
   }
 
   return chars.join("");
@@ -534,57 +532,17 @@ function maskTemplateTagContents(line, state) {
     }
 
     // ---- Inside a tag: blank everything; `%>` closes only when it is real
-    // code, mirroring maskOutsideTemplateTags's inside-tag branch exactly. --
-    chars[i] = " ";
-    if (code.inBlockComment) {
-      if (ch === "*" && line[i + 1] === "/") { chars[i + 1] = " "; code.inBlockComment = false; i++; }
-      continue;
-    }
-    if (code.swimDelimiter) {
-      if (line.startsWith(code.swimDelimiter, i)) {
-        for (let k = 1; k < code.swimDelimiter.length; k++) chars[i + k] = " ";
-        i += code.swimDelimiter.length - 1;
-        code.swimDelimiter = null;
-      }
-      continue;
-    }
-    if (code.inString) {
-      if (ch === code.quote && isUnescapedQuoteAt(line, i)) {
-        code.inString = false;
-        code.quote = null;
-      }
-      continue;
-    }
-    if (ch === "%" && line[i + 1] === ">") {
+    // code, using the same rule as maskOutsideTemplateTags. -----------------
+    if (isTemplateTagClose(line, i, code)) {
+      chars[i] = " ";
       chars[i + 1] = " ";
       state.inTemplateTag = false;
       i++;
       continue;
     }
-    if (ch === "/" && line[i + 1] === "*") {
-      chars[i + 1] = " ";
-      code.inBlockComment = true;
-      i++;
-      continue;
-    }
-    if (ch === ">") {
-      const swimMatch = line.slice(i).match(/^>[^>]{0,5}>/);
-      if (swimMatch) {
-        for (let k = 1; k < swimMatch[0].length; k++) chars[i + k] = " ";
-        code.swimDelimiter = swimMatch[0];
-        i += swimMatch[0].length - 1;
-        continue;
-      }
-    }
-    if (ch === '"' || ch === "'") {
-      code.inString = true;
-      code.quote = ch;
-      continue;
-    }
-    if (ch === "#" || (ch === "/" && line[i + 1] === "/")) {
-      for (let k = i; k < line.length; k++) chars[k] = " ";
-      break; // rest of the line is a comment; nothing after can close the tag
-    }
+    const { next } = stepCodeScan(line, i, code);
+    for (let k = i; k < next && k < line.length; k++) chars[k] = " ";
+    i = next - 1; // the loop's i++ lands on `next`
   }
 
   return chars.join("");
@@ -722,57 +680,11 @@ function isInStringOrComment(line, position, initialState) {
   // Shallow-copy so callers that pass a carried state are not mutated.
   const scanState = initialState ? { ...initialState } : createCodeScanState();
 
-  for (let i = 0; i < limit; i++) {
-    const ch = line[i];
-
-    if (scanState.inBlockComment) {
-      if (ch === "*" && line[i + 1] === "/") {
-        scanState.inBlockComment = false;
-        i++;
-      }
-      continue;
-    }
-
-    if (scanState.swimDelimiter) {
-      if (line.startsWith(scanState.swimDelimiter, i)) {
-        i += scanState.swimDelimiter.length - 1;
-        scanState.swimDelimiter = null;
-      }
-      continue;
-    }
-
-    if (scanState.inString) {
-      if (ch === scanState.quote && isUnescapedQuoteAt(line, i)) {
-        scanState.inString = false;
-        scanState.quote = null;
-      }
-      continue;
-    }
-
-    if (ch === "/" && line[i + 1] === "*") {
-      scanState.inBlockComment = true;
-      i++;
-      continue;
-    }
-
-    if (ch === ">") {
-      const swimMatch = line.slice(i).match(/^>[^>]{0,5}>/);
-      if (swimMatch) {
-        scanState.swimDelimiter = swimMatch[0];
-        i += scanState.swimDelimiter.length - 1;
-        continue;
-      }
-    }
-
-    if (ch === '"' || ch === "'") {
-      scanState.inString = true;
-      scanState.quote = ch;
-      continue;
-    }
-
-    if (ch === "#" || (ch === "/" && line[i + 1] === "/")) {
-      return true;
-    }
+  let i = 0;
+  while (i < limit) {
+    const { kind, next } = stepCodeScan(line, i, scanState);
+    if (kind === "lineComment") return true; // the comment starts before `position`
+    i = next;
   }
 
   return scanState.inString || scanState.inBlockComment || scanState.swimDelimiter !== null;
@@ -781,6 +693,74 @@ function isInStringOrComment(line, position, initialState) {
 // ============================================================
 // ARGUMENT HELPERS
 // ============================================================
+
+/**
+ * Prepares the text before the cursor for signature-help matching: blanks
+ * strings and comments, then every fully closed `( ... )` group, so only the
+ * still-open calls keep their parentheses. Length-preserving (blanked chars
+ * become spaces).
+ *
+ * This is what lets signature help find the call the cursor is really in
+ * when an earlier argument contains a nested call or a parenthesis inside a
+ * string -- e.g. `$Substring($Trim($x), ` or `$Substring("a(b", ` -- and
+ * keeps commas inside those closed groups from shifting the active parameter.
+ *
+ * @param {string} text - Document text up to the cursor
+ * @returns {string}
+ */
+function maskClosedGroups(text) {
+  const state = createCodeScanState();
+  const chars = text
+    .split("\n")
+    .map((line) => maskNonCodeSpans(line, state))
+    .join("\n")
+    .split("");
+
+  /** @type {number[]} indexes of the currently open '(' */
+  const open = [];
+  for (let i = 0; i < chars.length; i++) {
+    if (chars[i] === "(") {
+      open.push(i);
+    } else if (chars[i] === ")") {
+      const start = open.pop();
+      if (start === undefined) continue; // stray ')' -- not this helper's concern
+      for (let k = start; k <= i; k++) if (chars[k] !== "\n") chars[k] = " ";
+    }
+  }
+  return chars.join("");
+}
+
+/**
+ * Splits a documented signature's parameter list into its parameters, for
+ * signature help: `"$Substring(text, start, (length))"` gives
+ * `["text", "start", "(length)"]`. Commas inside nested `()`, `[]` or `{}`
+ * don't split. A signature without parentheses, or with an empty list
+ * (`"$Now()"`), has no parameters.
+ *
+ * @param {string} signature
+ * @returns {string[]}
+ */
+function splitSignatureParameters(signature) {
+  const match = /\(([\s\S]*)\)/.exec(signature);
+  if (!match || match[1].trim() === "") return [];
+
+  const text = match[1];
+  /** @type {string[]} */
+  const params = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === "(" || ch === "[" || ch === "{") depth++;
+    else if (ch === ")" || ch === "]" || ch === "}") { if (depth > 0) depth--; }
+    else if (ch === "," && depth === 0) {
+      params.push(text.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  params.push(text.slice(start).trim());
+  return params;
+}
 
 /**
  * Counts the active parameter index from a partial argument string.
@@ -836,6 +816,207 @@ function getActiveParameterIndex(argsText) {
 }
 
 // ============================================================
+// VARIABLE OCCURRENCES
+// ============================================================
+// Where a `$name` / `@name` / `%name` / `${name}` token is a real variable
+// reference. Per Inedo's strings-and-literals docs, variables expand in every
+// literal expression -- quoted (single or double) and swim strings included --
+// but inside a string only `$name` is recognized on its own: `@` / `%` mid-
+// string count only inside the `$( ... )` wrapper. Comments never count, and
+// a grave accent (`` ` ``) escapes the sigil. In a text template, the tag code
+// and the `$` expressions in the literal output are what count.
+
+/**
+ * Length-preserving mask that blanks only comments, keeping string and
+ * swim-string contents (where OtterScript expands variables). String and
+ * swim-string delimiters are blanked.
+ *
+ * @param {string} lineText
+ * @param {CodeScanState} state - Mutated in place.
+ * @returns {string}
+ */
+function maskCommentSpans(lineText, state) {
+  const chars = lineText.split("");
+  scanLineState(lineText, state, chars, true);
+  return chars.join("");
+}
+
+/**
+ * @typedef {{ view: string, code: string }} VariableLineView
+ *   `view` is the line with comments (and, in a template, non-expression
+ *   literal output) blanked. `code` additionally blanks string contents, so a
+ *   non-space char there means that position is code, not inside a string.
+ */
+
+/**
+ * Builds the {@link VariableLineView} of every line of a plain script.
+ *
+ * @param {string[]} lines
+ * @returns {VariableLineView[]}
+ */
+function scriptVariableViews(lines) {
+  const viewState = createCodeScanState();
+  const codeState = createCodeScanState();
+  return lines.map((raw) => ({
+    view: maskCommentSpans(raw, viewState),
+    code: maskNonCodeSpans(raw, codeState),
+  }));
+}
+
+/**
+ * Builds the {@link VariableLineView} of every line of a text template: the
+ * tag code, plus every `$` expression in the literal output -- including one
+ * inside literal-text quotes, since a template expands `$...` anywhere in its
+ * output (e.g. `"title": "$(%p.Name)"`). Those expressions count as code.
+ *
+ * @param {string[]} lines
+ * @returns {VariableLineView[]}
+ */
+function templateVariableViews(lines) {
+  const tagState = createTemplateScanState();
+  const literalState = createTemplateScanState();
+  const viewState = createCodeScanState();
+  const codeState = createCodeScanState();
+  return lines.map((raw) => {
+    const tagCode = maskOutsideTemplateTags(raw, tagState);
+    const view = maskCommentSpans(tagCode, viewState).split("");
+    const code = maskNonCodeSpans(tagCode, codeState).split("");
+    const literal = maskTemplateTagContents(raw, literalState);
+    for (let i = 0; i < literal.length; i++) {
+      if (literal[i] !== "$" || literal[i - 1] === "`") continue;
+      const end = findEmbeddedExpressionEnd(literal, i);
+      if (end === -1) continue;
+      for (let k = i; k < end; k++) view[k] = code[k] = raw[k];
+      i = end - 1;
+    }
+    return { view: view.join(""), code: code.join("") };
+  });
+}
+
+/**
+ * A variable token: a sigil (group 1), then either a plain name (group 2) or
+ * an explicit name in braces (group 3) -- `$name` or `${name}`, likewise for
+ * `@` / `%`. Per Inedo's formal grammar a name is letters, digits, dashes and
+ * underscores, starting with a letter and not ending with a dash or
+ * underscore (`$my-var`, but `$a-$b` is `$a`, a dash, then `$b`); an explicit
+ * name may also contain spaces (`${my var}`). The char before must not be
+ * part of an identifier (so `a$b` and `%>` never match) or the grave-accent
+ * escape, and a name directly followed by `(` is a function call, not a
+ * variable (the lookahead also stops backtracking into a shorter name, like
+ * `$Fo` of `$Foo(` or `$a` of `$a-b(`).
+ * @type {RegExp}
+ */
+const VARIABLE_TOKEN_REGEX =
+  /(?<![A-Za-z0-9_`$@%])([$@%])(?:([A-Za-z](?:[A-Za-z0-9_-]*[A-Za-z0-9])?)(?![A-Za-z0-9_(]|-[A-Za-z0-9])|\{([A-Za-z][A-Za-z0-9_ -]*)\})/g;
+
+/** Text before a token that makes it a `foreach` loop variable. */
+const FOREACH_VARIABLE_PREFIX_REGEX = /\bforeach\s+$/i;
+/** A module header up to the `<` that opens its parameter list. */
+const MODULE_PARAMETER_LIST_OPEN_REGEX = /^\s*module\s+[A-Za-z][\w-]*\s*</i;
+/**
+ * Text before a token, within a module parameter list, that makes it a
+ * parameter name (`<$a`, `, $b`, `in $c`, `out $d`) rather than a default value.
+ */
+const MODULE_PARAMETER_PREFIX_REGEX = /(?:^|,|\b(?:in|out|ref))\s*$/i;
+/** Text before a token at statement start (optionally after `set` / `global`). */
+const ASSIGNMENT_PREFIX_REGEX = /(?:^|[;{}]|\bset|\bglobal)\s*$/i;
+/** Text after a token that makes it an assignment target (`=` but not `==`). */
+const ASSIGNMENT_SUFFIX_REGEX = /^\s*=(?!=)/;
+
+/**
+ * @typedef {{ line: number, character: number, length: number, write: boolean }} VariableOccurrence
+ *   `line`/`character` are 0-based and point at the sigil; `length` covers
+ *   the whole token (`$name` or `${name}`). `write` is true for a declaration
+ *   or assignment target (`set $x = ...`, `$x = ...`, `global $x = ...`,
+ *   `foreach %p in ...`, or a module parameter, whose list may span several
+ *   lines).
+ */
+
+/**
+ * The key {@link indexVariableOccurrences} files a variable under: its sigil
+ * plus its lower-cased name (OtterScript variable names are treated as
+ * case-insensitive; the sigil is part of the identity).
+ *
+ * @param {string} sigil - `$`, `@`, or `%`
+ * @param {string} name - Variable name without its sigil
+ * @returns {string}
+ */
+function variableKey(sigil, name) {
+  return sigil + name.toLowerCase();
+}
+
+/**
+ * Finds every variable reference in a document in one pass, grouped by
+ * {@link variableKey}. `$x` and `@x` are different variables; `${x}` is the
+ * same variable as `$x` (and `@{x}` as `@x`). The whole document is one
+ * scope: modules are not treated separately.
+ *
+ * @param {string} text - Full document text
+ * @returns {Map<string, VariableOccurrence[]>}
+ */
+function indexVariableOccurrences(text) {
+  const lines = text.split(/\r?\n/);
+  const views = documentUsesTemplateTags(text) ? templateVariableViews(lines) : scriptVariableViews(lines);
+
+  /** @type {Map<string, VariableOccurrence[]>} */
+  const index = new Map();
+  let inParameterList = false;
+  views.forEach(({ view, code }, line) => {
+    // -- The part of this line inside a module's `< ... >` parameter list, if any
+    let paramStart = -1;
+    let paramEnd = -1;
+    const header = inParameterList ? null : MODULE_PARAMETER_LIST_OPEN_REGEX.exec(code);
+    if (inParameterList || header) {
+      paramStart = header ? header[0].length : 0;
+      const close = code.indexOf(">", paramStart);
+      paramEnd = close === -1 ? code.length : close;
+      inParameterList = close === -1;
+    }
+
+    for (const match of view.matchAll(VARIABLE_TOKEN_REGEX)) {
+      const tokenSigil = match[1];
+      const tokenName = match[2] ?? match[3];
+      const character = match.index ?? 0;
+      const before = view.slice(0, character);
+      // Inside a string, `@` / `%` are variables only within `$( ... )`.
+      const inString = code[character] === " ";
+      if (inString && tokenSigil !== "$" && !before.endsWith("$(")) continue;
+
+      const after = view.slice(character + match[0].length);
+      const isParameter =
+        paramStart !== -1 && character >= paramStart && character < paramEnd &&
+        MODULE_PARAMETER_PREFIX_REGEX.test(code.slice(paramStart, character));
+      const write = !inString && (
+        isParameter ||
+        FOREACH_VARIABLE_PREFIX_REGEX.test(before) ||
+        (ASSIGNMENT_PREFIX_REGEX.test(before) && ASSIGNMENT_SUFFIX_REGEX.test(after))
+      );
+
+      const key = variableKey(tokenSigil, tokenName);
+      const occurrence = { line, character, length: match[0].length, write };
+      const existing = index.get(key);
+      if (existing) existing.push(occurrence);
+      else index.set(key, [occurrence]);
+    }
+  });
+  return index;
+}
+
+/**
+ * Finds every reference to one variable in a document (see
+ * {@link indexVariableOccurrences} for the rules). For repeated lookups on
+ * the same text, build the index once and use {@link variableKey} instead.
+ *
+ * @param {string} text - Full document text
+ * @param {string} sigil - `$`, `@`, or `%`
+ * @param {string} name - Variable name without its sigil
+ * @returns {VariableOccurrence[]}
+ */
+function findVariableOccurrences(text, sigil, name) {
+  return indexVariableOccurrences(text).get(variableKey(sigil, name)) ?? [];
+}
+
+// ============================================================
 // EXPORTS
 // ============================================================
 
@@ -861,8 +1042,16 @@ module.exports = {
   // -- String & comment detection
   isInStringOrComment,
 
+  // -- Variable occurrences
+  maskCommentSpans,
+  findVariableOccurrences,
+  indexVariableOccurrences,
+  variableKey,
+
   // -- Argument helpers
   getActiveParameterIndex,
+  splitSignatureParameters,
+  maskClosedGroups,
 
   // -- Module-name regexes & context predicates
   MODULE_NAME_TOKEN_REGEX,

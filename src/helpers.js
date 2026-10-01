@@ -28,11 +28,15 @@ const {
   findTemplateTagDelimiters,
   isInStringOrComment,
   getActiveParameterIndex,
+  splitSignatureParameters,
+  maskClosedGroups,
   MODULE_NAME_TOKEN_REGEX,
   MODULE_CALL_TARGET_GLOBAL_REGEX,
   isModuleDeclarationContext,
   isModuleCallContext,
   findModuleDeclarations,
+  indexVariableOccurrences,
+  variableKey,
 } = require("./scanner");
 
 // Namespace allowlist — the single source of truth lives with the data it
@@ -42,6 +46,13 @@ const { NAMESPACES } = require("./language-data");
 // ============================================================
 // CONFIGURATION
 // ============================================================
+
+/**
+ * The extension's settings, as {@link loadConfig} returns them. activate()
+ * keeps one such object and updates it in place, so the provider modules it
+ * is handed to always see current values.
+ * @typedef {ReturnType<typeof loadConfig>} Settings
+ */
 
 /**
  * Loads OtterScript configuration from VS Code workspace settings.
@@ -54,14 +65,17 @@ const { NAMESPACES } = require("./language-data");
  *   hoverEnabled: boolean,
  *   signatureHelpEnabled: boolean,
  *   codeLensEnabled: boolean,
- *   workspaceSymbolsEnabled: boolean
+ *   workspaceSymbolsEnabled: boolean,
+ *   diagnosticRules: Readonly<Record<string, string>>,
+ *   adaptiveCardMaxVersion: string
  * }}
  *
  * @example
  * // .vscode/settings.json
  * // {
  * //   "otterscript.completion.enable": false,
- * //   "otterscript.hover.enable": true
+ * //   "otterscript.hover.enable": true,
+ * //   "otterscript.diagnostics.rules": { "unknown-operation": "off" }
  * // }
  */
 function loadConfig() {
@@ -72,13 +86,36 @@ function loadConfig() {
     hoverEnabled: config.get("hover.enable", true),
     signatureHelpEnabled: config.get("signatureHelp.enable", true),
     codeLensEnabled: config.get("codeLens.enable", true),
-    workspaceSymbolsEnabled: config.get("workspaceSymbols.enable", true)
+    workspaceSymbolsEnabled: config.get("workspaceSymbols.enable", true),
+    diagnosticRules: config.get("diagnostics.rules", {}),
+    adaptiveCardMaxVersion: config.get("adaptiveCards.maxVersion", "1.6")
   };
 }
 
 // ============================================================
 // CONSTANTS
 // ============================================================
+
+/**
+ * URI schemes of read-only views of a document's other versions -- the old
+ * side of a Git diff (`git`, `gitlens`) or a pull-request review (`pr`,
+ * `review`). Diagnostics are not reported for them: they would duplicate or
+ * contradict the problems of the real file in the Problems panel.
+ * @readonly
+ * @type {ReadonlySet<string>}
+ */
+const READ_ONLY_VIEW_SCHEMES = new Set(["git", "gitlens", "pr", "review"]);
+
+/**
+ * Whether a document is a read-only view of another version of a file (see
+ * {@link READ_ONLY_VIEW_SCHEMES}) rather than a file the user edits.
+ *
+ * @param {vscode.TextDocument} document
+ * @returns {boolean}
+ */
+function isReadOnlyView(document) {
+  return READ_ONLY_VIEW_SCHEMES.has(document.uri.scheme);
+}
 
 /**
  * Set of identifier names that are valid without a '$' prefix in conditions.
@@ -152,28 +189,28 @@ function appendOutputLine(line) {
  * log.debug('Processing line', lineIndex);
  */
 const log = {
-  /** @param {...any} args - @example log.info('Extension activated') */
+  /** @param {...any} args - e.g. `log.info('Extension activated')` */
   info: (...args) => {
     const now = timestamp();
     console.log(LOGPREFIX, `[${now}]`, ...args);
     appendOutputLine(`[${now}] ${args.join(' ')}`);
   },
 
-  /** @param {...any} args - @example log.warn('Missing field') */
+  /** @param {...any} args - e.g. `log.warn('Missing field')` */
   warn: (...args) => {
     const now = timestamp();
     console.warn(LOGPREFIX, `[${now}]`, ...args);
     appendOutputLine(`⚠️ [${now}] ${args.join(' ')}`);
   },
 
-  /** @param {...any} args - @example log.error('Failed', err) */
+  /** @param {...any} args - e.g. `log.error('Failed', err)` */
   error: (...args) => {
     const now = timestamp();
     console.error(LOGPREFIX, `[${now}]`, ...args);
     appendOutputLine(`❌ [${now}] ${args.join(' ')}`);
   },
 
-  /** @param {...any} args - @example log.debug('Processing', lineIndex) */
+  /** @param {...any} args - e.g. `log.debug('Processing', lineIndex)` */
   debug: (...args) => {
     const now = timestamp();
     // Debug logs go to console only - intentionally excluded from Output Channel
@@ -454,7 +491,7 @@ function createRegexPatterns(knownOperations) {
 
 /**
  * Per-document module analysis, keyed by `uri.toString()` and invalidated by
- * `document.version`. Entries are dropped on close via {@link clearModuleInfoCache}.
+ * `document.version`. Entries are dropped on close via {@link clearDocumentCaches}.
  * @type {Map<string, ModuleInfoCacheEntry>}
  */
 const moduleInfoCache = new Map();
@@ -583,13 +620,74 @@ function getModuleCallReferencesByName(document, allowedModuleNames) {
 }
 
 /**
- * Clears cached module info for a document URI.
+ * Per-document variable index ({@link indexVariableOccurrences}), keyed by
+ * `uri.toString()` and invalidated by `document.version`, so highlighting on
+ * every cursor move doesn't rescan an unchanged document. Entries are dropped
+ * on close via {@link clearDocumentCaches}.
+ * @type {Map<string, { version: number, index: Map<string, import("./scanner").VariableOccurrence[]> }>}
+ */
+const variableIndexCache = new Map();
+
+/**
+ * Scan states at the start of each line, per document version: `states[i]`
+ * is the state on entering line `i`. Filled in lazily, only as far as a
+ * request has needed, so hover, completion and highlight on every keystroke
+ * don't rescan the document from line 1. Dropped on close via
+ * {@link clearDocumentCaches}.
+ * @type {Map<string, { version: number, states: import("./scanner").CodeScanState[] }>}
+ */
+const lineStartStateCache = new Map();
+
+/**
+ * Every reference to one variable in a document (see
+ * {@link indexVariableOccurrences}), from a per-version cache.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {string} sigil - `$`, `@`, or `%`
+ * @param {string} name - Variable name without its sigil
+ * @returns {import("./scanner").VariableOccurrence[]}
+ */
+function getVariableOccurrences(document, sigil, name) {
+  const cacheKey = document.uri.toString();
+  let cached = variableIndexCache.get(cacheKey);
+  if (!cached || cached.version !== document.version) {
+    cached = { version: document.version, index: indexVariableOccurrences(document.getText()) };
+    variableIndexCache.set(cacheKey, cached);
+  }
+  return cached.index.get(variableKey(sigil, name)) ?? [];
+}
+
+/**
+ * Clears the per-document caches (module info, variable index and line-start
+ * scan states) for a document URI.
  *
  * @param {import('vscode').Uri} uri
  * @returns {void}
  */
-function clearModuleInfoCache(uri) {
+function clearDocumentCaches(uri) {
   moduleInfoCache.delete(uri.toString());
+  variableIndexCache.delete(uri.toString());
+  lineStartStateCache.delete(uri.toString());
+}
+
+/**
+ * The module name under the cursor, when it is a real module reference: the
+ * name in a `module X` declaration or a `call X` statement, outside strings
+ * and comments. Shared by Go to Definition, Find References and Highlight.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Position} position
+ * @returns {{ name: string, range: vscode.Range, isDeclaration: boolean } | null}
+ */
+function getModuleNameAt(document, position) {
+  const range = document.getWordRangeAtPosition(position, MODULE_NAME_TOKEN_REGEX);
+  if (!range || isInStringOrCommentDoc(document, range.start)) return null;
+
+  const lineText = document.lineAt(range.start.line).text;
+  const isDeclaration = isModuleDeclarationContext(lineText, range.start.character);
+  if (!isDeclaration && !isModuleCallContext(lineText, range.start.character)) return null;
+
+  return { name: document.getText(range), range, isDeclaration };
 }
 
 /**
@@ -641,19 +739,36 @@ function findModuleReferences(document, moduleName, includeDeclaration) {
  * @returns {boolean} true if the position is inside a string, comment, or swim-string
  */
 function isInStringOrCommentDoc(document, position) {
-  const state = createCodeScanState();
-
-  // Use advanceScanState (not maskNonCodeSpans) for preceding lines — we only
-  // need the state side-effect and want to avoid the split/join allocations.
-  for (let i = 0; i < position.line; i++) {
-    advanceScanState(document.lineAt(i).text, state);
-  }
-
   return isInStringOrComment(
     document.lineAt(position.line).text,
     position.character,
-    state
+    getLineStartScanState(document, position.line)
   );
+}
+
+/**
+ * The scan state on entering `line` (a fresh copy the caller may change).
+ *
+ * @param {vscode.TextDocument} document
+ * @param {number} line
+ * @returns {import("./scanner").CodeScanState}
+ */
+function getLineStartScanState(document, line) {
+  const cacheKey = document.uri.toString();
+  let cached = lineStartStateCache.get(cacheKey);
+  if (!cached || cached.version !== document.version) {
+    cached = { version: document.version, states: [createCodeScanState()] };
+    lineStartStateCache.set(cacheKey, cached);
+  }
+  const { states } = cached;
+  // Use advanceScanState (not maskNonCodeSpans) for the lines in between: only
+  // the state is needed, not the masked text.
+  while (states.length <= line) {
+    const state = { ...states[states.length - 1] };
+    advanceScanState(document.lineAt(states.length - 1).text, state);
+    states.push(state);
+  }
+  return { ...states[line] };
 }
 
 // ============================================================
@@ -661,7 +776,7 @@ function isInStringOrCommentDoc(document, position) {
 // ============================================================
 
 /**
- * Builds a standardised hover MarkdownString from a documentation entry.
+ * Builds a standardized hover MarkdownString from a documentation entry.
  *
  * This creates the formatted tooltip content shown when hovering over
  * symbols, keywords, operations, and syntax elements.
@@ -753,6 +868,43 @@ function buildCompletionItem(doc, kind, sortPrefix, insertText, triggerSignature
   }
 
   return item;
+}
+
+/**
+ * Completion items for the entries of one docs table whose name starts with
+ * what the user typed after a sigil (`$To` -> `$ToJson`, ...). Shared by the
+ * `$`, `@` and `%` completion providers, so every table is turned into items
+ * the same way:
+ * - inserted text: the entry's snippet, or `Name(${0})` for a function and
+ *   `Name` otherwise -- always without the leading sigil (escaped `\$` or
+ *   plain), which the user has already typed;
+ * - a function (signature with `(`) is a Function item that opens signature
+ *   help; anything else (a runtime variable) is a Variable item.
+ *
+ * @param {Readonly<Record<string, import('./language-data.js').DocEntry>>} table
+ * @param {string} typed - Identifier typed after the sigil (may be empty)
+ * @param {{ functionSort: string, variableSort: string }} sort - Sort-text
+ *   prefixes for functions and variables (lower sorts first)
+ * @returns {vscode.CompletionItem[]}
+ */
+function buildSigilCompletionItems(table, typed, sort) {
+  const lowerTyped = typed.toLowerCase();
+  return Object.entries(table)
+    .filter(([key]) => key.toLowerCase().startsWith(lowerTyped))
+    .map(([, doc]) => {
+      const isFunction = doc.signature?.includes("(") ?? false;
+      const bareName = doc.name.replace(/^[$@%]/, "");
+      const text = doc.snippet
+        ? doc.snippet.replace(/^\\?[$@%]/, "")
+        : isFunction ? `${bareName}(\${0})` : bareName;
+      return buildCompletionItem(
+        doc,
+        isFunction ? vscode.CompletionItemKind.Function : vscode.CompletionItemKind.Variable,
+        isFunction ? sort.functionSort : sort.variableSort,
+        new vscode.SnippetString(text),
+        isFunction
+      );
+    });
 }
 
 // ============================================================
@@ -1024,6 +1176,20 @@ function findArgumentCountDiagnosticsFromMasked(document, maskedText, scalarFunc
 }
 
 /**
+ * A table's own entry for `key`, or undefined. The docs tables and the fix
+ * table are plain objects, so `table[key]` would also find inherited members:
+ * hovering `$constructor` used to show `Object`'s constructor as a function.
+ *
+ * @template T
+ * @param {Readonly<Record<string, T>>} table
+ * @param {string} key
+ * @returns {T | undefined}
+ */
+function lookupOwn(table, key) {
+  return Object.hasOwn(table, key) ? table[key] : undefined;
+}
+
+/**
  * Gets the diagnostic code as a string, unwrapping the `{ value, target }`
  * object form; returns '' when the diagnostic has no code.
  * @param {vscode.Diagnostic} diagnostic
@@ -1134,12 +1300,19 @@ function createAssignmentInConditionFix(document, diagnostic) {
 
 /**
  * Creates a quick-fix that replaces incorrect 'for' loop usage with 'foreach'.
+ * Only for the `for $item in @list` form, which then reads as a valid
+ * `foreach`; the counting form (`for $i = 1 to 10`) has no `foreach`
+ * equivalent, so it gets no fix.
  *
  * @param {vscode.TextDocument} document - The document containing the diagnostic
  * @param {vscode.Diagnostic} diagnostic - The diagnostic with the incorrect 'for' usage
- * @returns {vscode.CodeAction} A code action that replaces 'for' with 'foreach'
+ * @returns {vscode.CodeAction | null} A code action that replaces 'for' with
+ *   'foreach', or null for the counting form
  */
 function createForToForeachFix(document, diagnostic) {
+  const line = document.lineAt(diagnostic.range.start.line).text;
+  if (!/^\s*for\s+[$@%]?[A-Za-z](?:[\w-]*[A-Za-z0-9])?\s+in\s/i.test(line)) return null;
+
   return createCodeAction("Replace 'for' with 'foreach'", diagnostic, (edit) => {
     edit.replace(document.uri, diagnostic.range, 'foreach');
   });
@@ -1166,7 +1339,6 @@ function createTemplateEndFix(document, diagnostic) {
  * @param {string} a
  * @param {string} b
  * @returns {number}
- * @private
  */
 function editDistance(a, b) {
   const rows = a.length + 1;
@@ -1189,7 +1361,7 @@ function editDistance(a, b) {
  * wins (canonical casing), otherwise the smallest edit distance within a small
  * threshold. Returns null when nothing is close enough to suggest.
  *
- * @param {string} token - The unrecognised namespace as written
+ * @param {string} token - The unrecognized namespace as written
  * @returns {string | null}
  */
 function nearestNamespace(token) {
@@ -1259,6 +1431,7 @@ function createUnbalancedDiagnostic(count, lastPos, openChar, closeChar, name, d
     message,
     vscode.DiagnosticSeverity.Error
   );
+  diagnostic.code = "unbalanced-symbol";
   diagnostic.source = "OtterScript";
   return diagnostic;
 }
@@ -1394,10 +1567,13 @@ module.exports = {
   clearTimerForUri,
 
   // -- Helpers
+  isReadOnlyView,
   isValidCompletionPosition,
   getTypedIdentifier,
   isInStringOrCommentDoc,
   getActiveParameterIndex,
+  splitSignatureParameters,
+  maskClosedGroups,
   checkMissingDollar,
   findDuplicateMapKeyDiagnosticsFromMasked,
   findArgumentCountDiagnosticsFromMasked,
@@ -1409,6 +1585,7 @@ module.exports = {
   // -- Builders
   buildHoverMarkdown,
   buildCompletionItem,
+  buildSigilCompletionItems,
 
   // -- Code Actions
   createMissingDollarFix,
@@ -1417,6 +1594,8 @@ module.exports = {
   createForToForeachFix,
   createUnknownNamespaceFix,
   createTemplateEndFix,
+  editDistance,
+  lookupOwn,
   nearestNamespace,
 
   // -- Module navigation
@@ -1425,6 +1604,8 @@ module.exports = {
   isModuleCallContext,
   getModuleDeclarations,
   findModuleDeclarations,
+  getModuleNameAt,
+  getVariableOccurrences,
   createCodeScanState,
   createTemplateScanState,
   maskNonCodeSpans,
@@ -1435,7 +1616,7 @@ module.exports = {
   // ./scanner above but not re-exported -- no external caller needs them here.
   findModuleDeclarationRange,
   getModuleCallReferencesByName,
-  clearModuleInfoCache,
+  clearDocumentCaches,
   findModuleReferences,
 
   // -- Regex

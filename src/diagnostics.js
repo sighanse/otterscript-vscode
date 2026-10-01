@@ -17,6 +17,8 @@ const {
   maskNonCodeSpans,
   maskOutsideTemplateTags,
   documentUsesTemplateTags,
+  getDiagnosticCode,
+  isReadOnlyView,
   log,
 } = require("./helpers");
 const { findAdaptiveCardDiagnostics } = require("./adaptivecard");
@@ -24,7 +26,7 @@ const { findAdaptiveCardDiagnostics } = require("./adaptivecard");
 /**
  * Context object passed to updateDiagnostics to avoid hidden closures.
  *
- * @typedef {Object} DiagnosticsContext
+ * @typedef {object} DiagnosticsContext
  * @property {Set<string>} nonVariableIdentifiers - Identifiers valid without '$'
  * @property {Set<string>} knownKeywords - Known language keywords
  * @property {Set<string>} knownScalarFunctions - Known scalar function names
@@ -38,7 +40,84 @@ const { findAdaptiveCardDiagnostics } = require("./adaptivecard");
  * @property {() => RegExp} scalarCallRegex - Regex factory for scalar function calls
  * @property {() => RegExp} vectorCallRegex - Regex factory for vector function calls
  * @property {() => RegExp} operationCallRegex - Regex factory for operation-like tokens
+ * @property {Readonly<Record<string, string>>} [diagnosticRules] - The
+ *   `otterscript.diagnostics.rules` setting: diagnostic code -> `"off"` or a
+ *   severity override (see {@link applyDiagnosticRules})
+ * @property {string} [adaptiveCardMaxVersion] - The
+ *   `otterscript.adaptiveCards.maxVersion` setting: the highest Adaptive Card
+ *   version the target host supports
  */
+
+/**
+ * Every diagnostic code this extension emits. Each one can be switched off or
+ * re-ranked via the `otterscript.diagnostics.rules` setting, whose schema in
+ * package.json must list exactly these codes (guarded by a unit test).
+ * @type {ReadonlyArray<string>}
+ */
+const DIAGNOSTIC_CODES = Object.freeze([
+  // -- Syntax & balance
+  "unbalanced-symbol",
+  "missing-dollar",
+  "assignment-in-condition",
+  "invalid-operator",
+  "incorrect-for-usage",
+  "duplicate-map-key",
+  // -- Unknown names & arity
+  "unknown-scalar-function",
+  "unknown-vector-function",
+  "unknown-operation",
+  "unknown-namespace",
+  "too-many-arguments",
+  // -- Text templates (`<% %>`)
+  "template-unexpected-close",
+  "template-unclosed",
+  "template-end-keyword",
+  "template-missing-brace",
+  "template-in-expression",
+  // -- Adaptive Cards
+  "adaptivecard-missing-version",
+  "adaptivecard-unknown-type",
+  "adaptivecard-invalid-value",
+  "adaptivecard-version-too-low",
+  "adaptivecard-version-too-high",
+  "adaptivecard-templating-keyword",
+  "adaptivecard-content-type",
+  "adaptivecard-webhook-submit",
+]);
+
+/**
+ * `otterscript.diagnostics.rules` values other than `"off"`, mapped to the
+ * severity they force.
+ * @type {Readonly<Record<string, vscode.DiagnosticSeverity>>}
+ */
+const RULE_SEVERITIES = Object.freeze({
+  error: vscode.DiagnosticSeverity.Error,
+  warning: vscode.DiagnosticSeverity.Warning,
+  information: vscode.DiagnosticSeverity.Information,
+  hint: vscode.DiagnosticSeverity.Hint,
+});
+
+/**
+ * Applies the user's per-code rules: drops diagnostics whose code is set to
+ * `"off"` and overrides the severity of those set to a severity name.
+ * Diagnostics with no rule, or an unrecognized rule value, pass through
+ * unchanged. Mutates the severity of the surviving diagnostics in place.
+ *
+ * @param {vscode.Diagnostic[]} issues
+ * @param {Readonly<Record<string, string>> | undefined} rules
+ * @returns {vscode.Diagnostic[]}
+ */
+function applyDiagnosticRules(issues, rules) {
+  if (!rules || Object.keys(rules).length === 0) return issues;
+  return issues.filter((issue) => {
+    const rule = rules[getDiagnosticCode(issue)];
+    if (rule === "off") return false;
+    // Own keys only: `in` would also match inherited names such as
+    // "constructor" and assign a function as the severity.
+    if (rule !== undefined && Object.hasOwn(RULE_SEVERITIES, rule)) issue.severity = RULE_SEVERITIES[rule];
+    return true;
+  });
+}
 
 /**
  * Matches a `Namespace::` qualifier: a bare identifier followed by `::` and then
@@ -49,7 +128,10 @@ const { findAdaptiveCardDiagnostics } = require("./adaptivecard");
 const NAMESPACE_QUALIFIER_REGEX = /(^|[^A-Za-z0-9_$@:])([A-Za-z][A-Za-z0-9]*)::(?=[A-Za-z])/g;
 
 // -- Text-template (`<% ... %>`) structural checks --------------------------
-/** Tag body that is only a block-terminator keyword (`end`, `endforeach`, ...). @type {RegExp} */
+/**
+ * Tag body that is only a block-terminator keyword (`end`, `endforeach`, ...).
+ * @type {RegExp}
+ */
 const TEMPLATE_END_KEYWORD_REGEX = /^\s*(end(?:if|for|foreach|while)?)\s*$/i;
 /**
  * Tag body that opens a `{ }` block: `if` / `foreach` / `while`, optionally
@@ -69,7 +151,7 @@ const TEMPLATE_BLOCK_OPENER_REGEX =
  * @param {number} end
  * @param {string} message
  * @param {vscode.DiagnosticSeverity} severity
- * @param {string} [code] - Diagnostic code; omitted for checks with no quick-fix/code
+ * @param {string} code - Diagnostic code; one of {@link DIAGNOSTIC_CODES}
  * @returns {vscode.Diagnostic}
  */
 function lineDiagnostic(lineIndex, start, end, message, severity, code) {
@@ -78,7 +160,7 @@ function lineDiagnostic(lineIndex, start, end, message, severity, code) {
     message,
     severity
   );
-  if (code) d.code = code;
+  d.code = code;
   d.source = "OtterScript";
   return d;
 }
@@ -198,7 +280,8 @@ function checkTemplateTags(tagView, lineIndex, issues, tagBalance, exprState, ta
         issues.push(lineDiagnostic(
           lineIndex, col, col + 2,
           "Unexpected '%>' - no matching '<%'",
-          vscode.DiagnosticSeverity.Error
+          vscode.DiagnosticSeverity.Error,
+          "template-unexpected-close"
         ));
       } else {
         tagBalance.count--;
@@ -240,6 +323,37 @@ function checkTemplateTags(tagView, lineIndex, issues, tagBalance, exprState, ta
 }
 
 /**
+ * Where the condition of an `if` line ends: at the `{` that opens its body
+ * (outside parentheses), or at the end of the line when the brace is on a
+ * later line. A braced variable such as `${my var}` is part of the condition,
+ * not the body.
+ *
+ * @param {string} line - Masked by `maskNonCodeSpans`
+ * @returns {number} Index just past the condition, or -1 when the line isn't
+ *   an `if` statement
+ */
+function findIfConditionEnd(line) {
+  const start = /^\s*if\b/.exec(line);
+  if (!start) return -1;
+  let depth = 0;
+  for (let i = start[0].length; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === "(") depth++;
+    else if (ch === ")") { if (depth > 0) depth--; }
+    else if (ch === "{") {
+      if ("$@%".includes(line[i - 1])) {
+        const close = line.indexOf("}", i);
+        if (close === -1) return line.length;
+        i = close;
+      } else if (depth === 0) {
+        return i;
+      }
+    }
+  }
+  return line.length;
+}
+
+/**
  * Updates diagnostics for an OtterScript document.
  * Performs a full scan of the document and reports all issues.
  *
@@ -249,7 +363,7 @@ function checkTemplateTags(tagView, lineIndex, issues, tagBalance, exprState, ta
  * @returns {void}
  */
 function updateDiagnostics(document, collection, ctx) {
-  if (document.languageId !== "otterscript") return;
+  if (document.languageId !== "otterscript" || isReadOnlyView(document)) return;
 
   const text = document.getText();
 
@@ -266,6 +380,8 @@ function updateDiagnostics(document, collection, ctx) {
     scalarCallRegex,
     vectorCallRegex,
     operationCallRegex,
+    diagnosticRules,
+    adaptiveCardMaxVersion,
   } = ctx;
 
   // Lower-cased view of the namespace allowlist for lenient matching (Inedo
@@ -381,20 +497,30 @@ function updateDiagnostics(document, collection, ctx) {
       }
     }
 
-    // -- Detect unknown operations
+    // -- Detect unknown operations. Only a word in operation position counts:
+    //    the first word of a statement (after the line start, `{`, `}` or
+    //    `;`, optionally behind `Namespace::`). Dashed words elsewhere are
+    //    names, which Inedo's grammar lets contain dashes too -- variables
+    //    (`$my-var`), map keys and parameter names (`my-key: 1`, also when
+    //    one starts a line), module names (`call My-Module`) and implicit
+    //    string arguments (`Ensure-Thing My-Arg`).
     for (const match of line.matchAll(operationCallRegex())) {
       const name = match[1];
+      const before = line.slice(0, match.index);
 
       // When the token is the operation half of `UnknownNs::Do-Thing`, the
       // unknown-namespace check below already flags the real problem -- don't
       // also report the operation name as unknown.
-      const qualifier = line.slice(0, match.index).match(/([A-Za-z][A-Za-z0-9]*)::$/)?.[1];
+      const qualifier = before.match(/([A-Za-z][A-Za-z0-9]*)::$/)?.[1];
       if (qualifier && !knownNamespacesLower.has(qualifier.toLowerCase())) continue;
+
+      const statementStart = qualifier ? before.slice(0, -(qualifier.length + 2)) : before;
+      // A `{` right after a sigil opens a braced variable (`${my-var}`), not a block.
+      if (!/(?:^|[;}]|(?<![$@%])\{)\s*$/.test(statementStart)) continue;
+      if (/^\s*(?::|=>)/.test(line.slice(match.index + name.length))) continue;
 
       if (
         name.includes("-") &&
-        !name.startsWith("$") &&
-        !name.startsWith("@") &&
         !knownKeywords.has(name) &&
         !knownOperations.has(name) &&
         !knownScalarFunctions.has(name) &&
@@ -435,10 +561,13 @@ function updateDiagnostics(document, collection, ctx) {
     // ------------------------------------------------------------
     // `if` conditions: assignment-like '=' and single '&' / '|'
     // ------------------------------------------------------------
-    if (/^\s*if\b/.test(line)) {
+    const conditionEnd = findIfConditionEnd(line);
+    if (conditionEnd !== -1) {
       // -- Detect assignment-like '=' in conditions (likely intended as '==').
       // `line` is already a length-preserving masked version of the source line.
-      for (let j = 0; j < line.length; j++) {
+      // Only the condition is checked: a body on the same line
+      // (`if $x { set $y = 1; }`) has real assignments.
+      for (let j = 0; j < conditionEnd; j++) {
         if (line[j] !== "=") continue;
 
         const prev = line[j - 1];
@@ -457,7 +586,7 @@ function updateDiagnostics(document, collection, ctx) {
       }
 
       // -- Detect a lone '&' / '|' (OtterScript's logical operators are '&&' / '||').
-      for (let j = 0; j < line.length; j++) {
+      for (let j = 0; j < conditionEnd; j++) {
         const ch = line[j];
         if (ch === "&" || ch === "|") {
           const prev = line[j - 1];
@@ -477,10 +606,12 @@ function updateDiagnostics(document, collection, ctx) {
     // ------------------------------------------------------------
     // Incorrect 'for' usage as a loop
     // ------------------------------------------------------------
-    // Matches: for i = 1 to 10, for $item in @list, for item in list
-    const forLoopLikePattern = /^\s*for\s+(\$?\w+)\s+(=|in)\s+/i;
-    if (forLoopLikePattern.test(line)) {
-      const startIndex = line.indexOf("for");
+    // Matches: for i = 1 to 10, for $item in @list, for item in list, with
+    // dashed names too ($item-name), in any case -- so the position comes from
+    // the match, not a search for "for".
+    const forLoopMatch = /^(\s*)for\s+([$@%]?[A-Za-z](?:[\w-]*[A-Za-z0-9])?)\s+(=|in)\s+/i.exec(line);
+    if (forLoopMatch) {
+      const startIndex = forLoopMatch[1].length;
       issues.push(lineDiagnostic(
         lineIndex, startIndex, startIndex + 3,
         "'for' in OtterScript does not perform iteration. Use 'foreach' for loops, or 'for server/role/directory' for context binding.",
@@ -503,7 +634,8 @@ function updateDiagnostics(document, collection, ctx) {
     issues.push(lineDiagnostic(
       tagBalance.lastLine, tagBalance.lastCol, tagBalance.lastCol + 2,
       `Unclosed template tag: '<%' not closed (first at line ${tagBalance.lastLine + 1}, col ${tagBalance.lastCol + 1})`,
-      vscode.DiagnosticSeverity.Error
+      vscode.DiagnosticSeverity.Error,
+      "template-unclosed"
     ));
   }
 
@@ -518,15 +650,17 @@ function updateDiagnostics(document, collection, ctx) {
     issues.push(...findArgumentCountDiagnosticsFromMasked(document, joinedMasked, scalarFunctionDocs, vectorFunctionDocs, mapFunctionDocs));
     if (templateAware) {
       // Triggered by a literal "type": "AdaptiveCard" in the literal output.
-      issues.push(...findAdaptiveCardDiagnostics(document, text));
+      issues.push(...findAdaptiveCardDiagnostics(document, text, { maxVersion: adaptiveCardMaxVersion }));
     }
   } catch (err) {
     log.error(`Cross-line diagnostic scan failed for ${document.uri.toString()}:`, err);
   }
 
-  collection.set(document.uri, issues);
+  collection.set(document.uri, applyDiagnosticRules(issues, diagnosticRules));
 }
 
 module.exports = {
+  DIAGNOSTIC_CODES,
+  applyDiagnosticRules,
   updateDiagnostics,
 };

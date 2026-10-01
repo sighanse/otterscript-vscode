@@ -2,9 +2,11 @@
 /**
  * @fileoverview Unit tests for the module-navigation surface of src/helpers.js
  * (`getModuleInfo` and friends): declaration discovery, `call` reference
- * discovery, raft-qualified calls, and the per-document-version cache.
+ * discovery, raft-qualified calls, and the per-document-version cache --
+ * plus the matching per-version cache of the variable index used by
+ * highlight all occurrences.
  *
- * Guards the behaviour before/after `getModuleInfo` is refactored to reuse
+ * Guards the behavior before/after `getModuleInfo` is refactored to reuse
  * `scanner.findModuleDeclarations`.
  *
  * Requires the vscode stub before helpers.js loads.
@@ -15,39 +17,24 @@ require("../vscode-stub");
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
-const { Position, Range } = require("../vscode-stub");
+const { makeDocument } = require("./fake-document");
 const {
   getModuleDeclarations,
   findModuleReferences,
   findModuleDeclarationRange,
   getModuleCallReferencesByName,
-  clearModuleInfoCache,
+  clearDocumentCaches,
+  getVariableOccurrences,
 } = require("../../src/helpers.js");
 
-let nextDocId = 0;
-
 /**
- * Minimal `vscode.TextDocument` stand-in for the module-nav helpers.
+ * A fake `vscode.TextDocument` (see fake-document.js), each with its own URI.
  *
  * @param {string} text
  * @param {number} [version]
  * @returns {any}
  */
-function makeDoc(text, version = 1) {
-  const lines = text.split("\n");
-  const uriString = `file:///module-nav-${nextDocId++}.otter`;
-  return {
-    version,
-    uri: { toString: () => uriString },
-    lineCount: lines.length,
-    getText: () => text,
-    /** @param {number} i */
-    lineAt: (i) => ({
-      text: lines[i],
-      range: new Range(new Position(i, 0), new Position(i, lines[i].length)),
-    }),
-  };
-}
+const makeDoc = (text, version = 1) => makeDocument(text, { version });
 
 // ============================================================
 // getModuleDeclarations
@@ -169,10 +156,41 @@ describe("module info cache", () => {
     assert.deepEqual(second.map((d) => d.name), ["A"]);
   });
 
-  it("clearModuleInfoCache forces a fresh scan for a uri", () => {
+  it("clearDocumentCaches forces a fresh scan for a uri", () => {
     const doc = makeDoc("module A {\n}", 9);
     const first = getModuleDeclarations(doc);
-    clearModuleInfoCache(doc.uri);
+    clearDocumentCaches(doc.uri);
     assert.notEqual(getModuleDeclarations(doc), first);
+  });
+});
+
+// ============================================================
+// getVariableOccurrences (per-version cache of the variable index)
+// ============================================================
+
+describe("getVariableOccurrences", () => {
+  it("reuses the index while the document version is unchanged", () => {
+    const doc = makeDoc("set $x = 1;\nLog $x;");
+    const first = getVariableOccurrences(doc, "$", "x");
+    assert.deepEqual(first.map((o) => o.line), [0, 1]);
+    assert.equal(getVariableOccurrences(doc, "$", "X"), first, "same cached array, names ignore case");
+    assert.deepEqual(getVariableOccurrences(doc, "@", "x"), []);
+  });
+
+  it("rebuilds the index when the version changes or the caches are cleared", () => {
+    let text = "set $x = 1;";
+    const doc = makeDoc(text);
+    doc.getText = () => text;
+    const first = getVariableOccurrences(doc, "$", "x");
+    assert.equal(first.length, 1);
+
+    text = "set $x = 1;\nLog $x;";
+    assert.equal(getVariableOccurrences(doc, "$", "x"), first, "stale until the version changes");
+    doc.version = 2;
+    assert.equal(getVariableOccurrences(doc, "$", "x").length, 2);
+
+    const cached = getVariableOccurrences(doc, "$", "x");
+    clearDocumentCaches(doc.uri);
+    assert.notEqual(getVariableOccurrences(doc, "$", "x"), cached);
   });
 });

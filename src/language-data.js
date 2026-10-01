@@ -36,7 +36,7 @@
  * - snippet
  * - documentation
  *
- * @typedef {Object} DocEntry
+ * @typedef {object} DocEntry
  * @property {string} name Human-readable name shown in completion and hover
  * @property {string} description Short summary shown in IntelliSense
  * @property {string | null} namespace The `[ScriptNamespace]` token declared on
@@ -75,8 +75,8 @@
  *
  * A `DocEntry.namespace` is either `null` (no `[ScriptNamespace]` on the class
  * or its assembly — the common case; such constructs are `Core::` built-ins and
- * are shown without a namespace) or one of the tokens below. NOTE: the extension
- * *name* is not a namespace — e.g. the InedoCore extension declares only
+ * are shown without a namespace) or one of the tokens below. NOTE: an extension's
+ * name is not a namespace — e.g. the InedoCore extension declares only
  * `Files`, `HTTP`, `Network`, `ProGet`, `UPack`, `Otter`; there is no
  * `InedoCore::` prefix.
  *
@@ -346,7 +346,7 @@ Upload-Http file.txt
     namespace: "PowerShell",
     name: "Execute-PowerShell",
     signature: "Execute-PowerShell(Text: <text>, [Debug: <true/false>], [Verbose: <true/false>], [RunOnSimulation: <true/false>], [Isolated: <true/false>], [SuccessExitCode: <text>], [PreferWindowsPowerShell: <text>]);",
-    snippet: "Execute-PowerShell >>\n    ${1:Get-Service | Where-Object { $_.Status -eq \"Running\" } | Out-String}\n>> (\n    Verbose: ${2:false},\n    Debug: ${3:false},\n    RunOnSimulation: ${4:false}\n);$0",
+    snippet: "Execute-PowerShell >>\n    ${1:Get-Service | Where-Object { \\$_.Status -eq \"Running\" \\} | Out-String}\n>> (\n    Verbose: ${2:false},\n    Debug: ${3:false},\n    RunOnSimulation: ${4:false}\n);$0",
     description: "Executes a specified PowerShell script.",
     documentation: `
 **Script Usage:**
@@ -589,7 +589,7 @@ Ensure-HostsEntry(
     namespace: null,
     name: "Acquire-Server",
     signature: "Acquire-Server([Role: <text>], [ServerName: <text>], [Verbose: <true/false>]);",
-    snippet: "Acquire-Server(\n   Role: ${1:build-servers},\n   ServerName => ${2:\$AcquiredServerName}\n);$0",
+    snippet: "Acquire-Server(\n   Role: ${1:build-servers},\n   ServerName => ${2:\\$AcquiredServerName}\n);$0",
     description: "Acquires a server from a resource pool defined by a server role.",
     documentation: `
 **Script Usage:**
@@ -1466,6 +1466,21 @@ Exec c:\\tools\\7za.exe (
 
 /** @type {DocsTable} */
 const syntaxDocs = {
+  // `#region` / `#endregion` are an editor convention, not OtterScript syntax:
+  // to OtterScript they are ordinary `#` comments. The extension uses them as
+  // folding markers when they start a line (see computeFoldingRanges).
+  "regionStart": {
+    namespace: null,
+    name: "#region",
+    description: "Marks a collapsible editor region.",
+    documentation: "An editor convention, not OtterScript syntax: to OtterScript this line is an ordinary `#` comment. At the start of a line, `#region` / `#endregion` create a collapsible section in the editor."
+  },
+  "regionEnd": {
+    namespace: null,
+    name: "#endregion",
+    description: "Ends a collapsible editor region.",
+    documentation: "An editor convention, not OtterScript syntax: to OtterScript this line is an ordinary `#` comment. Closes the collapsible section a `#region` line opened."
+  },
   "swimString": {
     namespace: null,
     name: "Swim string",
@@ -2092,18 +2107,6 @@ Forces the execution status back to **Normal**, overriding a previous Warn or Fa
 force normal;
 \`\`\`
 `
-  },
-  "#region": {
-    namespace: null,
-    name: "#region",
-    description: "Marks a collapsible editor region.",
-    documentation: "Editor-only folding directive. `#region` / `#endregion` create a collapsible section in the editor and have no effect on OtterScript execution."
-  },
-  "#endregion": {
-    namespace: null,
-    name: "#endregion",
-    description: "Ends a collapsible editor region.",
-    documentation: "Editor-only folding directive. Used to close a `#region` block. This affects editor folding only and has no runtime meaning."
   }
 };
 

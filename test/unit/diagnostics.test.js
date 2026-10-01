@@ -11,8 +11,9 @@ require("../vscode-stub");
 
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
+const { makeDocument } = require("./fake-document");
 
-const { Position, DiagnosticSeverity } = require("../vscode-stub");
+const { DiagnosticSeverity } = require("../vscode-stub");
 const { updateDiagnostics } = require("../../src/diagnostics.js");
 const { createRegexPatterns, NON_VARIABLE_IDENTIFIERS } = require("../../src/helpers.js");
 const data = require("../../src/language-data.js");
@@ -40,30 +41,7 @@ const ctx = {
  * @returns {any[]}
  */
 function diagnose(source, languageId = "otterscript") {
-  const lines = source.split("\n");
-  /** @param {{ line: number, character: number }} p */
-  const offsetAt = (p) => {
-    let offset = 0;
-    for (let i = 0; i < p.line; i++) offset += lines[i].length + 1;
-    return offset + p.character;
-  };
-  const document = /** @type {any} */ ({
-    languageId,
-    uri: { toString: () => "file:///test.otter" },
-    lineCount: lines.length,
-    getText: () => source,
-    lineAt: (/** @type {number} */ i) => ({ text: lines[i] }),
-    offsetAt,
-    positionAt: (/** @type {number} */ offset) => {
-      let remaining = Math.max(0, offset);
-      let line = 0;
-      while (line < lines.length - 1 && remaining > lines[line].length) {
-        remaining -= lines[line].length + 1;
-        line++;
-      }
-      return new Position(line, remaining);
-    },
-  });
+  const document = makeDocument(source, { languageId });
   /** @type {any[]} */
   let collected = [];
   const collection = /** @type {any} */ ({
@@ -297,6 +275,28 @@ describe("updateDiagnostics — unknown operation", () => {
   it("does not flag inside a comment", () => {
     assert.deepEqual(only("# Do-Something here", "unknown-operation"), []);
   });
+
+  it("checks only the statement's first word, so dashed names are not operations", () => {
+    for (const source of [
+      "set $my-var = 1;",
+      "Log-Information ${my-var};",
+      "set %m = %(my-key: 1);",
+      "Log-Information $x[my-key];",
+      "Log-Information (Text: x, Some-Param: y);",
+      "Log-Information (\n    Some-Param: x\n);",
+      "module My-Module {\n}",
+      "call My-Module;",
+      'Log-Information My-Arg;',
+    ]) {
+      assert.deepEqual(only(source, "unknown-operation"), [], source);
+    }
+  });
+
+  it("still flags an unknown operation after ';', inside braces, or behind a known namespace", () => {
+    assert.deepEqual(only('Log-Information "a"; Bogus-Op "b";', "unknown-operation").map((d) => d.range.start.character), [21]);
+    assert.equal(only("if $a { Bogus-Op; }", "unknown-operation").length, 1);
+    assert.equal(only("ProGet::Bogus-Op;", "unknown-operation").length, 1);
+  });
 });
 
 // ============================================================
@@ -318,6 +318,17 @@ describe("updateDiagnostics — assignment in condition", () => {
   it("does not flag '=' outside an if", () => {
     assert.deepEqual(only("set $x = 5;", "assignment-in-condition"), []);
   });
+
+  it("checks only the condition, not a body on the same line", () => {
+    assert.deepEqual(only("if $Debug { set $Level = 2; }", "assignment-in-condition"), []);
+    const found = only("if $a = 1 { set $b = 2; }", "assignment-in-condition");
+    assert.deepEqual(found.map((d) => d.range.start.character), [6]);
+  });
+
+  it("treats a braced variable as part of the condition", () => {
+    const src = "if ${my var} = 1 {\n}";
+    assert.deepEqual(only(src, "assignment-in-condition").map((d) => d.range.start.character), [src.indexOf("= 1")]);
+  });
 });
 
 describe("updateDiagnostics — invalid logical operator", () => {
@@ -333,6 +344,9 @@ describe("updateDiagnostics — invalid logical operator", () => {
 
   it("does not flag '&&' or '||'", () => {
     assert.deepEqual(only("if $a && $b || $c { }", "invalid-operator"), []);
+  });
+  it("checks only the condition, not a body on the same line", () => {
+    assert.deepEqual(only("if $a { Log-Information $b & $c; }", "invalid-operator"), []);
   });
 });
 
@@ -355,6 +369,17 @@ describe("updateDiagnostics — incorrect 'for' usage", () => {
 
   it("does not flag 'foreach'", () => {
     assert.deepEqual(only("foreach $x in @list { }", "incorrect-for-usage"), []);
+  });
+
+  it("flags a loop over a dashed variable name", () => {
+    assert.equal(only("for $item-name in @list { }", "incorrect-for-usage").length, 1);
+  });
+
+  it("reports the keyword's real position whatever its case", () => {
+    const [d] = only("  For $i = 1 to 10 { }", "incorrect-for-usage");
+    assert.ok(d);
+    assert.equal(d.range.start.character, 2);
+    assert.equal(d.range.end.character, 5);
   });
 
   it("does not flag context-binding 'for server'", () => {

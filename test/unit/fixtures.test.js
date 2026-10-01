@@ -20,9 +20,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
+const { makeDocument } = require("./fake-document");
+const { parse } = require("jsonc-parser");
 
-const { Position } = require("../vscode-stub");
-const { updateDiagnostics } = require("../../src/diagnostics.js");
+const { updateDiagnostics, DIAGNOSTIC_CODES } = require("../../src/diagnostics.js");
 const { createRegexPatterns, NON_VARIABLE_IDENTIFIERS, documentUsesTemplateTags } = require("../../src/helpers.js");
 const data = require("../../src/language-data.js");
 
@@ -46,38 +47,44 @@ const ctx = {
  * @returns {any[]}
  */
 function diagnoseFixture(relativePath) {
-  const source = fs.readFileSync(path.join(__dirname, "..", relativePath), "utf8");
-  const lines = source.split("\n");
-  /** @param {{ line: number, character: number }} p */
-  const offsetAt = (p) => {
-    let offset = 0;
-    for (let i = 0; i < p.line; i++) offset += lines[i].length + 1;
-    return offset + p.character;
-  };
-  const document = /** @type {any} */ ({
-    languageId: "otterscript",
-    uri: { toString: () => `file:///${relativePath}` },
-    lineCount: lines.length,
-    getText: () => source,
-    lineAt: (/** @type {number} */ i) => ({ text: lines[i] }),
-    offsetAt,
-    positionAt: (/** @type {number} */ offset) => {
-      let remaining = Math.max(0, offset);
-      let line = 0;
-      while (line < lines.length - 1 && remaining > lines[line].length) {
-        remaining -= lines[line].length + 1;
-        line++;
-      }
-      return new Position(line, remaining);
-    },
-  });
+  return diagnoseSource(fs.readFileSync(path.join(__dirname, "..", relativePath), "utf8"), relativePath);
+}
+
+/**
+ * Runs updateDiagnostics over a document's text.
+ *
+ * @param {string} source
+ * @param {string} relativePath - Used for the document's URI
+ * @param {{ adaptiveCardMaxVersion?: string }} [extraCtx] - Added to the
+ *   diagnostics context
+ * @returns {any[]}
+ */
+function diagnoseSource(source, relativePath, extraCtx = {}) {
+  const document = makeDocument(source, { uri: `file:///${relativePath}` });
   /** @type {any[]} */
   let collected = [];
   const collection = /** @type {any} */ ({
     set: (/** @type {unknown} */ _uri, /** @type {any[]} */ issues) => { collected = issues; },
   });
-  updateDiagnostics(document, collection, ctx);
+  updateDiagnostics(document, collection, { ...ctx, ...extraCtx });
   return collected;
+}
+
+/**
+ * Expands a snippet body with each placeholder's default: `${1:text}` becomes
+ * `text`, a choice `${1|a,b|}` its first option, a bare tab stop nothing, and
+ * the escapes `\$` / `\}` their characters. Enough for the flat (unnested)
+ * placeholders the snippets use.
+ *
+ * @param {string} body
+ * @returns {string}
+ */
+function expandSnippet(body) {
+  return body
+    .replace(/(?<!\\)\$\{\d+\|([^,|]*)[^}]*\}/g, "$1")
+    .replace(/(?<!\\)\$\{\d+:([^}]*)\}/g, "$1")
+    .replace(/(?<!\\)\$(?:\d+|\{\d+\})/g, "")
+    .replace(/\\([$}])/g, "$1");
 }
 
 describe("manual-review fixtures", () => {
@@ -97,6 +104,31 @@ describe("manual-review fixtures", () => {
     const source = fs.readFileSync(path.join(__dirname, "..", "sample-template.otter"), "utf8");
     assert.equal(documentUsesTemplateTags(source), true);
     assert.equal(diagnoseFixture("sample-template.otter").length, 13);
+  });
+
+  it("sample-card-version.otter IS template-aware and flags exactly its five version-too-low diagnostics", () => {
+    const source = fs.readFileSync(path.join(__dirname, "..", "sample-card-version.otter"), "utf8");
+    assert.equal(documentUsesTemplateTags(source), true);
+    const found = diagnoseFixture("sample-card-version.otter");
+    assert.deepEqual(found.map((d) => d.code), Array(5).fill("adaptivecard-version-too-low"));
+  });
+
+  it("the teamscard snippet, expanded with its defaults, IS template-aware and stays clean", () => {
+    const snippets = parse(fs.readFileSync(path.join(__dirname, "..", "..", "snippets", "otterscript.json"), "utf8"));
+    const source = expandSnippet(snippets["Teams Adaptive Card Message"].body.join("\n"));
+    assert.ok(source.includes('"text": $ToJson($Message)'), "placeholders expanded");
+    assert.equal(documentUsesTemplateTags(source), true);
+    assert.deepEqual(diagnoseSource(source, "teamscard.otter", { adaptiveCardMaxVersion: "1.6" }), []);
+  });
+
+  it("every diagnostic in the error fixtures carries a code listed in DIAGNOSTIC_CODES", () => {
+    // A code is what the otterscript.diagnostics.rules setting keys on, so a
+    // check emitted without one could never be turned off.
+    for (const fixture of ["sample.otter", "sample-template.otter", "sample-card-version.otter"]) {
+      for (const d of diagnoseFixture(fixture)) {
+        assert.ok(DIAGNOSTIC_CODES.includes(d.code), `${fixture}: '${d.message}' has code ${d.code}`);
+      }
+    }
   });
 
   it("sample-template-valid.otter IS template-aware and stays clean", () => {

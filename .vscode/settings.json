@@ -1,12 +1,16 @@
 {
   // Treat repository snippet files as JSON with comments
   "files.associations": {
-    "snippets/*.json": "jsonc",
-    ".vscode/*.json": "jsonc"  // VS Code workspace settings
+    "snippets/*.json": "jsonc"
   },
   "files.readonlyInclude": {
     ".eslintcache": true,
     "package-lock.json": true
+  },
+  // VS Code builds downloaded by the integration tests (~1.4 GB). Search
+  // already skips them via .gitignore; the file watcher does not.
+  "files.watcherExclude": {
+    "**/.vscode-test/**": true
   },
   // JSON tooling
   "json.validate.enable": true,
@@ -40,7 +44,7 @@
 
   "explorer.fileNesting.enabled": true,
   "explorer.fileNesting.patterns": {
-    "package.json": "package-lock.json",
+    "package.json": "package-lock.json, jsconfig.json, .vscode-test.mjs",
     "README.md": "CODE_OF_CONDUCT.md, CHANGELOG.md, SECURITY.md, CONTRIBUTING.md, LICENSE",
     "eslint.config.cjs": ".eslintcache"
   },
@@ -65,16 +69,35 @@
   "git.branchRandomName.enable": true,
   "git.autofetch": true,
 
-  // Spell checking
+  // Spell checking. `words` are real terms; `ignoreWords` are deliberate
+  // misspellings in test fixtures (unknown names the checks must flag).
   "cSpell.words": [
+    "actionlint",
+    "adaptivecard",
+    "adaptivecards",
+    "Anson",
+    "aquasecurity",
+    "buildmaster",
     "cooldown",
+    "endwhile",
     "eslintcache",
+    "executionengine",
     "foreachaffected",
     "foreachapikey",
     "hdars",
+    "ifdirexists",
+    "ifexists",
     "Inedo",
+    "inedox",
+    "inlines",
+    "jscheck",
+    "langsync",
     "LOGPREFIX",
+    "Lutrinae",
+    "misconfig",
+    "misdetected",
     "newversion",
+    "openvsx",
     "oscript",
     "otterscript",
     "PKGDEL",
@@ -88,11 +111,36 @@
     "preminor",
     "prepatch",
     "proget",
+    "psexec",
     "readwrite",
+    "rescan",
+    "rescans",
     "rubygems",
+    "sarif",
     "sighanse",
+    "teamscard",
     "tplforeach",
+    "uncatchably",
+    "upack",
+    "vararg",
     "vscodeignore"
+  ],
+  "cSpell.ignoreWords": [
+    "atripp",
+    "destfilename",
+    "Dokcer",
+    "endfoo",
+    "filez",
+    "Frobnicate",
+    "Informat",
+    "myoutputfile",
+    "sometool",
+    "Submitt",
+    "targetdir",
+    "TOOLONG",
+    "Windoze",
+    "workingdir",
+    "Xyzzy"
   ],
   "cSpell.minWordLength": 5
 }
