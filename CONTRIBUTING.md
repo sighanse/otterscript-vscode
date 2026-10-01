@@ -15,11 +15,19 @@ Contributions are welcome and appreciated.
 
 ```sh
 npm install       # dev dependencies
-npm run check     # ESLint + JSDoc type-check + grammar/language-data sync + unit tests
+npm run check     # ESLint + JSDoc type-check + grammar/language-data sync
+                  # + Adaptive Card data check + unit tests
 npm test          # unit tests only (node:test)
 npm run lint      # ESLint only
 npm run test:integration   # integration tests in real VS Code (see below)
+npm run update:cards       # re-download the Adaptive Card schema and regenerate
+                           # src/adaptivecard-data.js
 ```
+
+`src/adaptivecard-data.js` is generated. Edit
+`scripts/update-adaptivecard-data.js` instead: it holds the Teams-only types
+and values that Microsoft's schema leaves out, and the saved schema is in
+`scripts/adaptive-card-schema.json`.
 
 Optionally, install the [pre-commit](https://pre-commit.com) hooks once with
 `pre-commit install`. Each commit then gets the file, Markdown, workflow and

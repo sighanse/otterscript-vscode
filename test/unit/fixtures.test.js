@@ -99,11 +99,11 @@ describe("manual-review fixtures", () => {
     assert.equal(diagnoseFixture("sample-template.otter").length, 13);
   });
 
-  it("sample-card-version.otter IS template-aware and flags exactly its four version-too-low diagnostics", () => {
+  it("sample-card-version.otter IS template-aware and flags exactly its five version-too-low diagnostics", () => {
     const source = fs.readFileSync(path.join(__dirname, "..", "sample-card-version.otter"), "utf8");
     assert.equal(documentUsesTemplateTags(source), true);
     const found = diagnoseFixture("sample-card-version.otter");
-    assert.deepEqual(found.map((d) => d.code), Array(4).fill("adaptivecard-version-too-low"));
+    assert.deepEqual(found.map((d) => d.code), Array(5).fill("adaptivecard-version-too-low"));
   });
 
   it("every diagnostic in the error fixtures carries a code listed in DIAGNOSTIC_CODES", () => {

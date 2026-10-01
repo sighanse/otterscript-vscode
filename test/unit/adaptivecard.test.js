@@ -1,7 +1,7 @@
 // @ts-check
 /**
  * @fileoverview Unit tests for src/adaptivecard.js — the content-triggered, best-effort
- * Adaptive Card `"type"`/`"version"` checks.
+ * Adaptive Card checks: types, versions and property values.
  *
  * Requires the vscode stub before adaptivecard.js (which pulls in vscode) loads.
  */
@@ -12,13 +12,14 @@ const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
 const { Position } = require("../vscode-stub");
-const { findAdaptiveCardDiagnostics, createCardVersionFix } = require("../../src/adaptivecard.js");
+const { findAdaptiveCardDiagnostics, createCardVersionFix, createInvalidValueFix } = require("../../src/adaptivecard.js");
 
 /**
  * @param {string} source
+ * @param {{ maxVersion?: string }} [options]
  * @returns {any[]}
  */
-function diagnose(source) {
+function diagnose(source, options) {
   const lines = source.split("\n");
   /** @param {{ line: number, character: number }} p */
   const offsetAt = (p) => {
@@ -38,7 +39,7 @@ function diagnose(source) {
     },
     offsetAt,
   });
-  return findAdaptiveCardDiagnostics(document, source);
+  return findAdaptiveCardDiagnostics(document, source, options);
 }
 
 /**
@@ -272,6 +273,145 @@ describe("findAdaptiveCardDiagnostics — version too low", () => {
     const src = '{ "type": "AdaptiveCard", "version": "1.0", "actions": [ { "type": "Action.Submit", "data": { "type": "Table" } } ] }';
     assert.deepEqual(only(src, "adaptivecard-version-too-low"), []);
   });
+
+  it("knows the Teams-only elements and their version", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.4", "body": [ { "type": "Badge" }, { "type": "Chart.Pie" } ] }';
+    assert.deepEqual(only(src, "adaptivecard-unknown-type"), []);
+    assert.equal(only(src, "adaptivecard-version-too-low").length, 2);
+  });
+});
+
+describe("findAdaptiveCardDiagnostics — property version too low", () => {
+  it("flags a property newer than the card's version, on the property's key", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "ColumnSet", "columns": [ { "type": "Column", "rtl": true } ] } ] }';
+    const [d] = only(src, "adaptivecard-version-too-low");
+    assert.ok(d);
+    assert.equal(d.message, "'rtl' on Column requires Adaptive Card version 1.5 or later, but this card declares version 1.2.");
+    assert.equal(d.range.start.character, src.indexOf("rtl"));
+    assert.equal(d.range.end.character, src.indexOf("rtl") + 3);
+  });
+
+  it("finds inherited properties, such as an input's 1.3 'label'", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "Input.Text", "id": "a", "label": "Name" } ] }';
+    assert.deepEqual(only(src, "adaptivecard-version-too-low").map((d) => d.message.split(" requires")[0]), ["'label' on Input.Text"]);
+  });
+
+  it("checks the key whatever its value is (object, boolean, template)", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.0", "selectAction": { "type": "Action.OpenUrl", "url": "x" } }';
+    assert.equal(only(src, "adaptivecard-version-too-low").length, 1);
+  });
+
+  it("skips properties of an element that has a fallback", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "Input.Text", "id": "a", "label": "Name", "fallback": "drop" } ] }';
+    assert.deepEqual(only(src, "adaptivecard-version-too-low"), []);
+  });
+
+  it("ignores keys inside free-form payloads and on objects with no known type", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.0", "actions": [ { "type": "Action.Submit", "data": { "type": "Column", "rtl": true } } ], "body": [ { "rtl": true } ] }';
+    assert.deepEqual(only(src, "adaptivecard-version-too-low"), []);
+  });
+
+  it("does not mistake a string value for a key", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.0", "body": [ { "type": "TextBlock", "text": "rtl" } ] }';
+    assert.deepEqual(only(src, "adaptivecard-version-too-low"), []);
+  });
+});
+
+describe("findAdaptiveCardDiagnostics — invalid value", () => {
+  it("flags a value that isn't in the property's list, naming the allowed values", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "TextBlock", "text": "x", "weight": "bold" } ] }';
+    const [d] = only(src, "adaptivecard-invalid-value");
+    assert.ok(d);
+    assert.equal(d.message, "'bold' is not a valid value for 'weight' on TextBlock. Expected one of: default, lighter, bolder.");
+    assert.equal(d.range.start.character, src.indexOf("bold\""));
+    assert.equal(d.range.end.character, src.indexOf("bold\"") + 4);
+  });
+
+  it("compares case-insensitively, as hosts do", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "TextBlock", "text": "x", "weight": "Bolder", "size": "MEDIUM" } ] }';
+    assert.deepEqual(only(src, "adaptivecard-invalid-value"), []);
+  });
+
+  it("uses each type's own list for a shared property name", () => {
+    const valid = '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "Container", "style": "emphasis", "items": [ { "type": "TextBlock", "text": "x", "style": "heading" } ] } ], "actions": [ { "type": "Action.OpenUrl", "url": "x", "style": "positive" } ] }';
+    assert.deepEqual(only(valid, "adaptivecard-invalid-value"), []);
+    const invalid = '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "TextBlock", "text": "x", "style": "emphasis" } ] }';
+    assert.equal(only(invalid, "adaptivecard-invalid-value").length, 1);
+  });
+
+  it("accepts the values Teams adds to the schema's lists", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.5", "body": [ { "type": "Image", "url": "x", "style": "roundedCorners", "spacing": "extraSmall" }, { "type": "TextBlock", "text": "x", "style": "columnHeader" } ] }';
+    assert.deepEqual(only(src, "adaptivecard-invalid-value"), []);
+  });
+
+  it("skips values filled in by the template, and empty values", () => {
+    for (const value of ["$Weight", "$(Weight)", "<% $w %>", "@x", "%m.w", ""]) {
+      const src = `{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "TextBlock", "text": "x", "weight": "${value}" } ] }`;
+      assert.deepEqual(only(src, "adaptivecard-invalid-value"), [], value);
+    }
+  });
+
+  it("leaves properties that also accept free text alone (e.g. an Image's pixel height)", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "Image", "url": "x", "height": "50px" } ] }';
+    assert.deepEqual(only(src, "adaptivecard-invalid-value"), []);
+  });
+
+  it("does not check Teams-only elements, which the schema doesn't describe", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.5", "body": [ { "type": "Badge", "size": "huge" } ] }';
+    assert.deepEqual(only(src, "adaptivecard-invalid-value"), []);
+  });
+});
+
+describe("createInvalidValueFix", () => {
+  /** @param {string} source */
+  function fixFor(source) {
+    const [d] = only(source, "adaptivecard-invalid-value");
+    const document = /** @type {any} */ ({
+      uri: "file:///card.otter",
+      getText: () => source,
+      positionAt: (/** @type {number} */ offset) => new Position(0, offset),
+      offsetAt: (/** @type {{ character: number }} */ p) => p.character,
+    });
+    return createInvalidValueFix(document, d);
+  }
+
+  it("offers the closest allowed value", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "TextBlock", "text": "x", "weight": "bold" } ] }';
+    const fix = /** @type {any} */ (fixFor(src));
+    assert.equal(fix.title, "Change to 'bolder'");
+    const [[, , range, text]] = fix.edit.edits;
+    assert.equal(range.start.character, src.indexOf("bold\""));
+    assert.equal(text, "bolder");
+  });
+
+  it("offers nothing when no allowed value is close", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "TextBlock", "text": "x", "color": "red" } ] }';
+    assert.equal(fixFor(src), null);
+  });
+});
+
+describe("findAdaptiveCardDiagnostics — version too high", () => {
+  const card = (/** @type {string} */ version) => `{ "type": "AdaptiveCard", "version": "${version}", "body": [] }`;
+
+  it("flags a card version above the host's maximum, on the version value", () => {
+    const src = card("1.6");
+    const [d] = diagnose(src, { maxVersion: "1.5" });
+    assert.equal(d.code, "adaptivecard-version-too-high");
+    assert.match(d.message, /^Adaptive Card version 1\.6 is newer than 1\.5, the highest version the target host supports/);
+    assert.equal(d.range.start.character, src.indexOf("1.6"));
+  });
+
+  it("allows the maximum itself and anything older", () => {
+    for (const version of ["1.6", "1.2"]) {
+      assert.deepEqual(diagnose(card(version), { maxVersion: "1.6" }), [], version);
+    }
+  });
+
+  it("is off without a usable maximum, or when the version is templated", () => {
+    assert.deepEqual(diagnose(card("1.6")), []);
+    assert.deepEqual(diagnose(card("1.6"), { maxVersion: "latest" }), []);
+    assert.deepEqual(diagnose(card("$CardVersion"), { maxVersion: "1.5" }), []);
+  });
 });
 
 describe("createCardVersionFix", () => {
@@ -285,6 +425,11 @@ describe("createCardVersionFix", () => {
     });
     return createCardVersionFix(document, d);
   }
+
+  it("counts properties too when choosing the version", () => {
+    const src = '{ "type": "AdaptiveCard", "version": "1.0", "rtl": false, "body": [ { "type": "Media" } ] }';
+    assert.equal(/** @type {any} */ (fixFor(src)).title, "Change card version to 1.5");
+  });
 
   it("raises the version to the highest one any element needs", () => {
     const src = '{ "type": "AdaptiveCard", "version": "1.0", "body": [ { "type": "Table" }, { "type": "Media" } ] }';

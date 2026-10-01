@@ -10,20 +10,25 @@
  * legitimately render many different concrete JSON shapes depending on data
  * that only exists at execution time, and this module does not try to
  * enumerate or approximate them. It only checks things that hold regardless
- * of what any template hole evaluates to: every literal `"type": "..."`
- * value inside the Adaptive Card object must be a real element/action type
- * name (see adaptivecard-data.js) -- except inside free-form payloads such as
- * an action's `data`, Teams' `msteams` extension or `Authentication.buttons`,
- * where `"type"` is arbitrary -- that object must have a `"version"` property,
- * and no element or action may need a newer card version than it declares
- * (unless it, or an element around it, provides a `"fallback"`).
+ * of what any template hole evaluates to:
+ * - every literal `"type": "..."` value inside the Adaptive Card object must
+ *   be a real element/action type name (see adaptivecard-data.js) -- except
+ *   inside free-form payloads such as an action's `data`, Teams' `msteams`
+ *   extension or `Authentication.buttons`, where `"type"` is arbitrary;
+ * - the card must have a `"version"` property, no newer than the target host
+ *   supports (the `otterscript.adaptiveCards.maxVersion` setting);
+ * - no element, action or property may need a newer card version than the
+ *   card declares (unless it, or an element around it, has a `"fallback"`);
+ * - a property limited to a fixed list (`"weight"`, `"spacing"`, ...) must
+ *   have one of its values, unless the value is filled in by OtterScript.
  *
  * @module adaptivecard
  */
 
 const vscode = require("vscode");
 const { createTemplateScanState, maskTemplateTagContents, isUnescapedQuoteAt } = require("./scanner");
-const { ADAPTIVE_CARD_TYPES } = require("./adaptivecard-data");
+const { editDistance } = require("./helpers");
+const { ADAPTIVE_CARD_TYPES, ADAPTIVE_CARD_PROPERTIES, ADAPTIVE_CARD_VALUE_LISTS } = require("./adaptivecard-data");
 
 /**
  * Splits `text` into its double-quoted JSON string-literal tokens, honoring
@@ -313,29 +318,194 @@ function findOwnVersionProperty(card) {
 }
 
 /**
- * Every element/action `"type"` in the card that needs a newer card version
- * than `cardVersion`. Skipped: free-form payloads, and any element that has
- * a `"fallback"` (or sits inside one that does) -- that's the standard way to
- * use a newer element on purpose while still targeting older hosts.
+ * Maps the `{` of every typed object in the card to its `"type"`, leaving out
+ * objects inside free-form payloads (whose `"type"` means something else).
+ *
+ * @param {JsonView} card
+ * @returns {Map<number, string>}
+ */
+function findObjectTypes(card) {
+  const freeFormSpans = findFreeFormSpans(card);
+  /** @type {Map<number, string>} */
+  const types = new Map();
+  for (const { value, valueStart, objectStart } of findStringProperties(card, "type")) {
+    if (objectStart === -1 || types.has(objectStart) || isInsideAny(freeFormSpans, valueStart)) continue;
+    types.set(objectStart, value);
+  }
+  return types;
+}
+
+/**
+ * One key of a typed object that the property data has something to check
+ * for (see `ADAPTIVE_CARD_PROPERTIES`).
+ *
+ * @typedef {{
+ *   type: string,
+ *   key: string,
+ *   keyStart: number,
+ *   keyEnd: number,
+ *   valueToken: { value: string, start: number, end: number } | undefined,
+ *   info: { version?: string, values?: string }
+ * }} CheckedProperty
+ *   `keyStart`/`keyEnd` bracket the key's name without its quotes;
+ *   `valueToken` is the value when it is a string, otherwise undefined.
+ */
+
+/**
+ * Every key in the card that has a version or a fixed list of values to
+ * check, with the type of the object it belongs to.
+ *
+ * @param {JsonView} card
+ * @param {Map<number, string>} objectTypes - From {@link findObjectTypes}
+ * @returns {CheckedProperty[]}
+ */
+function findCheckedProperties(card, objectTypes) {
+  const { text, tokens, enclosing } = card;
+  /** @type {CheckedProperty[]} */
+  const results = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const type = objectTypes.get(enclosing[i]);
+    const info = type && ADAPTIVE_CARD_PROPERTIES.get(type)?.get(tokens[i].value);
+    if (!type || !info) continue;
+    const valueStart = valueStartAfterKey(text, tokens[i]);
+    if (valueStart === -1) continue; // a string value that happens to match a key name
+    const next = tokens[i + 1];
+    results.push({
+      type,
+      key: tokens[i].value,
+      keyStart: tokens[i].start + 1,
+      keyEnd: tokens[i].end,
+      valueToken: next && next.start === valueStart ? next : undefined,
+      info,
+    });
+  }
+  return results;
+}
+
+/**
+ * One element, action or property that needs a newer card version than the
+ * card declares. `start`/`end` bracket the type name or the property key;
+ * `label` names it in messages (`'Table'`, `'rtl' on Column`).
+ *
+ * @typedef {{ start: number, end: number, required: string, label: string }} TooNewItem
+ */
+
+/**
+ * Every element/action `"type"` and property in the card that needs a newer
+ * card version than `cardVersion`. Skipped: free-form payloads, and anything
+ * in an element that has a `"fallback"` (or sits inside one that does) --
+ * that's the standard way to use a newer feature on purpose while still
+ * targeting older hosts.
  *
  * @param {JsonView} card
  * @param {[number, number]} cardVersion
- * @returns {{ value: string, valueStart: number, valueEnd: number, required: string }[]}
+ * @returns {TooNewItem[]}
  */
-function findTooNewTypes(card, cardVersion) {
-  /** @type {{ value: string, valueStart: number, valueEnd: number, required: string }[]} */
+function findTooNewItems(card, cardVersion) {
+  /** @type {TooNewItem[]} */
   const results = [];
-  /** @type {{ start: number, end: number }[] | null} computed only if something is too new */
-  let skippedSpans = null;
-  for (const { value, valueStart, valueEnd } of findStringProperties(card, "type")) {
+  /**
+   * @param {string | undefined} required
+   * @returns {boolean}
+   */
+  const isTooNew = (required) => {
+    const parsed = required ? parseCardVersion(required) : null;
+    return parsed !== null && compareCardVersions(parsed, cardVersion) > 0;
+  };
+
+  const objectTypes = findObjectTypes(card);
+  for (const { value, valueStart, valueEnd, objectStart } of findStringProperties(card, "type")) {
+    if (objectTypes.get(objectStart) !== value) continue; // free-form, or a second "type" key
     const required = ADAPTIVE_CARD_TYPES.get(value);
-    const requiredVersion = required && parseCardVersion(required);
-    if (!required || !requiredVersion || compareCardVersions(requiredVersion, cardVersion) <= 0) continue;
+    if (required && isTooNew(required)) results.push({ start: valueStart, end: valueEnd, required, label: `'${value}'` });
+  }
+  for (const { type, key, keyStart, keyEnd, info } of findCheckedProperties(card, objectTypes)) {
+    if (info.version && isTooNew(info.version)) {
+      results.push({ start: keyStart, end: keyEnd, required: info.version, label: `'${key}' on ${type}` });
+    }
+  }
+  if (results.length === 0) return results;
 
-    skippedSpans ??= [...findFreeFormSpans(card), ...findFallbackSpans(card)];
-    if (isInsideAny(skippedSpans, valueStart)) continue;
+  const fallbackSpans = findFallbackSpans(card);
+  return results.filter((item) => !isInsideAny(fallbackSpans, item.start));
+}
 
-    results.push({ value, valueStart, valueEnd, required });
+/**
+ * Whether a string value is (partly) filled in when the template runs -- an
+ * OtterScript variable or expression, or a `<% %>` tag -- so its final text
+ * can't be checked.
+ *
+ * @param {string} value
+ * @returns {boolean}
+ */
+function isTemplatedValue(value) {
+  return /[$@%`<]/.test(value);
+}
+
+/**
+ * The allowed value closest to `value` -- a likely typo such as `"bold"` for
+ * `"bolder"` -- or undefined when none is close enough to suggest.
+ *
+ * @param {string} value
+ * @param {readonly string[]} allowed
+ * @returns {string | undefined}
+ */
+function nearestAllowedValue(value, allowed) {
+  const lower = value.toLowerCase();
+  let best;
+  let bestDistance = Infinity;
+  for (const candidate of allowed) {
+    const d = editDistance(lower, candidate.toLowerCase());
+    if (d < bestDistance) {
+      bestDistance = d;
+      best = candidate;
+    }
+  }
+  return bestDistance <= Math.max(2, Math.ceil(value.length / 3)) ? best : undefined;
+}
+
+/**
+ * One property whose string value isn't in its fixed list. `start`/`end`
+ * bracket the value without its quotes.
+ *
+ * @typedef {{
+ *   start: number,
+ *   end: number,
+ *   value: string,
+ *   type: string,
+ *   key: string,
+ *   allowed: ReadonlyArray<string>,
+ *   suggestion: string | undefined
+ * }} InvalidValue
+ */
+
+/**
+ * Every property in the card whose literal string value isn't one of the
+ * values its list allows. Compared case-insensitively, as hosts do; templated
+ * and empty values are skipped.
+ *
+ * @param {JsonView} card
+ * @returns {InvalidValue[]}
+ */
+function findInvalidValues(card) {
+  /** @type {InvalidValue[]} */
+  const results = [];
+  for (const { type, key, valueToken, info } of findCheckedProperties(card, findObjectTypes(card))) {
+    const allowed = info.values ? ADAPTIVE_CARD_VALUE_LISTS.get(info.values) : undefined;
+    if (!allowed || !valueToken) continue;
+    const { value } = valueToken;
+    if (value === "" || isTemplatedValue(value)) continue;
+    const lower = value.toLowerCase();
+    if (allowed.some((a) => a.toLowerCase() === lower)) continue;
+    results.push({
+      start: valueToken.start + 1,
+      end: valueToken.end,
+      value,
+      type,
+      key,
+      allowed,
+      suggestion: nearestAllowedValue(value, allowed),
+    });
   }
   return results;
 }
@@ -350,9 +520,13 @@ function findTooNewTypes(card, cardVersion) {
  *
  * @param {vscode.TextDocument} document
  * @param {string} text - `document.getText()`, passed in to avoid recomputing
+ * @param {{ maxVersion?: string }} [options] - `maxVersion`: the highest card
+ *   version the target host supports (`otterscript.adaptiveCards.maxVersion`);
+ *   a missing or malformed value turns the `adaptivecard-version-too-high`
+ *   check off
  * @returns {vscode.Diagnostic[]}
  */
-function findAdaptiveCardDiagnostics(document, text) {
+function findAdaptiveCardDiagnostics(document, text, options = {}) {
   /** @type {vscode.Diagnostic[]} */
   const issues = [];
 
@@ -392,9 +566,28 @@ function findAdaptiveCardDiagnostics(document, text) {
     addIssue(valueStart, valueEnd, `Unknown Adaptive Card type '${value}'.`, "adaptivecard-unknown-type");
   }
 
+  for (const { start, end, value, type, key, allowed } of findInvalidValues(card)) {
+    addIssue(
+      start, end,
+      `'${value}' is not a valid value for '${key}' on ${type}. Expected one of: ${allowed.join(", ")}.`,
+      "adaptivecard-invalid-value"
+    );
+  }
+
   const versionProperty = findOwnVersionProperty(card);
   const cardVersion = versionProperty && parseCardVersion(versionProperty.value);
   if (versionProperty && cardVersion) {
+    const declared = versionProperty.value.trim();
+    const maxVersion = options.maxVersion ? parseCardVersion(options.maxVersion) : null;
+    if (maxVersion && compareCardVersions(cardVersion, maxVersion) > 0) {
+      addIssue(
+        versionProperty.valueStart, versionProperty.valueEnd,
+        `Adaptive Card version ${declared} is newer than ${options.maxVersion?.trim()}, the highest version the target host supports ` +
+        "(setting otterscript.adaptiveCards.maxVersion). The host shows the card's fallbackText instead of the card.",
+        "adaptivecard-version-too-high"
+      );
+    }
+
     const versionLocation = new vscode.Location(
       document.uri,
       new vscode.Range(
@@ -402,10 +595,10 @@ function findAdaptiveCardDiagnostics(document, text) {
         document.positionAt(objStart + versionProperty.valueEnd)
       )
     );
-    for (const { value, valueStart, valueEnd, required } of findTooNewTypes(card, cardVersion)) {
+    for (const { start, end, required, label } of findTooNewItems(card, cardVersion)) {
       const diagnostic = addIssue(
-        valueStart, valueEnd,
-        `'${value}' requires Adaptive Card version ${required} or later, but this card declares version ${versionProperty.value.trim()}.`,
+        start, end,
+        `${label} requires Adaptive Card version ${required} or later, but this card declares version ${declared}.`,
         "adaptivecard-version-too-low"
       );
       diagnostic.relatedInformation = [
@@ -438,7 +631,7 @@ function createCardVersionFix(document, diagnostic) {
 
   let highest = cardVersion;
   let highestText = "";
-  for (const { required } of findTooNewTypes(located.card, cardVersion)) {
+  for (const { required } of findTooNewItems(located.card, cardVersion)) {
     const parsed = parseCardVersion(required);
     if (parsed && compareCardVersions(parsed, highest) > 0) {
       highest = parsed;
@@ -462,7 +655,33 @@ function createCardVersionFix(document, diagnostic) {
   return action;
 }
 
+/**
+ * Quick fix for `adaptivecard-invalid-value`: replaces the value with the
+ * closest allowed one (`"bold"` -> `"bolder"`), when one is close enough to
+ * be the intended value. Re-derives the suggestion from the document text,
+ * since diagnostics handed back by VS Code keep only their public fields.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Diagnostic} diagnostic
+ * @returns {vscode.CodeAction | null}
+ */
+function createInvalidValueFix(document, diagnostic) {
+  const located = locateCard(document.getText());
+  if (!located) return null;
+  const offset = document.offsetAt(diagnostic.range.start) - located.objStart;
+  const invalid = findInvalidValues(located.card).find((v) => v.start === offset);
+  if (!invalid?.suggestion) return null;
+
+  const action = new vscode.CodeAction(`Change to '${invalid.suggestion}'`, vscode.CodeActionKind.QuickFix);
+  action.diagnostics = [diagnostic];
+  action.isPreferred = true;
+  action.edit = new vscode.WorkspaceEdit();
+  action.edit.replace(document.uri, diagnostic.range, invalid.suggestion);
+  return action;
+}
+
 module.exports = {
   createCardVersionFix,
+  createInvalidValueFix,
   findAdaptiveCardDiagnostics,
 };

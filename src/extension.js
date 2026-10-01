@@ -31,7 +31,7 @@
 // -- VS Code Extension API
 const vscode = require("vscode");
 const { updateDiagnostics, DIAGNOSTIC_CODES } = require("./diagnostics");
-const { createCardVersionFix } = require("./adaptivecard");
+const { createCardVersionFix, createInvalidValueFix } = require("./adaptivecard");
 
 // -- Language documentation (functions, variables, operations, keywords).
 // Plain strings only; any conversion to MarkdownString happens in this file.
@@ -702,6 +702,7 @@ function activate(context) {
     vectorCallRegex,
     operationCallRegex,
     diagnosticRules: loadConfig().diagnosticRules,
+    adaptiveCardMaxVersion: loadConfig().adaptiveCardMaxVersion,
   };
 
   // ============================================================
@@ -720,6 +721,7 @@ function activate(context) {
     "unknown-namespace":       createUnknownNamespaceFix,
     "template-end-keyword":    createTemplateEndFix,
     "adaptivecard-version-too-low": createCardVersionFix,
+    "adaptivecard-invalid-value":   createInvalidValueFix,
   });
 
   // ============================================================
@@ -1274,12 +1276,17 @@ function activate(context) {
   // fixes (the first code that uses them).
   context.subscriptions.push(diagnostics);
 
-  // -- Re-run diagnostics in every open file when the per-code rules change,
-  //    so turning a check off (or re-ranking it) applies without an edit.
+  // -- Re-run diagnostics in every open file when the per-code rules or the
+  //    Adaptive Card version limit change, so the new setting applies without
+  //    an edit.
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
-      if (!e.affectsConfiguration("otterscript.diagnostics.rules")) return;
-      diagnosticsContext.diagnosticRules = loadConfig().diagnosticRules;
+      if (!e.affectsConfiguration("otterscript.diagnostics.rules") &&
+          !e.affectsConfiguration("otterscript.adaptiveCards.maxVersion")) return;
+      ({
+        diagnosticRules: diagnosticsContext.diagnosticRules,
+        adaptiveCardMaxVersion: diagnosticsContext.adaptiveCardMaxVersion,
+      } = loadConfig());
       for (const document of vscode.workspace.textDocuments) {
         updateDiagnostics(document, diagnostics, diagnosticsContext);
       }

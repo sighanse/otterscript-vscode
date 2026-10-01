@@ -19,7 +19,13 @@ This extension started as a learning project while implementing [custom webhook 
 - Syntax highlighting for OtterScript constructs, including namespaced operations (`ProGet::`, `Otter::`, `Windows::`)
 - Hover documentation, auto-completion, and signature help for built-in functions (including the `@` / `%` forms of `FromJson` and `ListItem`), operations, variables, and map/vector expressions
 - Diagnostics for common mistakes (missing `$`, unknown functions, invalid operators, `=` used in `if` conditions, duplicate map keys, too many arguments to a fixed-arity function, unknown `Namespace::` prefixes, malformed `<% %>` text-template tags, template/expression mode mixing) — including `$` expressions embedded directly in a text template's literal output (e.g. `$ToJson(...)` in a webhook body), not just code inside `<% %>`
-- Adaptive Card checks for Teams webhook bodies, automatically triggered when a literal `"type": "AdaptiveCard"` object is found: an unrecognized `"type"` value, a missing `"version"`, or an element/action that needs a newer card version than the card declares (e.g. a 1.5 `Table` in a 1.2 card, unless it has a `"fallback"`) is flagged, with a quick fix to raise the version. Best-effort only — it does not validate full card structure against the schema, since a template's `<% %>` control flow means there's no single concrete JSON document to validate against
+- Adaptive Card checks for Teams webhook bodies, automatically triggered when a literal `"type": "AdaptiveCard"` object is found:
+  - an unrecognized `"type"`, or a missing `"version"`
+  - a value a property doesn't allow, such as `"weight": "bold"` (should be `"bolder"`), with a quick fix to the closest allowed value
+  - an element, action or property that needs a newer card version than the card declares (e.g. a 1.5 `Table` or `"rtl"` in a 1.2 card, unless it has a `"fallback"`), with a quick fix to raise the version
+  - a card version newer than the host supports (`otterscript.adaptiveCards.maxVersion`, 1.6 by default, the version Teams supports)
+
+  The checks know the official Adaptive Card schema (1.6) and the Teams-only elements such as `Badge`, `Icon` and the charts. Best-effort only — they don't validate the full card structure, since a template's `<% %>` control flow means there's no single concrete JSON document to validate against
 - Quick‑fix code actions, plus a **Fix All Issues** command (`Ctrl+Shift+Alt+F`) that applies every available fix in the file
 - Go to Definition (F12) and Find All References (Shift+F12) for document-local module calls
 - Highlight all occurrences: clicking a variable (`$x`, `@list`, `%map`, or braced forms like `${my var}`) or module name highlights every use of it in the file, with declarations and assignments marked as writes
@@ -73,6 +79,10 @@ All features are enabled by default and can be toggled individually:
 - `otterscript.codeLens.enable` — CodeLens reference counts above module declarations
 - `otterscript.workspaceSymbols.enable` — index module declarations for "Go to Symbol in Workspace" (`Ctrl+T`)
 
+`otterscript.adaptiveCards.maxVersion` (default `"1.6"`) is the highest
+Adaptive Card version the host that shows your cards supports. Lower it if
+your cards go to an older host.
+
 ### Turning individual diagnostics off
 
 Every diagnostic has a code, shown in the Problems panel. Use
@@ -110,7 +120,9 @@ when no folder is open).
 | `template-in-expression` | `<% %>` inside an unclosed OtterScript expression |
 | `adaptivecard-missing-version` | Adaptive Card without a `"version"` |
 | `adaptivecard-unknown-type` | Unrecognized Adaptive Card `"type"` |
-| `adaptivecard-version-too-low` | Card element or action newer than the card's `"version"` |
+| `adaptivecard-invalid-value` | Card property value that isn't allowed, e.g. `"weight": "bold"` |
+| `adaptivecard-version-too-low` | Card element, action or property newer than the card's `"version"` |
+| `adaptivecard-version-too-high` | Card `"version"` newer than `otterscript.adaptiveCards.maxVersion` |
 
 ## Language Support Coverage
 

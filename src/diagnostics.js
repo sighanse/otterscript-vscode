@@ -43,6 +43,9 @@ const { findAdaptiveCardDiagnostics } = require("./adaptivecard");
  * @property {Readonly<Record<string, string>>} [diagnosticRules] - The
  *   `otterscript.diagnostics.rules` setting: diagnostic code -> `"off"` or a
  *   severity override (see {@link applyDiagnosticRules})
+ * @property {string} [adaptiveCardMaxVersion] - The
+ *   `otterscript.adaptiveCards.maxVersion` setting: the highest Adaptive Card
+ *   version the target host supports
  */
 
 /**
@@ -74,7 +77,9 @@ const DIAGNOSTIC_CODES = Object.freeze([
   // -- Adaptive Cards
   "adaptivecard-missing-version",
   "adaptivecard-unknown-type",
+  "adaptivecard-invalid-value",
   "adaptivecard-version-too-low",
+  "adaptivecard-version-too-high",
 ]);
 
 /**
@@ -342,6 +347,7 @@ function updateDiagnostics(document, collection, ctx) {
     vectorCallRegex,
     operationCallRegex,
     diagnosticRules,
+    adaptiveCardMaxVersion,
   } = ctx;
 
   // Lower-cased view of the namespace allowlist for lenient matching (Inedo
@@ -595,7 +601,7 @@ function updateDiagnostics(document, collection, ctx) {
     issues.push(...findArgumentCountDiagnosticsFromMasked(document, joinedMasked, scalarFunctionDocs, vectorFunctionDocs, mapFunctionDocs));
     if (templateAware) {
       // Triggered by a literal "type": "AdaptiveCard" in the literal output.
-      issues.push(...findAdaptiveCardDiagnostics(document, text));
+      issues.push(...findAdaptiveCardDiagnostics(document, text, { maxVersion: adaptiveCardMaxVersion }));
     }
   } catch (err) {
     log.error(`Cross-line diagnostic scan failed for ${document.uri.toString()}:`, err);

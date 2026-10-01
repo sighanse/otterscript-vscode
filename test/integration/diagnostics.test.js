@@ -68,7 +68,7 @@ describe("diagnostics", () => {
       ["sample-valid.otter", 0],
       ["sample-template.otter", 13],
       ["sample-template-valid.otter", 0],
-      ["sample-card-version.otter", 4],
+      ["sample-card-version.otter", 5],
     ]) {
       const document = await openFile(path.join(SAMPLES_DIR, /** @type {string} */ (file)));
       assert.equal((await refreshDiagnostics(document)).length, expected, /** @type {string} */ (file));
@@ -166,13 +166,29 @@ describe("quick fixes", () => {
   it("'Change card version' raises the card version to what the card needs", async () => {
     const document = await openFile(path.join(SAMPLES_DIR, "sample-card-version.otter"));
     const diagnostics = await refreshDiagnostics(document);
-    assert.equal(diagnostics.length, 4);
+    assert.equal(diagnostics.length, 5);
 
     const fix = (await quickFixes(document, diagnostics[0])).find((a) => a.title === "Change card version to 1.5");
     assert.ok(fix?.edit, "the fix is offered");
     // The edit is never saved: afterEach reverts and closes the editor.
     await vscode.workspace.applyEdit(fix.edit);
     assert.ok(document.lineAt(positionOf(document, "\"version\": \"").line).text.includes("\"1.5\""));
+    assert.equal((await refreshDiagnostics(document)).length, 0);
+  });
+
+  it("'Change to' replaces an Adaptive Card value that isn't allowed", async () => {
+    const document = await openContent(
+      "<% if $Notify { %>\n" +
+      '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "TextBlock", "text": "x", "weight": "bold" } ] }\n' +
+      "<% } %>\n"
+    );
+    const [diagnostic] = await refreshDiagnostics(document);
+    assert.equal(diagnostic?.code, "adaptivecard-invalid-value");
+
+    const fix = (await quickFixes(document, diagnostic)).find((a) => a.title === "Change to 'bolder'");
+    assert.ok(fix?.edit, "the fix is offered");
+    await vscode.workspace.applyEdit(fix.edit);
+    assert.ok(document.lineAt(1).text.includes('"weight": "bolder"'));
     assert.equal((await refreshDiagnostics(document)).length, 0);
   });
 });

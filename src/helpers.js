@@ -58,7 +58,8 @@ const { NAMESPACES } = require("./language-data");
  *   signatureHelpEnabled: boolean,
  *   codeLensEnabled: boolean,
  *   workspaceSymbolsEnabled: boolean,
- *   diagnosticRules: Readonly<Record<string, string>>
+ *   diagnosticRules: Readonly<Record<string, string>>,
+ *   adaptiveCardMaxVersion: string
  * }}
  *
  * @example
@@ -78,7 +79,8 @@ function loadConfig() {
     signatureHelpEnabled: config.get("signatureHelp.enable", true),
     codeLensEnabled: config.get("codeLens.enable", true),
     workspaceSymbolsEnabled: config.get("workspaceSymbols.enable", true),
-    diagnosticRules: config.get("diagnostics.rules", {})
+    diagnosticRules: config.get("diagnostics.rules", {}),
+    adaptiveCardMaxVersion: config.get("adaptiveCards.maxVersion", "1.6")
   };
 }
 
@@ -1223,7 +1225,6 @@ function createTemplateEndFix(document, diagnostic) {
  * @param {string} a
  * @param {string} b
  * @returns {number}
- * @private
  */
 function editDistance(a, b) {
   const rows = a.length + 1;
@@ -1477,6 +1478,7 @@ module.exports = {
   createForToForeachFix,
   createUnknownNamespaceFix,
   createTemplateEndFix,
+  editDistance,
   nearestNamespace,
 
   // -- Module navigation

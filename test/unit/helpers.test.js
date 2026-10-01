@@ -746,7 +746,7 @@ describe("isValidCompletionPosition", () => {
 // ============================================================
 
 describe("loadConfig", () => {
-  it("defaults every feature to enabled, with no diagnostic rules", () => {
+  it("defaults every feature to enabled, with no diagnostic rules and Teams' card version", () => {
     assert.deepEqual(loadConfig(), {
       completionEnabled: true,
       hoverEnabled: true,
@@ -754,6 +754,7 @@ describe("loadConfig", () => {
       codeLensEnabled: true,
       workspaceSymbolsEnabled: true,
       diagnosticRules: {},
+      adaptiveCardMaxVersion: "1.6",
     });
   });
 

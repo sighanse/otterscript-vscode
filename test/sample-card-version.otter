@@ -1,6 +1,7 @@
 # SAMPLE-CARD-VERSION.OTTER
 #
-# Manual-review corpus for the adaptivecard-version-too-low check. It lives in
+# Manual-review corpus for the adaptivecard-version-too-low check (element,
+# action and property versions). It lives in
 # its own file because only the FIRST Adaptive Card in a document is checked,
 # and test/sample-template.otter's card deliberately has no "version".
 #
@@ -8,8 +9,8 @@
 # Adaptive Card checks on. Every `# EXPECT:` note marks a line that must raise
 # exactly the named diagnostic.
 #
-# Expected total: 4 diagnostics (pinned by test/unit/fixtures.test.js) -
-#   adaptivecard-version-too-low x4. The quick fix "Change card version to 1.5"
+# Expected total: 5 diagnostics (pinned by test/unit/fixtures.test.js) -
+#   adaptivecard-version-too-low x5. The quick fix "Change card version to 1.5"
 #   on any of them raises "version" to the highest version the card needs.
 
 <% if $Notify { %>
@@ -37,4 +38,5 @@
 #                                              host replaces the whole element
 #   Action.Execute (1.4)                    -- EXPECT: adaptivecard-version-too-low
 #   "type": "Table" inside "data"           -- not flagged: free-form payload
+#   "refresh" property of the card (1.4)    -- EXPECT: adaptivecard-version-too-low
 #   Refresh (1.4) and its Action.Execute    -- EXPECT: adaptivecard-version-too-low x2
