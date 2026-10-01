@@ -53,6 +53,13 @@ jobs:
         run: npm run check:lang
         continue-on-error: true
 
+      # src/adaptivecard-data.js is generated from scripts/adaptive-card-schema.json
+      # and the Teams additions in scripts/update-adaptivecard-data.js.
+      - name: Adaptive Card data up to date
+        id: cards
+        run: npm run check:cards
+        continue-on-error: true
+
       - name: Unit tests
         id: tests
         run: npm test
@@ -171,6 +178,13 @@ jobs:
             echo "❌ Grammar / language-data sync: drift detected" >> "$GITHUB_STEP_SUMMARY"
           fi
 
+          # Adaptive Card data
+          if [ "${{ steps.cards.outcome }}" == "success" ]; then
+            echo "✅ Adaptive Card data: up to date" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ Adaptive Card data: stale (regenerate with node scripts/update-adaptivecard-data.js)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
           # Unit tests
           if [ "${{ steps.tests.outcome }}" == "success" ]; then
             echo "✅ Unit tests: passed" >> "$GITHUB_STEP_SUMMARY"
@@ -231,6 +245,7 @@ jobs:
             ESLint=${{ steps.eslint.outcome }}
             Type-check=${{ steps.jscheck.outcome }}
             Grammar-sync=${{ steps.langsync.outcome }}
+            Adaptive-Card-data=${{ steps.cards.outcome }}
             Unit-tests=${{ steps.tests.outcome }}
             JSON=${{ steps.json.outcome }}
             JSONC=${{ steps.jsonc.outcome }}

@@ -202,11 +202,15 @@ function activate(context) {
     // -- Output channel used for logging
     getOutputChannel(),
 
-    // -- Re-run diagnostics after a pause in typing
+    // -- After a pause in typing, re-run diagnostics and refresh the
+    //    document's entry in the workspace module index, so Go to Symbol in
+    //    Workspace follows unsaved edits (an added, renamed or removed module)
+    //    without waiting for a save.
     vscode.workspace.onDidChangeTextDocument(e => {
       if (e.document.languageId !== "otterscript") return;
       scheduleTimerForUri(diagnosticTimers, e.document.uri, 400, () => {
         updateDiagnostics(e.document, diagnostics, diagnosticsContext);
+        workspaceSymbols.setModuleIndexEntry(e.document.uri, e.document.getText());
       });
     }),
 

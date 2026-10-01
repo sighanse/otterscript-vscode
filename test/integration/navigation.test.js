@@ -156,6 +156,18 @@ describe("documents that aren't files on disk", () => {
     }
   });
 
+  it("Go to Symbol in Workspace follows unsaved edits to an open document", async () => {
+    await openContent("module BeforeRename {\n}\n");
+    await waitFor(async () => (await symbolSchemes("BeforeRename")).length === 1, "the module in the index");
+
+    const editor = /** @type {vscode.TextEditor} */ (vscode.window.activeTextEditor);
+    const name = positionOf(editor.document, "BeforeRename");
+    await editor.edit((edit) => edit.replace(new vscode.Range(name, name.translate(0, "BeforeRename".length)), "AfterRename"));
+
+    await waitFor(async () => (await symbolSchemes("AfterRename")).length === 1, "the renamed module in the index");
+    assert.deepEqual(await symbolSchemes("BeforeRename"), []);
+  });
+
   it("an untitled document's modules leave Go to Symbol in Workspace when it closes", async () => {
     await openContent("module UntitledOnly {\n}\n");
     assert.deepEqual(await symbolSchemes("UntitledOnly"), ["untitled"]);
