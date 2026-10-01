@@ -69,19 +69,18 @@ const {
   maskClosedGroups,
   getTypedIdentifier,
   getModuleDeclarations,
+  getModuleNameAt,
   getModuleCallReferencesByName,
   findModuleDeclarationRange,
   findModuleDeclarations,
   findModuleReferences,
   getVariableOccurrences,
-  isModuleCallContext,
-  isModuleDeclarationContext,
   isValidCompletionPosition,
   isInStringOrCommentDoc,
   clearDocumentCaches,
   clearTimerForUri,
   loadConfig,
-  MODULE_NAME_TOKEN_REGEX,
+  lookupOwn,
   validateDocs,
   scheduleTimerForUri,
   mapWithConcurrency,
@@ -109,20 +108,11 @@ function activate(context) {
 
   log.info(`${extensionName} v${version} activated`);
 
-  // -- Load initial configuration
-  let { completionEnabled, hoverEnabled, signatureHelpEnabled, codeLensEnabled, workspaceSymbolsEnabled } = loadConfig();
+  // -- Load initial configuration. Changes are applied by the one settings
+  //    listener at the end of activate() (SETTINGS CHANGES).
+  const initialConfig = loadConfig();
+  let { completionEnabled, hoverEnabled, signatureHelpEnabled, codeLensEnabled, workspaceSymbolsEnabled } = initialConfig;
   log.info(`Settings loaded: completion=${completionEnabled}, hover=${hoverEnabled}, signatureHelp=${signatureHelpEnabled}, codeLens=${codeLensEnabled}, workspaceSymbols=${workspaceSymbolsEnabled}`);
-
-  // -- Watch for settings changes while extension is running
-  context.subscriptions.push(
-    vscode.workspace.onDidChangeConfiguration(e => {
-      // -- Only reload if OtterScript settings changed
-      if (e.affectsConfiguration("otterscript")) {
-        ({ completionEnabled, hoverEnabled, signatureHelpEnabled, codeLensEnabled, workspaceSymbolsEnabled } = loadConfig());
-        log.info(`Settings reloaded: completion=${completionEnabled}, hover=${hoverEnabled}, signatureHelp=${signatureHelpEnabled}, codeLens=${codeLensEnabled}, workspaceSymbols=${workspaceSymbolsEnabled}`);
-      }
-    })
-  );
 
   // -- Validate all documentation sources (intentionally ignore return value)
   for (const [label, table] of Object.entries({
@@ -198,7 +188,7 @@ function activate(context) {
 
           for (const { regex, table, operation } of candidates) {
             const m = textBeforeCursor.match(regex());
-            if (m && table[m[1]]) { match = m; fn = table[m[1]]; args = m[2]; isOperation = operation; break; }
+            if (m && lookupOwn(table, m[1])) { match = m; fn = lookupOwn(table, m[1]); args = m[2]; isOperation = operation; break; }
           }
 
           // -- Validate we have everything needed
@@ -540,7 +530,7 @@ function activate(context) {
         // the string/comment guard below, since `#` itself starts a comment)
         const regionRange = document.getWordRangeAtPosition(position, /#(?:end)?region\b/);
         if (regionRange) {
-          const doc = keywordDocs[document.getText(regionRange)];
+          const doc = lookupOwn(keywordDocs, document.getText(regionRange));
           if (doc) {
             return new vscode.Hover(buildHoverMarkdown(doc), regionRange);
           }
@@ -608,11 +598,8 @@ function activate(context) {
           const word = document.getText(wordRange);
 
           // -- Check if it's a known keyword
-          if (knownKeywords.has(word)) {
-            const doc = keywordDocs[word];
-            // -- Make hover
-            return new vscode.Hover(buildHoverMarkdown(doc), wordRange);
-          }
+          const doc = lookupOwn(keywordDocs, word);
+          if (doc) return new vscode.Hover(buildHoverMarkdown(doc), wordRange);
         }
 
         // -- Swim-string delimiters (Fish Sentinels)
@@ -638,7 +625,7 @@ function activate(context) {
 
         if (operationRange) {
           const opName = document.getText(operationRange);
-          const doc = operationDocs[opName];
+          const doc = lookupOwn(operationDocs, opName);
 
           // -- No documentation found
           if (!doc) return null;
@@ -666,13 +653,13 @@ function activate(context) {
         if (prefix === "$") {
           // -- $ can be either a scalar function OR a variable
           // Check functions first (more specific), then variables
-          doc = scalarFunctionDocs[name] || variableDocs[name];
+          doc = lookupOwn(scalarFunctionDocs, name) ?? lookupOwn(variableDocs, name);
         } else if (prefix === "@") {
           // -- @ is a vector function
-          doc = vectorFunctionDocs[name];
+          doc = lookupOwn(vectorFunctionDocs, name);
         } else if (prefix === "%") {
           // -- % is a map function (a plain %map variable has no doc -> no hover)
-          doc = mapFunctionDocs[name];
+          doc = lookupOwn(mapFunctionDocs, name);
         }
 
         // -- No documentation found
@@ -706,8 +693,8 @@ function activate(context) {
     scalarCallRegex,
     vectorCallRegex,
     operationCallRegex,
-    diagnosticRules: loadConfig().diagnosticRules,
-    adaptiveCardMaxVersion: loadConfig().adaptiveCardMaxVersion,
+    diagnosticRules: initialConfig.diagnosticRules,
+    adaptiveCardMaxVersion: initialConfig.adaptiveCardMaxVersion,
   };
 
   // ============================================================
@@ -748,7 +735,7 @@ function activate(context) {
           for (const diagnostic of codeActionContext.diagnostics) {
             if (diagnostic.source !== "OtterScript") continue;
 
-            const factory = FIX_FACTORIES[getDiagnosticCode(diagnostic)];
+            const factory = lookupOwn(FIX_FACTORIES, getDiagnosticCode(diagnostic));
             const fix = factory?.(document, diagnostic);
             if (fix) {
               fix.command = {
@@ -810,11 +797,14 @@ function activate(context) {
       if (!editor || editor.document.languageId !== "otterscript") return;
 
       const document = editor.document;
-      const docDiagnostics = vscode.languages
-        .getDiagnostics(document.uri)
-        .filter(diagnostic => diagnostic.source === "OtterScript");
+      // -- Re-run the checks first: the published diagnostics lag 400 ms
+      // behind typing, and a fix built from a stale range would edit the
+      // wrong place.
+      clearTimerForUri(diagnosticTimers, document.uri);
+      updateDiagnostics(document, diagnostics, diagnosticsContext);
+      const docDiagnostics = diagnostics.get(document.uri) ?? [];
       // -- Filter to fixable diagnostic codes (keys of FIX_FACTORIES)
-      const fixableDiagnostics = docDiagnostics.filter(d => getDiagnosticCode(d) in FIX_FACTORIES);
+      const fixableDiagnostics = docDiagnostics.filter(d => Object.hasOwn(FIX_FACTORIES, getDiagnosticCode(d)));
 
       if (fixableDiagnostics.length === 0) {
         const msg = `No fixable OtterScript issues found in ${document.fileName}`;
@@ -833,7 +823,7 @@ function activate(context) {
       let fixedCount = 0;
 
       for (const diagnostic of sorted) {
-        const factory = FIX_FACTORIES[getDiagnosticCode(diagnostic)];
+        const factory = lookupOwn(FIX_FACTORIES, getDiagnosticCode(diagnostic));
         const action = factory?.(document, diagnostic) ?? null;
 
         // A fix that isn't preferred trades this problem for another (e.g.
@@ -875,23 +865,11 @@ function activate(context) {
   const definitionProvider = vscode.languages.registerDefinitionProvider(
     "otterscript", {
       provideDefinition(document, position) {
+        // -- Only from a `call` statement; the declaration is the definition.
+        const moduleAt = getModuleNameAt(document, position);
+        if (!moduleAt || moduleAt.isDeclaration) return null;
 
-        const wordRange = document.getWordRangeAtPosition(position, MODULE_NAME_TOKEN_REGEX);
-        if (!wordRange) return null;
-
-        const calledName = document.getText(wordRange);
-
-        // -- Verify this is actually a 'call' statement
-        const lineText = document.lineAt(position.line).text;
-        if (isInStringOrCommentDoc(document, wordRange.start)) {
-          return null;
-        }
-
-        if (!isModuleCallContext(lineText, wordRange.start.character)) {
-          return null;  // Not a 'call' statement - ignore
-        }
-
-        const declarationRange = findModuleDeclarationRange(document, calledName);
+        const declarationRange = findModuleDeclarationRange(document, moduleAt.name);
         return declarationRange ? new vscode.Location(document.uri, declarationRange) : null;
       }
     }
@@ -914,21 +892,9 @@ function activate(context) {
        * @returns {vscode.Location[]}
        */
       provideReferences(document, position, refContext) {
-        const wordRange = document.getWordRangeAtPosition(position, MODULE_NAME_TOKEN_REGEX);
-        if (!wordRange) return [];
-
-        const moduleName = document.getText(wordRange);
-
-        const currentLine = document.lineAt(position.line).text;
-        if (isInStringOrCommentDoc(document, wordRange.start)) {
-          return [];
-        }
-
-        const isModuleDecl = isModuleDeclarationContext(currentLine, wordRange.start.character);
-        const isCallSite = isModuleCallContext(currentLine, wordRange.start.character);
-        if (!isModuleDecl && !isCallSite) return [];
-
-        return findModuleReferences(document, moduleName, refContext.includeDeclaration);
+        const moduleAt = getModuleNameAt(document, position);
+        if (!moduleAt) return [];
+        return findModuleReferences(document, moduleAt.name, refContext.includeDeclaration);
       }
     }
   );
@@ -968,16 +934,10 @@ function activate(context) {
           ));
         }
 
-        const wordRange = document.getWordRangeAtPosition(position, MODULE_NAME_TOKEN_REGEX);
-        if (!wordRange || isInStringOrCommentDoc(document, wordRange.start)) return undefined;
+        const moduleAt = getModuleNameAt(document, position);
+        if (!moduleAt) return undefined;
 
-        const lineText = document.lineAt(position.line).text;
-        if (!isModuleDeclarationContext(lineText, wordRange.start.character) &&
-            !isModuleCallContext(lineText, wordRange.start.character)) {
-          return undefined;
-        }
-
-        const moduleName = document.getText(wordRange);
+        const moduleName = moduleAt.name;
         const declarationRange = findModuleDeclarationRange(document, moduleName);
         return findModuleReferences(document, moduleName, true).map((location) => new vscode.DocumentHighlight(
           location.range,
@@ -1192,23 +1152,20 @@ function activate(context) {
     scheduleTimerForUri(workspaceIndexTimers, uri, 400, () => { void indexModuleFile(uri); });
   });
 
-  // -- React to `otterscript.workspaceSymbols.enable` flipping at runtime.
-  //    Either way we just reset the lazy state: enabling does NOT eagerly scan
-  //    (the next Ctrl+T builds it, like a fresh activation); disabling drops the
-  //    index and any pending debounce timers. Reads the setting here so it does
-  //    not depend on any other listener's ordering.
-  context.subscriptions.push(
-    vscode.workspace.onDidChangeConfiguration(e => {
-      if (!e.affectsConfiguration("otterscript.workspaceSymbols.enable")) return;
-      workspaceSymbolsEnabled = vscode.workspace
-        .getConfiguration("otterscript")
-        .get("workspaceSymbols.enable", true);
-      workspaceModuleIndex.clear();
-      for (const timer of workspaceIndexTimers.values()) clearTimeout(timer);
-      workspaceIndexTimers.clear();
-      workspaceIndexReady = null;
-    })
-  );
+  /**
+   * Resets the lazy workspace index when `otterscript.workspaceSymbols.enable`
+   * flips. Either way: enabling does NOT eagerly scan (the next Ctrl+T builds
+   * it, like a fresh activation); disabling drops the index and any pending
+   * debounce timers.
+   *
+   * @returns {void}
+   */
+  function resetWorkspaceIndex() {
+    workspaceModuleIndex.clear();
+    for (const timer of workspaceIndexTimers.values()) clearTimeout(timer);
+    workspaceIndexTimers.clear();
+    workspaceIndexReady = null;
+  }
 
   // ============================================================
   // CODE LENS PROVIDER (Module References)
@@ -1286,19 +1243,29 @@ function activate(context) {
   // fixes (the first code that uses them).
   context.subscriptions.push(diagnostics);
 
-  // -- Re-run diagnostics in every open file when the per-code rules or the
-  //    Adaptive Card version limit change, so the new setting applies without
-  //    an edit.
+  // ============================================================
+  // SETTINGS CHANGES
+  // ============================================================
+  // The one listener for `otterscript.*` settings: reloads them all at once,
+  // then does what a particular change needs -- reset the workspace index, or
+  // re-run diagnostics in every open file so new rules or a new Adaptive Card
+  // version limit apply without an edit.
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
-      if (!e.affectsConfiguration("otterscript.diagnostics.rules") &&
-          !e.affectsConfiguration("otterscript.adaptiveCards.maxVersion")) return;
-      ({
-        diagnosticRules: diagnosticsContext.diagnosticRules,
-        adaptiveCardMaxVersion: diagnosticsContext.adaptiveCardMaxVersion,
-      } = loadConfig());
-      for (const document of vscode.workspace.textDocuments) {
-        updateDiagnostics(document, diagnostics, diagnosticsContext);
+      if (!e.affectsConfiguration("otterscript")) return;
+      const config = loadConfig();
+      ({ completionEnabled, hoverEnabled, signatureHelpEnabled, codeLensEnabled, workspaceSymbolsEnabled } = config);
+      log.info(`Settings reloaded: completion=${completionEnabled}, hover=${hoverEnabled}, signatureHelp=${signatureHelpEnabled}, codeLens=${codeLensEnabled}, workspaceSymbols=${workspaceSymbolsEnabled}`);
+
+      if (e.affectsConfiguration("otterscript.workspaceSymbols.enable")) resetWorkspaceIndex();
+
+      if (e.affectsConfiguration("otterscript.diagnostics.rules") ||
+          e.affectsConfiguration("otterscript.adaptiveCards.maxVersion")) {
+        diagnosticsContext.diagnosticRules = config.diagnosticRules;
+        diagnosticsContext.adaptiveCardMaxVersion = config.adaptiveCardMaxVersion;
+        for (const document of vscode.workspace.textDocuments) {
+          updateDiagnostics(document, diagnostics, diagnosticsContext);
+        }
       }
     })
   );

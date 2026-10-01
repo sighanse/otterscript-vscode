@@ -21,6 +21,11 @@
 
 ### Fixed
 
+- The `assignment-in-condition` and `invalid-operator` checks looked at the whole `if` line, so `if $Debug { set $Level = 2; }` was flagged, and the quick fix (also run by **Fix All**) turned the body's `=` into `==`. Only the condition is checked now
+- **Replace 'for' with 'foreach'** is no longer offered for a counting loop (`for $i = 1 to 10`), where it produced `foreach $i = 1 to 10`, which is still invalid; the warning stays
+- `incorrect-for-usage` on a capitalized `For` was placed at column -1
+- **Fix All** right after typing could apply fixes at positions from before the edit; it now re-checks the document first
+- Hovering `$constructor`, `$toString` or similar names showed a bogus "Object" entry
 - Read-only views of another version of a file — the old side of a Git diff, a pull-request review — no longer get diagnostics or add duplicate modules to Go to Symbol in Workspace; an untitled document's modules now leave it when the document closes
 - Signature help no longer disappears once an earlier argument contains a nested call or a parenthesis inside a string (e.g. `$Substring($Trim($x), …`)
 - Snippets that insert an OtterScript `$` literally: the `Execute-PowerShell` completion lost `$_` and a `}` (inserting `Where-Object { .Status -eq "Running"  | Out-String}`), and `Acquire-Server` lost `$AcquiredServerName`. The `ifMatchesRegex`, `joinIntoString`, `ifexists` and `ifdirexists` snippets had an extra tab stop on the function name, and caused VS Code's "snippets very likely confuse snippet-variables and snippet-placeholders" warning

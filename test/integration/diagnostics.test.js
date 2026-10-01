@@ -154,6 +154,18 @@ describe("quick fixes", () => {
     assert.equal(document.lineAt(0).text, "if $count == 1 {");
   });
 
+  it("Fix All works on the text as it is now, not on diagnostics from before an edit", async () => {
+    const document = await openContent("if count == 1 {\n}\n");
+    assert.equal((await refreshDiagnostics(document)).length, 1);
+
+    // Shift the line, then run Fix All at once -- before the debounced
+    // diagnostics run would have caught up with the edit.
+    const editor = /** @type {vscode.TextEditor} */ (vscode.window.activeTextEditor);
+    await editor.edit((edit) => edit.insert(new vscode.Position(0, 0), "# note\n"));
+    await vscode.commands.executeCommand("otterscript.fixAll");
+    assert.equal(document.getText(), "# note\nif $count == 1 {\n}\n");
+  });
+
   it("Fix All fixes every fixable diagnostic in one step", async () => {
     const document = await openContent("if count == 1 {\n}\nif $a & $b {\n}\n");
     assert.equal((await refreshDiagnostics(document)).length, 2);

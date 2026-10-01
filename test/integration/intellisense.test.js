@@ -68,6 +68,7 @@ describe("hover", () => {
       "#region Setup",
       "# a comment mentioning $ToJson",
       "#endregion",
+      "set $x = $constructor;",
     ].join("\n"));
   });
 
@@ -90,6 +91,10 @@ describe("hover", () => {
   it("documents a #region directive, but only on the directive itself", async () => {
     assert.match(await hoverText(document, positionOf(document, "#region", 2)), /region/i);
     assert.equal(await hoverText(document, positionOf(document, "Setup", 1)), "");
+  });
+
+  it("shows nothing for names that are only inherited Object members", async () => {
+    assert.equal(await hoverText(document, positionOf(document, "$constructor", 2)), "");
   });
 
   it("shows nothing for a function name inside a comment", async () => {

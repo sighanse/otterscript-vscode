@@ -51,6 +51,7 @@ const {
   isInStringOrCommentDoc,
   isValidCompletionPosition,
   loadConfig,
+  lookupOwn,
   scheduleTimerForUri,
   clearTimerForUri,
   mapWithConcurrency,
@@ -645,6 +646,10 @@ describe("quick-fix factories", () => {
     assert.equal(fix.edit.edits[0][3], "foreach");
   });
 
+  it("createForToForeachFix offers nothing for the counting form, which has no foreach equivalent", () => {
+    assert.equal(createForToForeachFix(makeDoc("for $i = 1 to 10 {"), diagAt(0, 3)), null);
+  });
+
   it("createTemplateEndFix replaces the diagnostic range with '}'", () => {
     const fix = /** @type {any} */ (createTemplateEndFix(makeDoc("<% end %>"), diagAt(3, 6)));
     assert.equal(fix.title, "Replace with '}'");
@@ -682,6 +687,16 @@ describe("createUnbalancedDiagnostic", () => {
 // ============================================================
 // getDiagnosticCode
 // ============================================================
+
+describe("lookupOwn", () => {
+  it("returns a table's own entries only, never inherited Object members", () => {
+    const table = { ToJson: { name: "$ToJson" } };
+    assert.equal(lookupOwn(table, "ToJson"), table.ToJson);
+    for (const inherited of ["constructor", "toString", "valueOf", "hasOwnProperty", "__proto__"]) {
+      assert.equal(lookupOwn(table, inherited), undefined, inherited);
+    }
+  });
+});
 
 describe("getDiagnosticCode", () => {
   it("normalizes string / {value} / number / missing", () => {

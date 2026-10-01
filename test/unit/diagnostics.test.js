@@ -318,6 +318,17 @@ describe("updateDiagnostics — assignment in condition", () => {
   it("does not flag '=' outside an if", () => {
     assert.deepEqual(only("set $x = 5;", "assignment-in-condition"), []);
   });
+
+  it("checks only the condition, not a body on the same line", () => {
+    assert.deepEqual(only("if $Debug { set $Level = 2; }", "assignment-in-condition"), []);
+    const found = only("if $a = 1 { set $b = 2; }", "assignment-in-condition");
+    assert.deepEqual(found.map((d) => d.range.start.character), [6]);
+  });
+
+  it("treats a braced variable as part of the condition", () => {
+    const src = "if ${my var} = 1 {\n}";
+    assert.deepEqual(only(src, "assignment-in-condition").map((d) => d.range.start.character), [src.indexOf("= 1")]);
+  });
 });
 
 describe("updateDiagnostics — invalid logical operator", () => {
@@ -333,6 +344,9 @@ describe("updateDiagnostics — invalid logical operator", () => {
 
   it("does not flag '&&' or '||'", () => {
     assert.deepEqual(only("if $a && $b || $c { }", "invalid-operator"), []);
+  });
+  it("checks only the condition, not a body on the same line", () => {
+    assert.deepEqual(only("if $a { Log-Information $b & $c; }", "invalid-operator"), []);
   });
 });
 
@@ -355,6 +369,13 @@ describe("updateDiagnostics — incorrect 'for' usage", () => {
 
   it("does not flag 'foreach'", () => {
     assert.deepEqual(only("foreach $x in @list { }", "incorrect-for-usage"), []);
+  });
+
+  it("reports the keyword's real position whatever its case", () => {
+    const [d] = only("  For $i = 1 to 10 { }", "incorrect-for-usage");
+    assert.ok(d);
+    assert.equal(d.range.start.character, 2);
+    assert.equal(d.range.end.character, 5);
   });
 
   it("does not flag context-binding 'for server'", () => {

@@ -652,6 +652,26 @@ function clearDocumentCaches(uri) {
 }
 
 /**
+ * The module name under the cursor, when it is a real module reference: the
+ * name in a `module X` declaration or a `call X` statement, outside strings
+ * and comments. Shared by Go to Definition, Find References and Highlight.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Position} position
+ * @returns {{ name: string, range: vscode.Range, isDeclaration: boolean } | null}
+ */
+function getModuleNameAt(document, position) {
+  const range = document.getWordRangeAtPosition(position, MODULE_NAME_TOKEN_REGEX);
+  if (!range || isInStringOrCommentDoc(document, range.start)) return null;
+
+  const lineText = document.lineAt(range.start.line).text;
+  const isDeclaration = isModuleDeclarationContext(lineText, range.start.character);
+  if (!isDeclaration && !isModuleCallContext(lineText, range.start.character)) return null;
+
+  return { name: document.getText(range), range, isDeclaration };
+}
+
+/**
  * Finds references to a module declaration and module calls in the document.
  *
  * @param {vscode.TextDocument} document
@@ -1083,6 +1103,20 @@ function findArgumentCountDiagnosticsFromMasked(document, maskedText, scalarFunc
 }
 
 /**
+ * A table's own entry for `key`, or undefined. The docs tables and the fix
+ * table are plain objects, so `table[key]` would also find inherited members:
+ * hovering `$constructor` used to show `Object`'s constructor as a function.
+ *
+ * @template T
+ * @param {Readonly<Record<string, T>>} table
+ * @param {string} key
+ * @returns {T | undefined}
+ */
+function lookupOwn(table, key) {
+  return Object.hasOwn(table, key) ? table[key] : undefined;
+}
+
+/**
  * Gets the diagnostic code as a string, unwrapping the `{ value, target }`
  * object form; returns '' when the diagnostic has no code.
  * @param {vscode.Diagnostic} diagnostic
@@ -1193,12 +1227,19 @@ function createAssignmentInConditionFix(document, diagnostic) {
 
 /**
  * Creates a quick-fix that replaces incorrect 'for' loop usage with 'foreach'.
+ * Only for the `for $item in @list` form, which then reads as a valid
+ * `foreach`; the counting form (`for $i = 1 to 10`) has no `foreach`
+ * equivalent, so it gets no fix.
  *
  * @param {vscode.TextDocument} document - The document containing the diagnostic
  * @param {vscode.Diagnostic} diagnostic - The diagnostic with the incorrect 'for' usage
- * @returns {vscode.CodeAction} A code action that replaces 'for' with 'foreach'
+ * @returns {vscode.CodeAction | null} A code action that replaces 'for' with
+ *   'foreach', or null for the counting form
  */
 function createForToForeachFix(document, diagnostic) {
+  const line = document.lineAt(diagnostic.range.start.line).text;
+  if (!/^\s*for\s+\$?\w+\s+in\s/i.test(line)) return null;
+
   return createCodeAction("Replace 'for' with 'foreach'", diagnostic, (edit) => {
     edit.replace(document.uri, diagnostic.range, 'foreach');
   });
@@ -1479,6 +1520,7 @@ module.exports = {
   createUnknownNamespaceFix,
   createTemplateEndFix,
   editDistance,
+  lookupOwn,
   nearestNamespace,
 
   // -- Module navigation
@@ -1487,6 +1529,7 @@ module.exports = {
   isModuleCallContext,
   getModuleDeclarations,
   findModuleDeclarations,
+  getModuleNameAt,
   getVariableOccurrences,
   createCodeScanState,
   createTemplateScanState,

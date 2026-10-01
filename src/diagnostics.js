@@ -323,6 +323,37 @@ function checkTemplateTags(tagView, lineIndex, issues, tagBalance, exprState, ta
 }
 
 /**
+ * Where the condition of an `if` line ends: at the `{` that opens its body
+ * (outside parentheses), or at the end of the line when the brace is on a
+ * later line. A braced variable such as `${my var}` is part of the condition,
+ * not the body.
+ *
+ * @param {string} line - Masked by `maskNonCodeSpans`
+ * @returns {number} Index just past the condition, or -1 when the line isn't
+ *   an `if` statement
+ */
+function findIfConditionEnd(line) {
+  const start = /^\s*if\b/.exec(line);
+  if (!start) return -1;
+  let depth = 0;
+  for (let i = start[0].length; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === "(") depth++;
+    else if (ch === ")") { if (depth > 0) depth--; }
+    else if (ch === "{") {
+      if ("$@%".includes(line[i - 1])) {
+        const close = line.indexOf("}", i);
+        if (close === -1) return line.length;
+        i = close;
+      } else if (depth === 0) {
+        return i;
+      }
+    }
+  }
+  return line.length;
+}
+
+/**
  * Updates diagnostics for an OtterScript document.
  * Performs a full scan of the document and reports all issues.
  *
@@ -520,10 +551,13 @@ function updateDiagnostics(document, collection, ctx) {
     // ------------------------------------------------------------
     // `if` conditions: assignment-like '=' and single '&' / '|'
     // ------------------------------------------------------------
-    if (/^\s*if\b/.test(line)) {
+    const conditionEnd = findIfConditionEnd(line);
+    if (conditionEnd !== -1) {
       // -- Detect assignment-like '=' in conditions (likely intended as '==').
       // `line` is already a length-preserving masked version of the source line.
-      for (let j = 0; j < line.length; j++) {
+      // Only the condition is checked: a body on the same line
+      // (`if $x { set $y = 1; }`) has real assignments.
+      for (let j = 0; j < conditionEnd; j++) {
         if (line[j] !== "=") continue;
 
         const prev = line[j - 1];
@@ -542,7 +576,7 @@ function updateDiagnostics(document, collection, ctx) {
       }
 
       // -- Detect a lone '&' / '|' (OtterScript's logical operators are '&&' / '||').
-      for (let j = 0; j < line.length; j++) {
+      for (let j = 0; j < conditionEnd; j++) {
         const ch = line[j];
         if (ch === "&" || ch === "|") {
           const prev = line[j - 1];
@@ -562,10 +596,11 @@ function updateDiagnostics(document, collection, ctx) {
     // ------------------------------------------------------------
     // Incorrect 'for' usage as a loop
     // ------------------------------------------------------------
-    // Matches: for i = 1 to 10, for $item in @list, for item in list
-    const forLoopLikePattern = /^\s*for\s+(\$?\w+)\s+(=|in)\s+/i;
-    if (forLoopLikePattern.test(line)) {
-      const startIndex = line.indexOf("for");
+    // Matches: for i = 1 to 10, for $item in @list, for item in list (any
+    // case, so the position comes from the match, not a search for "for").
+    const forLoopMatch = /^(\s*)for\s+(\$?\w+)\s+(=|in)\s+/i.exec(line);
+    if (forLoopMatch) {
+      const startIndex = forLoopMatch[1].length;
       issues.push(lineDiagnostic(
         lineIndex, startIndex, startIndex + 3,
         "'for' in OtterScript does not perform iteration. Use 'foreach' for loops, or 'for server/role/directory' for context binding.",
