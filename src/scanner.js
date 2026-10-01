@@ -8,14 +8,17 @@
  *
  * It owns the single source of truth for how the extension recognizes non-code
  * spans — quoted strings, line comments, block comments, and swim-strings — plus
- * the `<% %>` text-template tag masking, the argument-index helper, and the
- * module-name regexes that build on that scan. Everything here operates on plain
- * strings, numbers, and plain state objects ({@link CodeScanState},
- * {@link TemplateScanState}); nothing here constructs a `vscode.*` value.
+ * what builds on that scan: the `<% %>` text-template tag masking, the
+ * signature-help helpers (active parameter, parameter splitting), the
+ * variable-occurrence index behind highlighting, and the module-name regexes.
+ * Everything here operates on plain strings, numbers, and plain state objects
+ * ({@link CodeScanState}, {@link TemplateScanState}); nothing here constructs a
+ * `vscode.*` value.
  *
- * `helpers.js` re-exports the members its own callers need (extension.js and
- * diagnostics.js import them from there); the rest — used only internally, by
- * adaptivecard.js, or by tests — are imported from this module directly.
+ * `helpers.js` re-exports the members its own callers need (the provider
+ * modules and diagnostics.js import them from there); the rest — used only
+ * internally, by adaptivecard.js / json-view.js, or by tests — are imported
+ * from this module directly.
  *
  * @module scanner
  */
@@ -893,15 +896,18 @@ function templateVariableViews(lines) {
 /**
  * A variable token: a sigil (group 1), then either a plain name (group 2) or
  * an explicit name in braces (group 3) -- `$name` or `${name}`, likewise for
- * `@` / `%`. Per Inedo's formal grammar an explicit name may also contain
- * spaces (`${my var}`). The char before must not be part of an identifier (so `a$b` and
- * `%>` never match) or the grave-accent escape, and a name directly followed
- * by `(` is a function call, not a variable (the lookahead also stops
- * backtracking into a shorter name like `$Fo` of `$Foo(`).
+ * `@` / `%`. Per Inedo's formal grammar a name is letters, digits, dashes and
+ * underscores, starting with a letter and not ending with a dash or
+ * underscore (`$my-var`, but `$a-$b` is `$a`, a dash, then `$b`); an explicit
+ * name may also contain spaces (`${my var}`). The char before must not be
+ * part of an identifier (so `a$b` and `%>` never match) or the grave-accent
+ * escape, and a name directly followed by `(` is a function call, not a
+ * variable (the lookahead also stops backtracking into a shorter name, like
+ * `$Fo` of `$Foo(` or `$a` of `$a-b(`).
  * @type {RegExp}
  */
 const VARIABLE_TOKEN_REGEX =
-  /(?<![A-Za-z0-9_`$@%])([$@%])(?:([A-Za-z_][A-Za-z0-9_]*)(?![A-Za-z0-9_(])|\{([A-Za-z_][A-Za-z0-9_ ]*)\})/g;
+  /(?<![A-Za-z0-9_`$@%])([$@%])(?:([A-Za-z](?:[A-Za-z0-9_-]*[A-Za-z0-9])?)(?![A-Za-z0-9_(]|-[A-Za-z0-9])|\{([A-Za-z][A-Za-z0-9_ -]*)\})/g;
 
 /** Text before a token that makes it a `foreach` loop variable. */
 const FOREACH_VARIABLE_PREFIX_REGEX = /\bforeach\s+$/i;

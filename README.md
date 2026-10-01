@@ -4,7 +4,7 @@
 [![Open VSX](https://img.shields.io/open-vsx/v/sighanse/otterscript-vscode?label=Open%20VSX)](https://open-vsx.org/extension/sighanse/otterscript-vscode)
 [![Build](https://github.com/sighanse/otterscript-vscode/actions/workflows/build.yml/badge.svg)](https://github.com/sighanse/otterscript-vscode/actions/workflows/build.yml)
 
-This extension provides syntax highlighting, code snippets, and function support for OtterScript used in Inedo products (Otter, BuildMaster, ProGet).
+Language support for OtterScript, the scripting language of Inedo's Otter, BuildMaster and ProGet: syntax highlighting, completion, hover documentation and signature help, diagnostics with quick fixes, module navigation, snippets, and checks for Adaptive Cards in Teams webhook templates.
 
 Not affiliated with or endorsed by [Inedo](https://inedo.com/).
 
@@ -28,7 +28,7 @@ This extension started as a learning project while implementing [custom webhook 
   - in a Teams message (`"type": "message"` with `attachments`): a missing or wrong `"contentType"`, and `Action.Submit`, which Teams webhooks don't support
 
   The checks know the official Adaptive Card schema (1.6) and the Teams-only elements such as `Badge`, `Icon` and the charts. Best-effort only — they don't validate the full card structure, since a template's `<% %>` control flow means there's no single concrete JSON document to validate against
-- Quick‑fix code actions, plus a **Fix All Issues** command (`Ctrl+Shift+Alt+F`) that applies every available fix in the file
+- Quick‑fix code actions, plus a **Fix All Issues** command (`Ctrl+Shift+Alt+F`) that applies every fix in the file that is safe to apply unattended (a fix that would cause a new problem, such as raising a card's version above the host's maximum, is left to the lightbulb)
 - Go to Definition (F12) and Find All References (Shift+F12) for document-local module calls
 - Highlight all occurrences: clicking a variable (`$x`, `@list`, `%map`, or braced forms like `${my var}`) or module name highlights every use of it in the file, with declarations and assignments marked as writes
 - Outline and breadcrumbs via document symbols

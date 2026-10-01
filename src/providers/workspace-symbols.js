@@ -128,7 +128,8 @@ function registerWorkspaceSymbols(settings) {
   // Lazily-built index. `null` until the first workspace-symbol query (or a
   // watcher event once a build has happened) kicks off rebuildWorkspaceModuleIndex.
   // Reset to `null` on failure so the next query retries, and when the enable
-  // setting is toggled (see the config listener below).
+  // setting is toggled (resetWorkspaceIndex, called by the settings listener
+  // in extension.js).
   /** @type {Promise<void> | null} */
   let workspaceIndexReady = null;
 

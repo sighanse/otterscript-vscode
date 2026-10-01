@@ -772,6 +772,17 @@ describe("findVariableOccurrences", () => {
       (o) => `${o.line}:${o.character}:${o.write ? "w" : "r"}`
     );
 
+  it("follows Inedo's name rules: dashes inside a name, not at its end, and a letter first", () => {
+    assert.deepEqual(find(["set $my-var = 1;", "Log $my-var;"], "$", "my-var"), ["0:4:w", "1:4:r"]);
+    // `$a-$b` is two variables with a dash between them.
+    assert.deepEqual(find(["Log $a-$b;"], "$", "a"), ["0:4:r"]);
+    assert.deepEqual(find(["Log $a-$b;"], "$", "b"), ["0:7:r"]);
+    // A dashed function call is not a variable, nor a shorter name inside it.
+    assert.deepEqual(find(["Log $f-x(1);"], "$", "f"), []);
+    // A name can't start with an underscore (PowerShell's `$_` isn't one).
+    assert.deepEqual(find(["Log $_;"], "$", "_"), []);
+  });
+
   it("finds reads and writes, ignoring case", () => {
     assert.deepEqual(find(["set $x = 1;", "$X = $x + 1;", "if $x == 2 {}"], "$", "x"), [
       "0:4:w", "1:0:w", "1:5:r", "2:3:r",

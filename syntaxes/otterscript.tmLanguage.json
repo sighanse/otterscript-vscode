@@ -224,7 +224,7 @@
             },
             {
               "name": "variable.output.otterscript",
-              "match": "=>\\s*([$@%])\\{?[a-zA-Z][a-zA-Z0-9_\\- ]*\\}?",
+              "match": "=>\\s*([$@%])(?:\\{[a-zA-Z][a-zA-Z0-9_\\- ]*\\}|[a-zA-Z](?:[a-zA-Z0-9_\\-]*[a-zA-Z0-9])?)",
               "captures": {
                 "1": { "name": "storage.type.variable.otterscript" }
               }
@@ -366,20 +366,20 @@
     "variables": {
       "patterns": [
         {
+          "name": "support.variable.indexed.otterscript",
+          "match": "[@%](?:\\{[a-zA-Z][a-zA-Z0-9_\\- ]*\\}|[a-zA-Z](?:[a-zA-Z0-9_\\-]*[a-zA-Z0-9])?)(\\[[^\\]]+\\]|\\.[a-zA-Z][a-zA-Z0-9_-]*)"
+        },
+        {
           "name": "variable.other.otterscript",
-          "match": "\\$\\{?[a-zA-Z][a-zA-Z0-9_\\- ]*\\}?"
+          "match": "\\$(?:\\{[a-zA-Z][a-zA-Z0-9_\\- ]*\\}|[a-zA-Z](?:[a-zA-Z0-9_\\-]*[a-zA-Z0-9])?)"
         },
         {
           "name": "variable.vector.otterscript",
-          "match": "@\\{?[a-zA-Z][a-zA-Z0-9_\\- ]*\\}?"
+          "match": "@(?:\\{[a-zA-Z][a-zA-Z0-9_\\- ]*\\}|[a-zA-Z](?:[a-zA-Z0-9_\\-]*[a-zA-Z0-9])?)"
         },
         {
           "name": "variable.map.otterscript",
-          "match": "%\\{?[a-zA-Z][a-zA-Z0-9_\\- ]*\\}?"
-        },
-        {
-          "name": "support.variable.indexed.otterscript",
-          "match": "[@%]\\{?[a-zA-Z][a-zA-Z0-9_\\- ]*\\}?(\\[[^\\]]+\\]|\\.[a-zA-Z][a-zA-Z0-9_-]*)"
+          "match": "%(?:\\{[a-zA-Z][a-zA-Z0-9_\\- ]*\\}|[a-zA-Z](?:[a-zA-Z0-9_\\-]*[a-zA-Z0-9])?)"
         },
         {
           "name": "meta.nested-evaluate.otterscript",
@@ -391,7 +391,7 @@
             { "include": "#literals" },
             {
               "name": "support.variable.indexed.otterscript",
-              "match": "[@%]\\{?[a-zA-Z][a-zA-Z0-9_\\- ]*\\}?(\\[[^\\]]+\\]|\\.[a-zA-Z][a-zA-Z0-9_-]*)"
+              "match": "[@%](?:\\{[a-zA-Z][a-zA-Z0-9_\\- ]*\\}|[a-zA-Z](?:[a-zA-Z0-9_\\-]*[a-zA-Z0-9])?)(\\[[^\\]]+\\]|\\.[a-zA-Z][a-zA-Z0-9_-]*)"
             }
           ]
         },
@@ -496,7 +496,7 @@
         },
         {
           "name": "support.variable.indexed.otterscript",
-          "match": "[@%]\\{?[a-zA-Z][a-zA-Z0-9_\\- ]*\\}?(?:\\[[^\\]]+\\]|\\.[a-zA-Z][a-zA-Z0-9_-]*)+"
+          "match": "[@%](?:\\{[a-zA-Z][a-zA-Z0-9_\\- ]*\\}|[a-zA-Z](?:[a-zA-Z0-9_\\-]*[a-zA-Z0-9])?)(?:\\[[^\\]]+\\]|\\.[a-zA-Z][a-zA-Z0-9_-]*)+"
         }
       ]
     },

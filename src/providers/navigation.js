@@ -74,7 +74,8 @@ function registerNavigation(settings) {
   // file; declarations and assignment targets are marked as writes.
 
   /** A `$name` / `@name` / `%name` token, or its braced `${name}` form, under the cursor. */
-  const VARIABLE_AT_CURSOR_REGEX = /[$@%](?:\{[A-Za-z_][A-Za-z0-9_ ]*\}|[A-Za-z_][A-Za-z0-9_]*)/;
+  // Same name rules as the scanner's VARIABLE_TOKEN_REGEX (Inedo's formal grammar).
+  const VARIABLE_AT_CURSOR_REGEX = /[$@%](?:\{[A-Za-z][A-Za-z0-9_ -]*\}|[A-Za-z](?:[A-Za-z0-9_-]*[A-Za-z0-9])?)/;
 
   const documentHighlightProvider = vscode.languages.registerDocumentHighlightProvider(
     "otterscript",
