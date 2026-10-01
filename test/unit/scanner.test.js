@@ -28,6 +28,7 @@ const {
   findEmbeddedExpressionEnd,
   isInStringOrComment,
   getActiveParameterIndex,
+  splitSignatureParameters,
   maskCommentSpans,
   findVariableOccurrences,
   maskClosedGroups,
@@ -298,6 +299,28 @@ describe("isInStringOrComment", () => {
     const carried = createCodeScanState();
     carried.swimDelimiter = ">END>";
     assert.equal(isInStringOrComment("body >END> then code", 16, carried), false);
+  });
+});
+
+// ============================================================
+// splitSignatureParameters
+// ============================================================
+
+describe("splitSignatureParameters", () => {
+  it("splits a parameter list at top-level commas", () => {
+    assert.deepEqual(splitSignatureParameters("$Substring(text, start, (length))"), ["text", "start", "(length)"]);
+  });
+
+  it("keeps commas inside (), [] and {} together", () => {
+    assert.deepEqual(
+      splitSignatureParameters("Post-Http(Url: a, [Options: (x, y)], {b, c})"),
+      ["Url: a", "[Options: (x, y)]", "{b, c}"]
+    );
+  });
+
+  it("has no parameters for an empty list or no parentheses", () => {
+    assert.deepEqual(splitSignatureParameters("$ServerName()"), []);
+    assert.deepEqual(splitSignatureParameters("$WorkingDirectory"), []);
   });
 });
 

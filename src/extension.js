@@ -56,6 +56,7 @@ const {
   NON_VARIABLE_IDENTIFIERS,
   log,
   buildCompletionItem,
+  buildSigilCompletionItems,
   buildHoverMarkdown,
   createAssignmentInConditionFix,
   createForToForeachFix,
@@ -66,6 +67,7 @@ const {
   getOutputChannel,
   getDiagnosticCode,
   getActiveParameterIndex,
+  splitSignatureParameters,
   maskClosedGroups,
   getTypedIdentifier,
   getModuleDeclarations,
@@ -204,8 +206,6 @@ function activate(context) {
           // ------------------------------------------------------------
           // Build signature help UI
           // ------------------------------------------------------------
-          // Parse signature to extract individual parameters
-          // Handles nested parentheses in signature (e.g., "Func(a, (b + c), d)")
 
           // -- Qualify the displayed signature with its namespace when it belongs
           // to one and the stored signature string doesn't already spell it out.
@@ -218,26 +218,7 @@ function activate(context) {
 
           const sig = new vscode.SignatureInformation(signatureLabel, fn.documentation);
 
-          const paramMatch = fn.signature.match(/\(([\s\S]*)\)/);
-          if (paramMatch) {
-            const paramText = paramMatch[1];
-            const params = [];
-            let depth = 0;
-            let start = 0;
-
-            for (let i = 0; i < paramText.length; i++) {
-              const ch = paramText[i];
-              if (ch === '(') depth++;
-              if (ch === ')') depth--;
-              if (ch === ',' && depth === 0) {
-                params.push(paramText.substring(start, i).trim());
-                start = i + 1;
-              }
-            }
-            params.push(paramText.substring(start).trim());
-
-            sig.parameters = params.map(p => new vscode.ParameterInformation(p));
-          }
+          sig.parameters = splitSignatureParameters(fn.signature).map(p => new vscode.ParameterInformation(p));
 
           // -- Prepare the response
           const help = new vscode.SignatureHelp();
@@ -257,149 +238,58 @@ function activate(context) {
     );
 
   // ============================================================
-  // SCALAR FUNCTION COMPLETION PROVIDER ($Function)
+  // SIGIL COMPLETION PROVIDERS ($, @, %)
   // ============================================================
-  // Shows completions for scalar functions when user types '$'.
-  // Examples: $ToJson, $Base64Encode, $Trim
-  //
-  // Trigger character: '$'
-  // After selection: Inserts function name and optionally parentheses
-  // Then triggers signature help for parameter hints
+  // After `$`: scalar functions ($ToJson) and runtime variables ($PackageName).
+  // After `@`: vector functions (@Split) and variables (@AffectedPackages).
+  // After `%`: map functions (%FromJson) and the %( ... ) map literal; map
+  // variables are user-defined and can't be enumerated.
+  // buildSigilCompletionItems turns every table into items the same way.
 
-  const functionCompletionProvider =
+  const scalarCompletionProvider =
     vscode.languages.registerCompletionItemProvider(
       "otterscript",
       {
         provideCompletionItems(document, position) {
-          // -- Check if completion is enabled and not in a string/comment
           if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
-
           const typed = getTypedIdentifier(document, position, "$");
           if (typed === null) return [];
-
-          return Object.entries(scalarFunctionDocs)
-              .filter(([key]) => key.toLowerCase().startsWith(typed.toLowerCase()))
-              .map(([_key, doc]) => {
-                  // -- Some entries in scalarFunctionDocs are runtime variables,
-                  // not call-style functions (signature has no '('). Classify and
-                  // sort those as variables so they interleave with variableDocs.
-                  const isFunction = doc.signature?.includes("(") ?? false;
-                  const snippet = doc.snippet
-                    ? new vscode.SnippetString(doc.snippet.replace(/^\\\$/, ""))
-                    : new vscode.SnippetString(doc.name.replace(/^\$/, ""));
-                  const kind = isFunction
-                    ? vscode.CompletionItemKind.Function
-                    : vscode.CompletionItemKind.Variable;
-                  const sortPrefix = isFunction ? '1_' : '2_';
-                  const item = buildCompletionItem(doc, kind, sortPrefix, snippet, isFunction);
-                  return item;
-              });
+          // Functions first; the few runtime variables in scalarFunctionDocs
+          // (no '(' in the signature) sort with variableDocs.
+          return [
+            ...buildSigilCompletionItems(scalarFunctionDocs, typed, { functionSort: "1_", variableSort: "2_" }),
+            ...buildSigilCompletionItems(variableDocs, typed, { functionSort: "1_", variableSort: "2_" }),
+          ];
         }
       },
-      "$"   // Trigger on dollar
+      "$"
     );
-
-  // ============================================================
-  // VARIABLE COMPLETION PROVIDER ($Variable)
-  // ============================================================
-  // Shows completions for predefined OtterScript variables when user types '$'.
-  // Examples: $BuildId, $FeedName, $PackageVersion
-  //
-  // Note: This provider shares the same trigger character ($) as scalar functions.
-  // VS Code shows both types in the completion list automatically.
-
-  const variableCompletionProvider =
-    vscode.languages.registerCompletionItemProvider(
-      "otterscript",
-      {
-        provideCompletionItems(document, position) {
-          // -- Check if completion is enabled and not in a string/comment
-          if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
-
-          const typed = getTypedIdentifier(document, position, "$");
-          if (typed === null) return [];
-
-          // -- Filter variables by what user typed and create completion items
-          return Object.entries(variableDocs)
-              .filter(([key]) => key.toLowerCase().startsWith(typed.toLowerCase()))
-              .map(([_key, doc]) => {
-                  // -- Remove leading $ for insertion (user already typed it).
-                  // Snippets escape it as `\$`, same as scalarFunctionDocs.
-                  const snippet = doc.snippet
-                    ? new vscode.SnippetString(doc.snippet.replace(/^\\?\$/, ""))
-                    : new vscode.SnippetString(doc.name.replace(/^\$/, ""));
-                  return buildCompletionItem(doc, vscode.CompletionItemKind.Variable, '2_', snippet, false);
-          });
-        }
-      },
-      "$"   // Trigger character - same as scalar function provider
-    );
-
-  // ============================================================
-  // VECTOR COMPLETION PROVIDER (@Function / @Variable)
-  // ============================================================
-  // Triggered after typing '@'.
 
   const vectorCompletionProvider =
     vscode.languages.registerCompletionItemProvider(
       "otterscript",
       {
         provideCompletionItems(document, position) {
-          // -- Check if completion is enabled and not in a string/comment
           if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
-
           const typed = getTypedIdentifier(document, position, "@");
           if (typed === null) return [];
-
-          // -- Filter vector languageData by what user typed
-          return Object.entries(vectorFunctionDocs)
-              .filter(([key]) => key.toLowerCase().startsWith(typed.toLowerCase()))
-              .map(([_key, doc]) => {
-                  const isFunction = doc.signature?.includes("(");
-                  const insertName = doc.name.replace(/^@/, "");
-                  // -- Prefer doc.snippet if it exists, otherwise fall back to default pattern
-                  const insertText = isFunction
-                      ? new vscode.SnippetString(
-                          (doc.snippet?.replace(/^@/, "") || `${insertName}(\${0})`))
-                      : new vscode.SnippetString(
-                          (doc.snippet?.replace(/^@/, "") || `${insertName}\${0}`));
-                  const kind = isFunction
-                      ? vscode.CompletionItemKind.Function
-                      : vscode.CompletionItemKind.Variable;
-                  const sortPrefix = isFunction ? '2_' : '1_';
-                  return buildCompletionItem(doc, kind, sortPrefix, insertText, isFunction);
-              });
+          // Vector variables (@AffectedPackages) sort before the functions.
+          return buildSigilCompletionItems(vectorFunctionDocs, typed, { functionSort: "2_", variableSort: "1_" });
         }
       },
-      "@"   // Trigger character - provider runs when user types this
+      "@"
     );
-
-  // ============================================================
-  // MAP COMPLETION PROVIDER (%Function / %( ... ) expression)
-  // ============================================================
-  // Map variables are user-defined and cannot be enumerated; offers the
-  // map-returning functions (%FromJson, ...) plus the %( ... ) literal snippet.
 
   const mapCompletionProvider =
     vscode.languages.registerCompletionItemProvider(
       "otterscript",
       {
         provideCompletionItems(document, position) {
-          // -- Check if completion is enabled and not in a string/comment
           if (!isValidCompletionPosition(document, position, completionEnabled)) return [];
-
           const typed = getTypedIdentifier(document, position, "%");
           if (typed === null) return [];
 
-          // -- Map functions, filtered by what the user typed after '%'
-          const items = Object.entries(mapFunctionDocs)
-            .filter(([key]) => key.toLowerCase().startsWith(typed.toLowerCase()))
-            .map(([_key, doc]) => {
-              // -- Remove leading % for insertion (user already typed it)
-              const snippet = new vscode.SnippetString(
-                (doc.snippet ?? `${doc.name}(\${0})`).replace(/^%/, ""));
-              return buildCompletionItem(doc, vscode.CompletionItemKind.Function, "1_", snippet, true);
-            });
+          const items = buildSigilCompletionItems(mapFunctionDocs, typed, { functionSort: "1_", variableSort: "2_" });
 
           // -- The %( ... ) map literal, sorted last
           if (syntaxDocs?.mapExpr) {
@@ -408,7 +298,6 @@ function activate(context) {
               : new vscode.SnippetString(`${syntaxDocs.mapExpr.name} "(\${0})"`);
             items.push(buildCompletionItem(syntaxDocs.mapExpr, vscode.CompletionItemKind.Snippet, "~", snippet, false));
           }
-
           return items;
         }
       },
@@ -806,10 +695,13 @@ function activate(context) {
       // -- Filter to fixable diagnostic codes (keys of FIX_FACTORIES)
       const fixableDiagnostics = docDiagnostics.filter(d => Object.hasOwn(FIX_FACTORIES, getDiagnosticCode(d)));
 
-      if (fixableDiagnostics.length === 0) {
-        const msg = `No fixable OtterScript issues found in ${document.fileName}`;
+      /** @param {string} msg */
+      const report = (msg) => {
         vscode.window.showInformationMessage(msg);
         log.info(msg);
+      };
+      if (fixableDiagnostics.length === 0) {
+        report(`No fixable OtterScript issues found in ${document.fileName}`);
         return;
       }
 
@@ -846,13 +738,15 @@ function activate(context) {
         if (hasEdits) fixedCount++;
       }
 
-      if (fixedCount) {
-        await vscode.workspace.applyEdit(workspaceEdit);
-        updateDiagnostics(document, diagnostics, diagnosticsContext);
-        const msg = `Fixed ${fixedCount} issue(s) in ${document.fileName}`;
-        vscode.window.showInformationMessage(msg);
-        log.info(msg);
+      // -- Every fix may have been skipped (none preferred, or no edit);
+      // say so rather than doing nothing silently.
+      if (fixedCount === 0) {
+        report(`No issues in ${document.fileName} can be fixed automatically; see the lightbulb for the remaining fixes`);
+        return;
       }
+      await vscode.workspace.applyEdit(workspaceEdit);
+      updateDiagnostics(document, diagnostics, diagnosticsContext);
+      report(`Fixed ${fixedCount} issue(s) in ${document.fileName}`);
     }
   );
 
@@ -1370,15 +1264,14 @@ function activate(context) {
     documentSymbolProvider,
     fixAllCommand,
     foldingRangeProvider,
-    functionCompletionProvider,
     hoverProvider,
     mapCompletionProvider,
     operationCompletionProvider,
+    scalarCompletionProvider,
     otterFileWatcher,
     referenceProvider,
     refreshDiagnosticsCommand,
     signatureHelpProvider,
-    variableCompletionProvider,
     vectorCompletionProvider,
     workspaceSymbolProvider,
 

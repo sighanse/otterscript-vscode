@@ -728,6 +728,38 @@ function maskClosedGroups(text) {
 }
 
 /**
+ * Splits a documented signature's parameter list into its parameters, for
+ * signature help: `"$Substring(text, start, (length))"` gives
+ * `["text", "start", "(length)"]`. Commas inside nested `()`, `[]` or `{}`
+ * don't split. A signature without parentheses, or with an empty list
+ * (`"$Now()"`), has no parameters.
+ *
+ * @param {string} signature
+ * @returns {string[]}
+ */
+function splitSignatureParameters(signature) {
+  const match = /\(([\s\S]*)\)/.exec(signature);
+  if (!match || match[1].trim() === "") return [];
+
+  const text = match[1];
+  /** @type {string[]} */
+  const params = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === "(" || ch === "[" || ch === "{") depth++;
+    else if (ch === ")" || ch === "]" || ch === "}") { if (depth > 0) depth--; }
+    else if (ch === "," && depth === 0) {
+      params.push(text.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  params.push(text.slice(start).trim());
+  return params;
+}
+
+/**
  * Counts the active parameter index from a partial argument string.
  *
  * The input should be the text between an opening `(` and the cursor.
@@ -1012,6 +1044,7 @@ module.exports = {
 
   // -- Argument helpers
   getActiveParameterIndex,
+  splitSignatureParameters,
   maskClosedGroups,
 
   // -- Module-name regexes & context predicates

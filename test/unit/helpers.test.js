@@ -36,6 +36,7 @@ const {
   computeFoldingRanges,
   buildHoverMarkdown,
   buildCompletionItem,
+  buildSigilCompletionItems,
   nearestNamespace,
   createUnknownNamespaceFix,
   createMissingDollarFix,
@@ -559,6 +560,39 @@ describe("createRegexPatterns", () => {
 // ============================================================
 // buildCompletionItem
 // ============================================================
+
+describe("buildSigilCompletionItems", () => {
+  const table = {
+    ToJson: { name: "$ToJson", signature: "$ToJson(data)", snippet: "\\$ToJson(${1:data})" },
+    Trim: { name: "$Trim", signature: "$Trim(text)" },
+    TargetDirectory: { name: "$TargetDirectory", signature: "$TargetDirectory" },
+    Other: { name: "$Other", signature: "$Other()" },
+  };
+  const items = (/** @type {string} */ typed) =>
+    buildSigilCompletionItems(/** @type {any} */ (table), typed, { functionSort: "1_", variableSort: "2_" })
+      .map((i) => /** @type {any} */ (i));
+
+  it("filters by the typed prefix, ignoring case", () => {
+    assert.deepEqual(items("t").map((i) => i.label.label), ["$ToJson", "$Trim", "$TargetDirectory"]);
+  });
+
+  it("inserts without the sigil the user already typed, escaped or not", () => {
+    const [toJson, trim, target] = items("t");
+    assert.equal(toJson.insertText.value, "ToJson(${1:data})");
+    assert.equal(trim.insertText.value, "Trim(${0})");
+    assert.equal(target.insertText.value, "TargetDirectory");
+  });
+
+  it("makes functions Function items that open signature help, and the rest variables", () => {
+    const [toJson, , target] = items("t");
+    assert.equal(toJson.kind, "function");
+    assert.equal(toJson.sortText, "1_$ToJson");
+    assert.ok(toJson.command);
+    assert.equal(target.kind, "variable");
+    assert.equal(target.sortText, "2_$TargetDirectory");
+    assert.equal(target.command, undefined);
+  });
+});
 
 describe("buildCompletionItem", () => {
   const doc = {

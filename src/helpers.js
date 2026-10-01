@@ -28,6 +28,7 @@ const {
   findTemplateTagDelimiters,
   isInStringOrComment,
   getActiveParameterIndex,
+  splitSignatureParameters,
   maskClosedGroups,
   MODULE_NAME_TOKEN_REGEX,
   MODULE_CALL_TARGET_GLOBAL_REGEX,
@@ -834,6 +835,43 @@ function buildCompletionItem(doc, kind, sortPrefix, insertText, triggerSignature
   return item;
 }
 
+/**
+ * Completion items for the entries of one docs table whose name starts with
+ * what the user typed after a sigil (`$To` -> `$ToJson`, ...). Shared by the
+ * `$`, `@` and `%` completion providers, so every table is turned into items
+ * the same way:
+ * - inserted text: the entry's snippet, or `Name(${0})` for a function and
+ *   `Name` otherwise -- always without the leading sigil (escaped `\$` or
+ *   plain), which the user has already typed;
+ * - a function (signature with `(`) is a Function item that opens signature
+ *   help; anything else (a runtime variable) is a Variable item.
+ *
+ * @param {Readonly<Record<string, import('./language-data.js').DocEntry>>} table
+ * @param {string} typed - Identifier typed after the sigil (may be empty)
+ * @param {{ functionSort: string, variableSort: string }} sort - Sort-text
+ *   prefixes for functions and variables (lower sorts first)
+ * @returns {vscode.CompletionItem[]}
+ */
+function buildSigilCompletionItems(table, typed, sort) {
+  const lowerTyped = typed.toLowerCase();
+  return Object.entries(table)
+    .filter(([key]) => key.toLowerCase().startsWith(lowerTyped))
+    .map(([, doc]) => {
+      const isFunction = doc.signature?.includes("(") ?? false;
+      const bareName = doc.name.replace(/^[$@%]/, "");
+      const text = doc.snippet
+        ? doc.snippet.replace(/^\\?[$@%]/, "")
+        : isFunction ? `${bareName}(\${0})` : bareName;
+      return buildCompletionItem(
+        doc,
+        isFunction ? vscode.CompletionItemKind.Function : vscode.CompletionItemKind.Variable,
+        isFunction ? sort.functionSort : sort.variableSort,
+        new vscode.SnippetString(text),
+        isFunction
+      );
+    });
+}
+
 // ============================================================
 // DIAGNOSTIC CHECKS
 // ============================================================
@@ -1499,6 +1537,7 @@ module.exports = {
   getTypedIdentifier,
   isInStringOrCommentDoc,
   getActiveParameterIndex,
+  splitSignatureParameters,
   maskClosedGroups,
   checkMissingDollar,
   findDuplicateMapKeyDiagnosticsFromMasked,
@@ -1511,6 +1550,7 @@ module.exports = {
   // -- Builders
   buildHoverMarkdown,
   buildCompletionItem,
+  buildSigilCompletionItems,
 
   // -- Code Actions
   createMissingDollarFix,
