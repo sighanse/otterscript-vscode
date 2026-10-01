@@ -13,6 +13,9 @@ Contributions are welcome and appreciated.
 
 ## Development
 
+Requires Node.js 22.22 or newer (or 24.15+ on the 24 line): the packaging
+tool (`@vscode/vsce`) and the JSDoc lint plugin need it. CI uses Node 24.
+
 ```sh
 npm install       # dev dependencies
 npm run check     # ESLint + JSDoc type-check + grammar/language-data sync
