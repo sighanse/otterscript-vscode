@@ -16,6 +16,7 @@
 
 ### Changed
 
+- Hover, completion and highlighting no longer rescan a large file from the top on every request; the scan state at each line is cached per document version
 - The Adaptive Card data is now generated from Microsoft's Adaptive Card 1.6 schema (`npm run update:cards`; `npm run check` fails if it's stale), and includes the Teams-only elements the schema leaves out, such as `Badge`, `Icon`, `CodeBlock` and the charts. These were previously flagged as unknown types
 - The Adaptive Card checks are much faster on large cards: each card is now parsed once per check instead of being re-scanned for every lookup (a 2,000-element card went from about 1 s to about 10 ms)
 
@@ -26,6 +27,8 @@
 - `incorrect-for-usage` on a capitalized `For` was placed at column -1
 - **Fix All** right after typing could apply fixes at positions from before the edit; it now re-checks the document first
 - Hovering `$constructor`, `$toString` or similar names showed a bogus "Object" entry
+- **Fix All** did nothing, without a message, when every available fix had to be left to the user
+- Signature help showed one empty parameter for functions that take none, such as `$ServerName()`
 - Read-only views of another version of a file — the old side of a Git diff, a pull-request review — no longer get diagnostics or add duplicate modules to Go to Symbol in Workspace; an untitled document's modules now leave it when the document closes
 - Signature help no longer disappears once an earlier argument contains a nested call or a parenthesis inside a string (e.g. `$Substring($Trim($x), …`)
 - Snippets that insert an OtterScript `$` literally: the `Execute-PowerShell` completion lost `$_` and a `}` (inserting `Where-Object { .Status -eq "Running"  | Out-String}`), and `Acquire-Server` lost `$AcquiredServerName`. The `ifMatchesRegex`, `joinIntoString`, `ifexists` and `ifdirexists` snippets had an extra tab stop on the function name, and caused VS Code's "snippets very likely confuse snippet-variables and snippet-placeholders" warning
