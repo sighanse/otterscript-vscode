@@ -497,20 +497,30 @@ function updateDiagnostics(document, collection, ctx) {
       }
     }
 
-    // -- Detect unknown operations
+    // -- Detect unknown operations. Only a word in operation position counts:
+    //    the first word of a statement (after the line start, `{`, `}` or
+    //    `;`, optionally behind `Namespace::`). Dashed words elsewhere are
+    //    names, which Inedo's grammar lets contain dashes too -- variables
+    //    (`$my-var`), map keys and parameter names (`my-key: 1`, also when
+    //    one starts a line), module names (`call My-Module`) and implicit
+    //    string arguments (`Ensure-Thing My-Arg`).
     for (const match of line.matchAll(operationCallRegex())) {
       const name = match[1];
+      const before = line.slice(0, match.index);
 
       // When the token is the operation half of `UnknownNs::Do-Thing`, the
       // unknown-namespace check below already flags the real problem -- don't
       // also report the operation name as unknown.
-      const qualifier = line.slice(0, match.index).match(/([A-Za-z][A-Za-z0-9]*)::$/)?.[1];
+      const qualifier = before.match(/([A-Za-z][A-Za-z0-9]*)::$/)?.[1];
       if (qualifier && !knownNamespacesLower.has(qualifier.toLowerCase())) continue;
+
+      const statementStart = qualifier ? before.slice(0, -(qualifier.length + 2)) : before;
+      // A `{` right after a sigil opens a braced variable (`${my-var}`), not a block.
+      if (!/(?:^|[;}]|(?<![$@%])\{)\s*$/.test(statementStart)) continue;
+      if (/^\s*(?::|=>)/.test(line.slice(match.index + name.length))) continue;
 
       if (
         name.includes("-") &&
-        !name.startsWith("$") &&
-        !name.startsWith("@") &&
         !knownKeywords.has(name) &&
         !knownOperations.has(name) &&
         !knownScalarFunctions.has(name) &&
@@ -596,9 +606,10 @@ function updateDiagnostics(document, collection, ctx) {
     // ------------------------------------------------------------
     // Incorrect 'for' usage as a loop
     // ------------------------------------------------------------
-    // Matches: for i = 1 to 10, for $item in @list, for item in list (any
-    // case, so the position comes from the match, not a search for "for").
-    const forLoopMatch = /^(\s*)for\s+(\$?\w+)\s+(=|in)\s+/i.exec(line);
+    // Matches: for i = 1 to 10, for $item in @list, for item in list, with
+    // dashed names too ($item-name), in any case -- so the position comes from
+    // the match, not a search for "for".
+    const forLoopMatch = /^(\s*)for\s+([$@%]?[A-Za-z](?:[\w-]*[A-Za-z0-9])?)\s+(=|in)\s+/i.exec(line);
     if (forLoopMatch) {
       const startIndex = forLoopMatch[1].length;
       issues.push(lineDiagnostic(

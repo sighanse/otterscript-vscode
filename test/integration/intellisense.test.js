@@ -140,6 +140,13 @@ describe("completion", () => {
     assert.ok(labels.includes("Log-Information"));
   });
 
+  it("offers built-in operations after Core::, but not after another namespace", async () => {
+    const core = await openContent("Core::Log-Inf");
+    assert.ok((await completionLabels(core, positionOf(core, "Log-Inf", 7))).includes("Log-Information"));
+    const proget = await openContent("ProGet::Log-Inf");
+    assert.ok(!(await completionLabels(proget, positionOf(proget, "Log-Inf", 7))).includes("Log-Information"));
+  });
+
   it("offers nothing from this extension inside a comment", async () => {
     const document = await openContent("# $");
     const labels = await completionLabels(document, positionOf(document, "# $", 3), "$");

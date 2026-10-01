@@ -1311,7 +1311,7 @@ function createAssignmentInConditionFix(document, diagnostic) {
  */
 function createForToForeachFix(document, diagnostic) {
   const line = document.lineAt(diagnostic.range.start.line).text;
-  if (!/^\s*for\s+\$?\w+\s+in\s/i.test(line)) return null;
+  if (!/^\s*for\s+[$@%]?[A-Za-z](?:[\w-]*[A-Za-z0-9])?\s+in\s/i.test(line)) return null;
 
   return createCodeAction("Replace 'for' with 'foreach'", diagnostic, (edit) => {
     edit.replace(document.uri, diagnostic.range, 'foreach');

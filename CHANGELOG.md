@@ -23,7 +23,9 @@
 
 - The `assignment-in-condition` and `invalid-operator` checks looked at the whole `if` line, so `if $Debug { set $Level = 2; }` was flagged, and the quick fix (also run by **Fix All**) turned the body's `=` into `==`. Only the condition is checked now
 - **Replace 'for' with 'foreach'** is no longer offered for a counting loop (`for $i = 1 to 10`), where it produced `foreach $i = 1 to 10`, which is still invalid; the warning stays
-- `incorrect-for-usage` on a capitalized `For` was placed at column -1
+- `unknown-operation` flagged dashed names that aren't operations — variables (`$my-var`), map keys and parameter names (`my-key: 1`), module names (`call My-Module`) and arguments (`Log-Information My-Arg`). Only the first word of a statement is checked now
+- `incorrect-for-usage` on a capitalized `For` was placed at column -1, and a loop over a dashed name (`for $item-name in @list`) wasn't flagged
+- Completion after `Core::` offered no operations; it now offers the built-in ones
 - **Fix All** right after typing could apply fixes at positions from before the edit; it now re-checks the document first
 - Variable names now follow Inedo's grammar: syntax highlighting no longer runs on past a plain name into the following words (`"Deploying $Name to $Server"` colored "$Name to " as one variable; only a braced `${my var}` may contain spaces). Indexed expressions such as `@list[1]` and `%map.key` now get their own color
 - Signature help no longer disappears once an earlier argument contains a nested call or a parenthesis inside a string (e.g. `$Substring($Trim($x), …`), and no longer shows one empty parameter for functions that take none, such as `$ServerName()`

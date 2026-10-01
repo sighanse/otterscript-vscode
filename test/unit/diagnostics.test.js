@@ -275,6 +275,28 @@ describe("updateDiagnostics — unknown operation", () => {
   it("does not flag inside a comment", () => {
     assert.deepEqual(only("# Do-Something here", "unknown-operation"), []);
   });
+
+  it("checks only the statement's first word, so dashed names are not operations", () => {
+    for (const source of [
+      "set $my-var = 1;",
+      "Log-Information ${my-var};",
+      "set %m = %(my-key: 1);",
+      "Log-Information $x[my-key];",
+      "Log-Information (Text: x, Some-Param: y);",
+      "Log-Information (\n    Some-Param: x\n);",
+      "module My-Module {\n}",
+      "call My-Module;",
+      'Log-Information My-Arg;',
+    ]) {
+      assert.deepEqual(only(source, "unknown-operation"), [], source);
+    }
+  });
+
+  it("still flags an unknown operation after ';', inside braces, or behind a known namespace", () => {
+    assert.deepEqual(only('Log-Information "a"; Bogus-Op "b";', "unknown-operation").map((d) => d.range.start.character), [21]);
+    assert.equal(only("if $a { Bogus-Op; }", "unknown-operation").length, 1);
+    assert.equal(only("ProGet::Bogus-Op;", "unknown-operation").length, 1);
+  });
 });
 
 // ============================================================
@@ -347,6 +369,10 @@ describe("updateDiagnostics — incorrect 'for' usage", () => {
 
   it("does not flag 'foreach'", () => {
     assert.deepEqual(only("foreach $x in @list { }", "incorrect-for-usage"), []);
+  });
+
+  it("flags a loop over a dashed variable name", () => {
+    assert.equal(only("for $item-name in @list { }", "incorrect-for-usage").length, 1);
   });
 
   it("reports the keyword's real position whatever its case", () => {

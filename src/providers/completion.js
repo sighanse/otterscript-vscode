@@ -143,7 +143,9 @@ function registerCompletion(settings) {
               // -- When a "Namespace::" prefix is typed, only offer operations that
               // belong to that namespace -- inserting a core/other-namespace operation
               // after the prefix would produce invalid code ("ProGet::Log-Information").
-              if (namespaceTyped && (doc.namespace ?? "").toLowerCase() !== lowerNamespaceTyped) {
+              // An operation with no namespace (`null`) is a built-in, which the
+              // optional `Core::` prefix names.
+              if (namespaceTyped && (doc.namespace ?? "Core").toLowerCase() !== lowerNamespaceTyped) {
                   continue;
               }
               if (!typed || name.toLowerCase().startsWith(lowerTyped)) {

@@ -653,6 +653,10 @@ describe("quick-fix factories", () => {
     assert.equal(fix.edit.edits[0][3], "foreach");
   });
 
+  it("createForToForeachFix also works for a dashed loop variable", () => {
+    assert.ok(createForToForeachFix(makeDoc("for $item-name in @list {"), diagAt(0, 3)));
+  });
+
   it("createForToForeachFix offers nothing for the counting form, which has no foreach equivalent", () => {
     assert.equal(createForToForeachFix(makeDoc("for $i = 1 to 10 {"), diagAt(0, 3)), null);
   });
