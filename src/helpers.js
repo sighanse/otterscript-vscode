@@ -48,6 +48,13 @@ const { NAMESPACES } = require("./language-data");
 // ============================================================
 
 /**
+ * The extension's settings, as {@link loadConfig} returns them. activate()
+ * keeps one such object and updates it in place, so the provider modules it
+ * is handed to always see current values.
+ * @typedef {ReturnType<typeof loadConfig>} Settings
+ */
+
+/**
  * Loads OtterScript configuration from VS Code workspace settings.
  *
  * Settings are stored in .vscode/settings.json or user preferences.
