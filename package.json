@@ -57,9 +57,6 @@
     "webhook"
   ],
   "main": "./src/extension.js",
-  "activationEvents": [
-    "onLanguage:otterscript"
-  ],
   "contributes": {
     "languages": [
       {
@@ -391,7 +388,7 @@
         "otterscript.adaptiveCards.maxVersion": {
           "type": "string",
           "default": "1.6",
-          "pattern": "^d+.d+$",
+          "pattern": "^\\d+\\.\\d+$",
           "patternErrorMessage": "A card version such as 1.5 or 1.6.",
           "markdownDescription": "The highest Adaptive Card version the host that shows your cards supports. A card whose `\"version\"` is newer gets an `adaptivecard-version-too-high` warning, because the host shows the card's `fallbackText` instead. Microsoft Teams supports up to 1.6."
         }

@@ -67,6 +67,16 @@ describe("applyDiagnosticRules", () => {
   });
 });
 
+describe("otterscript.adaptiveCards.maxVersion schema", () => {
+  const schema = packageJson.contributes.configuration.properties["otterscript.adaptiveCards.maxVersion"];
+
+  it("accepts major.minor versions only, including its own default", () => {
+    const pattern = new RegExp(schema.pattern);
+    for (const valid of [schema.default, "1.5", "1.10"]) assert.ok(pattern.test(valid), valid);
+    for (const invalid of ["1", "1.5.0", "1x5", "latest", "d+.d"]) assert.ok(!pattern.test(invalid), invalid);
+  });
+});
+
 describe("otterscript.diagnostics.rules schema", () => {
   const schema = packageJson.contributes.configuration.properties["otterscript.diagnostics.rules"];
 
