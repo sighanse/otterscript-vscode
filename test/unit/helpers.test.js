@@ -15,7 +15,7 @@
  *   - buildHoverMarkdown / buildCompletionItem
  *   - nearestNamespace / createUnknownNamespaceFix
  *   - the other quick-fix factories, createUnbalancedDiagnostic, getDiagnosticCode
- *   - validateDocs, createRegexPatterns
+ *   - validateDocs (test/unit/validate-docs.js), signature-help's call regexes
  *   - getTypedIdentifier, isInStringOrCommentDoc, isValidCompletionPosition
  *   - loadConfig, scheduleTimerForUri / clearTimerForUri
  *   - mapWithConcurrency
@@ -23,7 +23,7 @@
 
 require("../vscode-stub");
 
-const { describe, it, before, after } = require("node:test");
+const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
@@ -40,15 +40,15 @@ const {
   buildArgumentHoverMarkdown,
   buildSigilCompletionItems,
   clearTimerForUri,
-  createRegexPatterns,
   getTypedIdentifier,
   isValidCompletionPosition,
   loadConfig,
   lookupOwn,
   mapWithConcurrency,
   scheduleTimerForUri,
-  validateDocs,
 } = require("../../src/helpers.js");
+const { validateDocs } = require("./validate-docs");
+const { FUNCTION_SIGNATURE_REGEX, OPERATION_SIGNATURE_REGEX, findSignatureCall } = require("../../src/providers/signature-help.js");
 const { isInStringOrCommentDoc } = require("../../src/document-index.js");
 const {
   checkMissingDollar,
@@ -484,12 +484,6 @@ describe("mapWithConcurrency", () => {
 // ============================================================
 
 describe("validateDocs", () => {
-  // validateDocs mirrors its findings to the console via the logger.
-  const realWarn = console.warn;
-  const realError = console.error;
-  before(() => { console.warn = () => {}; console.error = () => {}; });
-  after(() => { console.warn = realWarn; console.error = realError; });
-
   const good = { name: "X", description: "does X", namespace: null };
 
   it("passes a well-formed table", () => {
@@ -540,42 +534,27 @@ describe("validateDocs", () => {
 });
 
 // ============================================================
-// createRegexPatterns
+// signature help: the call the cursor is in
 // ============================================================
 
-describe("createRegexPatterns", () => {
-  const rx = createRegexPatterns(new Set(["Log-Information", "Copy-Files"]));
-
-  it("mapSignatureRegex captures '%Name(' + partial args, but not a '%(' literal", () => {
-    const m = "set %m = %ListItem(@x, ".match(rx.mapSignatureRegex());
-    assert.ok(m);
-    assert.equal(m[1], "ListItem");
-    assert.equal(m[2], "@x, ");
-    assert.equal("set %m = %(a: ".match(rx.mapSignatureRegex()), null);
+describe("signature help call regexes", () => {
+  it("FUNCTION_SIGNATURE_REGEX captures sigil, name and partial args, but not a '%(' literal", () => {
+    const m = "set %m = %ListItem(@x, ".match(FUNCTION_SIGNATURE_REGEX);
+    assert.deepEqual(m?.slice(1), ["%", "ListItem", "@x, "]);
+    assert.deepEqual("set $r = $Substring(text, 1".match(FUNCTION_SIGNATURE_REGEX)?.slice(1), ["$", "Substring", "text, 1"]);
+    assert.equal("set %m = %(a: ".match(FUNCTION_SIGNATURE_REGEX), null);
   });
 
-  it("scalarSignatureRegex captures name + partial args at end of prefix", () => {
-    const m = "set $r = $Substring(text, 1".match(rx.scalarSignatureRegex());
-    assert.ok(m);
-    assert.equal(m[1], "Substring");
-    assert.equal(m[2], "text, 1");
+  it("OPERATION_SIGNATURE_REGEX captures a bare and a namespaced operation, not 'set $x = ('", () => {
+    assert.equal("Copy-Files(Include: a".match(OPERATION_SIGNATURE_REGEX)?.[1], "Copy-Files");
+    assert.equal("ProGet::Create-Directory foo (Path: b".match(OPERATION_SIGNATURE_REGEX)?.[1], "Create-Directory");
+    assert.equal("set $x = (".match(OPERATION_SIGNATURE_REGEX), null);
   });
 
-  it("operationSignatureRegex captures a bare and a namespaced operation", () => {
-    assert.equal("Copy-Files(Include: a".match(rx.operationSignatureRegex())?.[1], "Copy-Files");
-    assert.equal(
-      "ProGet::Create-Directory foo (Path: b".match(rx.operationSignatureRegex())?.[1],
-      "Create-Directory"
-    );
-  });
-
-  it("operationSignatureRegex does NOT swallow 'set $x = ('", () => {
-    assert.equal("set $x = (".match(rx.operationSignatureRegex()), null);
-  });
-
-  it("operationRegex is word-anchored over the known set", () => {
-    assert.ok(rx.operationRegex().test("run Log-Information now"));
-    assert.equal(rx.operationRegex().test("XLog-InformationY"), false);
+  it("findSignatureCall prefers the function the cursor is in, then the operation", () => {
+    assert.equal(findSignatureCall("Copy-Files(Include: $Trim(a")?.doc.name, "$Trim");
+    assert.equal(findSignatureCall("Copy-Files(Include: a")?.isOperation, true);
+    assert.equal(findSignatureCall("$Frobnicate(a"), null);
   });
 });
 

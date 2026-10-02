@@ -38,25 +38,12 @@
 const vscode = require("vscode");
 const { updateDiagnostics } = require("./diagnostics");
 
-// -- Language documentation (functions, variables, operations, keywords).
-const {
-  operationDocs,
-  syntaxDocs,
-  keywordDocs,
-  variableDocs,
-  scalarFunctionDocs,
-  vectorFunctionDocs,
-  mapFunctionDocs
-} = require("./language-data");
-
 const {
   log,
   getOutputChannel,
   clearTimerForUri,
   loadConfig,
-  validateDocs,
   scheduleTimerForUri,
-  createRegexPatterns,
 } = require("./helpers");
 const { clearDocumentCaches } = require("./document-index");
 
@@ -97,23 +84,6 @@ function activate(context) {
     `workspaceSymbols=${settings.workspaceSymbolsEnabled}`;
   log.info(`Settings loaded: ${describeSettings()}`);
 
-  // -- Validate all documentation sources (intentionally ignore return value)
-  for (const [label, table] of Object.entries({
-    scalarFunctionDocs,  // $ToJson, $Trim, etc.
-    operationDocs,       // Log-Information, Log-Warning, Log-Error, etc.
-    vectorFunctionDocs,  // @Split, @Join, etc.
-    mapFunctionDocs,     // %FromJson, %ListItem
-    variableDocs,        // $BuildId, $FeedName, etc.
-    syntaxDocs,          // Template tags, swim strings, expression delimiters, etc.
-    keywordDocs,         // if, foreach, with, set, etc.
-  })) {
-    void validateDocs(label, table);
-  }
-
-  // -- Knowledge bases (fast lookup sets) and the regex patterns built from them
-  const knownOperations = new Set(Object.keys(operationDocs));
-  const patterns = createRegexPatterns(knownOperations);
-
   // ============================================================
   // DIAGNOSTICS
   // ============================================================
@@ -143,9 +113,9 @@ function activate(context) {
     diagnostics,
     ...registerCodeActions(settings, diagnostics, runDiagnostics),
     ...registerCompletion(settings, workspaceSymbols.listModules),
-    ...registerHover(settings, patterns.operationRegex(), workspaceSymbols.listModules),
+    ...registerHover(settings, workspaceSymbols.listModules),
     ...registerNavigation(settings, workspaceSymbols),
-    ...registerSignatureHelp(settings, patterns),
+    ...registerSignatureHelp(settings),
     ...workspaceSymbols.disposables,
   );
 

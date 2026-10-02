@@ -78,75 +78,47 @@ function registerCompletion(settings, listWorkspaceModules) {
   // After `@`: vector functions (@Split) and variables (@AffectedPackages).
   // After `%`: map functions (%FromJson) and the %( ... ) map literal.
   // Each also offers the variables of that sigil the file itself uses.
-  // buildSigilCompletionItems turns every table into items the same way.
+  // One provider for all three; buildSigilCompletionItems turns every table
+  // into items the same way.
 
-  const documentedScalars = documentedNames(scalarFunctionDocs, variableDocs);
-  const documentedVectors = documentedNames(vectorFunctionDocs);
-  const documentedMaps = documentedNames(mapFunctionDocs);
+  /**
+   * What each sigil offers: its docs tables, and the sort prefixes for their
+   * functions and variables (lower sorts first). After `$` the functions come
+   * first (the few runtime variables in scalarFunctionDocs, which have no `(`
+   * in their signature, sort with variableDocs); after `@` the variables
+   * (@AffectedPackages) do.
+   * @type {Readonly<Record<string, { tables: Readonly<Record<string, import("../language-data").DocEntry>>[], sort: { functionSort: string, variableSort: string }, documented: Set<string> }>>}
+   */
+  const SIGIL_COMPLETIONS = Object.freeze({
+    "$": { tables: [scalarFunctionDocs, variableDocs], sort: { functionSort: "1_", variableSort: "2_" }, documented: documentedNames(scalarFunctionDocs, variableDocs) },
+    "@": { tables: [vectorFunctionDocs], sort: { functionSort: "2_", variableSort: "1_" }, documented: documentedNames(vectorFunctionDocs) },
+    "%": { tables: [mapFunctionDocs], sort: { functionSort: "1_", variableSort: "2_" }, documented: documentedNames(mapFunctionDocs) },
+  });
 
-  const scalarCompletionProvider =
+  /** The `%( ... )` map literal, offered after `%` and sorted last. */
+  const mapLiteralItem = buildCompletionItem(
+    syntaxDocs.mapExpr, vscode.CompletionItemKind.Snippet, "~", new vscode.SnippetString(syntaxDocs.mapExpr.snippet ?? "%(${0})"), false
+  );
+
+  const sigilCompletionProvider =
     vscode.languages.registerCompletionItemProvider(
       "otterscript",
       {
         provideCompletionItems(document, position) {
           if (!isValidCompletionPosition(document, position, settings.completionEnabled)) return [];
-          const typed = getTypedIdentifier(document, position, "$");
+          const sigil = /([$@%])[a-zA-Z]*$/.exec(document.lineAt(position.line).text.slice(0, position.character))?.[1];
+          if (!sigil) return [];
+          const typed = getTypedIdentifier(document, position, /** @type {"$" | "@" | "%"} */ (sigil));
           if (typed === null) return [];
-          // Functions first; the few runtime variables in scalarFunctionDocs
-          // (no '(' in the signature) sort with variableDocs.
+          const { tables, sort, documented } = SIGIL_COMPLETIONS[sigil];
           return [
-            ...documentVariableItems(document, position, "$", typed, documentedScalars),
-            ...buildSigilCompletionItems(scalarFunctionDocs, typed, { functionSort: "1_", variableSort: "2_" }, settings.product),
-            ...buildSigilCompletionItems(variableDocs, typed, { functionSort: "1_", variableSort: "2_" }, settings.product),
+            ...documentVariableItems(document, position, sigil, typed, documented),
+            ...tables.flatMap((table) => buildSigilCompletionItems(table, typed, sort, settings.product)),
+            ...(sigil === "%" ? [mapLiteralItem] : []),
           ];
         }
       },
-      "$"
-    );
-
-  const vectorCompletionProvider =
-    vscode.languages.registerCompletionItemProvider(
-      "otterscript",
-      {
-        provideCompletionItems(document, position) {
-          if (!isValidCompletionPosition(document, position, settings.completionEnabled)) return [];
-          const typed = getTypedIdentifier(document, position, "@");
-          if (typed === null) return [];
-          // Vector variables (@AffectedPackages) sort before the functions.
-          return [
-            ...documentVariableItems(document, position, "@", typed, documentedVectors),
-            ...buildSigilCompletionItems(vectorFunctionDocs, typed, { functionSort: "2_", variableSort: "1_" }, settings.product),
-          ];
-        }
-      },
-      "@"
-    );
-
-  const mapCompletionProvider =
-    vscode.languages.registerCompletionItemProvider(
-      "otterscript",
-      {
-        provideCompletionItems(document, position) {
-          if (!isValidCompletionPosition(document, position, settings.completionEnabled)) return [];
-          const typed = getTypedIdentifier(document, position, "%");
-          if (typed === null) return [];
-
-          const items = [
-            ...documentVariableItems(document, position, "%", typed, documentedMaps),
-            ...buildSigilCompletionItems(mapFunctionDocs, typed, { functionSort: "1_", variableSort: "2_" }, settings.product),
-          ];
-
-          // -- The %( ... ) map literal, sorted last
-          if (syntaxDocs?.mapExpr) {
-            const snippet = syntaxDocs.mapExpr.snippet
-              ? new vscode.SnippetString(syntaxDocs.mapExpr.snippet)
-              : new vscode.SnippetString(`${syntaxDocs.mapExpr.name} "(\${0})"`);
-            items.push(buildCompletionItem(syntaxDocs.mapExpr, vscode.CompletionItemKind.Snippet, "~", snippet, false));
-          }
-          return items;
-        }
-      },
-      "%"
+      "$", "@", "%"
     );
 
   // ============================================================
@@ -363,7 +335,7 @@ function registerCompletion(settings, listWorkspaceModules) {
       '"'
     );
 
-  return [scalarCompletionProvider, vectorCompletionProvider, mapCompletionProvider, operationCompletionProvider, cardCompletionProvider];
+  return [sigilCompletionProvider, operationCompletionProvider, cardCompletionProvider];
 }
 
 module.exports = { registerCompletion };

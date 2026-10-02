@@ -75,12 +75,11 @@ async function hoverModuleCall(document, position, listWorkspaceModules) {
  *
  * @param {import("../helpers").Settings} settings - Live settings, updated in
  *   place by the settings listener in extension.js
- * @param {RegExp} operationRegex - Matches a known operation name
  * @param {() => Promise<{ name: string, uri: vscode.Uri, range: vscode.Range }[]>} listWorkspaceModules -
  *   Every module declared in the workspace (workspace-symbols.js)
  * @returns {vscode.Disposable[]}
  */
-function registerHover(settings, operationRegex, listWorkspaceModules) {
+function registerHover(settings, listWorkspaceModules) {
   // ============================================================
   // HOVER PROVIDER
   // ============================================================
@@ -201,22 +200,12 @@ function registerHover(settings, operationRegex, listWorkspaceModules) {
             buildHoverMarkdown(syntaxDocs.swimString, settings.product), swimRange);
         }
 
-        // -- Operations (Log-Information, Log-Warning, Log-Error, etc.)
-        // Built-in operations. Distinguished by hyphenated names.
-        const operationRange = document.getWordRangeAtPosition(
-          position,
-          operationRegex
-        );
-
-        if (operationRange) {
-          const opName = document.getText(operationRange);
-          const doc = lookupOwn(operationDocs, opName);
-
-          // -- No documentation found
-          if (!doc) return null;
-
-          // -- Make hover
-          return new vscode.Hover(buildHoverMarkdown(doc, settings.product), operationRange);
+        // -- Operations (Log-Information, Copy-Files, PSCall, ...): a documented
+        // name that isn't the name part of a `$`/`@`/`%` token.
+        const operationRange = document.getWordRangeAtPosition(position, /[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*/);
+        if (operationRange && !/[$@%{]$/.test(document.lineAt(position.line).text.slice(0, operationRange.start.character))) {
+          const doc = lookupOwn(operationDocs, document.getText(operationRange));
+          if (doc) return new vscode.Hover(buildHoverMarkdown(doc, settings.product), operationRange);
         }
 
         // -- Symbols ($function, @vector, %map function, $variable)

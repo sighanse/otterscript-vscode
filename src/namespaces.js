@@ -27,7 +27,7 @@
  * `System::Backup-Application` -- BuildMaster's own, closed-source
  * operations).
  *
- * Single source of truth for `validateDocs`, the grammar/language-data sync
+ * Single source of truth for diagnostics, the docs-table check in the tests, the grammar sync
  * check, and any namespace-aware editor feature.
  *
  * `Object.freeze` does not stop `Set.prototype.add`; read-only-ness is enforced

@@ -12,12 +12,13 @@ require("../vscode-stub");
 
 const fs = require("node:fs");
 const path = require("node:path");
-const { describe, it, before, after } = require("node:test");
+const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
 const data = require("../../src/language-data.js");
 const reference = require("../../src/inedo-reference-data.js");
-const { isAvailableIn, validateDocs } = require("../../src/helpers.js");
+const { isAvailableIn } = require("../../src/helpers.js");
+const { validateDocs } = require("./validate-docs");
 
 describe("generated Inedo reference, merged into language-data", () => {
   it("adds functions and operations the hand-written tables don't have", () => {
@@ -128,10 +129,6 @@ describe("generated Inedo reference, merged into language-data", () => {
   });
 
   describe("every merged table passes validateDocs", () => {
-    const realWarn = console.warn;
-    const realError = console.error;
-    before(() => { console.warn = () => {}; console.error = () => {}; });
-    after(() => { console.warn = realWarn; console.error = realError; });
 
     for (const table of ["scalarFunctionDocs", "vectorFunctionDocs", "mapFunctionDocs", "operationDocs", "variableDocs"]) {
       it(table, () => {

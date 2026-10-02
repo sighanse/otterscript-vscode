@@ -10,15 +10,47 @@ const { lookupOwn } = require("../helpers");
 const { getActiveParameterIndex, maskClosedGroups, splitSignatureParameters } = require("../scanner");
 
 /**
+ * The function call the cursor is in, from the text before the cursor:
+ * sigil (group 1), name (group 2), arguments typed so far (group 3). A `%(`
+ * map literal has no name, so it never matches.
+ */
+const FUNCTION_SIGNATURE_REGEX = /([$@%])([A-Za-z][A-Za-z0-9_]*)\s*\(([^()]*)$/;
+
+/**
+ * The operation call the cursor is in: name (group 1), arguments typed so far
+ * (group 2). The optional segment after the name allows one default/positional
+ * argument before the `(` -- a quoted string or a single bare token, as in
+ * `ProGet::Create-Directory my/folder/path\n(` -- but no whitespace or `=`,
+ * so it can't swallow an assignment like `set $x = (`.
+ */
+const OPERATION_SIGNATURE_REGEX = /(?:^|\s)(?:[A-Za-z][\w-]*::)?([A-Za-z][A-Za-z-]*)(?:[ \t]+(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s(){};=]+))?\s*\(([^()]*)$/;
+
+/** The function table for each call sigil. */
+const FUNCTION_TABLES = Object.freeze({ "$": scalarFunctionDocs, "@": vectorFunctionDocs, "%": mapFunctionDocs });
+
+/**
+ * The documented call the cursor is in, given the (masked) text before it.
+ *
+ * @param {string} textBeforeCursor
+ * @returns {{ doc: import("../language-data").DocEntry, args: string, isOperation: boolean } | null}
+ */
+function findSignatureCall(textBeforeCursor) {
+  const fn = FUNCTION_SIGNATURE_REGEX.exec(textBeforeCursor);
+  const fnDoc = fn && lookupOwn(FUNCTION_TABLES[/** @type {"$" | "@" | "%"} */ (fn[1])], fn[2]);
+  if (fn && fnDoc) return { doc: fnDoc, args: fn[3], isOperation: false };
+  const op = OPERATION_SIGNATURE_REGEX.exec(textBeforeCursor);
+  const opDoc = op && lookupOwn(operationDocs, op[1]);
+  return op && opDoc ? { doc: opDoc, args: op[2], isOperation: true } : null;
+}
+
+/**
  * Registers the signature help provider.
  *
  * @param {import("../helpers").Settings} settings - Live settings, updated in
  *   place by the settings listener in extension.js
- * @param {ReturnType<typeof import("../helpers").createRegexPatterns>} patterns
  * @returns {vscode.Disposable[]}
  */
-function registerSignatureHelp(settings, patterns) {
-  const { scalarSignatureRegex, vectorSignatureRegex, mapSignatureRegex, operationSignatureRegex } = patterns;
+function registerSignatureHelp(settings) {
 
   // ============================================================
   // SIGNATURE HELP PROVIDER
@@ -44,29 +76,11 @@ function registerSignatureHelp(settings, patterns) {
             new vscode.Position(Math.max(0, position.line - 10), 0),
             position
           )));
-          // -- Try each pattern to find the call the cursor is inside; the first
-          // pattern whose name is documented wins
-          let match = null;
-          let fn = null;
-          let args = null;
-
-          let isOperation = false;
-
-          const candidates = [
-            { regex: scalarSignatureRegex,    table: scalarFunctionDocs, operation: false }, // ($Func)
-            { regex: vectorSignatureRegex,    table: vectorFunctionDocs, operation: false }, // (@Func)
-            { regex: mapSignatureRegex,       table: mapFunctionDocs,    operation: false }, // (%Func)
-            { regex: operationSignatureRegex, table: operationDocs,       operation: true  }, // (Log-Information etc...)
-          ];
-
-          for (const { regex, table, operation } of candidates) {
-            const m = textBeforeCursor.match(regex());
-            if (m && lookupOwn(table, m[1])) { match = m; fn = lookupOwn(table, m[1]); args = m[2]; isOperation = operation; break; }
-          }
-
-          // -- Validate we have everything needed
-          if (!fn?.signature || !match) return null;
-          if (typeof args !== 'string') return null;
+          // -- The documented call the cursor is in
+          const call = findSignatureCall(textBeforeCursor);
+          if (!call?.doc.signature) return null;
+          const { doc: fn, args, isOperation } = call;
+          const signature = call.doc.signature;
 
           // ------------------------------------------------------------
           // Active parameter detection
@@ -83,13 +97,13 @@ function registerSignatureHelp(settings, patterns) {
           // Operations only: "Namespace::Operation" is grammatically valid, whereas
           // the syntax for namespaced $/@ functions is not surfaced here.
           const signatureLabel =
-            isOperation && fn.namespace && !fn.signature.includes("::")
-              ? `${fn.namespace}::${fn.signature}`
-              : fn.signature;
+            isOperation && fn.namespace && !signature.includes("::")
+              ? `${fn.namespace}::${signature}`
+              : signature;
 
           const sig = new vscode.SignatureInformation(signatureLabel, fn.documentation);
 
-          sig.parameters = splitSignatureParameters(fn.signature).map(p => new vscode.ParameterInformation(p));
+          sig.parameters = splitSignatureParameters(signature).map(p => new vscode.ParameterInformation(p));
 
           // -- Prepare the response
           const help = new vscode.SignatureHelp();
@@ -111,4 +125,4 @@ function registerSignatureHelp(settings, patterns) {
   return [signatureHelpProvider];
 }
 
-module.exports = { registerSignatureHelp };
+module.exports = { FUNCTION_SIGNATURE_REGEX, OPERATION_SIGNATURE_REGEX, findSignatureCall, registerSignatureHelp };
