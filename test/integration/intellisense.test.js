@@ -85,6 +85,13 @@ describe("hover", () => {
     assert.match(await hoverText(document, positionOf(document, "%FromJson", 2)), /%FromJson\(jsonString\)/);
   });
 
+  it("documents an operation that only Inedo's generated reference describes", async () => {
+    const reference = await openContent('Extract-ZipFile (Name: "a.zip");');
+    const text = await hoverText(reference, positionOf(reference, "Extract-ZipFile", 3));
+    assert.match(text, /Extracts a zip file/);
+    assert.match(text, /From Inedo's/);
+  });
+
   it("documents an operation", async () => {
     assert.match(await hoverText(document, positionOf(document, "Log-Information", 3)), /Log-Information/);
   });

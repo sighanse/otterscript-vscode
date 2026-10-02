@@ -71,77 +71,7 @@
 
 /** @typedef {Record<string, DocEntry>} DocsTable */
 
-/**
- * The set of valid OtterScript namespace prefixes: `Core` (the built-in engine
- * namespace — every unqualified operation/function may optionally be written as
- * `Core::Name`) plus every first-party extension's declared `[ScriptNamespace]`
- * token, verified against Inedo source (github.com/Inedo/inedox-*). A value here
- * is never a typo, so the `unknown-namespace` diagnostic never flags a
- * legitimate prefix.
- *
- * A `DocEntry.namespace` is either `null` (no `[ScriptNamespace]` on the class
- * or its assembly — the common case; such constructs are `Core::` built-ins and
- * are shown without a namespace) or one of the tokens below. NOTE: an extension's
- * name is not a namespace — e.g. the InedoCore extension declares only
- * `Files`, `HTTP`, `Network`, `ProGet`, `UPack`, `Otter`; there is no
- * `InedoCore::` prefix.
- *
- * Not included, because no public source declares them: `DB::`, `Packages::`
- * and `System::`, which only BuildMaster's generated operation reference
- * shows (`DB::Backup-Database`, `Packages::Attach-Package`,
- * `System::Backup-Application` -- BuildMaster's own, closed-source
- * operations).
- *
- * Single source of truth for `validateDocs`, the grammar/language-data sync
- * check, and any namespace-aware editor feature.
- *
- * `Object.freeze` does not stop `Set.prototype.add`; read-only-ness is enforced
- * by the `ReadonlySet` type under `// @ts-check`, not at runtime.
- *
- * @type {ReadonlySet<string>}
- */
-const NAMESPACES = Object.freeze(
-  new Set([
-    // -- Built-in engine namespace (optional prefix for any unqualified name)
-    "Core",
-    // -- Every [ScriptNamespace] declared in Inedo's public extensions
-    //    (github.com/Inedo/inedox-*, all 42 scanned 2026-10-02), by repository.
-    //    Names are matched case-insensitively (inedox-scripting also declares
-    //    "python").
-    "Files", "HTTP", "Network", "ProGet", "UPack", "Otter", // inedox-inedocore
-    "Windows", "IIS", "Firewall",                           // inedox-windows
-    "DotNet", "DevEnv", "MSBuild", "NuGet", "WindowsSDK",   // inedox-dotnet (DotNet/MSBuild also inedox-windowssdk)
-    "Scripting", "PowerShell", "Linux",                     // inedox-scripting (Linux also inedox-linux)
-    "Python", "Pip",                                        // inedox-python
-    "Artifactory",                                          // inedox-artifactory
-    "AWS",                                                  // inedox-aws
-    "Azure",                                                // inedox-azure
-    "AzureDevOps",                                          // inedox-azuredevops
-    "Bitbucket",                                            // inedox-bitbucket
-    "Chocolatey",                                           // inedox-chocolatey
-    "Docker",                                               // inedox-docker
-    "FTP",                                                  // inedox-ftp
-    "Git",                                                  // inedox-git
-    "Gitea",                                                // inedox-gitea
-    "GitHub",                                               // inedox-github
-    "GitLab",                                               // inedox-gitlab
-    "GoogleCloud",                                          // inedox-googlecloud
-    "Java",                                                 // inedox-java
-    "Jenkins",                                              // inedox-jenkins
-    "Jira",                                                 // inedox-jira
-    "Kubernetes",                                           // inedox-kubernetes
-    "Loupe",                                                // inedox-loupe
-    "Mercurial",                                            // inedox-mercurial
-    "nginx",                                                // inedox-nginx
-    "npm",                                                  // inedox-node
-    "NUnit",                                                // inedox-nunit
-    "PHP", "Composer",                                      // inedox-php
-    "SqlServer",                                            // inedox-sqlserver
-    "TeamCity",                                             // inedox-teamcity
-    "TFS",                                                  // inedox-tfs
-    "YouTrack",                                             // inedox-youtrack
-  ])
-);
+const { NAMESPACES } = require("./namespaces");
 
 // ============================================================
 // OPERATION DOCS
@@ -2158,6 +2088,30 @@ const variableDocs = {
     description: "The display number of the current build.",
     documentation: PROGET_VAR_DOC
   },
+  "EventName": {
+    namespace: null,
+    name: "$EventName",
+    description: "The name of the event that triggered the notification.",
+    documentation: PROGET_VAR_DOC
+  },
+  "ProjectName": {
+    namespace: null,
+    name: "$ProjectName",
+    description: "The name of the project the build belongs to.",
+    documentation: PROGET_VAR_DOC + `
+Used by ProGet's default "issues detected in a build" notification:
+\`Issues detected in $ProjectName $BuildNumber\`.
+`
+  },
+  "ReleaseNumber": {
+    namespace: null,
+    name: "$ReleaseNumber",
+    description: "The release number of the project build in scope.",
+    documentation: PROGET_VAR_DOC + `
+In BuildMaster, \`$ReleaseNumber\` is the release number of the current
+release, or \`0.0.0\` when no release is in context.
+`
+  },
   "BuildProjectName": {
     namespace: null,
     name: "$BuildProjectName",
@@ -3993,13 +3947,45 @@ Object.freeze(vectorFunctionDocs);
 Object.freeze(mapFunctionDocs);
 
 // Export
+// ============================================================
+// GENERATED REFERENCE
+// ============================================================
+// Every function and operation in Inedo's Otter and BuildMaster reference
+// (src/inedo-reference-data.js, generated by scripts/update-inedo-reference.js)
+// is added to the hand-written tables above, so none of them is flagged as
+// unknown and all get hover, completion and signature help.
+
+const reference = require("./inedo-reference-data");
+
+/**
+ * The hand-written entries plus the generated ones they don't cover. A
+ * hand-written entry always wins -- it has examples and ProGet's meaning --
+ * and names are compared case-insensitively, against every table listed in
+ * `alsoCovered` too (ProGet's `$PackageVersion` in variableDocs keeps the
+ * generated BuildMaster `$PackageVersion` out of scalarFunctionDocs).
+ *
+ * @param {DocsTable} handWritten
+ * @param {DocsTable} generated
+ * @param {DocsTable[]} [alsoCovered]
+ * @returns {DocsTable}
+ */
+function withReference(handWritten, generated, alsoCovered = []) {
+  const covered = new Set([handWritten, ...alsoCovered].flatMap((t) => Object.keys(t)).map((k) => k.toLowerCase()));
+  /** @type {DocsTable} */
+  const merged = { ...handWritten };
+  for (const [key, doc] of Object.entries(generated)) {
+    if (!covered.has(key.toLowerCase())) merged[key] = doc;
+  }
+  return merged;
+}
+
 module.exports = {
   NAMESPACES,
-  operationDocs,
+  operationDocs: withReference(operationDocs, reference.operationDocs),
   syntaxDocs,
   keywordDocs,
   variableDocs,
-  scalarFunctionDocs,
-  vectorFunctionDocs,
-  mapFunctionDocs
+  scalarFunctionDocs: withReference(scalarFunctionDocs, reference.scalarFunctionDocs, [variableDocs]),
+  vectorFunctionDocs: withReference(vectorFunctionDocs, reference.vectorFunctionDocs),
+  mapFunctionDocs: withReference(mapFunctionDocs, reference.mapFunctionDocs),
 };

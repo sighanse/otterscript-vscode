@@ -19,18 +19,33 @@ tool (`@vscode/vsce`) and the JSDoc lint plugin need it. CI uses Node 24.
 ```sh
 npm install       # dev dependencies
 npm run check     # ESLint + JSDoc type-check + grammar/language-data sync
-                  # + Adaptive Card data check + unit tests
+                  # + generated-data checks + unit tests
 npm test          # unit tests only (node:test)
 npm run lint      # ESLint only
 npm run test:integration   # integration tests in real VS Code (see below)
 npm run update:cards       # re-download the Adaptive Card schema and regenerate
                            # src/adaptivecard-data.js
+npm run update:reference   # re-download Inedo's function/operation reference,
+                           # regenerate src/inedo-reference-data.js and the
+                           # grammar's name lists
+npm run update:grammar     # regenerate the grammar's name lists only
 ```
 
-`src/adaptivecard-data.js` is generated. Edit
-`scripts/update-adaptivecard-data.js` instead: it holds the Teams-only types
-and values that Microsoft's schema leaves out, and the saved schema is in
-`scripts/adaptive-card-schema.json`.
+Some files are generated; `npm run check` fails when one is out of date:
+
+- `src/adaptivecard-data.js`, by `scripts/update-adaptivecard-data.js` from
+  the saved schema in `scripts/adaptive-card-schema.json`. The script also
+  holds the Teams-only types and values that Microsoft's schema leaves out.
+- `src/inedo-reference-data.js`, by `scripts/update-inedo-reference.js` from
+  the saved reference in `scripts/inedo-reference.json` (Inedo's Otter and
+  BuildMaster function/operation reference). The script also holds the
+  namespace corrections. Hand-written entries in `src/language-data.js` win
+  over generated ones, so better docs or ProGet's meaning go there.
+- The function and operation name lists in
+  `syntaxes/otterscript.tmLanguage.json`, by
+  `scripts/check-language-sync.js --write` from the tables in
+  `src/language-data.js`. After adding an entry there, run
+  `npm run update:grammar`.
 
 Optionally, install the [pre-commit](https://pre-commit.com) hooks once with
 `pre-commit install`. Each commit then gets the file, Markdown, workflow and

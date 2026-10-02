@@ -10,20 +10,28 @@
  *      member of the `NAMESPACES` allowlist exported by language-data.js.
  *
  * Background: the grammar matches scalar, vector, and map functions and
- * operations with hand-maintained regex alternations, e.g.
+ * operations with regex alternations, e.g.
  *
  *     "match": "\\$(ToJson|FromJson|...|PackageProperty)\\("
  *
- * Every time an entry is added to language-data.js the matching alternation
- * has to be updated by hand, and it keeps getting missed. This script makes
- * CI catch it.
+ * These lists are generated from language-data.js (which includes Inedo's
+ * generated reference) with `--write`; without it, the script checks that
+ * they are current, so CI catches a list that wasn't regenerated.
+ *
+ * Each list is sorted longest name first, so a pattern such as
+ * `\b(Build|Build-Project)\b` prefers the longer name. Operations without a
+ * dash that belong to a namespace (`DotNet::Build`, `ProGet::Promote`) are
+ * left out of the operations list: they are always written with their
+ * namespace, and as plain words (`Build`, `Test`) they would color ordinary
+ * text.
  *
  * Scope: call-style functions and operations only. Runtime *variables*
  * (entries whose `signature` has no `(` -- e.g. `$WorkingDirectory`,
- * `@AffectedPackages`) are matched by different grammar rules and are not
- * checked here yet.
+ * `@AffectedPackages`) are matched by different grammar rules.
  *
- * Usage: node scripts/check-language-sync.js   (exit 0 = in sync, 1 = drift)
+ * Usage:
+ *   node scripts/check-language-sync.js           exit 0 = in sync, 1 = drift
+ *   node scripts/check-language-sync.js --write   regenerate the grammar lists
  */
 
 "use strict";
@@ -33,15 +41,11 @@
  * @typedef {Record<string, { signature?: string, namespace?: string | null }>} DocsTable
  */
 
+const fs = require("fs");
 const path = require("path");
 
 const data = require(path.join(__dirname, "..", "src", "language-data.js"));
-const grammar = require(path.join(
-  __dirname,
-  "..",
-  "syntaxes",
-  "otterscript.tmLanguage.json"
-));
+const GRAMMAR_PATH = path.join(__dirname, "..", "syntaxes", "otterscript.tmLanguage.json");
 
 /**
  * Recursively collect every {name, match} pattern in the grammar.
@@ -61,15 +65,14 @@ function collectPatterns(node, acc) {
   return acc;
 }
 
-const patterns = collectPatterns(grammar, []);
-
 /**
  * Pull the alternation names out of a grammar pattern identified by scope name.
  * Expects a single `(a|b|c)` group of bare identifiers somewhere in the match.
+ * @param {GrammarPattern[]} patterns - From {@link collectPatterns}
  * @param {string} scopeName
  * @returns {string[]}
  */
-function grammarNames(scopeName) {
+function grammarNames(patterns, scopeName) {
   const pattern = patterns.find((p) => p.name === scopeName);
   if (!pattern) {
     throw new Error(
@@ -106,12 +109,25 @@ function functionNames(docsTable) {
 }
 
 /**
- * All docs-table entries, call-style or not.
+ * The operations the grammar colors: every entry except a dashless one that
+ * belongs to a namespace (see the header).
  * @param {DocsTable} docsTable
  * @returns {string[]}
  */
-function allNames(docsTable) {
-  return Object.keys(docsTable).map(bareName);
+function operationNames(docsTable) {
+  return Object.entries(docsTable)
+    .filter(([key, entry]) => key.includes("-") || entry.namespace === null)
+    .map(([key]) => bareName(key));
+}
+
+/**
+ * Longest name first, then alphabetically -- the order the grammar lists use.
+ * @param {string} a
+ * @param {string} b
+ * @returns {number}
+ */
+function byLengthThenName(a, b) {
+  return b.length - a.length || a.localeCompare(b);
 }
 
 const checks = [
@@ -133,15 +149,43 @@ const checks = [
   {
     label: "operations",
     scope: "keyword.other.operation.otterscript",
-    expected: allNames(data.operationDocs),
+    expected: operationNames(data.operationDocs),
   },
 ];
+
+// ------------------------------------------------------------------
+// --write: regenerate the grammar lists
+// ------------------------------------------------------------------
+// Edits the file text in place, one pattern at a time, so the rest of the
+// grammar keeps its formatting.
+
+if (process.argv.includes("--write")) {
+  let text = fs.readFileSync(GRAMMAR_PATH, "utf8");
+  for (const check of checks) {
+    const names = [...new Set(check.expected)].sort(byLengthThenName);
+    const scopeAt = text.indexOf(`"name": "${check.scope}"`);
+    const matchAt = text.indexOf(`"match": "`, scopeAt);
+    const lineEnd = text.indexOf("\n", matchAt);
+    const line = text.slice(matchAt, lineEnd);
+    const listPattern = /\(([A-Za-z0-9_:|-]+\|[A-Za-z0-9_:|-]+)\)/;
+    if (scopeAt === -1 || matchAt === -1 || !listPattern.test(line)) {
+      throw new Error(`could not find the list of "${check.scope}"`);
+    }
+    text = text.slice(0, matchAt) + line.replace(listPattern, `(${names.join("|")})`) + text.slice(lineEnd);
+  }
+  JSON.parse(text); // still valid JSON
+  fs.writeFileSync(GRAMMAR_PATH, text);
+  console.log("Rewrote the grammar lists in syntaxes/otterscript.tmLanguage.json");
+}
+
+// Read after any --write above, so the check below sees the current file.
+const patterns = collectPatterns(JSON.parse(fs.readFileSync(GRAMMAR_PATH, "utf8")), []);
 
 let drift = false;
 
 for (const check of checks) {
   const expected = new Set(check.expected);
-  const actual = new Set(grammarNames(check.scope));
+  const actual = new Set(grammarNames(patterns, check.scope));
 
   const missingFromGrammar = [...expected].filter((n) => !actual.has(n)).sort();
   const staleInGrammar = [...actual].filter((n) => !expected.has(n)).sort();

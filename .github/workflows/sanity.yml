@@ -60,6 +60,12 @@ jobs:
         run: npm run check:cards
         continue-on-error: true
 
+      # src/inedo-reference-data.js is generated from scripts/inedo-reference.json.
+      - name: Inedo reference data up to date
+        id: reference
+        run: npm run check:reference
+        continue-on-error: true
+
       - name: Unit tests
         id: tests
         run: npm test
@@ -185,6 +191,13 @@ jobs:
             echo "❌ Adaptive Card data: stale (regenerate with node scripts/update-adaptivecard-data.js)" >> "$GITHUB_STEP_SUMMARY"
           fi
 
+          # Inedo reference data
+          if [ "${{ steps.reference.outcome }}" == "success" ]; then
+            echo "✅ Inedo reference data: up to date" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ Inedo reference data: stale (regenerate with node scripts/update-inedo-reference.js)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
           # Unit tests
           if [ "${{ steps.tests.outcome }}" == "success" ]; then
             echo "✅ Unit tests: passed" >> "$GITHUB_STEP_SUMMARY"
@@ -246,6 +259,7 @@ jobs:
             Type-check=${{ steps.jscheck.outcome }}
             Grammar-sync=${{ steps.langsync.outcome }}
             Adaptive-Card-data=${{ steps.cards.outcome }}
+            Inedo-reference-data=${{ steps.reference.outcome }}
             Unit-tests=${{ steps.tests.outcome }}
             JSON=${{ steps.json.outcome }}
             JSONC=${{ steps.jsonc.outcome }}

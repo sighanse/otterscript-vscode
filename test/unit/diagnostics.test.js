@@ -311,6 +311,18 @@ describe("updateDiagnostics — unknown operation", () => {
     }
   });
 
+  it("knows every operation and function in Inedo's reference", () => {
+    for (const source of [
+      "Extract-ZipFile (Name: a.zip);",
+      "Replace-Text (Include: *.txt, SearchText: a, ReplaceWith: b);",
+      "Ensure-DscResource (Name: x);",
+      "IIS::Ensure-AppPool (Name: x);",
+      "set %m = %MapAdd(%m, k, v);",
+    ]) {
+      assert.deepEqual(diagnose(source).filter((d) => /^unknown-/.test(d.code)), [], source);
+    }
+  });
+
   it("still flags an unknown operation after ';', inside braces, or behind a known namespace", () => {
     assert.deepEqual(only('Log-Information "a"; Bogus-Op "b";', "unknown-operation").map((d) => d.range.start.character), [21]);
     assert.equal(only("if $a { Bogus-Op; }", "unknown-operation").length, 1);

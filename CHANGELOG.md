@@ -2,8 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Hover, completion and signature help for every function and operation in Inedo's Otter and BuildMaster reference — about 100 operations and 80 functions more than before, such as `Extract-ZipFile`, `Replace-Text`, `IIS::Ensure-AppPool`, `Git::Checkout-Code`, `PSCall`, `%MapAdd` and `$PSCredential` — with their arguments and the products that have them, and syntax highlighting for their names
+- ProGet notifier variables `$EventName`, `$ProjectName` and `$ReleaseNumber`
+
 ### Fixed
 
+- Operations and functions that exist in Otter or BuildMaster but weren't documented here, such as `Extract-ZipFile` or `Ensure-DscResource`, were flagged as unknown
 - `$Trim` accepts the characters to trim (`$Trim($x, "-")`), as `$TrimStart` and `$TrimEnd` already did; it was flagged as too many arguments
 - `$PackageHash` and `$PackageProperty` mixed ProGet's and BuildMaster's forms. Hover now shows ProGet's (`$PackageHash([format], [algorithm])`, `$PackageProperty(name, [default])`) with BuildMaster's below it, and a three-argument BuildMaster `$PackageProperty(...)` is no longer flagged as too many arguments
 
