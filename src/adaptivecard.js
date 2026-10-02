@@ -35,7 +35,7 @@
 const vscode = require("vscode");
 const { createTemplateScanState, maskTemplateTagContents } = require("./scanner");
 const { editDistance } = require("./helpers");
-const { analyzeJson, findStringProperties, hasOwnKeyProperty, valueStartAfterKey } = require("./json-view");
+const { analyzeJson, findStringProperties, hasOwnKeyProperty, scanJsonPrefix, valueStartAfterKey } = require("./json-view");
 const { ADAPTIVE_CARD_TYPES, ADAPTIVE_CARD_PROPERTIES, ADAPTIVE_CARD_VALUE_LISTS } = require("./adaptivecard-data");
 
 /** @typedef {import("./json-view").JsonView} JsonView */
@@ -498,6 +498,179 @@ function findDuplicateIds(card, source) {
   return results;
 }
 
+/**
+ * The types an object may have, by the key that holds it (an array's key, or
+ * the object's own key, like `selectAction`). Keys not listed allow any type.
+ * @type {ReadonlyMap<string, (type: string) => boolean>}
+ */
+const TYPES_BY_CONTAINER = (() => {
+  /** Types that are parts of an element, never an element in `body` / `items`. */
+  const parts = new Set([
+    "AdaptiveCard", "Authentication", "BackgroundImage", "CaptionSource", "CarouselPage", "Column", "Data.Query",
+    "Fact", "Input.Choice", "MediaSource", "Metadata", "Refresh", "TableCell", "TableColumnDefinition", "TableRow",
+    "TargetElement", "TextRun", "TokenExchangeResource",
+  ]);
+  /**
+   * @param {string[]} types
+   * @returns {(type: string) => boolean}
+   */
+  const only = (types) => (/** @type {string} */ type) => types.includes(type);
+  /**
+   * @param {string} type
+   * @returns {boolean}
+   */
+  const isAction = (type) => type.startsWith("Action.");
+  /**
+   * @param {string} type
+   * @returns {boolean}
+   */
+  const isElement = (type) => !isAction(type) && !type.startsWith("Layout.") && !parts.has(type);
+  return new Map([
+    ["actions", isAction],
+    ["selectAction", isAction],
+    ["body", isElement],
+    ["items", isElement],
+    ["columns", only(["Column", "TableColumnDefinition"])],
+    ["rows", only(["TableRow"])],
+    ["cells", only(["TableCell"])],
+    ["facts", only(["Fact"])],
+    ["choices", only(["Input.Choice"])],
+    ["inlines", only(["TextRun"])],
+    ["pages", only(["CarouselPage"])],
+    ["layouts", (type) => type.startsWith("Layout.")],
+    ["sources", only(["MediaSource"])],
+    ["captionSources", only(["CaptionSource"])],
+  ]);
+})();
+
+/**
+ * One completion inside an Adaptive Card string value.
+ *
+ * @typedef {{ label: string, detail: string, kind: "type" | "value" | "id" }} CardCompletionItem
+ */
+
+/**
+ * Completions for the Adaptive Card string value the cursor is in:
+ * - after `"type": "` -- the types the card's `"version"` supports that fit
+ *   where the object is (`Action.*` in `actions`, `Column` in `columns`, ...;
+ *   see {@link TYPES_BY_CONTAINER});
+ * - after a key with a fixed list of values (`"weight": "`) -- that list, for
+ *   the type of the object the key is in;
+ * - in an `Action.ToggleVisibility`'s `targetElements` (a string item, or an
+ *   `"elementId"`) -- the ids of the card's elements.
+ *
+ * Works on everything before the cursor, so the string being typed may still
+ * be unclosed; looks past the cursor only for what isn't found before it (an
+ * object's `"type"` written after the key, ids further down the card).
+ *
+ * @param {string} text - Full document text
+ * @param {number} offset - The cursor
+ * @returns {{ start: number, items: CardCompletionItem[] } | null} `start`:
+ *   where the typed part of the value begins (just past its opening quote);
+ *   null when the cursor isn't in a card value this knows about.
+ */
+function findCardCompletions(text, offset) {
+  const state = createTemplateScanState();
+  const literal = text.split("\n").map((line) => maskTemplateTagContents(line, state)).join("\n");
+  const { open, openString } = scanJsonPrefix(literal.slice(0, offset));
+  if (openString === -1 || literal.slice(openString, offset).includes("\n")) return null;
+
+  // Everything before the value's opening quote is complete JSON tokens.
+  const before = analyzeJson(literal.slice(0, openString));
+  /** @type {JsonView | undefined} */
+  let whole;
+  const views = () => [before, (whole ??= analyzeJson(literal))];
+
+  /**
+   * The key whose value starts at `index`, if any.
+   *
+   * @param {number} index
+   * @returns {string | undefined}
+   */
+  const keyOf = (index) => {
+    let k = before.tokens.length - 1;
+    while (k >= 0 && before.tokens[k].start > index) k--;
+    return k >= 0 && valueStartAfterKey(before.text, before.tokens[k]) === index ? before.tokens[k].value : undefined;
+  };
+  /**
+   * The string value of an object's own `key`.
+   *
+   * @param {number} objectStart
+   * @param {string} key
+   * @returns {string | undefined}
+   */
+  const propertyOf = (objectStart, key) => {
+    for (const view of views()) {
+      const found = findStringProperties(view, key).find((p) => p.objectStart === objectStart);
+      if (found) return found.value;
+    }
+    return undefined;
+  };
+
+  // Inside the card, and not in a free-form payload.
+  const root = open.find((o) => literal[o] === "{" && propertyOf(o, "type") === "AdaptiveCard");
+  if (root === undefined || open.some((o) => FREE_FORM_KEYS.has(keyOf(o) ?? ""))) return null;
+
+  const inner = open[open.length - 1];
+  const parent = open[open.length - 2];
+  const precedingChar = before.text.trimEnd().slice(-1);
+  /**
+   * @param {CardCompletionItem[]} items
+   * @returns {{ start: number, items: CardCompletionItem[] } | null}
+   */
+  const result = (items) => (items.length ? { start: openString + 1, items } : null);
+
+  // A string item of an array: only `targetElements` has element ids.
+  if (literal[inner] === "[" && (precedingChar === "[" || precedingChar === ",")) {
+    const action = parent !== undefined && propertyOf(parent, "type") === "Action.ToggleVisibility";
+    return action && keyOf(inner) === "targetElements" ? result(cardIdItems(views())) : null;
+  }
+  if (literal[inner] !== "{" || precedingChar !== ":") return null;
+  const key = keyOf(openString);
+
+  if (key === "type") {
+    // An object's container: an `actions` array, or the key itself (`selectAction`).
+    const containerKey = keyOf(inner) ?? (parent !== undefined && literal[parent] === "[" ? keyOf(parent) : undefined);
+    const cardVersion = parseCardVersion(propertyOf(root, "version") ?? "");
+    const items = [];
+    const fits = (containerKey && TYPES_BY_CONTAINER.get(containerKey)) || (() => true);
+    for (const [type, version] of ADAPTIVE_CARD_TYPES) {
+      if (!fits(type)) continue;
+      const required = parseCardVersion(version);
+      if (cardVersion && required && compareCardVersions(required, cardVersion) > 0) continue;
+      items.push({ label: type, detail: `Adaptive Card ${version}+`, kind: /** @type {const} */ ("type") });
+    }
+    return result(items);
+  }
+
+  if (key === "elementId") {
+    const action = open[open.length - 3];
+    const isTarget = literal[parent] === "[" && keyOf(parent) === "targetElements" &&
+      action !== undefined && propertyOf(action, "type") === "Action.ToggleVisibility";
+    return isTarget ? result(cardIdItems(views())) : null;
+  }
+
+  const type = propertyOf(inner, "type");
+  const listName = key && type ? ADAPTIVE_CARD_PROPERTIES.get(type)?.get(key)?.values : undefined;
+  const values = listName ? ADAPTIVE_CARD_VALUE_LISTS.get(listName) : undefined;
+  return values
+    ? result(values.map((value) => ({ label: value, detail: `${key} on ${type}`, kind: /** @type {const} */ ("value") })))
+    : null;
+}
+
+/**
+ * Completion items for the element ids in the card: each literal id once.
+ *
+ * @param {JsonView[]} views - The text before the cursor, then the whole text
+ * @returns {CardCompletionItem[]}
+ */
+function cardIdItems(views) {
+  const ids = new Set(views.flatMap((view) => findElementIds(view).map((id) => id.value)));
+  return [...ids]
+    .filter((id) => id !== "" && !isTemplatedValue(id))
+    .map((id) => ({ label: id, detail: "Element id", kind: /** @type {const} */ ("id") }));
+}
+
 /** The `contentType` a Teams message attachment needs for an Adaptive Card. */
 const ADAPTIVE_CARD_CONTENT_TYPE = "application/vnd.microsoft.card.adaptive";
 
@@ -873,4 +1046,5 @@ module.exports = {
   createTemplatingKeywordFix,
   createToggleTargetFix,
   findAdaptiveCardDiagnostics,
+  findCardCompletions,
 };

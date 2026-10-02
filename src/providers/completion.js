@@ -2,7 +2,8 @@
 /**
  * @fileoverview Completion for OtterScript: functions and variables after a
  * `$`, `@` or `%` sigil (including the file's own variables), operations and
- * keywords, and module names after `call`.
+ * keywords, module names after `call`, and values inside an Adaptive Card in
+ * a text template.
  */
 
 const vscode = require("vscode");
@@ -16,6 +17,7 @@ const {
   isAvailableIn,
   isValidCompletionPosition,
 } = require("../helpers");
+const { findCardCompletions } = require("../adaptivecard");
 
 /**
  * Lower-cased names a table documents, so the file's own variable of the same
@@ -281,7 +283,52 @@ function registerCompletion(settings, listWorkspaceModules) {
     return [...items.values()];
   }
 
-  return [scalarCompletionProvider, vectorCompletionProvider, mapCompletionProvider, operationCompletionProvider];
+  // ============================================================
+  // ADAPTIVE CARD COMPLETION PROVIDER
+  // ============================================================
+  // Inside a card's string values -- where the providers above never offer
+  // anything: `"type"` values, a property's allowed values, and the ids a
+  // ToggleVisibility can target (see findCardCompletions). Triggered by the
+  // opening quote; VS Code doesn't suggest while typing in a string, so
+  // Ctrl+Space brings the list back after that.
+
+  /** @type {Record<string, vscode.CompletionItemKind>} */
+  const CARD_ITEM_KINDS = {
+    type: vscode.CompletionItemKind.Class,
+    value: vscode.CompletionItemKind.EnumMember,
+    id: vscode.CompletionItemKind.Reference,
+  };
+
+  const cardCompletionProvider =
+    vscode.languages.registerCompletionItemProvider(
+      "otterscript",
+      {
+        provideCompletionItems(document, position) {
+          if (!settings.completionEnabled) return [];
+          const offset = document.offsetAt(position);
+          const found = findCardCompletions(document.getText(), offset);
+          if (!found) return [];
+
+          // Insert at the cursor, or replace the rest of the value up to its
+          // closing quote (when it has one on this line).
+          const start = document.positionAt(found.start);
+          const rest = document.lineAt(position.line).text.slice(position.character);
+          const closing = rest.indexOf('"');
+          const end = closing === -1 ? position : position.translate(0, closing);
+          const range = { inserting: new vscode.Range(start, position), replacing: new vscode.Range(start, end) };
+
+          return found.items.map(({ label, detail, kind }, i) => {
+            const item = new vscode.CompletionItem({ label, description: detail }, CARD_ITEM_KINDS[kind]);
+            item.range = range;
+            item.sortText = String(i).padStart(4, "0"); // keep the data's order
+            return item;
+          });
+        }
+      },
+      '"'
+    );
+
+  return [scalarCompletionProvider, vectorCompletionProvider, mapCompletionProvider, operationCompletionProvider, cardCompletionProvider];
 }
 
 module.exports = { registerCompletion };

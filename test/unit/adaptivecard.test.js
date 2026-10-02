@@ -14,6 +14,7 @@ const assert = require("node:assert/strict");
 const { makeDocument } = require("./fake-document");
 const {
   findAdaptiveCardDiagnostics,
+  findCardCompletions,
   createCardVersionFix,
   createContentTypeFix,
   createInvalidValueFix,
@@ -608,5 +609,71 @@ describe("findAdaptiveCardDiagnostics — ToggleVisibility targets and ids", () 
   it("doesn't flag the same id in alternative <% %> branches", () => {
     const src = card(`<% if $x { %>${details}<% } else { %>${details}<% } %>`, '"details"');
     assert.deepEqual(only(src, "adaptivecard-duplicate-id"), []);
+  });
+});
+
+describe("findCardCompletions", () => {
+  /**
+   * The completion labels at the `|` in `source`, or null.
+   *
+   * @param {string} source
+   * @returns {string[] | null}
+   */
+  const labelsAt = (source) => {
+    const offset = source.indexOf("|");
+    const found = findCardCompletions(source.slice(0, offset) + source.slice(offset + 1), offset);
+    if (found) assert.equal(found.start, source.lastIndexOf('"', offset) + 1, "starts after the opening quote");
+    return found && found.items.map((item) => item.label);
+  };
+  const CARD = '{ "type": "AdaptiveCard", "version": "1.2", ';
+
+  it("offers element types in body, limited to the card's version", () => {
+    const labels = labelsAt(`${CARD}"body": [ { "type": "|" } ] }`) ?? [];
+    assert.ok(labels.includes("TextBlock") && labels.includes("ActionSet"), labels.join(" "));
+    assert.ok(!labels.includes("Table"), "1.5, newer than the card");
+    assert.ok(!labels.includes("Action.OpenUrl") && !labels.includes("Column") && !labels.includes("AdaptiveCard"));
+  });
+
+  it("offers only actions in actions and selectAction, and Column in columns", () => {
+    assert.deepEqual(labelsAt(`${CARD}"actions": [ { "type": "|`)?.every((l) => l.startsWith("Action.")), true);
+    assert.deepEqual(labelsAt(`${CARD}"body": [ { "type": "Container", "selectAction": { "type": "Action.Op|" } } ] }`)
+      ?.every((l) => l.startsWith("Action.")), true);
+    assert.deepEqual(labelsAt(`${CARD}"body": [ { "type": "ColumnSet", "columns": [ { "type": "|" } ] } ] }`), ["Column"]);
+  });
+
+  it("offers every type the version allows when the version is templated or missing", () => {
+    const labels = labelsAt('{ "type": "AdaptiveCard", "version": "$V", "body": [ { "type": "|" } ] }') ?? [];
+    assert.ok(labels.includes("Table"));
+  });
+
+  it("offers a property's allowed values, with the object's type before or after the key", () => {
+    assert.deepEqual(labelsAt(`${CARD}"body": [ { "type": "TextBlock", "weight": "b|" } ] }`), ["default", "lighter", "bolder"]);
+    assert.deepEqual(labelsAt(`${CARD}"body": [ { "weight": "|", "type": "TextBlock" } ] }`), ["default", "lighter", "bolder"]);
+    assert.equal(labelsAt(`${CARD}"body": [ { "type": "TextBlock", "text": "|" } ] }`), null, "free text");
+  });
+
+  it("offers the card's element ids as ToggleVisibility targets", () => {
+    const body = `${CARD}"body": [ { "type": "TextBlock", "id": "details", "text": "x" }, { "type": "Image", "id": "row$i" } ], `;
+    assert.deepEqual(labelsAt(`${body}"actions": [ { "type": "Action.ToggleVisibility", "targetElements": [ "|" ] } ] }`), ["details"]);
+    assert.deepEqual(labelsAt(`${body}"actions": [ { "type": "Action.ToggleVisibility", "targetElements": [ "a", { "elementId": "|" } ] } ] }`), ["details"]);
+    assert.equal(labelsAt(`${body}"actions": [ { "type": "Action.Submit", "targetElements": [ "|" ] } ] }`), null);
+  });
+
+  it("offers nothing outside a card, in a key, in a free-form payload or in a <% %> tag", () => {
+    assert.equal(labelsAt('{ "type": "message", "weight": "|" }'), null);
+    assert.equal(labelsAt(`${CARD}"body": [ { "|`), null);
+    assert.equal(labelsAt(`${CARD}"actions": [ { "type": "Action.Submit", "data": { "type": "|" } } ] }`), null);
+    assert.equal(labelsAt(`${CARD}"body": [ <% set $x = "|"; %> ] }`), null);
+  });
+
+  it("works with <% %> tags around the card's parts", () => {
+    const src = `<% if $Notify { %>
+${CARD}"body": [
+<% foreach $n in @Names { %>
+{ "type": "TextBlock", "size": "|" },
+<% } %>
+] }
+<% } %>`;
+    assert.ok(labelsAt(src)?.includes("large"));
   });
 });

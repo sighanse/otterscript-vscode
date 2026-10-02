@@ -194,6 +194,18 @@ describe("completion", () => {
     }
   });
 
+  it("offers Adaptive Card values inside a card in a text template", async () => {
+    const document = await openContent(
+      "<% if $Notify { %>\n" +
+      '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "TextBlock", "weight": "" } ] }\n' +
+      "<% } %>\n"
+    );
+    const weights = await completionLabels(document, positionOf(document, '"weight": "', 11), '"');
+    assert.deepEqual(weights, ["default", "lighter", "bolder"]);
+    const types = await completionLabels(document, positionOf(document, '"TextBlock"', 1), '"');
+    assert.ok(types.includes("TextBlock") && !types.includes("Table"), types.join(" "));
+  });
+
   it("offers nothing from this extension inside a comment", async () => {
     const document = await openContent("# $");
     const labels = await completionLabels(document, positionOf(document, "# $", 3), "$");
