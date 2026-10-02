@@ -482,6 +482,22 @@ describe("updateDiagnostics — unknown namespace", () => {
     assert.deepEqual(only("set %m = %(a: 1);\nset %n = %FromJson('{}');\nset %o = %MapAdd(%m, b, 2);", "unknown-map-function"), []);
   });
 
+  it("hints at an operation call without a required argument", () => {
+    const [d] = only('Copy-Files(\n  From: "a",\n  Include: @("*")\n);', "missing-required-argument");
+    assert.equal(d.message, "'Copy-Files' is missing its required argument 'To'.");
+    assert.equal(d.severity, DiagnosticSeverity.Hint);
+    assert.deepEqual(only('Copy-Files(From: "a", to: "b");', "missing-required-argument"), [], "names ignore case");
+    assert.deepEqual(only('Copy-Files("a");', "missing-required-argument"), [], "a positional argument: unknown which");
+    assert.deepEqual(only('Log-Information "x";\ncall Copy-Files(From: "a");', "missing-required-argument"), [], "a module call");
+  });
+
+  it("flags a module declared twice in one file, pointing at the first", () => {
+    const [d] = only("module Greet {\n}\nmodule greet {\n}\nmodule Other {\n}", "duplicate-module");
+    assert.equal(d.message, "A module named 'greet' is already declared in this file.");
+    assert.equal(d.range.start.line, 2);
+    assert.equal(d.relatedInformation[0].location.range.start.line, 0);
+  });
+
   it("flags too few arguments, using the [optional] markers and the most lenient form", () => {
     const [d] = only("set $s = $Substring($x);", "too-few-arguments");
     assert.equal(d.message, "'$Substring' needs at least 2 arguments, got 1.");

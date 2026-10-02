@@ -99,6 +99,15 @@ describe("hover", () => {
     assert.match(await hoverText(source, positionOf(source, "Copy-Files", 2)), /\*\*Arguments:\*\*\n- `Include`/);
   });
 
+  it("shows a called module's declaration and its comment, also from another workspace file", async () => {
+    const local = await openContent("# Says hello.\n# Twice.\nmodule Hi<$who> {\n}\ncall Hi(who: x);\n");
+    const text = await hoverText(local, positionOf(local, "call Hi", 6));
+    assert.match(text, /module Hi<\$who>/);
+    assert.match(text, /Says hello\. {2}\nTwice\./);
+    const elsewhere = await openContent('call Greet(name: "x");\n');
+    assert.match(await hoverText(elsewhere, positionOf(elsewhere, "Greet", 2)), /module Greet<\$name>[\s\S]*Declared in `main\.otter`/);
+  });
+
   it("documents an operation", async () => {
     assert.match(await hoverText(document, positionOf(document, "Log-Information", 3)), /Log-Information/);
   });

@@ -21,7 +21,7 @@ This extension started as a learning project while implementing [custom webhook 
 - Diagnostics for common mistakes (see [the list of checks](#turning-individual-diagnostics-off)) — also for `$` expressions in a text template's literal output, such as `$ToJson(...)` in a webhook body
 - Adaptive Card checks, triggered by a literal `"type": "AdaptiveCard"` object in a template: unknown types, values a property doesn't allow (`"weight": "bold"`), elements or properties newer than the card's `"version"`, `Action.ToggleVisibility` targets with no matching `"id"`, and Teams webhook mistakes such as a wrong `"contentType"` or `Action.Submit`. Completion inside the card offers `"type"` values, a property's allowed values and toggle targets. Based on the Adaptive Card 1.6 schema plus Teams-only elements; best-effort, not a full schema validation
 - Quick fixes, plus a **Fix All Issues** command (`Ctrl+Shift+Alt+F`); fixes that would cause a new problem are left to the lightbulb
-- Module navigation: Go to Definition (F12, also to a module declared in another workspace file), Find All References (Shift+F12) and Rename (F2) across workspace files, CodeLens reference counts, Outline and breadcrumbs, and Go to Symbol in Workspace (`Ctrl+T`); completion of module names after `call`, from this file and the rest of the workspace
+- Module navigation: hover on `call MyModule` (its declaration and comment), Go to Definition (F12, also to a module declared in another workspace file), Find All References (Shift+F12) and Rename (F2) across workspace files, CodeLens reference counts, Outline and breadcrumbs, and Go to Symbol in Workspace (`Ctrl+T`); completion of module names after `call`, from this file and the rest of the workspace
 - Variables: completion of the ones the file uses, Go to Definition (F12) to where they're assigned, Rename (F2) everywhere in the file (strings included), and highlighting all occurrences of a variable (`$x`, `@list`, `%map`, `${my var}`) or module, with declarations and assignments marked as writes
 - Code folding via `#region` / `#endregion` and block structure
 - Snippets for common patterns, including `teamscard`: a complete Teams webhook body with an Adaptive Card
@@ -86,6 +86,7 @@ when no folder is open).
 | `invalid-operator` | `&` or `\|` where `&&` or `\|\|` is required |
 | `incorrect-for-usage` | `for` used as a loop (use `foreach`) |
 | `duplicate-map-key` | The same key twice in a `%(...)` map |
+| `duplicate-module` | Two modules with the same name in one file |
 | `unknown-scalar-function` | Unknown `$Name(...)` function |
 | `unknown-vector-function` | Unknown `@Name(...)` function |
 | `unknown-map-function` | Unknown `%Name(...)` function |
@@ -93,6 +94,7 @@ when no folder is open).
 | `unknown-namespace` | Unknown `Namespace::` prefix |
 | `too-many-arguments` | More arguments than the function accepts |
 | `too-few-arguments` | Fewer arguments than the function requires |
+| `missing-required-argument` | Operation call without a required argument, e.g. `Copy-Files` without `To` (a hint) |
 | `template-unexpected-close` | `%>` with no matching `<%` |
 | `template-unclosed` | `<%` that is never closed |
 | `template-end-keyword` | `<% end %>` where `<% } %>` is required |

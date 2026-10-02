@@ -8,7 +8,7 @@
 const vscode = require("vscode");
 const { keywordDocs, mapFunctionDocs, operationDocs, scalarFunctionDocs, syntaxDocs, variableDocs, vectorFunctionDocs } = require("../language-data");
 const { buildArgumentHoverMarkdown, buildHoverMarkdown, lookupOwn } = require("../helpers");
-const { getMaskedTextBefore, isInStringOrCommentDoc } = require("../document-index");
+const { findModuleDeclarationRange, getMaskedTextBefore, getModuleNameAt, isInStringOrCommentDoc } = require("../document-index");
 const { findOperationArgumentContext } = require("../scanner");
 
 /**
@@ -31,14 +31,56 @@ function hoverArgument(document, position) {
 }
 
 /**
+ * Hover for the module name in a `call`: the module's declaration line and
+ * the `#` comment lines right above it -- from this file, or else from the
+ * one workspace file that declares it -- or null.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Position} position
+ * @param {() => Promise<{ name: string, uri: vscode.Uri }[]>} listWorkspaceModules
+ * @returns {Promise<vscode.Hover | null>}
+ */
+async function hoverModuleCall(document, position, listWorkspaceModules) {
+  const moduleAt = getModuleNameAt(document, position);
+  if (!moduleAt || moduleAt.isDeclaration) return null;
+
+  let home = document;
+  let declaration = findModuleDeclarationRange(document, moduleAt.name);
+  if (!declaration) {
+    const elsewhere = (await listWorkspaceModules()).filter((m) => m.name === moduleAt.name);
+    if (elsewhere.length !== 1) return null;
+    home = await vscode.workspace.openTextDocument(elsewhere[0].uri);
+    declaration = findModuleDeclarationRange(home, moduleAt.name);
+    if (!declaration) return null;
+  }
+
+  // The declaration up to its `{`, and the comment block right above it.
+  const header = home.lineAt(declaration.start.line).text.replace(/\{.*$/, "").trim();
+  const comment = [];
+  for (let line = declaration.start.line - 1; line >= 0; line--) {
+    const match = /^\s*#\s?(.*)$/.exec(home.lineAt(line).text);
+    if (!match) break;
+    comment.unshift(match[1]);
+  }
+
+  const md = new vscode.MarkdownString();
+  md.appendCodeblock(header, "otterscript");
+  if (comment.length) md.appendMarkdown(`${comment.join("  \n")}\n\n`);
+  if (home !== document) md.appendMarkdown(`Declared in \`${vscode.workspace.asRelativePath(home.uri)}\``);
+  return new vscode.Hover(md, moduleAt.range);
+}
+
+/**
  * Registers the hover provider.
  *
  * @param {import("../helpers").Settings} settings - Live settings, updated in
  *   place by the settings listener in extension.js
  * @param {RegExp} operationRegex - Matches a known operation name
+ * @param {() => Promise<{ name: string, uri: vscode.Uri, range: vscode.Range }[]>} listWorkspaceModules -
+ *   Every module declared in the workspace (workspace-symbols.js)
  * @returns {vscode.Disposable[]}
  */
-function registerHover(settings, operationRegex) {
+function registerHover(settings, operationRegex, listWorkspaceModules) {
   // ============================================================
   // HOVER PROVIDER
   // ============================================================
@@ -50,7 +92,7 @@ function registerHover(settings, operationRegex) {
   const hoverProvider = vscode.languages.registerHoverProvider(
     "otterscript",
     {
-      provideHover(document, position) {
+      async provideHover(document, position) {
         // -- Check if hover is enabled in settings
         if (!settings.hoverEnabled) {
           return null;
@@ -79,6 +121,10 @@ function registerHover(settings, operationRegex) {
         // -- An argument name in an operation call (`To` in `Copy-Files(To: $x)`)
         const argumentHover = hoverArgument(document, position);
         if (argumentHover) return argumentHover;
+
+        // -- A module name in a `call`: the module's declaration
+        const moduleHover = await hoverModuleCall(document, position, listWorkspaceModules);
+        if (moduleHover) return moduleHover;
 
         // -- Template tags (<% and %>)
         // OtterScript uses ASP-style template tags for embedding code

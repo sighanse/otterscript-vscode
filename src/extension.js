@@ -143,7 +143,7 @@ function activate(context) {
     diagnostics,
     ...registerCodeActions(settings, diagnostics, runDiagnostics),
     ...registerCompletion(settings, workspaceSymbols.listModules),
-    ...registerHover(settings, patterns.operationRegex()),
+    ...registerHover(settings, patterns.operationRegex(), workspaceSymbols.listModules),
     ...registerNavigation(settings, workspaceSymbols),
     ...registerSignatureHelp(settings, patterns),
     ...workspaceSymbols.disposables,

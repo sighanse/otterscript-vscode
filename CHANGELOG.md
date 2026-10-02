@@ -20,6 +20,9 @@
 - Hover says when a function works with every sigil (`$FromJson`, `@FromJson`, `%FromJson`), where the sigil picks what it returns. The `@` and `%` forms of `$Eval` and `$GetVariableValue` now have the same full documentation as their `$` form
 
 - `unknown-map-function` diagnostic: an unknown `%Name(...)` function, as `$Name(...)` and `@Name(...)` calls already are
+- `missing-required-argument` diagnostic, a hint by default: an operation call that leaves out a required argument, such as `Copy-Files(From: ...)` without `To`. Calls with a positional argument aren't checked
+- `duplicate-module` diagnostic: a second `module` with a name the file already declares
+- Hover on the module name in `call MyModule` shows the module's declaration and the `#` comment lines above it, also when the module is declared in another workspace file
 - `too-few-arguments` diagnostic: a function call with fewer arguments than the function requires (`$Substring($x)`), based on the `[optional]` parameters in its signature and the most lenient of its forms in Inedo's products
 
 ### Changed

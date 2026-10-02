@@ -190,6 +190,17 @@
               ],
               "markdownDescription": "`for` used as a loop (OtterScript loops use `foreach`)."
             },
+            "duplicate-module": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "A `module` whose name another module in the same file already has."
+            },
             "duplicate-map-key": {
               "type": "string",
               "enum": [
@@ -266,6 +277,17 @@
                 "hint"
               ],
               "markdownDescription": "A function call with more arguments than the function accepts."
+            },
+            "missing-required-argument": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "An operation call without one of its required arguments, such as `Copy-Files` without `To`. A hint by default: an operation may accept argument names Inedo's reference doesn't list."
             },
             "too-few-arguments": {
               "type": "string",

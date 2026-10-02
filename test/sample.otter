@@ -238,7 +238,7 @@ $auth = $EncodeBasicAuth("user", "password");
 ###############################################################################
 
 ProGet::Create-Directory( Path: "C:\\temp\\artifacts" );
-Windows::Ensure-Service( Name: "w3svc", Status: running );
+Windows::Ensure-Service( Name: "w3svc", Path: 'C:\Windows\System32\svchost.exe', Status: running );
 
 ###############################################################################
 # MODULES

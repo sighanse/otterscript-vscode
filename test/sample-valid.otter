@@ -103,7 +103,7 @@ foreach $env in @("dev", "test", "staging") {
 ###############################################################################
 
 ProGet::Create-Directory( Path: $PathCombine($WorkingDirectory, "artifacts") );
-Windows::Ensure-Service( Name: "InedoProGetSvc", Status: running );
+Windows::Ensure-Service( Name: "InedoProGetSvc", Path: 'C:\Program Files\ProGet\Service\ProGet.Service.exe', Status: running );
 
 ###############################################################################
 # TEMPLATE OUTPUT

@@ -28,6 +28,7 @@ const {
   maskCommentSpans,
   maskNonCodeSpans,
   maskOutsideTemplateTags,
+  MODULE_DECLARATION_REGEX,
 } = require("./scanner");
 const { findAdaptiveCardDiagnostics } = require("./adaptivecard");
 
@@ -211,6 +212,21 @@ function findDuplicateMapKeyDiagnosticsFromMasked(document, maskedText) {
 }
 
 /**
+ * Whether `text[start, end)` -- an argument list or one argument, blank once
+ * masked -- holds anything but whitespace and comments. Masking blanks string
+ * literals, so `$F("x")` looks like `$F()` in the masked text.
+ *
+ * @param {string} text - The unmasked text
+ * @param {number} start
+ * @param {number} end
+ * @returns {boolean}
+ */
+function hasArgumentText(text, start, end) {
+  const state = createCodeScanState();
+  return text.slice(start, end).split("\n").some((line) => maskCommentSpans(line, state).trim() !== "");
+}
+
+/**
  * How many arguments a `$Name(...)` / `@Name(...)` / `%Name(...)` doc
  * signature takes: `min` counts the parameters not written `[optional]`,
  * `max` all of them (Infinity after a `...` tail). Null when the signature
@@ -287,12 +303,7 @@ function findArgumentCountDiagnosticsFromMasked(document, maskedText, text = doc
    */
   function countArgs(start, end) {
     const body = maskedText.slice(start, end);
-    // Blank once masked: no argument, or a single string (or a comment).
-    if (body.trim() === "") {
-      const state = createCodeScanState();
-      const raw = text.slice(start, end).split("\n").map((line) => maskCommentSpans(line, state)).join("\n");
-      return raw.trim() === "" ? 0 : 1;
-    }
+    if (body.trim() === "") return hasArgumentText(text, start, end) ? 1 : 0;
 
     let depth = 0;
     let count = 1;
@@ -339,6 +350,112 @@ function findArgumentCountDiagnosticsFromMasked(document, maskedText, text = doc
       vscode.DiagnosticSeverity.Warning
     );
     diagnostic.code = code;
+    diagnostic.source = "OtterScript";
+    issues.push(diagnostic);
+  }
+  return issues;
+}
+
+/**
+ * Flags every `module` declaration whose name an earlier one in the file
+ * already has (names compared case-insensitively, as Inedo resolves them):
+ * a `call` can reach only one of them.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {string[]} maskedLines - The document's lines, masked
+ * @returns {vscode.Diagnostic[]}
+ */
+function findDuplicateModuleDiagnostics(document, maskedLines) {
+  /** @type {Map<string, vscode.Range>} */
+  const firsts = new Map();
+  /** @type {vscode.Diagnostic[]} */
+  const issues = [];
+  maskedLines.forEach((line, lineIndex) => {
+    const match = MODULE_DECLARATION_REGEX.exec(line);
+    if (!match) return;
+    const name = match[1];
+    const character = line.indexOf(name, match.index);
+    const range = new vscode.Range(lineIndex, character, lineIndex, character + name.length);
+    const first = firsts.get(name.toLowerCase());
+    if (!first) {
+      firsts.set(name.toLowerCase(), range);
+      return;
+    }
+    const diagnostic = lineDiagnostic(
+      lineIndex, character, character + name.length,
+      `A module named '${name}' is already declared in this file.`,
+      vscode.DiagnosticSeverity.Warning,
+      "duplicate-module"
+    );
+    diagnostic.relatedInformation = [
+      new vscode.DiagnosticRelatedInformation(new vscode.Location(document.uri, first), "First declared here"),
+    ];
+    issues.push(diagnostic);
+  });
+  return issues;
+}
+
+/**
+ * An operation call with parentheses: optional namespace (group 1), name
+ * (group 2), then `(`. Not a function (`$F(`), a dashed variable or a
+ * `call Module(` (checked by the caller).
+ */
+const OPERATION_CALL_REGEX = /(?<![$@%\w:-])(?:([A-Za-z][A-Za-z0-9]*)::)?([A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*)\s*\(/g;
+
+/**
+ * Flags operation calls that leave out a required argument
+ * (`Copy-Files(From: $x)` without `To:`), as hints: an operation may accept
+ * names the reference doesn't list (aliases), so this is a nudge, not an
+ * error. Calls with a positional argument are skipped -- which argument it
+ * fills isn't documented -- and so are operations without parentheses.
+ *
+ * @param {vscode.TextDocument} document - Used only for `positionAt()`.
+ * @param {string} maskedText - Full document text, already masked.
+ * @param {string} [text] - The same text unmasked (default: the document's)
+ * @returns {vscode.Diagnostic[]}
+ */
+function findMissingArgumentDiagnosticsFromMasked(document, maskedText, text = document.getText()) {
+  /** @type {vscode.Diagnostic[]} */
+  const issues = [];
+  for (const match of maskedText.matchAll(OPERATION_CALL_REGEX)) {
+    const name = match[2];
+    const required = lookupOwn(operationDocs, name)?.params?.filter((p) => p.required);
+    if (!required?.length) continue;
+    const start = /** @type {number} */ (match.index) + (match[1] ? match[1].length + 2 : 0);
+    if (/\bcall\s+$/i.test(maskedText.slice(Math.max(0, start - 20), start))) continue;
+
+    const open = /** @type {number} */ (match.index) + match[0].length - 1;
+    const close = findMatchingParen(maskedText, open);
+    if (close === -1) continue;
+
+    // The top-level arguments' names; a segment without `Name:` is positional.
+    /** @type {Set<string>} */
+    const given = new Set();
+    let positional = false;
+    let depth = 0;
+    let segmentStart = open + 1;
+    for (let i = open + 1; i <= close; i++) {
+      const ch = maskedText[i];
+      if (ch === "(" || ch === "[") depth++;
+      else if ((ch === ")" || ch === "]") && i < close) depth--;
+      if (i === close || (ch === "," && depth === 0)) {
+        const segment = maskedText.slice(segmentStart, i);
+        const argName = /^\s*([A-Za-z]\w*)\s*:(?!:)/.exec(segment)?.[1];
+        if (argName) given.add(argName.toLowerCase());
+        else if (hasArgumentText(text, segmentStart, i)) positional = true;
+        segmentStart = i + 1;
+      }
+    }
+    if (positional) continue;
+
+    const missing = required.filter((p) => !given.has(p.name.toLowerCase())).map((p) => p.name);
+    if (!missing.length) continue;
+    const diagnostic = new vscode.Diagnostic(
+      new vscode.Range(document.positionAt(start), document.positionAt(start + name.length)),
+      `'${name}' is missing its required argument${missing.length === 1 ? "" : "s"} ${missing.map((m) => `'${m}'`).join(", ")}.`,
+      vscode.DiagnosticSeverity.Hint
+    );
+    diagnostic.code = "missing-required-argument";
     diagnostic.source = "OtterScript";
     issues.push(diagnostic);
   }
@@ -420,6 +537,7 @@ const DIAGNOSTIC_CODES = Object.freeze([
   "invalid-operator",
   "incorrect-for-usage",
   "duplicate-map-key",
+  "duplicate-module",
   // -- Unknown names & arity
   "unknown-scalar-function",
   "unknown-vector-function",
@@ -428,6 +546,7 @@ const DIAGNOSTIC_CODES = Object.freeze([
   "unknown-namespace",
   "too-many-arguments",
   "too-few-arguments",
+  "missing-required-argument",
   // -- Text templates (`<% %>`)
   "template-unexpected-close",
   "template-unclosed",
@@ -968,7 +1087,7 @@ function updateDiagnostics(document, collection, ctx) {
     ));
   }
 
-  // -- Duplicate map keys, argument counts, and (template-aware documents
+  // -- Duplicate map keys and modules, argument checks, and (template-aware documents
   //    only) content-triggered Adaptive Card checks. Isolated in its own try/catch:
   //    these run over the whole joined document rather than per-line like
   //    every check above, so a bug here must not be able to wipe out the
@@ -977,6 +1096,8 @@ function updateDiagnostics(document, collection, ctx) {
   try {
     issues.push(...findDuplicateMapKeyDiagnosticsFromMasked(document, joinedMasked));
     issues.push(...findArgumentCountDiagnosticsFromMasked(document, joinedMasked));
+    issues.push(...findMissingArgumentDiagnosticsFromMasked(document, joinedMasked));
+    issues.push(...findDuplicateModuleDiagnostics(document, maskedLines));
     if (templateAware) {
       // Triggered by a literal "type": "AdaptiveCard" in the literal output.
       issues.push(...findAdaptiveCardDiagnostics(document, text, { maxVersion: adaptiveCardMaxVersion }));
