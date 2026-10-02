@@ -9,6 +9,8 @@
 - Completion of the variables the file uses: after `$`, `@` or `%`, the file's own variables (`set $myVar`, `foreach %item`, module parameters, ...) are listed first, with the line where they're assigned
 - Completion of module names after `call`: the file's own modules first, then those declared in other OtterScript files in the workspace
 - Go to Definition (F12) on a variable goes to where the file assigns it; with several assignments, VS Code lists them all
+- Go to Definition on `call MyModule` also finds a module declared in another OtterScript file in the workspace
+- Rename (F2) for variables and modules. A variable is renamed everywhere in the file, including in strings, where OtterScript expands it; a new name with spaces gets the braces it needs (`${my var}`). A module is renamed with every `call` to it in the file. Invalid names and names already in use are refused
 
 ### Changed
 

@@ -31,6 +31,53 @@ describe("navigation and highlighting (main.otter)", () => {
     assert.equal(range.start.line, declarationLine());
   });
 
+  it("goes to a module declared in another workspace file", async () => {
+    const source = await openContent('call Greet(name: "x");\n');
+    /** @type {(vscode.Location | vscode.LocationLink)[]} */
+    const results = await vscode.commands.executeCommand(
+      "vscode.executeDefinitionProvider", source.uri, positionOf(source, "Greet", 2)
+    );
+    const uris = results.map((l) => ("targetUri" in l ? l.targetUri : l.uri).fsPath);
+    assert.ok(uris.some((p) => p.endsWith("main.otter")), uris.join(", "));
+  });
+
+  /**
+   * Renames the symbol at `needle` (+ `offset`) and applies the edit.
+   *
+   * @param {vscode.TextDocument} source
+   * @param {string} needle
+   * @param {number} offset
+   * @param {string} newName
+   * @returns {Promise<void>}
+   */
+  async function rename(source, needle, offset, newName) {
+    /** @type {vscode.WorkspaceEdit} */
+    const edit = await vscode.commands.executeCommand(
+      "vscode.executeDocumentRenameProvider", source.uri, positionOf(source, needle, offset), newName
+    );
+    await vscode.workspace.applyEdit(edit);
+  }
+
+  it("renames a variable everywhere in the file, strings included, adding braces a spaced name needs", async () => {
+    const source = await openContent('set $count = 1;\nLog-Information "$count items" ${count};\n');
+    await rename(source, "$count =", 2, "total");
+    assert.equal(source.getText(), 'set $total = 1;\nLog-Information "$total items" ${total};\n');
+    await rename(source, "$total =", 2, "item total");
+    assert.equal(source.getText(), 'set ${item total} = 1;\nLog-Information "${item total} items" ${item total};\n');
+  });
+
+  it("renames a module's declaration and its calls", async () => {
+    const source = await openContent("module Old-Name {\n}\ncall Old-Name;\n");
+    await rename(source, "call Old-Name", 6, "New-Name");
+    assert.equal(source.getText(), "module New-Name {\n}\ncall New-Name;\n");
+  });
+
+  it("refuses an invalid or already-used name", async () => {
+    const source = await openContent("set $a = 1;\nset $b = 2;\n");
+    await assert.rejects(rename(source, "$a", 1, "1bad"), /isn't a valid variable name/);
+    await assert.rejects(rename(source, "$a", 1, "b"), /already used/);
+  });
+
   it("goes to a variable's assignments, and nowhere for a variable that is only read", async () => {
     const source = await openContent("set $count = 1;\nset $count = 2;\nLog-Information $count $PackageName;\n");
     /** @type {(vscode.Location | vscode.LocationLink)[]} */
