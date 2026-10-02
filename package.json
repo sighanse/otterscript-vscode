@@ -223,6 +223,17 @@
               ],
               "markdownDescription": "An `@Name(...)` call to a function this extension doesn't know."
             },
+            "unknown-map-function": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "An unknown `%Name(...)` map function."
+            },
             "unknown-operation": {
               "type": "string",
               "enum": [
@@ -255,6 +266,17 @@
                 "hint"
               ],
               "markdownDescription": "A function call with more arguments than the function accepts."
+            },
+            "too-few-arguments": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "A function call with fewer arguments than every documented form of the function requires."
             },
             "template-unexpected-close": {
               "type": "string",

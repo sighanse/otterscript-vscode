@@ -7,7 +7,7 @@
 #
 # This is the corrected "new vulnerability" webhook body from the milestone
 # reference: comma BEFORE each looped item (a static first element makes the
-# leading comma valid), $ToJson() on every dynamic value, no <% set %>.
+# leading comma valid), $ToJson(...) on every dynamic value, no <% set %>.
 #
 # @AffectedPackages elements are maps, so the loop variable is %p (not $p) --
 # per the formal grammar, dot/bracket indexing (.Name, [key]) is only defined

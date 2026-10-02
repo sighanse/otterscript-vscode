@@ -15,21 +15,9 @@ const { makeDocument } = require("./fake-document");
 
 const { DiagnosticSeverity } = require("../vscode-stub");
 const { updateDiagnostics } = require("../../src/diagnostics.js");
-const { createRegexPatterns, NON_VARIABLE_IDENTIFIERS } = require("../../src/helpers.js");
-const data = require("../../src/language-data.js");
 
-const ctx = {
-  nonVariableIdentifiers: NON_VARIABLE_IDENTIFIERS,
-  knownKeywords: new Set(Object.keys(data.keywordDocs)),
-  knownScalarFunctions: new Set(Object.keys(data.scalarFunctionDocs)),
-  knownVectorFunctions: new Set(Object.keys(data.vectorFunctionDocs)),
-  scalarFunctionDocs: data.scalarFunctionDocs,
-  vectorFunctionDocs: data.vectorFunctionDocs,
-  mapFunctionDocs: data.mapFunctionDocs,
-  knownOperations: new Set(Object.keys(data.operationDocs)),
-  knownNamespaces: data.NAMESPACES,
-  ...createRegexPatterns(new Set(Object.keys(data.operationDocs))),
-};
+/** The diagnostics context: settings left at their defaults. */
+const ctx = {};
 
 /**
  * Runs updateDiagnostics over `source` and returns the collected diagnostics
@@ -482,10 +470,29 @@ describe("updateDiagnostics — unknown namespace", () => {
   });
 
   it("checks operations only under namespaces whose operations are documented", () => {
-    const documented = { operationNamespaces: new Set(["Core", "ProGet"]) };
-    assert.deepEqual(only("GitHub::Ensure-Release;", "unknown-operation", documented), []);
-    assert.equal(only("ProGet::Bogus-Op;", "unknown-operation", documented).length, 1);
-    assert.equal(only("Bogus-Op;", "unknown-operation", documented).length, 1);
+    // No Kubernetes operation is documented; ProGet's and the built-ins are.
+    assert.deepEqual(only("Kubernetes::Ensure-Thing;", "unknown-operation"), []);
+    assert.equal(only("ProGet::Bogus-Op;", "unknown-operation").length, 1);
+    assert.equal(only("Bogus-Op;", "unknown-operation").length, 1);
+  });
+
+  it("flags an unknown %Name( map function, but not a %( map literal or a known one", () => {
+    const [d] = only("set %m = %Frob(1);", "unknown-map-function");
+    assert.equal(d.message, "Unknown map function '%Frob'");
+    assert.deepEqual(only("set %m = %(a: 1);\nset %n = %FromJson('{}');\nset %o = %MapAdd(%m, b, 2);", "unknown-map-function"), []);
+  });
+
+  it("flags too few arguments, using the [optional] markers and the most lenient form", () => {
+    const [d] = only("set $s = $Substring($x);", "too-few-arguments");
+    assert.equal(d.message, "'$Substring' needs at least 2 arguments, got 1.");
+    assert.deepEqual(only("set $s = $Substring($x, 1);\nset $t = $Substring($x, 1, 2);", "too-few-arguments"), []);
+    // A lone string argument (blank once strings are masked) still counts.
+    assert.deepEqual(only('set $l = $ToLower("HELLO");\nset $m = $ToLower(\n  "x" # why\n);', "too-few-arguments"), []);
+    assert.equal(only("set $l = $ToLower( # nothing\n);", "too-few-arguments").length, 1);
+    // ProGet's $PackageProperty(name, [default]) next to BuildMaster's three-argument form.
+    assert.deepEqual(only("set $p = $PackageProperty(Name);", "too-few-arguments"), []);
+    // A vararg tail never makes a call too long.
+    assert.deepEqual(only("set $p = $PathCombine(a, b, c, d, e);", "too-many-arguments"), []);
   });
 
   it("flags a qualifier whose namespace is not known", () => {

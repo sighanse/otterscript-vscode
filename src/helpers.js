@@ -439,16 +439,12 @@ function buildWordRegex(names) {
  * Each entry is a factory returning a FRESH RegExp, so callers never share a
  * global regex's `lastIndex` state between scans.
  *
- * - `*CallRegex` (global): find `$Name(` / `@Name(` / bare-word tokens in a line.
  * - `*SignatureRegex` (anchored to end of input): find the call the cursor is inside,
  *   given the text before the cursor; group 1 = name, group 2 = args so far.
  * - `operationRegex`: word-boundary match of any known operation name.
  *
  * @param {Set<string>} knownOperations - Set of operation names
  * @returns {{
- *   scalarCallRegex: () => RegExp,
- *   vectorCallRegex: () => RegExp,
- *   operationCallRegex: () => RegExp,
  *   scalarSignatureRegex: () => RegExp,
  *   vectorSignatureRegex: () => RegExp,
  *   mapSignatureRegex: () => RegExp,
@@ -458,9 +454,6 @@ function buildWordRegex(names) {
  */
 function createRegexPatterns(knownOperations) {
   return {
-    scalarCallRegex: () => /\$([A-Za-z][A-Za-z0-9_]*)\s*\(/g,
-    vectorCallRegex: () => /@([A-Za-z][A-Za-z0-9_]*)\s*\(/g,
-    operationCallRegex: () => /\b([A-Za-z][A-Za-z-]*)\b/g,
     scalarSignatureRegex: () => /\$([A-Za-z][A-Za-z0-9_]*)\s*\(([^()]*)$/,
     vectorSignatureRegex: () => /@([A-Za-z][A-Za-z0-9_]*)\s*\(([^()]*)$/,
     // Requires a name after `%`, so a `%(` map literal never matches.

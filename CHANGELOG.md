@@ -19,6 +19,9 @@
 - Argument names in operation calls: inside `Copy-Files(` (after the `(` or a `,`), completion lists the operation's arguments that aren't given yet, required ones first, with their format and description; hovering an argument name (`To:`) shows what it is. An operation's hover now lists its arguments too
 - Hover says when a function works with every sigil (`$FromJson`, `@FromJson`, `%FromJson`), where the sigil picks what it returns. The `@` and `%` forms of `$Eval` and `$GetVariableValue` now have the same full documentation as their `$` form
 
+- `unknown-map-function` diagnostic: an unknown `%Name(...)` function, as `$Name(...)` and `@Name(...)` calls already are
+- `too-few-arguments` diagnostic: a function call with fewer arguments than the function requires (`$Substring($x)`), based on the `[optional]` parameters in its signature and the most lenient of its forms in Inedo's products
+
 ### Changed
 
 - Function parameter names in hover, signature help and completion are now the ones in Inedo's reference, such as `$Substring(Text, Offset, [Length])` (was `text, startIndex, [length]`) or `$RegexReplace(Text, MatchExpression, ReplaceWith)`

@@ -546,22 +546,6 @@ describe("validateDocs", () => {
 describe("createRegexPatterns", () => {
   const rx = createRegexPatterns(new Set(["Log-Information", "Copy-Files"]));
 
-  it("scalarCallRegex matches '$Name(' and captures the name", () => {
-    const m = [...String.raw`x = $ToJson( $y`.matchAll(rx.scalarCallRegex())];
-    assert.deepEqual(m.map((x) => x[1]), ["ToJson"]);
-  });
-
-  it("vectorCallRegex matches '@Name('", () => {
-    assert.equal([...'@Split("a")'.matchAll(rx.vectorCallRegex())][0][1], "Split");
-  });
-
-  it("operationCallRegex yields word tokens", () => {
-    assert.deepEqual(
-      [...'Copy-Files x'.matchAll(rx.operationCallRegex())].map((x) => x[1]),
-      ["Copy-Files", "x"]
-    );
-  });
-
   it("mapSignatureRegex captures '%Name(' + partial args, but not a '%(' literal", () => {
     const m = "set %m = %ListItem(@x, ".match(rx.mapSignatureRegex());
     assert.ok(m);

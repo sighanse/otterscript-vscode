@@ -40,7 +40,6 @@ const { updateDiagnostics } = require("./diagnostics");
 
 // -- Language documentation (functions, variables, operations, keywords).
 const {
-  NAMESPACES,
   operationDocs,
   syntaxDocs,
   keywordDocs,
@@ -51,7 +50,6 @@ const {
 } = require("./language-data");
 
 const {
-  NON_VARIABLE_IDENTIFIERS,
   log,
   getOutputChannel,
   clearTimerForUri,
@@ -124,24 +122,6 @@ function activate(context) {
   // 400 ms pause, and on demand (quick fixes, Fix All, settings changes).
 
   const diagnostics = vscode.languages.createDiagnosticCollection("otterscript");
-  /** @type {import("./diagnostics").DiagnosticsContext} */
-  const diagnosticsContext = {
-    nonVariableIdentifiers: NON_VARIABLE_IDENTIFIERS,
-    knownKeywords: new Set(Object.keys(keywordDocs)),
-    knownScalarFunctions: new Set(Object.keys(scalarFunctionDocs)),
-    knownVectorFunctions: new Set(Object.keys(vectorFunctionDocs)),
-    scalarFunctionDocs,
-    vectorFunctionDocs,
-    mapFunctionDocs,
-    knownOperations,
-    knownNamespaces: NAMESPACES,
-    operationNamespaces: new Set(Object.values(operationDocs).map((doc) => doc.namespace ?? "Core")),
-    scalarCallRegex: patterns.scalarCallRegex,
-    vectorCallRegex: patterns.vectorCallRegex,
-    operationCallRegex: patterns.operationCallRegex,
-    diagnosticRules: settings.diagnosticRules,
-    adaptiveCardMaxVersion: settings.adaptiveCardMaxVersion,
-  };
 
   /**
    * Checks a document now, cancelling any pending debounced run for it.
@@ -151,7 +131,7 @@ function activate(context) {
    */
   const runDiagnostics = (document) => {
     clearTimerForUri(diagnosticTimers, document.uri);
-    updateDiagnostics(document, diagnostics, diagnosticsContext);
+    updateDiagnostics(document, diagnostics, settings);
   };
 
   // ============================================================
@@ -186,8 +166,6 @@ function activate(context) {
 
       if (e.affectsConfiguration("otterscript.diagnostics.rules") ||
           e.affectsConfiguration("otterscript.adaptiveCards.maxVersion")) {
-        diagnosticsContext.diagnosticRules = settings.diagnosticRules;
-        diagnosticsContext.adaptiveCardMaxVersion = settings.adaptiveCardMaxVersion;
         for (const document of vscode.workspace.textDocuments) runDiagnostics(document);
       }
     })
@@ -211,7 +189,7 @@ function activate(context) {
     vscode.workspace.onDidChangeTextDocument(e => {
       if (e.document.languageId !== "otterscript") return;
       scheduleTimerForUri(diagnosticTimers, e.document.uri, 400, () => {
-        updateDiagnostics(e.document, diagnostics, diagnosticsContext);
+        updateDiagnostics(e.document, diagnostics, settings);
         workspaceSymbols.setModuleIndexEntry(e.document.uri, e.document.getText());
       });
     }),

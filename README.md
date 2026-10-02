@@ -88,9 +88,11 @@ when no folder is open).
 | `duplicate-map-key` | The same key twice in a `%(...)` map |
 | `unknown-scalar-function` | Unknown `$Name(...)` function |
 | `unknown-vector-function` | Unknown `@Name(...)` function |
+| `unknown-map-function` | Unknown `%Name(...)` function |
 | `unknown-operation` | Unknown operation |
 | `unknown-namespace` | Unknown `Namespace::` prefix |
 | `too-many-arguments` | More arguments than the function accepts |
+| `too-few-arguments` | Fewer arguments than the function requires |
 | `template-unexpected-close` | `%>` with no matching `<%` |
 | `template-unclosed` | `<%` that is never closed |
 | `template-end-keyword` | `<% end %>` where `<% } %>` is required |

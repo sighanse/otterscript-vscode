@@ -24,22 +24,10 @@ const { makeDocument } = require("./fake-document");
 const { parse } = require("jsonc-parser");
 
 const { updateDiagnostics, DIAGNOSTIC_CODES } = require("../../src/diagnostics.js");
-const { createRegexPatterns, NON_VARIABLE_IDENTIFIERS } = require("../../src/helpers.js");
 const { documentUsesTemplateTags } = require("../../src/scanner.js");
-const data = require("../../src/language-data.js");
 
-const ctx = {
-  nonVariableIdentifiers: NON_VARIABLE_IDENTIFIERS,
-  knownKeywords: new Set(Object.keys(data.keywordDocs)),
-  knownScalarFunctions: new Set(Object.keys(data.scalarFunctionDocs)),
-  knownVectorFunctions: new Set(Object.keys(data.vectorFunctionDocs)),
-  scalarFunctionDocs: data.scalarFunctionDocs,
-  vectorFunctionDocs: data.vectorFunctionDocs,
-  mapFunctionDocs: data.mapFunctionDocs,
-  knownOperations: new Set(Object.keys(data.operationDocs)),
-  knownNamespaces: data.NAMESPACES,
-  ...createRegexPatterns(new Set(Object.keys(data.operationDocs))),
-};
+/** The diagnostics context: settings left at their defaults. */
+const ctx = {};
 
 /**
  * Runs updateDiagnostics over a fixture file's on-disk contents.

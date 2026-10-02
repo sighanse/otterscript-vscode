@@ -11,15 +11,48 @@ const {
   isReadOnlyView,
   log,
   lookupOwn,
+  NON_VARIABLE_IDENTIFIERS,
 } = require("./helpers");
+const {
+  NAMESPACES,
+  keywordDocs,
+  mapFunctionDocs,
+  operationDocs,
+  scalarFunctionDocs,
+  vectorFunctionDocs,
+} = require("./language-data");
 const {
   createCodeScanState,
   createTemplateScanState,
   documentUsesTemplateTags,
+  maskCommentSpans,
   maskNonCodeSpans,
   maskOutsideTemplateTags,
 } = require("./scanner");
 const { findAdaptiveCardDiagnostics } = require("./adaptivecard");
+
+/**
+ * The function table, kind and diagnostic code for each call sigil.
+ * @type {Readonly<Record<string, { docs: Readonly<Record<string, import("./language-data").DocEntry>>, kind: string }>>}
+ */
+const FUNCTION_TABLES = Object.freeze({
+  "$": { docs: scalarFunctionDocs, kind: "scalar" },
+  "@": { docs: vectorFunctionDocs, kind: "vector" },
+  "%": { docs: mapFunctionDocs, kind: "map" },
+});
+
+/** A function call: sigil (group 1) and name (group 2). Not `<%`, nor a `%(` map literal. */
+const FUNCTION_CALL_REGEX = /(?<!<)([$@%])([A-Za-z][A-Za-z0-9_]*)\s*\(/g;
+
+/** Namespaces, lower-cased: Inedo resolves them case-insensitively. */
+const KNOWN_NAMESPACES = new Set([...NAMESPACES].map((n) => n.toLowerCase()));
+/**
+ * The namespaces whose operations are documented (`core` for the built-ins),
+ * lower-cased. A dashed name behind any other known namespace
+ * (`Kubernetes::Ensure-Thing`) isn't flagged as an unknown operation: its
+ * extension's operations simply aren't documented.
+ */
+const DOCUMENTED_OPERATION_NAMESPACES = new Set(Object.values(operationDocs).map((doc) => (doc.namespace ?? "Core").toLowerCase()));
 
 // ============================================================
 // DIAGNOSTIC CHECKS
@@ -178,78 +211,72 @@ function findDuplicateMapKeyDiagnosticsFromMasked(document, maskedText) {
 }
 
 /**
- * Parses a `$Name(...)` / `@Name(...)` / `%Name(...)` doc signature and returns the maximum
- * number of arguments the call can take, or `null` when the signature isn't a
- * fixed-arity parenthesized call (a bare property like `$ExecutionId`, or a
- * vararg signature containing a literal `...` parameter such as
- * `$PathCombine(path1, path2, ...)`).
+ * How many arguments a `$Name(...)` / `@Name(...)` / `%Name(...)` doc
+ * signature takes: `min` counts the parameters not written `[optional]`,
+ * `max` all of them (Infinity after a `...` tail). Null when the signature
+ * isn't a parenthesized call (a bare property like `$ExecutionId`).
  *
- * Only the total slot count is computed -- required vs. `[optional]` isn't
- * distinguished, since that's all a "too many arguments" check needs and it
- * avoids relying on the optional-bracket convention being 100% consistent.
- *
- * @param {string} signature - e.g. `"$ToJson(data)"`
- * @returns {number | null}
+ * @param {string} signature - e.g. `"$Substring(Text, Offset, [Length])"`
+ * @returns {{ min: number, max: number } | null}
  */
-function parseFixedMaxArity(signature) {
+function parseArity(signature) {
   const m = signature.match(/^[$@%][A-Za-z]\w*\(([\s\S]*)\)$/);
   if (!m) return null;
-
   const argsText = m[1].trim();
-  if (argsText === "") return 0;
+  if (argsText === "") return { min: 0, max: 0 };
 
   const parts = argsText.split(",").map((s) => s.trim());
-  if (parts.some((p) => p === "...")) return null;
-
-  return parts.length;
+  const vararg = parts.includes("...");
+  const params = parts.filter((p) => p !== "...");
+  return {
+    min: params.filter((p) => !p.startsWith("[")).length,
+    max: vararg ? Infinity : params.length,
+  };
 }
 
 /**
- * The signature fields the argument-count check reads from a docs entry.
+ * The signature fields the argument-count checks read from a docs entry.
  * @typedef {{ signature?: string, overloads?: { product: string, signature: string }[] }} FunctionSignatures
  */
 
 /**
- * The most arguments any documented form of a function takes: its
+ * The argument range any documented form of a function accepts: its
  * `signature` and its other products' `overloads` (e.g. BuildMaster's
- * three-argument `$PackageProperty` next to ProGet's two-argument one). `null`
- * when any form is not fixed-arity, so a call is never flagged for using a
- * form that is valid somewhere.
+ * three-argument `$PackageProperty` next to ProGet's two-argument one) --
+ * the fewest any form requires to the most any form takes, so a call is
+ * never flagged for using a form that is valid somewhere. Null when a form
+ * isn't a parenthesized call.
  *
  * @param {FunctionSignatures} doc
- * @returns {number | null}
+ * @returns {{ min: number, max: number } | null}
  */
-function maxFixedArity(doc) {
+function arityOf(doc) {
+  let min = Infinity;
   let max = 0;
   for (const signature of [doc.signature, ...(doc.overloads ?? []).map((o) => o.signature)]) {
     if (!signature) continue;
-    const arity = parseFixedMaxArity(signature);
-    if (arity === null) return null;
-    max = Math.max(max, arity);
+    const arity = parseArity(signature);
+    if (!arity) return null;
+    min = Math.min(min, arity.min);
+    max = Math.max(max, arity.max);
   }
-  return max;
+  return min === Infinity ? null : { min, max };
 }
 
 /**
- * Finds calls to known scalar/vector/map functions that pass more arguments than
- * their documented signature allows, given text already masked by
+ * Finds calls to known functions with more arguments than any documented
+ * form takes (`too-many-arguments`) or fewer than every form requires
+ * (`too-few-arguments`), given text already masked by
  * {@link maskNonCodeSpans} (and, for template-aware documents,
- * {@link maskOutsideTemplateTags}). Only functions with a fixed-arity,
- * parenthesized signature are checked -- see {@link parseFixedMaxArity}.
- *
- * This deliberately does NOT flag too few arguments: which parameters are
- * truly required (vs. documented as optional) is a softer signal than the
- * hard ceiling on total slots, so under-counting stays silent to avoid false
- * positives.
+ * {@link maskOutsideTemplateTags}).
  *
  * @param {vscode.TextDocument} document - Used only for `positionAt()`.
  * @param {string} maskedText - Full document text, already masked.
- * @param {Record<string, FunctionSignatures>} scalarFunctionDocs
- * @param {Record<string, FunctionSignatures>} vectorFunctionDocs
- * @param {Record<string, FunctionSignatures>} [mapFunctionDocs] - `%Name(...)` functions
+ * @param {string} [text] - The same text unmasked (default: the document's);
+ *   masking blanks a string argument, so `$F("x")` would look empty
  * @returns {vscode.Diagnostic[]}
  */
-function findArgumentCountDiagnosticsFromMasked(document, maskedText, scalarFunctionDocs, vectorFunctionDocs, mapFunctionDocs = {}) {
+function findArgumentCountDiagnosticsFromMasked(document, maskedText, text = document.getText()) {
   /** @type {vscode.Diagnostic[]} */
   const issues = [];
 
@@ -260,7 +287,12 @@ function findArgumentCountDiagnosticsFromMasked(document, maskedText, scalarFunc
    */
   function countArgs(start, end) {
     const body = maskedText.slice(start, end);
-    if (body.trim() === "") return 0;
+    // Blank once masked: no argument, or a single string (or a comment).
+    if (body.trim() === "") {
+      const state = createCodeScanState();
+      const raw = text.slice(start, end).split("\n").map((line) => maskCommentSpans(line, state)).join("\n");
+      return raw.trim() === "" ? 0 : 1;
+    }
 
     let depth = 0;
     let count = 1;
@@ -272,46 +304,44 @@ function findArgumentCountDiagnosticsFromMasked(document, maskedText, scalarFunc
     return count;
   }
 
-  /**
-   * @param {RegExp} nameRegex - Global regex; group 1 is the function name
-   * @param {Record<string, FunctionSignatures>} docs
-   * @param {string} sigil - `"$"`, `"@"`, or `"%"`, for the diagnostic message
-   */
-  function scan(nameRegex, docs, sigil) {
-    for (const match of maskedText.matchAll(nameRegex)) {
-      const name = match[1];
-      const doc = lookupOwn(docs, name);
-      if (!doc?.signature) continue;
+  for (const match of maskedText.matchAll(FUNCTION_CALL_REGEX)) {
+    const [whole, sigil, name] = match;
+    const doc = lookupOwn(FUNCTION_TABLES[sigil].docs, name);
+    const arity = doc && arityOf(doc);
+    if (!arity) continue;
 
-      const maxArity = maxFixedArity(doc);
-      if (maxArity === null) continue;
+    const openParenIndex = /** @type {number} */ (match.index) + whole.length - 1;
+    const closeParenIndex = findMatchingParen(maskedText, openParenIndex);
+    if (closeParenIndex === -1) continue;
 
-      const openParenIndex = /** @type {number} */ (match.index) + match[0].length - 1;
-      const closeParenIndex = findMatchingParen(maskedText, openParenIndex);
-      if (closeParenIndex === -1) continue;
-
-      const argCount = countArgs(openParenIndex + 1, closeParenIndex);
-      if (argCount <= maxArity) continue;
-
-      const nameStart = /** @type {number} */ (match.index) + 1;
-      const diagnostic = new vscode.Diagnostic(
-        new vscode.Range(
-          document.positionAt(nameStart),
-          document.positionAt(nameStart + name.length)
-        ),
-        `'${sigil}${name}' takes at most ${maxArity} argument${maxArity === 1 ? "" : "s"}, got ${argCount}.`,
-        vscode.DiagnosticSeverity.Warning
-      );
-      diagnostic.code = "too-many-arguments";
-      diagnostic.source = "OtterScript";
-      issues.push(diagnostic);
+    const argCount = countArgs(openParenIndex + 1, closeParenIndex);
+    /**
+     * @param {number} n
+     * @returns {string} `n argument(s)`
+     */
+    const args = (n) => `${n} argument${n === 1 ? "" : "s"}`;
+    let message;
+    let code;
+    if (argCount > arity.max) {
+      message = `'${sigil}${name}' takes at most ${args(arity.max)}, got ${argCount}.`;
+      code = "too-many-arguments";
+    } else if (argCount < arity.min) {
+      message = `'${sigil}${name}' needs at least ${args(arity.min)}, got ${argCount}.`;
+      code = "too-few-arguments";
+    } else {
+      continue;
     }
+
+    const nameStart = /** @type {number} */ (match.index) + 1;
+    const diagnostic = new vscode.Diagnostic(
+      new vscode.Range(document.positionAt(nameStart), document.positionAt(nameStart + name.length)),
+      message,
+      vscode.DiagnosticSeverity.Warning
+    );
+    diagnostic.code = code;
+    diagnostic.source = "OtterScript";
+    issues.push(diagnostic);
   }
-
-  scan(/\$([A-Za-z][A-Za-z0-9_]*)\s*\(/g, scalarFunctionDocs, "$");
-  scan(/@([A-Za-z][A-Za-z0-9_]*)\s*\(/g, vectorFunctionDocs, "@");
-  scan(/%([A-Za-z][A-Za-z0-9_]*)\s*\(/g, mapFunctionDocs, "%");
-
   return issues;
 }
 
@@ -365,27 +395,9 @@ function createUnbalancedDiagnostic(count, lastPos, openChar, closeChar, name, d
 }
 
 /**
- * Context object passed to updateDiagnostics to avoid hidden closures.
+ * The settings the checks read -- the live settings object from extension.js.
  *
  * @typedef {object} DiagnosticsContext
- * @property {Set<string>} nonVariableIdentifiers - Identifiers valid without '$'
- * @property {Set<string>} knownKeywords - Known language keywords
- * @property {Set<string>} knownScalarFunctions - Known scalar function names
- * @property {Set<string>} knownVectorFunctions - Known vector function names
- * @property {Record<string, {signature?: string}>} scalarFunctionDocs - Scalar function docs, keyed by name
- * @property {Record<string, {signature?: string}>} vectorFunctionDocs - Vector function docs, keyed by name
- * @property {Record<string, {signature?: string}>} [mapFunctionDocs] - Map (`%Name(...)`)
- *   function docs, keyed by name; used only for the argument-count check
- * @property {Set<string>} knownOperations - Known operation names
- * @property {ReadonlySet<string>} knownNamespaces - Valid OtterScript namespace tokens
- * @property {ReadonlySet<string>} [operationNamespaces] - The namespaces whose
- *   operations are documented (`Core` for the built-ins). A dashed name behind
- *   any other known namespace (`GitHub::Ensure-Release`) isn't flagged as an
- *   unknown operation: its extension's operations simply aren't documented.
- *   When omitted, every known namespace counts as documented.
- * @property {() => RegExp} scalarCallRegex - Regex factory for scalar function calls
- * @property {() => RegExp} vectorCallRegex - Regex factory for vector function calls
- * @property {() => RegExp} operationCallRegex - Regex factory for operation-like tokens
  * @property {Readonly<Record<string, string>>} [diagnosticRules] - The
  *   `otterscript.diagnostics.rules` setting: diagnostic code -> `"off"` or a
  *   severity override (see {@link applyDiagnosticRules})
@@ -411,9 +423,11 @@ const DIAGNOSTIC_CODES = Object.freeze([
   // -- Unknown names & arity
   "unknown-scalar-function",
   "unknown-vector-function",
+  "unknown-map-function",
   "unknown-operation",
   "unknown-namespace",
   "too-many-arguments",
+  "too-few-arguments",
   // -- Text templates (`<% %>`)
   "template-unexpected-close",
   "template-unclosed",
@@ -715,30 +729,7 @@ function updateDiagnostics(document, collection, ctx) {
 
   const text = document.getText();
 
-  const {
-    nonVariableIdentifiers,
-    knownKeywords,
-    knownScalarFunctions,
-    knownVectorFunctions,
-    scalarFunctionDocs,
-    vectorFunctionDocs,
-    mapFunctionDocs = {},
-    knownOperations,
-    knownNamespaces,
-    operationNamespaces,
-    scalarCallRegex,
-    vectorCallRegex,
-    operationCallRegex,
-    diagnosticRules,
-    adaptiveCardMaxVersion,
-  } = ctx;
-
-  // Lower-cased view of the namespace allowlist for lenient matching (Inedo
-  // resolves namespaces case-insensitively; only genuinely unknown tokens flag).
-  const knownNamespacesLower = new Set([...knownNamespaces].map((n) => n.toLowerCase()));
-  const operationNamespacesLower = operationNamespaces
-    ? new Set([...operationNamespaces].map((n) => n.toLowerCase()))
-    : knownNamespacesLower;
+  const { diagnosticRules, adaptiveCardMaxVersion } = ctx;
 
   // -- Symbol-balance state (text is pre-masked by shared scanner helpers)
   const symbols = [
@@ -783,7 +774,7 @@ function updateDiagnostics(document, collection, ctx) {
     // ------------------------------------------------------------
     // Missing '$' in if conditions
     // ------------------------------------------------------------
-    const missingDollarDiagnostic = checkMissingDollar(line, lineIndex, nonVariableIdentifiers);
+    const missingDollarDiagnostic = checkMissingDollar(line, lineIndex, NON_VARIABLE_IDENTIFIERS);
     if (missingDollarDiagnostic) {
       issues.push(missingDollarDiagnostic);
     }
@@ -821,32 +812,18 @@ function updateDiagnostics(document, collection, ctx) {
     // ============================================================
     // SYMBOL DETECTION
     // ============================================================
-    // -- Detect unknown scalar functions
-    for (const match of line.matchAll(scalarCallRegex())) {
-      const name = match[1];
-      if (!knownScalarFunctions.has(name)) {
-        const start = match.index + 1;
-        issues.push(lineDiagnostic(
-          lineIndex, start, start + name.length,
-          `Unknown scalar function '$${name}'`,
-          vscode.DiagnosticSeverity.Warning,
-          "unknown-scalar-function"
-        ));
-      }
-    }
-
-    // -- Detect unknown vector functions
-    for (const match of line.matchAll(vectorCallRegex())) {
-      const name = match[1];
-      if (!knownVectorFunctions.has(name)) {
-        const start = match.index + 1;
-        issues.push(lineDiagnostic(
-          lineIndex, start, start + name.length,
-          `Unknown vector function '@${name}'`,
-          vscode.DiagnosticSeverity.Warning,
-          "unknown-vector-function"
-        ));
-      }
+    // -- Unknown `$Name(`, `@Name(` and `%Name(` functions
+    for (const match of line.matchAll(FUNCTION_CALL_REGEX)) {
+      const [, sigil, name] = match;
+      const { docs, kind } = FUNCTION_TABLES[sigil];
+      if (lookupOwn(docs, name)) continue;
+      const start = /** @type {number} */ (match.index) + 1;
+      issues.push(lineDiagnostic(
+        lineIndex, start, start + name.length,
+        `Unknown ${kind} function '${sigil}${name}'`,
+        vscode.DiagnosticSeverity.Warning,
+        `unknown-${kind}-function`
+      ));
     }
 
     // -- Detect unknown operations. Only a word in operation position counts:
@@ -856,7 +833,7 @@ function updateDiagnostics(document, collection, ctx) {
     //    (`$my-var`), map keys and parameter names (`my-key: 1`, also when
     //    one starts a line), module names (`call My-Module`) and implicit
     //    string arguments (`Ensure-Thing My-Arg`).
-    for (const match of line.matchAll(operationCallRegex())) {
+    for (const match of line.matchAll(/\b([A-Za-z][A-Za-z-]*)\b/g)) {
       const name = match[1];
       const before = line.slice(0, match.index);
 
@@ -864,9 +841,9 @@ function updateDiagnostics(document, collection, ctx) {
       // unknown-namespace check below already flags the real problem -- don't
       // also report the operation name as unknown.
       const qualifier = before.match(/([A-Za-z][A-Za-z0-9]*)::$/)?.[1];
-      if (qualifier && !knownNamespacesLower.has(qualifier.toLowerCase())) continue;
+      if (qualifier && !KNOWN_NAMESPACES.has(qualifier.toLowerCase())) continue;
       // A known namespace whose operations aren't documented: nothing to compare against.
-      if (qualifier && !operationNamespacesLower.has(qualifier.toLowerCase())) continue;
+      if (qualifier && !DOCUMENTED_OPERATION_NAMESPACES.has(qualifier.toLowerCase())) continue;
 
       const statementStart = qualifier ? before.slice(0, -(qualifier.length + 2)) : before;
       // A `{` right after a sigil opens a braced variable (`${my-var}`), not a block.
@@ -875,10 +852,8 @@ function updateDiagnostics(document, collection, ctx) {
 
       if (
         name.includes("-") &&
-        !knownKeywords.has(name) &&
-        !knownOperations.has(name) &&
-        !knownScalarFunctions.has(name) &&
-        !knownVectorFunctions.has(name)
+        !lookupOwn(keywordDocs, name) &&
+        !lookupOwn(operationDocs, name)
       ) {
         const start = match.index;
         issues.push(lineDiagnostic(
@@ -898,7 +873,7 @@ function updateDiagnostics(document, collection, ctx) {
     // `call Raft::Module` uses `::` for raft names, not namespaces, so skip it.
     for (const match of line.matchAll(NAMESPACE_QUALIFIER_REGEX)) {
       const token = match[2];
-      if (knownNamespacesLower.has(token.toLowerCase())) continue;
+      if (KNOWN_NAMESPACES.has(token.toLowerCase())) continue;
 
       const tokenStart = match.index + match[1].length;
       const beforeToken = line.slice(0, tokenStart);
@@ -993,7 +968,7 @@ function updateDiagnostics(document, collection, ctx) {
     ));
   }
 
-  // -- Duplicate map keys, too-many-arguments, and (template-aware documents
+  // -- Duplicate map keys, argument counts, and (template-aware documents
   //    only) content-triggered Adaptive Card checks. Isolated in its own try/catch:
   //    these run over the whole joined document rather than per-line like
   //    every check above, so a bug here must not be able to wipe out the
@@ -1001,7 +976,7 @@ function updateDiagnostics(document, collection, ctx) {
   const joinedMasked = maskedLines.join("\n");
   try {
     issues.push(...findDuplicateMapKeyDiagnosticsFromMasked(document, joinedMasked));
-    issues.push(...findArgumentCountDiagnosticsFromMasked(document, joinedMasked, scalarFunctionDocs, vectorFunctionDocs, mapFunctionDocs));
+    issues.push(...findArgumentCountDiagnosticsFromMasked(document, joinedMasked));
     if (templateAware) {
       // Triggered by a literal "type": "AdaptiveCard" in the literal output.
       issues.push(...findAdaptiveCardDiagnostics(document, text, { maxVersion: adaptiveCardMaxVersion }));
