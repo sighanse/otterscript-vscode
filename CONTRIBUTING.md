@@ -22,6 +22,9 @@ npm run check     # ESLint + JSDoc type-check + grammar/language-data sync
                   # + generated-data checks + unit tests
 npm test          # unit tests only (node:test)
 npm run lint      # ESLint only
+npm run build              # bundle src/ into dist/extension.js, which the
+                           # extension runs from (F5, the integration tests and
+                           # packaging build it first)
 npm run test:integration   # integration tests in real VS Code (see below)
 npm run update:cards       # re-download the Adaptive Card schema and regenerate
                            # src/adaptivecard-data.js
@@ -55,9 +58,9 @@ ESLint checks, and each push runs `npm run check`. The hook tools install
 themselves on first use (the workflow linter, actionlint, is built with Go,
 which pre-commit downloads if it isn't installed), so the first commit is slow.
 
-Press <kbd>F5</kbd> in VS Code to launch an Extension Development Host with this
-repo loaded as the test workspace. The same checks run in CI
-(`.github/workflows/sanity.yml`) on every pull request.
+Press <kbd>F5</kbd> in VS Code to build the bundle and launch an Extension
+Development Host with this repo loaded as the test workspace. The same checks
+run in CI (`.github/workflows/sanity.yml`) on every pull request.
 
 ### Integration tests
 

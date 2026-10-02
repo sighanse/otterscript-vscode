@@ -32,6 +32,7 @@
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.28.2",
     "eslint": "^10.11.0",
     "eslint-plugin-jsdoc": "^65.0.1",
     "globals": "^17.13.0",
@@ -56,7 +57,7 @@
     "teams",
     "webhook"
   ],
-  "main": "./src/extension.js",
+  "main": "./dist/extension.js",
   "contributes": {
     "languages": [
       {
@@ -521,11 +522,13 @@
     "update:reference": "node scripts/update-inedo-reference.js --fetch && node scripts/check-language-sync.js --write",
     "update:grammar": "node scripts/check-language-sync.js --write",
     "test": "node --test \"test/unit/*.test.js\"",
+    "build": "esbuild src/extension.js --bundle --platform=node --format=cjs --target=node18 --external:vscode --minify --keep-names --sourcemap=linked --outfile=dist/extension.js",
+    "pretest:integration": "npm run build",
     "test:integration": "vscode-test",
     "test:cov": "node --test --experimental-test-coverage \"test/unit/*.test.js\"",
     "check": "npm run lint:ci && npm run check:js && npm run check:lang && npm run check:cards && npm run check:reference && npm test",
     "package": "vsce package --no-yarn",
-    "vscode:prepublish": "npm run lint:ci",
+    "vscode:prepublish": "npm run lint:ci && npm run build",
     "publish:vsce": "vsce publish",
     "publish:ovsx": "ovsx publish --no-dependencies"
   },

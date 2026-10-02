@@ -12,7 +12,9 @@ module.exports = [
       "node_modules/**",
       // VS Code builds downloaded by the integration tests
       ".vscode-test/**",
-      "*.vsix"
+      "*.vsix",
+      // The bundle `npm run build` writes
+      "dist/**"
     ]
   },
 

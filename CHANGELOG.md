@@ -27,6 +27,7 @@
 
 ### Changed
 
+- The extension package is about 30% smaller (from about 178 KB to 125 KB): it now ships as a single bundled file, with Inedo's reference data stored compactly
 - Function parameter names in hover, signature help and completion are now the ones in Inedo's reference, such as `$Substring(Text, Offset, [Length])` (was `text, startIndex, [length]`) or `$RegexReplace(Text, MatchExpression, ReplaceWith)`
 
 ### Fixed
