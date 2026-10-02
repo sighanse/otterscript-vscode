@@ -30,6 +30,7 @@ const {
   getActiveParameterIndex,
   splitSignatureParameters,
   maskCommentSpans,
+  findOperationArgumentContext,
   indexVariableOccurrences,
   variableKey,
   maskClosedGroups,
@@ -877,5 +878,35 @@ describe("maskClosedGroups", () => {
 
   it("keeps line breaks and ignores a stray ')'", () => {
     assert.equal(maskClosedGroups("x)\n$F(a,\n(b)"), "x)\n$F(a,\n   ");
+  });
+});
+
+describe("findOperationArgumentContext", () => {
+  /**
+   * The context at the end of `text`, masked as the providers mask it.
+   *
+   * @param {string} text
+   */
+  const at = (text) => {
+    const state = createCodeScanState();
+    return findOperationArgumentContext(text.split("\n").map((line) => maskNonCodeSpans(line, state)).join("\n"));
+  };
+
+  it("finds the call and the typed name, after '(' or a top-level ','", () => {
+    assert.deepEqual(at("Copy-Files("), { operation: "Copy-Files", namespace: null, typed: "", used: [] });
+    assert.deepEqual(at("Copy-Files (\n\tFr"), { operation: "Copy-Files", namespace: null, typed: "Fr", used: [] });
+    assert.deepEqual(at("ProGet::Create-Directory(Path: ${my dir}, "),
+      { operation: "Create-Directory", namespace: "ProGet", typed: "", used: ["Path"] });
+  });
+
+  it("lists the arguments given before, skipping commas in nested calls and strings", () => {
+    assert.deepEqual(at('Copy-Files(From: "a,b", To: $PathCombine($a, $b), Inc')?.used, ["From", "To"]);
+  });
+
+  it("is null in a value, outside a call, or in a function, literal or module call", () => {
+    for (const text of ["Copy-Files(From: ", "Copy-Files(To: x);\nLog", "if $x { Copy-Files(To: x) }", "$Substring(",
+      "set @x = @(", 'Copy-Files(Include: @("a", ', "call Greet(", 'Copy-Files(From: "(", To: "x" # (']) {
+      assert.equal(at(text), null, text);
+    }
   });
 });

@@ -7,8 +7,28 @@
 
 const vscode = require("vscode");
 const { keywordDocs, mapFunctionDocs, operationDocs, scalarFunctionDocs, syntaxDocs, variableDocs, vectorFunctionDocs } = require("../language-data");
-const { buildHoverMarkdown, lookupOwn } = require("../helpers");
-const { isInStringOrCommentDoc } = require("../document-index");
+const { buildArgumentHoverMarkdown, buildHoverMarkdown, lookupOwn } = require("../helpers");
+const { getMaskedTextBefore, isInStringOrCommentDoc } = require("../document-index");
+const { findOperationArgumentContext } = require("../scanner");
+
+/**
+ * Hover for an argument name of an operation call -- a name followed by `:`
+ * (not `::`) where an argument starts -- or null.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Position} position
+ * @returns {vscode.Hover | null}
+ */
+function hoverArgument(document, position) {
+  const range = document.getWordRangeAtPosition(position, /[A-Za-z]\w*/);
+  if (!range || !/^\s*:(?!:)/.test(document.lineAt(range.end.line).text.slice(range.end.character))) return null;
+  const context = findOperationArgumentContext(getMaskedTextBefore(document, range.start));
+  if (!context || context.typed) return null;
+  const operation = lookupOwn(operationDocs, context.operation);
+  const name = document.getText(range).toLowerCase();
+  const param = operation?.params?.find((p) => p.name.toLowerCase() === name);
+  return operation && param ? new vscode.Hover(buildArgumentHoverMarkdown(operation, param), range) : null;
+}
 
 /**
  * Registers the hover provider.
@@ -55,6 +75,10 @@ function registerHover(settings, operationRegex) {
         if (isInStringOrCommentDoc(document, position)) {
           return null;
         }
+
+        // -- An argument name in an operation call (`To` in `Copy-Files(To: $x)`)
+        const argumentHover = hoverArgument(document, position);
+        if (argumentHover) return argumentHover;
 
         // -- Template tags (<% and %>)
         // OtterScript uses ASP-style template tags for embedding code

@@ -2,8 +2,8 @@
 /**
  * @fileoverview Completion for OtterScript: functions and variables after a
  * `$`, `@` or `%` sigil (including the file's own variables), operations and
- * keywords, module names after `call`, and values inside an Adaptive Card in
- * a text template.
+ * keywords, an operation's argument names inside its call, module names after
+ * `call`, and values inside an Adaptive Card in a text template.
  */
 
 const vscode = require("vscode");
@@ -14,8 +14,10 @@ const {
   getTypedIdentifier,
   isAvailableIn,
   isValidCompletionPosition,
+  lookupOwn,
 } = require("../helpers");
-const { getDocumentVariables, getModuleDeclarations } = require("../document-index");
+const { getDocumentVariables, getMaskedTextBefore, getModuleDeclarations } = require("../document-index");
+const { findOperationArgumentContext } = require("../scanner");
 const { findCardCompletions } = require("../adaptivecard");
 
 /**
@@ -162,6 +164,13 @@ function registerCompletion(settings, listWorkspaceModules) {
           // -- Check if completion is enabled and not in a string/comment
           if (!isValidCompletionPosition(document, position, settings.completionEnabled)) return [];
 
+          // -- At an argument name inside an operation call: its arguments.
+          const argumentContext = findOperationArgumentContext(getMaskedTextBefore(document, position));
+          const calledDoc = argumentContext && lookupOwn(operationDocs, argumentContext.operation);
+          if (argumentContext && calledDoc?.params) return argumentItems(calledDoc, argumentContext, position);
+          // `(` and `,` trigger only argument names.
+          if (localContext.triggerKind === vscode.CompletionTriggerKind.TriggerCharacter) return [];
+
           const line = document.lineAt(position.line).text;
           const cursor = position.character;
           const prefix = line.slice(0, cursor);
@@ -253,7 +262,34 @@ function registerCompletion(settings, listWorkspaceModules) {
       }
       // Manual invoke (Ctrl+Space) can return all operations/keywords.
       // Auto-trigger still requires a short typed prefix to reduce noise.
+      // `(` and `,` open an argument list or the next argument.
+      , "(", ","
     );
+
+  /**
+   * Argument-name items for an operation call: the arguments not given yet,
+   * required ones first, each inserted as `Name: `.
+   *
+   * @param {import("../language-data").DocEntry} doc - The called operation
+   * @param {import("../scanner").OperationArgumentContext} context
+   * @param {vscode.Position} position
+   * @returns {vscode.CompletionItem[]}
+   */
+  function argumentItems(doc, context, position) {
+    const used = new Set(context.used.map((name) => name.toLowerCase()));
+    const range = new vscode.Range(position.translate(0, -context.typed.length), position);
+    return (doc.params ?? [])
+      .filter((param) => !used.has(param.name.toLowerCase()))
+      .map((param, i) => {
+        const item = new vscode.CompletionItem({ label: param.name, description: param.format }, vscode.CompletionItemKind.Property);
+        item.detail = `${param.required ? "Required" : "Optional"} argument of ${doc.name}`;
+        if (param.description) item.documentation = param.description;
+        item.insertText = `${param.name}: `;
+        item.sortText = `${param.required ? 0 : 1}_${String(i).padStart(3, "0")}`;
+        item.range = range;
+        return item;
+      });
+  }
 
   /**
    * Module-name items for `call`: the file's own modules first, then the ones

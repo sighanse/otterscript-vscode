@@ -17,7 +17,7 @@ This extension started as a learning project while implementing [custom webhook 
 ## Features
 
 - Syntax highlighting, including namespaced operations (`ProGet::`, `Otter::`, `Windows::`)
-- Hover documentation, completion and signature help for every function and operation in Inedo's Otter and BuildMaster reference, ProGet's notifier variables, and map/vector expressions
+- Hover documentation, completion and signature help for every function and operation in Inedo's Otter and BuildMaster reference, ProGet's notifier variables, and map/vector expressions; inside an operation call, completion and hover for its argument names (`Copy-Files(To: ...)`)
 - Diagnostics for common mistakes (see [the list of checks](#turning-individual-diagnostics-off)) — also for `$` expressions in a text template's literal output, such as `$ToJson(...)` in a webhook body
 - Adaptive Card checks, triggered by a literal `"type": "AdaptiveCard"` object in a template: unknown types, values a property doesn't allow (`"weight": "bold"`), elements or properties newer than the card's `"version"`, `Action.ToggleVisibility` targets with no matching `"id"`, and Teams webhook mistakes such as a wrong `"contentType"` or `Action.Submit`. Completion inside the card offers `"type"` values, a property's allowed values and toggle targets. Based on the Adaptive Card 1.6 schema plus Teams-only elements; best-effort, not a full schema validation
 - Quick fixes, plus a **Fix All Issues** command (`Ctrl+Shift+Alt+F`); fixes that would cause a new problem are left to the lightbulb

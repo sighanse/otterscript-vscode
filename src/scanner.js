@@ -1012,6 +1012,83 @@ function indexVariableOccurrences(text) {
 }
 
 // ============================================================
+// OPERATION ARGUMENTS
+// ============================================================
+
+/**
+ * Where an argument name may be typed in an operation call: right after its
+ * `(` or a top-level `,` -- `Copy-Files(To: $x, |` or `Copy-Files(\n\tFr|`.
+ *
+ * @typedef {{
+ *   operation: string,
+ *   namespace: string | null,
+ *   typed: string,
+ *   used: string[]
+ * }} OperationArgumentContext
+ *   `operation` / `namespace` name the call (`ProGet::Create-Directory`);
+ *   `typed` is the part of the argument name before the cursor; `used` the
+ *   names of the arguments already given before it.
+ */
+
+/**
+ * The operation-argument context at the end of `maskedPrefix`, or null when
+ * the end isn't at an argument name inside an operation call (it's in a
+ * value, outside any call, in a function call `$F(`, a `call Module(`, ...).
+ *
+ * @param {string} maskedPrefix - The code before the cursor, masked by
+ *   {@link maskNonCodeSpans} (so brackets in strings and comments are gone);
+ *   from at least the start of the statement
+ * @returns {OperationArgumentContext | null}
+ */
+function findOperationArgumentContext(maskedPrefix) {
+  // A braced variable's `}` (`${my dir}`) isn't a block's.
+  const text = maskedPrefix.replace(/[$@%]\{[^{}\n]*\}/g, (m) => "_".repeat(m.length));
+
+  // Back to the call's unclosed `(`, noting the last top-level `,`.
+  let depth = 0;
+  let argumentStart = -1;
+  let open = -1;
+  for (let i = text.length - 1; i >= 0 && open === -1; i--) {
+    const ch = text[i];
+    if (ch === ")" || ch === "]") depth++;
+    else if (ch === "(" || ch === "[") {
+      if (depth > 0) depth--;
+      else if (ch === "(") open = i;
+      else return null; // inside a vector literal or an index
+    } else if (depth === 0 && (ch === ";" || ch === "{" || ch === "}")) return null; // statement boundary
+    else if (depth === 0 && ch === "," && argumentStart === -1) argumentStart = i + 1;
+  }
+  if (open === -1) return null;
+
+  const typedMatch = /^\s*([A-Za-z]\w*)?$/.exec(text.slice(argumentStart === -1 ? open + 1 : argumentStart));
+  if (!typedMatch) return null; // in a value
+
+  // The operation: a dashed or plain name right before `(`, not a function
+  // (`$F(`), a map or vector literal, or a `call Module(`.
+  const before = text.slice(0, open);
+  const callee = /(?<![$@%\w:-])(?:([A-Za-z][A-Za-z0-9]*)::)?([A-Za-z][A-Za-z0-9-]*)\s*$/.exec(before);
+  if (!callee || /\bcall\s+(?:[A-Za-z]\w*::)?[A-Za-z][\w-]*\s*$/i.test(before)) return null;
+
+  // Arguments already given: each complete top-level `Name:` segment.
+  /** @type {string[]} */
+  const used = [];
+  let segmentStart = open + 1;
+  depth = 0;
+  for (let i = open + 1; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === "(" || ch === "[") depth++;
+    else if (ch === ")" || ch === "]") depth--;
+    else if (ch === "," && depth === 0) {
+      const name = /^\s*([A-Za-z]\w*)\s*:(?!:)/.exec(text.slice(segmentStart, i))?.[1];
+      if (name) used.push(name);
+      segmentStart = i + 1;
+    }
+  }
+
+  return { operation: callee[2], namespace: callee[1] ?? null, typed: typedMatch[1] ?? "", used };
+}
+
+// ============================================================
 // EXPORTS
 // ============================================================
 
@@ -1042,6 +1119,7 @@ module.exports = {
   indexVariableOccurrences,
   variableKey,
   NAME_PATTERN,
+  findOperationArgumentContext,
   BRACED_NAME_PATTERN,
 
   // -- Argument helpers

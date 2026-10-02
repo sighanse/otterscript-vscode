@@ -217,7 +217,8 @@ async function fetchSnapshot() {
  *   description: string,
  *   documentation: string,
  *   products: string[],
- *   anySigil?: true
+ *   anySigil?: true,
+ *   params?: { name: string, required: boolean, description?: string, format?: string }[]
  * }} GeneratedDoc
  */
 
@@ -242,7 +243,8 @@ function operationNamespace(name, usage, declared) {
 }
 
 /**
- * Hover documentation: parameters, then where the entry comes from.
+ * Hover documentation: a function's parameters (an operation's are in its
+ * `params`, which hover lists), then where the entry comes from.
  *
  * @param {RefEntry} entry
  * @param {string[]} products - Every product that has the function/operation
@@ -250,8 +252,9 @@ function operationNamespace(name, usage, declared) {
  */
 function documentationFor(entry, products) {
   const lines = [];
-  if (entry.params.length) {
-    lines.push(entry.kind === "function" ? "**Parameters:**" : "**Arguments:**");
+  // An operation's arguments are in its `params`, which hover lists.
+  if (entry.kind === "function" && entry.params.length) {
+    lines.push("**Parameters:**");
     for (const p of entry.params) {
       const flags = [p.required ? "required" : "optional", p.format].filter(Boolean).join(", ");
       lines.push(`- \`${p.name}\` (${flags})${p.description && p.description !== p.name ? ` - ${p.description}` : ""}`);
@@ -276,6 +279,29 @@ function operationSnippet(entry) {
     return `${entry.name}(\n\t${required.map((p, i) => `${p.name}: \${${i + 1}}`).join(",\n\t")}\n);$0`;
   }
   return `${entry.name} \${1};$0`;
+}
+
+/**
+ * An operation's arguments, for argument completion and hover: the first
+ * product's, then any another product adds. A description that only repeats
+ * the name is left out.
+ *
+ * @param {RefEntry[]} variants - The operation's pages, one per product
+ * @returns {{ name: string, required: boolean, description?: string, format?: string }[]}
+ */
+function operationParams(variants) {
+  /** @type {Map<string, { name: string, required: boolean, description?: string, format?: string }>} */
+  const params = new Map();
+  for (const { name, required, description, format } of variants.flatMap((v) => v.params)) {
+    if (params.has(name.toLowerCase())) continue;
+    params.set(name.toLowerCase(), {
+      name,
+      required,
+      ...(description && description !== name ? { description } : {}),
+      ...(format ? { format } : {}),
+    });
+  }
+  return [...params.values()];
 }
 
 /**
@@ -322,6 +348,7 @@ function buildTables(snapshot, declared) {
         description: primary.description,
         documentation: documentationFor(primary, products),
         products,
+        params: operationParams(variants),
       });
       continue;
     }
@@ -390,7 +417,8 @@ function render(snapshot) {
  *   description: string,
  *   documentation: string,
  *   products: string[],
- *   anySigil?: true
+ *   anySigil?: true,
+ *   params?: { name: string, required: boolean, description?: string, format?: string }[]
  * }} ReferenceDoc
  */
 

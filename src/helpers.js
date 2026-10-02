@@ -334,6 +334,12 @@ function validateDocs(label, docsTable) {
       warnings.push(`${label}.${key} 'products' must be an array of ${PRODUCTS.join(", ")}`);
     }
 
+    // Optional Field: 'params' -- an operation's named arguments
+    if (doc.params !== undefined && (!Array.isArray(doc.params) ||
+        doc.params.some((/** @type {any} */ p) => typeof p?.name !== "string" || typeof p?.required !== "boolean"))) {
+      warnings.push(`${label}.${key} 'params' must be an array of { name, required }`);
+    }
+
     // Optional Field: 'anySigil' -- works with every sigil
     if (doc.anySigil !== undefined && doc.anySigil !== true) {
       warnings.push(`${label}.${key} 'anySigil' must be true when set`);
@@ -474,12 +480,18 @@ function createRegexPatterns(knownOperations) {
 // ============================================================
 
 /**
+ * One named argument of an operation (a DocEntry's `params`).
+ *
+ * @typedef {{ name: string, required: boolean, description?: string, format?: string }} OperationParam
+ */
+
+/**
  * Builds a standardized hover MarkdownString from a documentation entry.
  *
  * This creates the formatted tooltip content shown when hovering over
  * symbols, keywords, operations, and syntax elements.
  *
- * @param {Readonly<{ name: string, signature?: string, overloads?: { product: string, signature: string }[], description?: string, documentation?: string, namespace?: string | null, products?: ReadonlyArray<string>, anySigil?: boolean }>} doc
+ * @param {Readonly<{ name: string, signature?: string, overloads?: { product: string, signature: string }[], description?: string, documentation?: string, namespace?: string | null, products?: ReadonlyArray<string>, anySigil?: boolean, params?: ReadonlyArray<OperationParam> }>} doc
  *   - name: Required - Display name (e.g., "$ToJson")
  *   - signature: Optional - Function signature (monospace formatted)
  *   - overloads: Optional - The function's form in other Inedo products, each
@@ -490,6 +502,8 @@ function createRegexPatterns(knownOperations) {
  *   - products: Optional - The products that have it; a note says so when
  *     `product` isn't one of them (see {@link isAvailableIn})
  *   - anySigil: Optional - Works with every sigil (noted below the signature)
+ *   - params: Optional - An operation's arguments, listed unless
+ *     `documentation` has its own **Arguments:** section
  * @param {string} [product] - The `otterscript.product` setting
  * @returns {vscode.MarkdownString} - Formatted hover content
  *
@@ -535,11 +549,43 @@ function buildHoverMarkdown(doc, product = "any") {
     md.appendMarkdown(`${doc.description}\n\n`);
   }
 
-  // Extended documentation (supports Markdown)
-  if (typeof doc.documentation === "string") {
-    md.appendMarkdown(doc.documentation);
+  // An operation's arguments, unless its documentation lists them itself
+  const documentation = typeof doc.documentation === "string" ? doc.documentation : "";
+  if (doc.params?.length && !documentation.includes("**Arguments:**")) {
+    md.appendMarkdown(`**Arguments:**\n${doc.params.map((p) => `- ${argumentSummary(p)}`).join("\n")}\n\n`);
   }
 
+  // Extended documentation (supports Markdown)
+  if (documentation) {
+    md.appendMarkdown(documentation);
+  }
+
+  return md;
+}
+
+/**
+ * One operation argument on a line: `` `To` (required, text) - Target directory ``.
+ *
+ * @param {OperationParam} param
+ * @returns {string}
+ */
+function argumentSummary(param) {
+  const flags = [param.required ? "required" : "optional", param.format].filter(Boolean).join(", ");
+  return `\`${param.name}\` (${flags})${param.description ? ` - ${param.description}` : ""}`;
+}
+
+/**
+ * Hover for an argument name inside an operation call (`To:` in
+ * `Copy-Files(To: ...)`): the argument, and which operation it belongs to.
+ *
+ * @param {{ name: string }} operation
+ * @param {OperationParam} param
+ * @returns {vscode.MarkdownString}
+ */
+function buildArgumentHoverMarkdown(operation, param) {
+  const md = new vscode.MarkdownString();
+  md.appendMarkdown(`### ${param.name}\n\n`);
+  md.appendMarkdown(`Argument of \`${operation.name}\`: ${argumentSummary(param)}\n`);
   return md;
 }
 
@@ -739,6 +785,7 @@ module.exports = {
   isValidCompletionPosition,
   getTypedIdentifier,
   buildHoverMarkdown,
+  buildArgumentHoverMarkdown,
   buildCompletionItem,
   buildSigilCompletionItems,
 

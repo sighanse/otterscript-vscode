@@ -37,6 +37,7 @@ const { advanceScanState, createCodeScanState, isInStringOrComment } = require("
 const {
   buildCompletionItem,
   buildHoverMarkdown,
+  buildArgumentHoverMarkdown,
   buildSigilCompletionItems,
   clearTimerForUri,
   createRegexPatterns,
@@ -304,6 +305,26 @@ describe("buildHoverMarkdown (otterscript.product and anySigil)", () => {
   it("says when a function works with every sigil", () => {
     assert.match(text(buildHoverMarkdown({ name: "@FromJson", anySigil: true })), /Works with `\$`, `@` and `%`/);
     assert.doesNotMatch(text(buildHoverMarkdown({ name: "$ToJson" })), /Works with/);
+  });
+});
+
+describe("buildHoverMarkdown / buildArgumentHoverMarkdown (operation arguments)", () => {
+  const params = [
+    { name: "To", required: true, description: "Target directory", format: "text" },
+    { name: "Verbose", required: false, format: "true/false" },
+  ];
+
+  it("lists an operation's arguments, unless its documentation has its own list", () => {
+    const value = /** @type {any} */ (buildHoverMarkdown({ name: "Copy-Files", params, documentation: "*From Inedo's reference.*" })).value;
+    assert.ok(value.includes("**Arguments:**\n- `To` (required, text) - Target directory\n- `Verbose` (optional, true/false)\n"), value);
+    assert.ok(value.indexOf("**Arguments:**") < value.indexOf("*From Inedo's"));
+    const own = /** @type {any} */ (buildHoverMarkdown({ name: "Copy-Files", params, documentation: "**Arguments:**\n- hand-written" })).value;
+    assert.equal(own.split("**Arguments:**").length, 2, "listed once");
+  });
+
+  it("documents one argument with its operation", () => {
+    const value = /** @type {any} */ (buildArgumentHoverMarkdown({ name: "Copy-Files" }, params[0])).value;
+    assert.match(value, /### To\n\nArgument of `Copy-Files`: `To` \(required, text\) - Target directory/);
   });
 });
 

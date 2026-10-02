@@ -72,6 +72,10 @@
  *   `signature`) vs BuildMaster's `$PackageHash(packageName, [sourceName])`.
  *   Shown in hover; the too-many-arguments check allows the largest count of
  *   any form.
+ * @property {{ name: string, required: boolean, description?: string, format?: string }[]=} params
+ *   An operation's named arguments (`Copy-Files(To: ...)`), from Inedo's
+ *   reference: for argument completion and hover, which lists them unless
+ *   `documentation` has its own **Arguments:** section.
  * @property {true=} anySigil The function works with every sigil, which picks
  *   what it returns (`$FromJson` / `@FromJson` / `%FromJson`), as Inedo's
  *   reference marks it. A hand-written `$` entry's `@` and `%` forms are
@@ -3965,14 +3969,15 @@ function withReference(handWritten, generated, alsoCovered = []) {
   for (const [key, doc] of Object.entries(generated)) {
     const handKey = handKeys.get(key.toLowerCase());
     if (!covered.has(key.toLowerCase())) merged[key] = doc;
-    // A hand-written entry takes the reference's product list when it has
-    // none of its own, and its `anySigil` mark.
+    // A hand-written entry takes the reference's product list and argument
+    // list when it has none of its own, and its `anySigil` mark.
     else if (handKey) {
       const own = merged[handKey];
       merged[handKey] = {
         ...own,
         ...(!own.products && doc.products ? { products: doc.products } : {}),
         ...(doc.anySigil ? { anySigil: doc.anySigil } : {}),
+        ...(!own.params && doc.params ? { params: doc.params } : {}),
       };
     }
   }

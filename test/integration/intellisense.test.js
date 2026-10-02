@@ -92,6 +92,13 @@ describe("hover", () => {
     assert.match(text, /From Inedo's/);
   });
 
+  it("documents an operation's argument name, and lists the arguments on the operation", async () => {
+    const source = await openContent('Copy-Files(\n    From: "a",\n    To: "b"\n);\n');
+    assert.match(await hoverText(source, positionOf(source, "To:", 1)), /Argument of `Copy-Files`: `To` \(required, text\) - Target directory/);
+    assert.equal(await hoverText(source, positionOf(source, '"b"', 1)), "", "not in a value");
+    assert.match(await hoverText(source, positionOf(source, "Copy-Files", 2)), /\*\*Arguments:\*\*\n- `Include`/);
+  });
+
   it("documents an operation", async () => {
     assert.match(await hoverText(document, positionOf(document, "Log-Information", 3)), /Log-Information/);
   });
@@ -207,6 +214,19 @@ describe("completion", () => {
     } finally {
       await config.update("product", undefined, vscode.ConfigurationTarget.Global);
     }
+  });
+
+  it("offers an operation's arguments inside its call, leaving out the ones given", async () => {
+    const document = await openContent('Copy-Files(\n    From: "a",\n    \n);\n');
+    const labels = await completionLabels(document, new vscode.Position(2, 4));
+    assert.ok(labels.includes("To") && labels.includes("Include"), labels.join(" "));
+    assert.ok(!labels.includes("From"), "already given");
+    assert.ok(!labels.includes("Log-Information"), "no operations in an argument list");
+
+    const opened = await openContent("Copy-Files(");
+    assert.ok((await completionLabels(opened, positionOf(opened, "(", 1), "(")).includes("To"), "on '('");
+    const fn = await openContent("set $s = $Substring(");
+    assert.deepEqual(await completionLabels(fn, positionOf(fn, "(", 1), "("), [], "nothing for a function's '('");
   });
 
   it("offers Adaptive Card values inside a card in a text template", async () => {

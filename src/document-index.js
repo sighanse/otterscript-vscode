@@ -389,11 +389,35 @@ function getLineStartScanState(document, line) {
   return { ...states[line] };
 }
 
+/** How far back {@link getMaskedTextBefore} looks: plenty for one statement. */
+const MASKED_PREFIX_MAX_LINES = 200;
+
+/**
+ * The code before `position`, from up to {@link MASKED_PREFIX_MAX_LINES}
+ * lines back, with strings and comments masked ({@link maskNonCodeSpans}) --
+ * for finding the call the cursor is in.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Position} position
+ * @returns {string}
+ */
+function getMaskedTextBefore(document, position) {
+  const first = Math.max(0, position.line - MASKED_PREFIX_MAX_LINES);
+  const state = getLineStartScanState(document, first);
+  const lines = [];
+  for (let line = first; line <= position.line; line++) {
+    const text = document.lineAt(line).text;
+    lines.push(maskNonCodeSpans(line === position.line ? text.slice(0, position.character) : text, state));
+  }
+  return lines.join("\n");
+}
+
 module.exports = {
   clearDocumentCaches,
   findModuleDeclarationRange,
   findModuleReferences,
   getDocumentVariables,
+  getMaskedTextBefore,
   getModuleCallReferencesByName,
   getModuleDeclarations,
   getModuleNameAt,

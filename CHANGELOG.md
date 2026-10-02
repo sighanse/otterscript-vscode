@@ -16,6 +16,7 @@
 - `adaptivecard-unknown-target` diagnostic: an `Action.ToggleVisibility` target that no element in the card has as its `"id"` — the button would silently do nothing — with a quick fix to the closest id (`"detials"` → `"details"`)
 - `adaptivecard-duplicate-id` diagnostic: an `"id"` that another element in the same card already has, so a toggle reaches only one of them. Ids in alternative `<% if %>` / `<% else %>` branches aren't flagged
 - `otterscript.product` setting (`any`, `ProGet`, `Otter` or `BuildMaster`): completion leaves out the functions, variables and operations the chosen product doesn't have, based on Inedo's Otter and BuildMaster reference (what both have counts as the core engine, which ProGet runs too). Hover notes it when a function, variable or operation isn't in the chosen product
+- Argument names in operation calls: inside `Copy-Files(` (after the `(` or a `,`), completion lists the operation's arguments that aren't given yet, required ones first, with their format and description; hovering an argument name (`To:`) shows what it is. An operation's hover now lists its arguments too
 - Hover says when a function works with every sigil (`$FromJson`, `@FromJson`, `%FromJson`), where the sigil picks what it returns. The `@` and `%` forms of `$Eval` and `$GetVariableValue` now have the same full documentation as their `$` form
 
 ### Changed

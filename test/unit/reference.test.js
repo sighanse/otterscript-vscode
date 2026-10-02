@@ -66,6 +66,15 @@ describe("generated Inedo reference, merged into language-data", () => {
     }
   });
 
+  it("gives operations their arguments, in params rather than in the documentation", () => {
+    const copy = reference.operationDocs["Copy-Files"];
+    assert.deepEqual(copy.params?.find((p) => p.name === "To"), { name: "To", required: true, description: "Target directory", format: "text" });
+    assert.ok(copy.params?.every((p) => p.description !== p.name), "no description that only repeats the name");
+    assert.doesNotMatch(copy.documentation, /\*\*Arguments:\*\*/);
+    // A hand-written operation takes the reference's list.
+    assert.ok(data.operationDocs["Execute-PowerShell"].params?.some((p) => p.name === "Text"));
+  });
+
   it("uses only declared namespaces (none for InedoCore and BuildMaster's DB/Packages/System)", () => {
     for (const doc of Object.values(reference.operationDocs)) {
       assert.ok(doc.namespace === null || data.NAMESPACES.has(doc.namespace), `${doc.name}: ${doc.namespace}`);
