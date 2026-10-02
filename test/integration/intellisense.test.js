@@ -160,6 +160,25 @@ describe("completion", () => {
     assert.ok(!(await completionLabels(proget, positionOf(proget, "Log-Inf", 7))).includes("Log-Information"));
   });
 
+  it("offers the file's own variables after $, @ and %, but not the one being typed", async () => {
+    const document = await openContent("set $myCount = 1;\nset @myList = @(1);\nforeach %myItem in @maps {\n}\nLog-Information $my");
+    const scalars = await completionLabels(document, positionOf(document, "Information $my", 15), "$");
+    assert.ok(scalars.includes("$myCount"), scalars.join(" "));
+    assert.ok(!scalars.includes("$my"), "not the token being typed");
+    const vectors = await completionLabels(document, positionOf(document, "set @myList", 5), "@");
+    assert.ok(vectors.includes("@maps"));
+    const maps = await completionLabels(document, positionOf(document, "foreach %", 9), "%");
+    assert.ok(maps.includes("%myItem"));
+  });
+
+  it("offers module names after call, from this file and other workspace files", async () => {
+    const document = await openContent("module LocalHelper {\n}\ncall ");
+    const labels = await completionLabels(document, positionOf(document, "call ", 5));
+    assert.ok(labels.includes("LocalHelper"), labels.join(" "));
+    assert.ok(labels.includes("Greet"), "declared in the workspace's main.otter");
+    assert.ok(!labels.includes("Log-Information"), "no operations after call");
+  });
+
   it("offers nothing from this extension inside a comment", async () => {
     const document = await openContent("# $");
     const labels = await completionLabels(document, positionOf(document, "# $", 3), "$");

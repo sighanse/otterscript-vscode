@@ -6,6 +6,9 @@
 
 - Hover, completion and signature help for every function and operation in Inedo's Otter and BuildMaster reference — about 100 operations and 80 functions more than before, such as `Extract-ZipFile`, `Replace-Text`, `IIS::Ensure-AppPool`, `Git::Checkout-Code`, `PSCall`, `%MapAdd` and `$PSCredential` — with their arguments and the products that have them, and syntax highlighting for their names
 - ProGet notifier variables `$EventName`, `$ProjectName` and `$ReleaseNumber`
+- Completion of the variables the file uses: after `$`, `@` or `%`, the file's own variables (`set $myVar`, `foreach %item`, module parameters, ...) are listed first, with the line where they're assigned
+- Completion of module names after `call`: the file's own modules first, then those declared in other OtterScript files in the workspace
+- Go to Definition (F12) on a variable goes to where the file assigns it; with several assignments, VS Code lists them all
 
 ### Changed
 

@@ -161,7 +161,7 @@ function activate(context) {
   context.subscriptions.push(
     diagnostics,
     ...registerCodeActions(settings, diagnostics, runDiagnostics),
-    ...registerCompletion(settings),
+    ...registerCompletion(settings, workspaceSymbols.listModules),
     ...registerHover(settings, patterns.operationRegex()),
     ...registerNavigation(settings),
     ...registerSignatureHelp(settings, patterns),

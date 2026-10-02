@@ -18,9 +18,10 @@ const { clearTimerForUri, findModuleDeclarations, log, mapWithConcurrency, sched
  *   setModuleIndexEntry: (uri: vscode.Uri, text: string) => void,
  *   indexModuleFile: (uri: vscode.Uri) => Promise<void>,
  *   removeModuleIndexEntry: (uri: vscode.Uri) => void,
- *   resetWorkspaceIndex: () => void
+ *   resetWorkspaceIndex: () => void,
+ *   listModules: () => Promise<{ name: string, uri: vscode.Uri }[]>
  * }} The index operations extension.js calls on document events and
- *   settings changes
+ *   settings changes, and `listModules` for module-name completion
  */
 function registerWorkspaceSymbols(settings) {
   // ============================================================
@@ -222,6 +223,18 @@ function registerWorkspaceSymbols(settings) {
     workspaceIndexTimers.clear();
   }
 
+  /**
+   * Every module declared in the workspace, building the index first if no
+   * Ctrl+T has yet. Empty when `otterscript.workspaceSymbols.enable` is off.
+   *
+   * @returns {Promise<{ name: string, uri: vscode.Uri }[]>}
+   */
+  async function listModules() {
+    if (!settings.workspaceSymbolsEnabled) return [];
+    await ensureWorkspaceIndex();
+    return [...workspaceModuleIndex.values()].flatMap(({ uri, symbols }) => symbols.map(({ name }) => ({ name, uri })));
+  }
+
   return {
     disposables: [
       workspaceSymbolProvider,
@@ -233,6 +246,7 @@ function registerWorkspaceSymbols(settings) {
     indexModuleFile,
     removeModuleIndexEntry: (uri) => { workspaceModuleIndex.delete(uri.toString()); },
     resetWorkspaceIndex,
+    listModules,
   };
 }
 

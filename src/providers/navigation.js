@@ -1,8 +1,9 @@
 // @ts-check
 /**
- * @fileoverview In-file navigation for OtterScript: Go to Definition and Find
- * References for modules, highlighting a variable's or module's occurrences,
- * the Outline, reference-count CodeLens, and folding.
+ * @fileoverview In-file navigation for OtterScript: Go to Definition for
+ * variables (their assignments) and modules, Find References for modules,
+ * highlighting a variable's or module's occurrences, the Outline,
+ * reference-count CodeLens, and folding.
  */
 
 const vscode = require("vscode");
@@ -13,7 +14,7 @@ const {
   getModuleCallReferencesByName,
   getModuleDeclarations,
   getModuleNameAt,
-  getVariableOccurrences,
+  getVariableAt,
 } = require("../helpers");
 
 /**
@@ -25,15 +26,27 @@ const {
  */
 function registerNavigation(settings) {
   // ============================================================
-  // GO TO DEFINITION PROVIDER (Modules)
+  // GO TO DEFINITION PROVIDER (Variables & Modules)
   // ============================================================
-  // Enables Go-to-Definition (F12 / Ctrl+Click) for calls like:
-  // call MyHelper(...) by navigating to the corresponding module MyHelper
+  // F12 / Ctrl+Click on a variable goes to where the file assigns it (`set`,
+  // `foreach`, a module parameter, ...); with several assignments VS Code
+  // lists them. On `call MyHelper(...)` it goes to `module MyHelper`.
 
   const definitionProvider = vscode.languages.registerDefinitionProvider(
     "otterscript", {
       provideDefinition(document, position) {
-        // -- Only from a `call` statement; the declaration is the definition.
+        // -- A variable: its assignments. One that is only ever read (a
+        // runtime variable such as $PackageName) has nothing to go to.
+        const variableAt = getVariableAt(document, position);
+        if (variableAt) {
+          if (!variableAt.isReference) return null;
+          const writes = variableAt.occurrences.filter((o) => o.write);
+          return writes.length
+            ? writes.map((o) => new vscode.Location(document.uri, new vscode.Range(o.line, o.character, o.line, o.character + o.length)))
+            : null;
+        }
+
+        // -- A module: only from a `call` statement; the declaration is the definition.
         const moduleAt = getModuleNameAt(document, position);
         if (!moduleAt || moduleAt.isDeclaration) return null;
 
@@ -73,9 +86,6 @@ function registerNavigation(settings) {
   // Clicking a variable or module name highlights every use of it in the
   // file; declarations and assignment targets are marked as writes.
 
-  /** A `$name` / `@name` / `%name` token, or its braced `${name}` form, under the cursor. */
-  // Same name rules as the scanner's VARIABLE_TOKEN_REGEX (Inedo's formal grammar).
-  const VARIABLE_AT_CURSOR_REGEX = /[$@%](?:\{[A-Za-z][A-Za-z0-9_ -]*\}|[A-Za-z](?:[A-Za-z0-9_-]*[A-Za-z0-9])?)/;
 
   const documentHighlightProvider = vscode.languages.registerDocumentHighlightProvider(
     "otterscript",
@@ -86,18 +96,12 @@ function registerNavigation(settings) {
        * @returns {vscode.DocumentHighlight[] | undefined}
        */
       provideDocumentHighlights(document, position) {
-        const variableRange = document.getWordRangeAtPosition(position, VARIABLE_AT_CURSOR_REGEX);
-        if (variableRange) {
-          const token = document.getText(variableRange);
-          const name = token[1] === "{" ? token.slice(2, -1) : token.slice(1);
-          const occurrences = getVariableOccurrences(document, token[0], name);
-          // The token under the cursor must itself be a reference -- not in a
-          // comment or single-quoted string, and not a function call.
-          const isReference = occurrences.some(
-            (o) => o.line === variableRange.start.line && o.character === variableRange.start.character
-          );
-          if (!isReference) return undefined;
-          return occurrences.map((o) => new vscode.DocumentHighlight(
+        // A variable token that isn't a real reference (in a comment, a
+        // function call's name, ...) highlights nothing.
+        const variableAt = getVariableAt(document, position);
+        if (variableAt) {
+          if (!variableAt.isReference) return undefined;
+          return variableAt.occurrences.map((o) => new vscode.DocumentHighlight(
             new vscode.Range(o.line, o.character, o.line, o.character + o.length),
             o.write ? vscode.DocumentHighlightKind.Write : vscode.DocumentHighlightKind.Read
           ));

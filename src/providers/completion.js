@@ -1,29 +1,84 @@
 // @ts-check
 /**
  * @fileoverview Completion for OtterScript: functions and variables after a
- * `$`, `@` or `%` sigil, and operations and keywords.
+ * `$`, `@` or `%` sigil (including the file's own variables), operations and
+ * keywords, and module names after `call`.
  */
 
 const vscode = require("vscode");
 const { keywordDocs, mapFunctionDocs, operationDocs, scalarFunctionDocs, syntaxDocs, variableDocs, vectorFunctionDocs } = require("../language-data");
-const { buildCompletionItem, buildSigilCompletionItems, getTypedIdentifier, isValidCompletionPosition } = require("../helpers");
+const {
+  buildCompletionItem,
+  buildSigilCompletionItems,
+  getDocumentVariables,
+  getModuleDeclarations,
+  getTypedIdentifier,
+  isValidCompletionPosition,
+} = require("../helpers");
+
+/**
+ * Lower-cased names a table documents, so the file's own variable of the same
+ * name isn't offered twice.
+ *
+ * @param {...Readonly<Record<string, { name: string }>>} tables
+ * @returns {Set<string>}
+ */
+function documentedNames(...tables) {
+  return new Set(tables.flatMap((t) => Object.values(t).map((doc) => doc.name.slice(1).toLowerCase())));
+}
+
+/**
+ * Completion items for the variables of one sigil that the file itself uses
+ * (`set $myVar = ...`, `foreach %item in ...`, module parameters, ...),
+ * sorted before the built-ins. Leaves out the one being typed (it is an
+ * occurrence too) and names the docs tables already offer.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Position} position
+ * @param {string} sigil - `$`, `@`, or `%`
+ * @param {string} typed - What follows the sigil so far
+ * @param {ReadonlySet<string>} documented - From {@link documentedNames}
+ * @returns {vscode.CompletionItem[]}
+ */
+function documentVariableItems(document, position, sigil, typed, documented) {
+  const lowerTyped = typed.toLowerCase();
+  return getDocumentVariables(document, sigil)
+    .filter(({ name, occurrences }) =>
+      name.toLowerCase().startsWith(lowerTyped) &&
+      !documented.has(name.toLowerCase()) &&
+      occurrences.some((o) => !(o.line === position.line && o.character + o.length === position.character)))
+    .map(({ name, assigned, line }) => {
+      const item = new vscode.CompletionItem({ label: `${sigil}${name}`, description: "this file" }, vscode.CompletionItemKind.Variable);
+      // The sigil is already typed; a name with spaces needs its braces.
+      item.insertText = name.includes(" ") ? `{${name}}` : name;
+      item.sortText = `0_${name}`;
+      item.detail = `${assigned ? "Assigned" : "Used"} on line ${line + 1}`;
+      return item;
+    });
+}
 
 /**
  * Registers the completion providers.
  *
  * @param {import("../helpers").Settings} settings - Live settings, updated in
  *   place by the settings listener in extension.js
+ * @param {() => Promise<{ name: string, uri: vscode.Uri }[]>} listWorkspaceModules -
+ *   Every module declared in the workspace (workspace-symbols.js)
  * @returns {vscode.Disposable[]}
  */
-function registerCompletion(settings) {
+function registerCompletion(settings, listWorkspaceModules) {
   // ============================================================
   // SIGIL COMPLETION PROVIDERS ($, @, %)
   // ============================================================
   // After `$`: scalar functions ($ToJson) and runtime variables ($PackageName).
   // After `@`: vector functions (@Split) and variables (@AffectedPackages).
-  // After `%`: map functions (%FromJson) and the %( ... ) map literal; map
-  // variables are user-defined and can't be enumerated.
+  // After `%`: map functions (%FromJson) and the %( ... ) map literal.
+  // Each also offers the variables of that sigil the file itself uses.
   // buildSigilCompletionItems turns every table into items the same way.
+
+  const documentedScalars = documentedNames(scalarFunctionDocs, variableDocs);
+  const documentedVectors = documentedNames(vectorFunctionDocs);
+  const documentedMaps = documentedNames(mapFunctionDocs);
 
   const scalarCompletionProvider =
     vscode.languages.registerCompletionItemProvider(
@@ -36,6 +91,7 @@ function registerCompletion(settings) {
           // Functions first; the few runtime variables in scalarFunctionDocs
           // (no '(' in the signature) sort with variableDocs.
           return [
+            ...documentVariableItems(document, position, "$", typed, documentedScalars),
             ...buildSigilCompletionItems(scalarFunctionDocs, typed, { functionSort: "1_", variableSort: "2_" }),
             ...buildSigilCompletionItems(variableDocs, typed, { functionSort: "1_", variableSort: "2_" }),
           ];
@@ -53,7 +109,10 @@ function registerCompletion(settings) {
           const typed = getTypedIdentifier(document, position, "@");
           if (typed === null) return [];
           // Vector variables (@AffectedPackages) sort before the functions.
-          return buildSigilCompletionItems(vectorFunctionDocs, typed, { functionSort: "2_", variableSort: "1_" });
+          return [
+            ...documentVariableItems(document, position, "@", typed, documentedVectors),
+            ...buildSigilCompletionItems(vectorFunctionDocs, typed, { functionSort: "2_", variableSort: "1_" }),
+          ];
         }
       },
       "@"
@@ -68,7 +127,10 @@ function registerCompletion(settings) {
           const typed = getTypedIdentifier(document, position, "%");
           if (typed === null) return [];
 
-          const items = buildSigilCompletionItems(mapFunctionDocs, typed, { functionSort: "1_", variableSort: "2_" });
+          const items = [
+            ...documentVariableItems(document, position, "%", typed, documentedMaps),
+            ...buildSigilCompletionItems(mapFunctionDocs, typed, { functionSort: "1_", variableSort: "2_" }),
+          ];
 
           // -- The %( ... ) map literal, sorted last
           if (syntaxDocs?.mapExpr) {
@@ -101,6 +163,16 @@ function registerCompletion(settings) {
           const line = document.lineAt(position.line).text;
           const cursor = position.character;
           const prefix = line.slice(0, cursor);
+
+          // -- After `call`, the only thing that fits is a module name.
+          const callMatch = /\bcall\s+(?:([A-Za-z]\w*)::)?([A-Za-z][\w-]*)?$/i.exec(prefix);
+          if (callMatch) {
+            // A raft-qualified call (`call Raft::Name`) names a module we can't see.
+            if (callMatch[1]) return [];
+            const typedName = callMatch[2] ?? "";
+            const range = new vscode.Range(position.line, cursor - typedName.length, position.line, cursor);
+            return moduleItems(document, range);
+          }
 
           // -- Match the identifier fragment immediately before the cursor (letters +
           // hyphens), plus an optional "Namespace::" prefix the user may have already
@@ -178,6 +250,33 @@ function registerCompletion(settings) {
       // Manual invoke (Ctrl+Space) can return all operations/keywords.
       // Auto-trigger still requires a short typed prefix to reduce noise.
     );
+
+  /**
+   * Module-name items for `call`: the file's own modules first, then the ones
+   * declared in other workspace files.
+   *
+   * @param {vscode.TextDocument} document
+   * @param {vscode.Range} range - The typed part of the name, to replace
+   * @returns {Promise<vscode.CompletionItem[]>}
+   */
+  async function moduleItems(document, range) {
+    /** @type {Map<string, vscode.CompletionItem>} */
+    const items = new Map();
+    for (const { name } of getModuleDeclarations(document)) {
+      const item = new vscode.CompletionItem({ label: name, description: "this file" }, vscode.CompletionItemKind.Module);
+      item.sortText = `0_${name}`;
+      item.range = range;
+      items.set(name.toLowerCase(), item);
+    }
+    for (const { name, uri } of await listWorkspaceModules()) {
+      if (items.has(name.toLowerCase()) || uri.toString() === document.uri.toString()) continue;
+      const item = new vscode.CompletionItem({ label: name, description: vscode.workspace.asRelativePath(uri) }, vscode.CompletionItemKind.Module);
+      item.sortText = `1_${name}`;
+      item.range = range;
+      items.set(name.toLowerCase(), item);
+    }
+    return [...items.values()];
+  }
 
   return [scalarCompletionProvider, vectorCompletionProvider, mapCompletionProvider, operationCompletionProvider];
 }

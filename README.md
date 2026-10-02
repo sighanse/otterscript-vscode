@@ -21,8 +21,8 @@ This extension started as a learning project while implementing [custom webhook 
 - Diagnostics for common mistakes (see [the list of checks](#turning-individual-diagnostics-off)) — also for `$` expressions in a text template's literal output, such as `$ToJson(...)` in a webhook body
 - Adaptive Card checks, triggered by a literal `"type": "AdaptiveCard"` object in a template: unknown types, values a property doesn't allow (`"weight": "bold"`), elements or properties newer than the card's `"version"`, and Teams webhook mistakes such as a wrong `"contentType"` or `Action.Submit`. Based on the Adaptive Card 1.6 schema plus Teams-only elements; best-effort, not a full schema validation
 - Quick fixes, plus a **Fix All Issues** command (`Ctrl+Shift+Alt+F`); fixes that would cause a new problem are left to the lightbulb
-- Module navigation: Go to Definition (F12), Find All References (Shift+F12), CodeLens reference counts, Outline and breadcrumbs, and Go to Symbol in Workspace (`Ctrl+T`)
-- Highlight all occurrences of a variable (`$x`, `@list`, `%map`, `${my var}`) or module, with declarations and assignments marked as writes
+- Module navigation: Go to Definition (F12), Find All References (Shift+F12), CodeLens reference counts, Outline and breadcrumbs, and Go to Symbol in Workspace (`Ctrl+T`); completion of module names after `call`, from this file and the rest of the workspace
+- Variables: completion of the ones the file uses, Go to Definition (F12) to where they're assigned, and highlighting all occurrences of a variable (`$x`, `@list`, `%map`, `${my var}`) or module, with declarations and assignments marked as writes
 - Code folding via `#region` / `#endregion` and block structure
 - Snippets for common patterns, including `teamscard`: a complete Teams webhook body with an Adaptive Card
 

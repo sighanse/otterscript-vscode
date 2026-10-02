@@ -31,6 +31,22 @@ describe("navigation and highlighting (main.otter)", () => {
     assert.equal(range.start.line, declarationLine());
   });
 
+  it("goes to a variable's assignments, and nowhere for a variable that is only read", async () => {
+    const source = await openContent("set $count = 1;\nset $count = 2;\nLog-Information $count $PackageName;\n");
+    /** @type {(vscode.Location | vscode.LocationLink)[]} */
+    const results = await vscode.commands.executeCommand(
+      "vscode.executeDefinitionProvider", source.uri, positionOf(source, "Information $count", 14)
+    );
+    const lines = results.map((l) => ("targetRange" in l ? l.targetRange : l.range).start.line).sort();
+    assert.deepEqual(lines, [0, 1]);
+
+    /** @type {unknown[]} */
+    const none = await vscode.commands.executeCommand(
+      "vscode.executeDefinitionProvider", source.uri, positionOf(source, "$PackageName", 2)
+    );
+    assert.deepEqual(none, []);
+  });
+
   it("finds a module's declaration and both calls", async () => {
     /** @type {vscode.Location[]} */
     const references = await vscode.commands.executeCommand(

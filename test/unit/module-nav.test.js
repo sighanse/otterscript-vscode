@@ -24,8 +24,19 @@ const {
   findModuleDeclarationRange,
   getModuleCallReferencesByName,
   clearDocumentCaches,
+  getDocumentVariables,
+  getVariableAt,
   getVariableOccurrences,
 } = require("../../src/helpers.js");
+const { Position } = require("../vscode-stub");
+/**
+ * A stub Position, typed loosely so it can stand in for vscode's.
+ *
+ * @param {number} line
+ * @param {number} character
+ * @returns {any}
+ */
+const pos = (line, character) => new Position(line, character);
 
 /**
  * A fake `vscode.TextDocument` (see fake-document.js), each with its own URI.
@@ -167,6 +178,36 @@ describe("module info cache", () => {
 // ============================================================
 // getVariableOccurrences (per-version cache of the variable index)
 // ============================================================
+
+describe("getVariableAt", () => {
+  it("returns the variable under the cursor with all its occurrences", () => {
+    const doc = makeDoc("set $count = 1;\nLog $count;");
+    const at = getVariableAt(doc, pos(1, 6));
+    assert.ok(at?.isReference);
+    assert.equal(at.name, "count");
+    assert.deepEqual(at.occurrences.map((o) => [o.line, o.write]), [[0, true], [1, false]]);
+  });
+
+  it("marks a token that isn't a real reference, and returns null away from any variable", () => {
+    const doc = makeDoc("# $count in a comment\nLog x;");
+    assert.equal(getVariableAt(doc, pos(0, 4))?.isReference, false);
+    assert.equal(getVariableAt(doc, pos(1, 1)), null);
+  });
+});
+
+describe("getDocumentVariables", () => {
+  it("lists each variable of a sigil once, named as first assigned", () => {
+    const doc = makeDoc("set $MyVar = 1;\nLog $myvar;\nset @list = @(1);\nforeach %item in @maps { Log $(%item.x); }");
+    const scalars = getDocumentVariables(doc, "$");
+    assert.deepEqual(scalars.map((v) => [v.name, v.assigned, v.line]), [["MyVar", true, 0]]);
+    assert.deepEqual(getDocumentVariables(doc, "@").map((v) => v.name).sort(), ["list", "maps"]);
+    assert.deepEqual(getDocumentVariables(doc, "%").map((v) => [v.name, v.assigned]), [["item", true]]);
+  });
+
+  it("keeps a braced name's spaces", () => {
+    assert.deepEqual(getDocumentVariables(makeDoc("set ${my var} = 1;"), "$").map((v) => v.name), ["my var"]);
+  });
+});
 
 describe("getVariableOccurrences", () => {
   it("reuses the index while the document version is unchanged", () => {

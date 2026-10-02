@@ -55,6 +55,24 @@ function makeDocument(text, options = {}) {
     getText: (range) => (range ? text.slice(offsetAt(range.start), offsetAt(range.end)) : text),
     /** @param {number} i */
     lineAt: (i) => ({ text: lines[i], range: new Range(new Position(i, 0), new Position(i, lines[i].length)) }),
+    /**
+     * Like VS Code's: the match of `regex` on the position's line that
+     * contains the position (touching either end counts).
+     *
+     * @param {{ line: number, character: number }} position
+     * @param {RegExp} regex
+     * @returns {any} A stub Range, or undefined
+     */
+    getWordRangeAtPosition: (position, regex) => {
+      const global = new RegExp(regex.source, regex.flags.includes("g") ? regex.flags : regex.flags + "g");
+      for (const m of lines[position.line].matchAll(global)) {
+        const start = /** @type {number} */ (m.index);
+        if (start <= position.character && position.character <= start + m[0].length) {
+          return new Range(new Position(position.line, start), new Position(position.line, start + m[0].length));
+        }
+      }
+      return undefined;
+    },
   };
 }
 

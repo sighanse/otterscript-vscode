@@ -654,13 +654,73 @@ const lineStartStateCache = new Map();
  * @returns {import("./scanner").VariableOccurrence[]}
  */
 function getVariableOccurrences(document, sigil, name) {
+  return getVariableIndex(document).get(variableKey(sigil, name)) ?? [];
+}
+
+/**
+ * The document's variable index ({@link indexVariableOccurrences}), from the
+ * per-version cache.
+ *
+ * @param {vscode.TextDocument} document
+ * @returns {Map<string, import("./scanner").VariableOccurrence[]>}
+ */
+function getVariableIndex(document) {
   const cacheKey = document.uri.toString();
   let cached = variableIndexCache.get(cacheKey);
   if (!cached || cached.version !== document.version) {
     cached = { version: document.version, index: indexVariableOccurrences(document.getText()) };
     variableIndexCache.set(cacheKey, cached);
   }
-  return cached.index.get(variableKey(sigil, name)) ?? [];
+  return cached.index;
+}
+
+/**
+ * A `$name` / `@name` / `%name` token, or its braced `${name}` form (whose
+ * name may contain spaces), per Inedo's variable-name rules.
+ */
+const VARIABLE_AT_CURSOR_REGEX = /[$@%](?:\{[A-Za-z][A-Za-z0-9_ -]*\}|[A-Za-z](?:[A-Za-z0-9_-]*[A-Za-z0-9])?)/;
+
+/**
+ * The variable token under the cursor, with every occurrence of that
+ * variable in the document. `isReference` is false when the token isn't a
+ * real reference -- in a comment or single-quoted string, or a function
+ * call's name -- so callers can stop there instead of trying other symbols.
+ * Used by highlighting and Go to Definition.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Position} position
+ * @returns {{ sigil: string, name: string, range: vscode.Range, isReference: boolean, occurrences: import("./scanner").VariableOccurrence[] } | null}
+ *   null when no variable token is under the cursor
+ */
+function getVariableAt(document, position) {
+  const range = document.getWordRangeAtPosition(position, VARIABLE_AT_CURSOR_REGEX);
+  if (!range) return null;
+  const token = document.getText(range);
+  const name = token[1] === "{" ? token.slice(2, -1) : token.slice(1);
+  const occurrences = getVariableOccurrences(document, token[0], name);
+  const isReference = occurrences.some((o) => o.line === range.start.line && o.character === range.start.character);
+  return { sigil: token[0], name, range, isReference, occurrences };
+}
+
+/**
+ * The distinct variables of one sigil used in a document, for completion:
+ * each with the name as first written (the first assignment, else the first
+ * use), whether the document assigns it, and that line.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {string} sigil - `$`, `@`, or `%`
+ * @returns {{ name: string, assigned: boolean, line: number, occurrences: import("./scanner").VariableOccurrence[] }[]}
+ */
+function getDocumentVariables(document, sigil) {
+  const result = [];
+  for (const [key, occurrences] of getVariableIndex(document)) {
+    if (key[0] !== sigil || occurrences.length === 0) continue;
+    const first = occurrences.find((o) => o.write) ?? occurrences[0];
+    const token = document.lineAt(first.line).text.slice(first.character, first.character + first.length);
+    const name = token[1] === "{" ? token.slice(2, -1) : token.slice(1);
+    result.push({ name, assigned: first.write, line: first.line, occurrences });
+  }
+  return result;
 }
 
 /**
@@ -1643,6 +1703,8 @@ module.exports = {
   getModuleDeclarations,
   findModuleDeclarations,
   getModuleNameAt,
+  getDocumentVariables,
+  getVariableAt,
   getVariableOccurrences,
   createCodeScanState,
   createTemplateScanState,
