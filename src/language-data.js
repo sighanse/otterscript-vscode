@@ -58,6 +58,12 @@
  *     Parameter names are lowerCamelCase descriptive labels, no type tokens, no
  *     trailing `;`; `...` marks a repeating tail argument.
  *   - Runtime values with no call syntax (`$WorkingDirectory`, `@AllRoles`): bare name.
+ * @property {{ product: string, signature: string }[]=} overloads The same
+ *   function's form in another Inedo product, when it differs from `signature`
+ *   -- e.g. ProGet's notifier `$PackageHash(format, algorithm)` (the
+ *   `signature`) vs BuildMaster's `$PackageHash(packageName, [sourceName])`.
+ *   Shown in hover; the too-many-arguments check allows the largest count of
+ *   any form.
  * @property {string=} snippet VS Code snippet insertion text
  * @property {string=} documentation Extended Markdown documentation. Do not repeat
  *   `description` verbatim as the first line — hover renders both.
@@ -2479,20 +2485,21 @@ $upper = $ToUpper("Hello World");
   "Trim": {
     namespace: null,
     name: "$Trim",
-    signature: "$Trim(text)",
+    signature: "$Trim(text, ...)",
     snippet: "\\$Trim(${1:text})",
-    description: "Removes leading and trailing whitespace from a string.",
+    description: "Returns a string with leading and trailing whitespace removed, or optionally a set of specified characters.",
     documentation: `
-Removes all leading and trailing whitespace characters from the specified string.
-
 **Parameters:**
-- \`text\` - The string to trim
+- \`text\` - The input string.
+- \`...\` - (Optional) One or more characters to trim instead of whitespace.
 
 **Returns:** Trimmed string
 
 **Example:**
 \`\`\`otterscript
 $trimmed = $Trim("  hello  ");
+# Result: "hello"
+$trimmed = $Trim("--hello--", "-");
 # Result: "hello"
 \`\`\`
 `,
@@ -2629,49 +2636,6 @@ $customUtc = $DateUtc("yyyy-MM-dd HH:mm:ss");
 # Result: "2024-04-01 12:30:00"
 \`\`\`
 `
-  },
-  // Encoding Functions
-  "Base64Encode": {
-    namespace: null,
-    name: "$Base64Encode",
-    signature: "$Base64Encode(text)",
-    snippet: "\\$Base64Encode(${1:text})",
-    description: "Encodes a string to Base64 format.",
-    documentation: `
-Encodes the specified string to a Base64-encoded string.
-
-**Parameters:**
-- \`text\` - The string to encode
-
-**Returns:** Base64-encoded string
-
-**Example:**
-\`\`\`otterscript
-$encoded = $Base64Encode("Hello World");
-# Result: "SGVsbG8gV29ybGQ="
-\`\`\`
-`,
-  },
-  "Base64Decode": {
-    namespace: null,
-    name: "$Base64Decode",
-    signature: "$Base64Decode(base64Text)",
-    snippet: "\\$Base64Decode(${1:base64Text})",
-    description: "Decodes a Base64 string to plain text.",
-    documentation: `
-Decodes a Base64-encoded string back to its original plain text.
-
-**Parameters:**
-- \`base64Text\` - The Base64-encoded string to decode
-
-**Returns:** Decoded plain text string
-
-**Example:**
-\`\`\`otterscript
-$decoded = $Base64Decode("SGVsbG8gV29ybGQ=");
-# Result: "Hello World"
-\`\`\`
-`,
   },
   // JSON Functions
   "FromJson": {
@@ -3144,22 +3108,25 @@ Exec sometool.exe --host $host;
   "PackageHash": {
     namespace: null,
     name: "$PackageHash",
-    signature: "$PackageHash(packageName, [sourceName])",
-    snippet: "\\$PackageHash(\"${1:packageName}\")",
-    description: "Returns the hex-encoded SHA1 hash of a package's current version.",
+    signature: "$PackageHash([format], [algorithm])",
+    overloads: [{ product: "BuildMaster", signature: "$PackageHash(packageName, [sourceName])" }],
+    snippet: "\\$PackageHash",
+    description: "Returns the hash of a package.",
     documentation: `
-Gets the hex-encoded SHA1 hash of the version of \`packageName\` associated
-with the current build. There is no format/algorithm choice — the hash is
-always hex-encoded SHA1.
+The two products define this differently:
 
-**Parameters:**
-- \`packageName\` - The package name
-- \`sourceName\` - (Optional) The package source to look in
-
-**Returns:** Hex-encoded SHA1 hash as string
+- **ProGet** (notifier and webhook content): the hash of the package the event
+  is about. Used bare (\`$PackageHash\`) or with an optional format and
+  algorithm, \`$PackageHash(format, algorithm)\`; ProGet lists the accepted
+  values under Admin > Notifications & Webhooks > Variables & Expressions.
+- **BuildMaster**: the hex-encoded SHA1 hash of the version of \`packageName\`
+  associated with the current build, optionally looked up in \`sourceName\`.
 
 **Example:**
 \`\`\`otterscript
+# ProGet webhook body
+"hash": "$PackageHash"
+# BuildMaster
 $hash = $PackageHash("MyPackage");
 \`\`\`
 `
@@ -3168,22 +3135,28 @@ $hash = $PackageHash("MyPackage");
     namespace: null,
     name: "$PackageProperty",
     signature: "$PackageProperty(name, [default])",
+    overloads: [{ product: "BuildMaster", signature: "$PackageProperty(packageName, packageProperty, [sourceName])" }],
     snippet: "\\$PackageProperty(\"${1:propertyName}\", \"${2:defaultValue}\")",
-    description: "Returns the value of any property of the package currently in scope.",
+    description: "Returns the value of a package property.",
     documentation: `
-Returns the value of any property of the package currently in scope or the default value. Note an error will occur if a default is not specified and the package does not have that property.
+The two products define this differently:
 
-**Parameters:**
-- \`name\` - The property name to retrieve
-- \`default\` - (Optional) Value to return if the property doesn't exist. Omitting
-  it is only safe when the property is guaranteed to be set — otherwise the call
-  throws rather than returning an empty value; see the note above.
+- **ProGet** (notifier and webhook content): the value of any property of the
+  package currently in scope, or \`default\`. An error occurs if no default is
+  given and the package doesn't have that property, so omit \`default\` only
+  when the property is guaranteed to be set.
+- **BuildMaster**: the value of \`packageProperty\` from the metadata of the
+  version of \`packageName\` associated with the current build, optionally
+  looked up in \`sourceName\`.
 
 **Returns:** Property value as string
 
 **Example:**
 \`\`\`otterscript
+# ProGet
 $description = $PackageProperty("myPropertyName", "No property defined");
+# BuildMaster
+$description = $PackageProperty("MyPackage", "description");
 \`\`\`
 `
   },

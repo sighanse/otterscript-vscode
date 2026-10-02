@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- `$Trim` accepts the characters to trim (`$Trim($x, "-")`), as `$TrimStart` and `$TrimEnd` already did; it was flagged as too many arguments
+- `$PackageHash` and `$PackageProperty` mixed ProGet's and BuildMaster's forms. Hover now shows ProGet's (`$PackageHash([format], [algorithm])`, `$PackageProperty(name, [default])`) with BuildMaster's below it, and a three-argument BuildMaster `$PackageProperty(...)` is no longer flagged as too many arguments
+
+### Removed
+
+- `$Base64Encode` and `$Base64Decode`, which don't exist in Inedo's products; using them is now flagged as an unknown function
+
 ## [0.5.0] - 2026-10-01
 
 ### Added

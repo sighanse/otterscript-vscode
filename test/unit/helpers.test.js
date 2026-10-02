@@ -270,6 +270,18 @@ describe("computeFoldingRanges", () => {
 // buildHoverMarkdown — namespace line
 // ============================================================
 
+describe("buildHoverMarkdown (other products' forms)", () => {
+  it("lists each overload under its product, after the signature", () => {
+    const md = buildHoverMarkdown({
+      name: "$PackageHash",
+      signature: "$PackageHash([format], [algorithm])",
+      overloads: [{ product: "BuildMaster", signature: "$PackageHash(packageName, [sourceName])" }],
+    });
+    const value = /** @type {any} */ (md).value;
+    assert.ok(value.indexOf("**Signature:** `$PackageHash([format], [algorithm])`") < value.indexOf("**In BuildMaster:** `$PackageHash(packageName, [sourceName])`"));
+  });
+});
+
 describe("buildHoverMarkdown (namespace provenance)", () => {
   it("adds a **Namespace:** line for an entry that has one", () => {
     const md = buildHoverMarkdown({
@@ -438,6 +450,13 @@ describe("validateDocs", () => {
     const { errors, warnings } = validateDocs("t", { X: good });
     assert.deepEqual(errors, []);
     assert.deepEqual(warnings, []);
+  });
+
+  it("checks the shape of 'overloads'", () => {
+    const ok = validateDocs("t", { X: { ...good, overloads: [{ product: "BuildMaster", signature: "$X(a)" }] } });
+    assert.deepEqual(ok.warnings, []);
+    const bad = validateDocs("t", { X: { ...good, overloads: [{ product: "BuildMaster" }] } });
+    assert.equal(bad.warnings.length, 1);
   });
 
   it("errors on a missing name / description", () => {

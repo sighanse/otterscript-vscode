@@ -344,6 +344,12 @@ function validateDocs(label, docsTable) {
     if (doc.documentation && typeof doc.documentation !== "string") {
       warnings.push(`${label}.${key} 'documentation' must be a string`);
     }
+
+    // Optional Field: 'overloads' -- other products' forms of the function
+    if (doc.overloads !== undefined && (!Array.isArray(doc.overloads) ||
+        doc.overloads.some((/** @type {any} */ o) => typeof o?.product !== "string" || typeof o?.signature !== "string"))) {
+      warnings.push(`${label}.${key} 'overloads' must be an array of { product, signature } strings`);
+    }
   }
 
   // Log errors
@@ -781,9 +787,11 @@ function getLineStartScanState(document, line) {
  * This creates the formatted tooltip content shown when hovering over
  * symbols, keywords, operations, and syntax elements.
  *
- * @param {Readonly<{ name: string, signature?: string, description?: string, documentation?: string, namespace?: string | null }>} doc
+ * @param {Readonly<{ name: string, signature?: string, overloads?: { product: string, signature: string }[], description?: string, documentation?: string, namespace?: string | null }>} doc
  *   - name: Required - Display name (e.g., "$ToJson")
  *   - signature: Optional - Function signature (monospace formatted)
+ *   - overloads: Optional - The function's form in other Inedo products, each
+ *     shown as "**In <product>:** `signature`"
  *   - description: Optional - Short description
  *   - documentation: Optional - Extended Markdown documentation
  *   - namespace: Optional - Owning OtterScript namespace (shown as provenance)
@@ -806,6 +814,10 @@ function buildHoverMarkdown(doc) {
   // Signature (monospace for code clarity)
   if (doc.signature) {
     md.appendMarkdown(`**Signature:** \`${doc.signature}\`\n\n`);
+  }
+  // The same function's form in other Inedo products, when it differs
+  for (const overload of doc.overloads ?? []) {
+    md.appendMarkdown(`**In ${overload.product}:** \`${overload.signature}\`\n\n`);
   }
 
   // Namespace provenance -- the extension/namespace this construct belongs to.
@@ -1091,6 +1103,32 @@ function parseFixedMaxArity(signature) {
 }
 
 /**
+ * The signature fields the argument-count check reads from a docs entry.
+ * @typedef {{ signature?: string, overloads?: { product: string, signature: string }[] }} FunctionSignatures
+ */
+
+/**
+ * The most arguments any documented form of a function takes: its
+ * `signature` and its other products' `overloads` (e.g. BuildMaster's
+ * three-argument `$PackageProperty` next to ProGet's two-argument one). `null`
+ * when any form is not fixed-arity, so a call is never flagged for using a
+ * form that is valid somewhere.
+ *
+ * @param {FunctionSignatures} doc
+ * @returns {number | null}
+ */
+function maxFixedArity(doc) {
+  let max = 0;
+  for (const signature of [doc.signature, ...(doc.overloads ?? []).map((o) => o.signature)]) {
+    if (!signature) continue;
+    const arity = parseFixedMaxArity(signature);
+    if (arity === null) return null;
+    max = Math.max(max, arity);
+  }
+  return max;
+}
+
+/**
  * Finds calls to known scalar/vector/map functions that pass more arguments than
  * their documented signature allows, given text already masked by
  * {@link maskNonCodeSpans} (and, for template-aware documents,
@@ -1104,9 +1142,9 @@ function parseFixedMaxArity(signature) {
  *
  * @param {vscode.TextDocument} document - Used only for `positionAt()`.
  * @param {string} maskedText - Full document text, already masked.
- * @param {Record<string, {signature?: string}>} scalarFunctionDocs
- * @param {Record<string, {signature?: string}>} vectorFunctionDocs
- * @param {Record<string, {signature?: string}>} [mapFunctionDocs] - `%Name(...)` functions
+ * @param {Record<string, FunctionSignatures>} scalarFunctionDocs
+ * @param {Record<string, FunctionSignatures>} vectorFunctionDocs
+ * @param {Record<string, FunctionSignatures>} [mapFunctionDocs] - `%Name(...)` functions
  * @returns {vscode.Diagnostic[]}
  */
 function findArgumentCountDiagnosticsFromMasked(document, maskedText, scalarFunctionDocs, vectorFunctionDocs, mapFunctionDocs = {}) {
@@ -1134,16 +1172,16 @@ function findArgumentCountDiagnosticsFromMasked(document, maskedText, scalarFunc
 
   /**
    * @param {RegExp} nameRegex - Global regex; group 1 is the function name
-   * @param {Record<string, {signature?: string}>} docs
+   * @param {Record<string, FunctionSignatures>} docs
    * @param {string} sigil - `"$"`, `"@"`, or `"%"`, for the diagnostic message
    */
   function scan(nameRegex, docs, sigil) {
     for (const match of maskedText.matchAll(nameRegex)) {
       const name = match[1];
-      const doc = docs[name];
+      const doc = lookupOwn(docs, name);
       if (!doc?.signature) continue;
 
-      const maxArity = parseFixedMaxArity(doc.signature);
+      const maxArity = maxFixedArity(doc);
       if (maxArity === null) continue;
 
       const openParenIndex = /** @type {number} */ (match.index) + match[0].length - 1;

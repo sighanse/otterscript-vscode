@@ -100,7 +100,7 @@ function activate(context) {
 
   // -- Validate all documentation sources (intentionally ignore return value)
   for (const [label, table] of Object.entries({
-    scalarFunctionDocs,  // $ToJson, $Base64Encode, etc.
+    scalarFunctionDocs,  // $ToJson, $Trim, etc.
     operationDocs,       // Log-Information, Log-Warning, Log-Error, etc.
     vectorFunctionDocs,  // @Split, @Join, etc.
     mapFunctionDocs,     // %FromJson, %ListItem

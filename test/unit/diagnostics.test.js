@@ -194,6 +194,23 @@ describe("updateDiagnostics — unknown vector function", () => {
 // too many arguments
 // ============================================================
 
+describe("updateDiagnostics — too many arguments (Inedo's arity)", () => {
+  it("accepts $Trim's optional characters to trim", () => {
+    assert.deepEqual(only('$r = $Trim($a, "-", "_");', "too-many-arguments"), []);
+  });
+
+  it("allows the largest count of any product's form, and flags beyond it", () => {
+    // ProGet takes (name, [default]); BuildMaster (packageName, packageProperty, [sourceName]).
+    assert.deepEqual(only("$r = $PackageProperty($a, $b, $c);", "too-many-arguments"), []);
+    assert.equal(only("$r = $PackageProperty($a, $b, $c, $d);", "too-many-arguments").length, 1);
+  });
+
+  it("no longer knows $Base64Encode / $Base64Decode, which Inedo doesn't have", () => {
+    assert.equal(only("$r = $Base64Encode($a);", "unknown-scalar-function").length, 1);
+    assert.equal(only("$r = $Base64Decode($a);", "unknown-scalar-function").length, 1);
+  });
+});
+
 describe("updateDiagnostics — too many arguments", () => {
   it("flags a fixed-arity scalar function called with an extra argument", () => {
     const [d] = only('$r = $ToJson($a, $b);', "too-many-arguments");
