@@ -86,6 +86,12 @@
  * `Files`, `HTTP`, `Network`, `ProGet`, `UPack`, `Otter`; there is no
  * `InedoCore::` prefix.
  *
+ * Not included, because no public source declares them: `DB::`, `Packages::`
+ * and `System::`, which only BuildMaster's generated operation reference
+ * shows (`DB::Backup-Database`, `Packages::Attach-Package`,
+ * `System::Backup-Application` -- BuildMaster's own, closed-source
+ * operations).
+ *
  * Single source of truth for `validateDocs`, the grammar/language-data sync
  * check, and any namespace-aware editor feature.
  *
@@ -98,27 +104,42 @@ const NAMESPACES = Object.freeze(
   new Set([
     // -- Built-in engine namespace (optional prefix for any unqualified name)
     "Core",
-    // -- InedoCore extension's declared [ScriptNamespace] tokens
-    "Files",
-    "HTTP",
-    "Network",
-    "ProGet",
-    "UPack",
-    "Otter",
-    // -- Windows extension
-    "Windows",
-    "IIS",
-    "Firewall",
-    "DotNet",
-    // -- Scripting extension (assembly-level [ScriptNamespace("Scripting")])
-    "Scripting",
-    "PowerShell",
-    "Linux",
-    // -- Other first-party extensions
-    "Docker",
-    "Python",
-    "Pip",
-    "Git",
+    // -- Every [ScriptNamespace] declared in Inedo's public extensions
+    //    (github.com/Inedo/inedox-*, all 42 scanned 2026-10-02), by repository.
+    //    Names are matched case-insensitively (inedox-scripting also declares
+    //    "python").
+    "Files", "HTTP", "Network", "ProGet", "UPack", "Otter", // inedox-inedocore
+    "Windows", "IIS", "Firewall",                           // inedox-windows
+    "DotNet", "DevEnv", "MSBuild", "NuGet", "WindowsSDK",   // inedox-dotnet (DotNet/MSBuild also inedox-windowssdk)
+    "Scripting", "PowerShell", "Linux",                     // inedox-scripting (Linux also inedox-linux)
+    "Python", "Pip",                                        // inedox-python
+    "Artifactory",                                          // inedox-artifactory
+    "AWS",                                                  // inedox-aws
+    "Azure",                                                // inedox-azure
+    "AzureDevOps",                                          // inedox-azuredevops
+    "Bitbucket",                                            // inedox-bitbucket
+    "Chocolatey",                                           // inedox-chocolatey
+    "Docker",                                               // inedox-docker
+    "FTP",                                                  // inedox-ftp
+    "Git",                                                  // inedox-git
+    "Gitea",                                                // inedox-gitea
+    "GitHub",                                               // inedox-github
+    "GitLab",                                               // inedox-gitlab
+    "GoogleCloud",                                          // inedox-googlecloud
+    "Java",                                                 // inedox-java
+    "Jenkins",                                              // inedox-jenkins
+    "Jira",                                                 // inedox-jira
+    "Kubernetes",                                           // inedox-kubernetes
+    "Loupe",                                                // inedox-loupe
+    "Mercurial",                                            // inedox-mercurial
+    "nginx",                                                // inedox-nginx
+    "npm",                                                  // inedox-node
+    "NUnit",                                                // inedox-nunit
+    "PHP", "Composer",                                      // inedox-php
+    "SqlServer",                                            // inedox-sqlserver
+    "TeamCity",                                             // inedox-teamcity
+    "TFS",                                                  // inedox-tfs
+    "YouTrack",                                             // inedox-youtrack
   ])
 );
 

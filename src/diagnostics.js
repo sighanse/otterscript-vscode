@@ -37,6 +37,11 @@ const { findAdaptiveCardDiagnostics } = require("./adaptivecard");
  *   function docs, keyed by name; used only for the argument-count check
  * @property {Set<string>} knownOperations - Known operation names
  * @property {ReadonlySet<string>} knownNamespaces - Valid OtterScript namespace tokens
+ * @property {ReadonlySet<string>} [operationNamespaces] - The namespaces whose
+ *   operations are documented (`Core` for the built-ins). A dashed name behind
+ *   any other known namespace (`GitHub::Ensure-Release`) isn't flagged as an
+ *   unknown operation: its extension's operations simply aren't documented.
+ *   When omitted, every known namespace counts as documented.
  * @property {() => RegExp} scalarCallRegex - Regex factory for scalar function calls
  * @property {() => RegExp} vectorCallRegex - Regex factory for vector function calls
  * @property {() => RegExp} operationCallRegex - Regex factory for operation-like tokens
@@ -377,6 +382,7 @@ function updateDiagnostics(document, collection, ctx) {
     mapFunctionDocs = {},
     knownOperations,
     knownNamespaces,
+    operationNamespaces,
     scalarCallRegex,
     vectorCallRegex,
     operationCallRegex,
@@ -387,6 +393,9 @@ function updateDiagnostics(document, collection, ctx) {
   // Lower-cased view of the namespace allowlist for lenient matching (Inedo
   // resolves namespaces case-insensitively; only genuinely unknown tokens flag).
   const knownNamespacesLower = new Set([...knownNamespaces].map((n) => n.toLowerCase()));
+  const operationNamespacesLower = operationNamespaces
+    ? new Set([...operationNamespaces].map((n) => n.toLowerCase()))
+    : knownNamespacesLower;
 
   // -- Symbol-balance state (text is pre-masked by shared scanner helpers)
   const symbols = [
@@ -513,6 +522,8 @@ function updateDiagnostics(document, collection, ctx) {
       // also report the operation name as unknown.
       const qualifier = before.match(/([A-Za-z][A-Za-z0-9]*)::$/)?.[1];
       if (qualifier && !knownNamespacesLower.has(qualifier.toLowerCase())) continue;
+      // A known namespace whose operations aren't documented: nothing to compare against.
+      if (qualifier && !operationNamespacesLower.has(qualifier.toLowerCase())) continue;
 
       const statementStart = qualifier ? before.slice(0, -(qualifier.length + 2)) : before;
       // A `{` right after a sigil opens a braced variable (`${my-var}`), not a block.

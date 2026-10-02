@@ -38,25 +38,27 @@ const ctx = {
  *
  * @param {string} source
  * @param {string} [languageId]
+ * @param {object} [extraCtx] - Added to the diagnostics context
  * @returns {any[]}
  */
-function diagnose(source, languageId = "otterscript") {
+function diagnose(source, languageId = "otterscript", extraCtx = {}) {
   const document = makeDocument(source, { languageId });
   /** @type {any[]} */
   let collected = [];
   const collection = /** @type {any} */ ({
     set: (/** @type {unknown} */ _uri, /** @type {any[]} */ issues) => { collected = issues; },
   });
-  updateDiagnostics(document, collection, ctx);
+  updateDiagnostics(document, collection, { ...ctx, ...extraCtx });
   return collected;
 }
 
 /**
  * @param {string} source
  * @param {string} code
+ * @param {object} [extraCtx] - Added to the diagnostics context
  * @returns {any[]}
  */
-const only = (source, code) => diagnose(source).filter((d) => d.code === code);
+const only = (source, code, extraCtx) => diagnose(source, "otterscript", extraCtx).filter((d) => d.code === code);
 
 // ============================================================
 // languageId guard
@@ -455,6 +457,24 @@ describe("updateDiagnostics — masking & cross-line state", () => {
 describe("updateDiagnostics — unknown namespace", () => {
   /** @param {string} source */
   const namespaceIssues = (source) => only(source, "unknown-namespace");
+
+  it("knows every namespace Inedo's public extensions declare, in any case", () => {
+    for (const ns of ["GitHub", "jira", "NuGet", "MSBuild", "WindowsSDK", "DevEnv", "SqlServer", "Kubernetes", "AzureDevOps", "npm"]) {
+      assert.deepEqual(namespaceIssues(`${ns}::Do-Thing;`), [], ns);
+    }
+  });
+
+  it("still flags prefixes no public source declares (BuildMaster's DB::, InedoCore::)", () => {
+    assert.equal(namespaceIssues("DB::Backup-Database;").length, 1);
+    assert.equal(namespaceIssues("InedoCore::Sleep 5;").length, 1);
+  });
+
+  it("checks operations only under namespaces whose operations are documented", () => {
+    const documented = { operationNamespaces: new Set(["Core", "ProGet"]) };
+    assert.deepEqual(only("GitHub::Ensure-Release;", "unknown-operation", documented), []);
+    assert.equal(only("ProGet::Bogus-Op;", "unknown-operation", documented).length, 1);
+    assert.equal(only("Bogus-Op;", "unknown-operation", documented).length, 1);
+  });
 
   it("flags a qualifier whose namespace is not known", () => {
     const issues = namespaceIssues("Frobnicate::Do-Thing xyz;");

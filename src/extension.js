@@ -134,6 +134,7 @@ function activate(context) {
     mapFunctionDocs,
     knownOperations,
     knownNamespaces: NAMESPACES,
+    operationNamespaces: new Set(Object.values(operationDocs).map((doc) => doc.namespace ?? "Core")),
     scalarCallRegex: patterns.scalarCallRegex,
     vectorCallRegex: patterns.vectorCallRegex,
     operationCallRegex: patterns.operationCallRegex,
