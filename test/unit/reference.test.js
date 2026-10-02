@@ -1,7 +1,8 @@
 // @ts-check
 /**
  * @fileoverview Unit tests for the generated Inedo reference
- * (src/inedo-reference-data.js, from scripts/update-inedo-reference.js): how
+ * (src/inedo-reference-data.js, from scripts/update-inedo-reference.js,
+ * expanded by src/inedo-reference.js): how
  * language-data.js merges it under the hand-written tables, and the grammar
  * lists generated from the result (scripts/check-language-sync.js --write).
  *
@@ -16,11 +17,19 @@ const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
 const data = require("../../src/language-data.js");
-const reference = require("../../src/inedo-reference-data.js");
+const { expandReference } = require("../../src/inedo-reference.js");
+const reference = expandReference(require("../../src/inedo-reference-data.js"));
+const { buildReference } = require("../../scripts/update-inedo-reference.js");
 const { isAvailableIn } = require("../../src/helpers.js");
 const { validateDocs } = require("./validate-docs");
 
 describe("generated Inedo reference, merged into language-data", () => {
+  it("expands the compact generated file into exactly the entries built from the snapshot", () => {
+    const snapshot = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "..", "scripts", "inedo-reference.json"), "utf8"));
+    const declared = new Set([...data.NAMESPACES].map((n) => n.toLowerCase()));
+    assert.deepStrictEqual(reference, buildReference(snapshot, declared).tables);
+  });
+
   it("adds functions and operations the hand-written tables don't have", () => {
     assert.ok(data.operationDocs["Extract-ZipFile"], "Extract-ZipFile");
     assert.ok(data.operationDocs["Ensure-DscResource"], "Ensure-DscResource");

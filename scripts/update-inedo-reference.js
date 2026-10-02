@@ -31,6 +31,17 @@ const REFERENCE_URL = "https://raw.githubusercontent.com/Inedo/inedo-docs/master
 const PRODUCTS = ["Otter", "BuildMaster"];
 const SNAPSHOT_PATH = path.join(__dirname, "inedo-reference.json");
 const OUTPUT_PATH = path.join(__dirname, "..", "src", "inedo-reference-data.js");
+const {
+  PRODUCT_LETTERS,
+  functionSignature,
+  operationSignature,
+  operationSnippet,
+  referenceDocumentation,
+} = require("../src/inedo-reference");
+
+/** @typedef {import("../src/inedo-reference").ReferenceDoc} ReferenceDoc */
+/** @typedef {import("../src/inedo-reference").ReferenceParam} ReferenceParam */
+/** @typedef {import("../src/inedo-reference").CompactEntry} CompactEntry */
 
 // -----------------------------------------------------------------------------
 // NAMESPACE CORRECTIONS -- hand-maintained
@@ -208,21 +219,6 @@ async function fetchSnapshot() {
 // -----------------------------------------------------------------------------
 
 /**
- * @typedef {{
- *   namespace: string | null,
- *   name: string,
- *   signature: string,
- *   overloads?: { product: string, signature: string }[],
- *   snippet?: string,
- *   description: string,
- *   documentation: string,
- *   products: string[],
- *   anySigil?: true,
- *   params?: { name: string, required: boolean, description?: string, format?: string }[]
- * }} GeneratedDoc
- */
-
-/**
  * @param {string} usage
  * @returns {string} The usage on one line, `Name(A, B)` style
  */
@@ -243,79 +239,71 @@ function operationNamespace(name, usage, declared) {
 }
 
 /**
- * Hover documentation: a function's parameters (an operation's are in its
- * `params`, which hover lists), then where the entry comes from.
+ * An argument as the docs entries hold it: the description left out when it
+ * only repeats the name.
  *
- * @param {RefEntry} entry
- * @param {string[]} products - Every product that has the function/operation
- * @returns {string}
+ * @param {RefParam} param
+ * @returns {ReferenceParam}
  */
-function documentationFor(entry, products) {
-  const lines = [];
-  // An operation's arguments are in its `params`, which hover lists.
-  if (entry.kind === "function" && entry.params.length) {
-    lines.push("**Parameters:**");
-    for (const p of entry.params) {
-      const flags = [p.required ? "required" : "optional", p.format].filter(Boolean).join(", ");
-      lines.push(`- \`${p.name}\` (${flags})${p.description && p.description !== p.name ? ` - ${p.description}` : ""}`);
-    }
-    lines.push("");
-  }
-  lines.push(`*From Inedo's ${products.join(" and ")} reference.*`);
-  return lines.join("\n");
-}
-
-/**
- * A completion snippet for an operation: its required named arguments, or a
- * single placeholder for the positional form (`Sleep <integer>;`).
- *
- * @param {RefEntry} entry
- * @returns {string}
- */
-function operationSnippet(entry) {
-  const required = entry.params.filter((p) => p.required && /^[A-Za-z]\w*$/.test(p.name));
-  if (/^\S+\s*\(/.test(entry.usage.replace(/^\w+::/, ""))) {
-    if (!required.length) return `${entry.name}($1);$0`;
-    return `${entry.name}(\n\t${required.map((p, i) => `${p.name}: \${${i + 1}}`).join(",\n\t")}\n);$0`;
-  }
-  return `${entry.name} \${1};$0`;
-}
+const cleanParam = ({ name, required, description, format }) => ({
+  name,
+  required,
+  ...(format ? { format } : {}),
+  ...(description && description !== name ? { description } : {}),
+});
 
 /**
  * An operation's arguments, for argument completion and hover: the first
- * product's, then any another product adds. A description that only repeats
- * the name is left out.
+ * product's, then any another product adds.
  *
  * @param {RefEntry[]} variants - The operation's pages, one per product
- * @returns {{ name: string, required: boolean, description?: string, format?: string }[]}
+ * @returns {ReferenceParam[]}
  */
 function operationParams(variants) {
-  /** @type {Map<string, { name: string, required: boolean, description?: string, format?: string }>} */
+  /** @type {Map<string, ReferenceParam>} */
   const params = new Map();
-  for (const { name, required, description, format } of variants.flatMap((v) => v.params)) {
-    if (params.has(name.toLowerCase())) continue;
-    params.set(name.toLowerCase(), {
-      name,
-      required,
-      ...(description && description !== name ? { description } : {}),
-      ...(format ? { format } : {}),
-    });
+  for (const param of variants.flatMap((v) => v.params)) {
+    if (!params.has(param.name.toLowerCase())) params.set(param.name.toLowerCase(), cleanParam(param));
   }
   return [...params.values()];
 }
 
 /**
- * Builds the four tables, keyed like the hand-written ones in
- * language-data.js (functions by bare name, operations by name). A function
- * the reference lists without a sigil (`MapAdd`, `Eval`, `FromJson`) can be
- * called with any sigil -- the sigil picks the return type -- so it goes into
- * all three function tables, marked `anySigil`.
+ * An argument list in the compact form (see CompactEntry in
+ * src/inedo-reference.js), or nothing when empty.
+ *
+ * @param {ReferenceParam[]} params
+ * @returns {{ r?: (string | number)[][] }}
+ */
+function compactParams(params) {
+  if (!params.length) return {};
+  return {
+    r: params.map((p) => {
+      const tuple = [p.name, p.required ? 1 : 0, p.format ?? "", p.description ?? ""];
+      while (tuple.length > 2 && tuple[tuple.length - 1] === "") tuple.pop();
+      return tuple;
+    }),
+  };
+}
+
+/**
+ * Builds the reference from the snapshot, twice over: `tables`, the four
+ * docs tables as language-data.js uses them (keyed like the hand-written
+ * ones: functions by bare name, operations by name), and `compact`, what
+ * src/inedo-reference-data.js stores -- which `expandReference` turns back
+ * into exactly `tables` (a unit test checks it). A function the reference
+ * lists without a sigil (`MapAdd`, `Eval`, `FromJson`) can be called with any
+ * sigil -- the sigil picks the return type -- so it goes into all three
+ * function tables, marked `anySigil`, and is stored once.
  *
  * @param {{ source: string, entries: RefEntry[] }} snapshot
  * @param {ReadonlySet<string>} declared - NAMESPACES, lower-cased
- * @returns {Record<"scalar" | "vector" | "map" | "operation", Map<string, GeneratedDoc>>}
+ * @returns {{
+ *   tables: Record<"scalarFunctionDocs" | "vectorFunctionDocs" | "mapFunctionDocs" | "operationDocs", Record<string, ReferenceDoc>>,
+ *   compact: { functions: Record<string, CompactEntry>, operations: Record<string, CompactEntry> }
+ * }}
  */
-function buildTables(snapshot, declared) {
+function buildReference(snapshot, declared) {
   /** @type {Map<string, RefEntry[]>} */
   const byName = new Map();
   for (const entry of snapshot.entries) {
@@ -323,61 +311,84 @@ function buildTables(snapshot, declared) {
     byName.set(key, [...(byName.get(key) ?? []), entry]);
   }
 
-  const tables = { scalar: new Map(), vector: new Map(), map: new Map(), operation: new Map() };
+  /** @type {Record<"scalarFunctionDocs" | "vectorFunctionDocs" | "mapFunctionDocs" | "operationDocs", Record<string, ReferenceDoc>>} */
+  const tables = { scalarFunctionDocs: {}, vectorFunctionDocs: {}, mapFunctionDocs: {}, operationDocs: {} };
+  /** @type {{ functions: Record<string, CompactEntry>, operations: Record<string, CompactEntry> }} */
+  const compact = { functions: {}, operations: {} };
+  const letters = Object.entries(PRODUCT_LETTERS);
+
   for (const [, variants] of [...byName].sort(([a], [b]) => a.localeCompare(b))) {
     // Otter first (it has most of them); other products' differing forms become overloads.
     variants.sort((a, b) => PRODUCTS.indexOf(a.products[0]) - PRODUCTS.indexOf(b.products[0]));
     const [primary, ...others] = variants;
     const products = PRODUCTS.filter((product) => variants.some((v) => v.products.includes(product)));
-    const signature = (/** @type {RefEntry} */ v, /** @type {string} */ sigil) =>
-      v.kind === "operation" ? oneLine(v.usage.replace(/^\w+::/, "")) : `${sigil}${oneLine(v.usage).replace(/^[$@%]/, "")}`;
-    const overloads = (/** @type {string} */ sigil) => {
-      const list = others
-        .map((v) => ({ product: v.products.join(" and "), signature: signature(v, sigil) }))
-        .filter((o) => o.signature !== signature(primary, sigil));
-      return list.length ? { overloads: list } : {};
-    };
+    const p = letters.filter(([, product]) => products.includes(product)).map(([letter]) => letter).join("");
+    // A function's forms without their sigil; an operation's without its namespace.
+    const form = (/** @type {RefEntry} */ v) =>
+      v.kind === "operation" ? oneLine(v.usage.replace(/^\w+::/, "")) : oneLine(v.usage).replace(/^[$@%]/, "");
+    /** @type {[string, string][]} */
+    const overloads = others
+      .map((v) => /** @type {[string, string]} */ ([v.products.join(" and "), form(v)]))
+      .filter(([, f]) => f !== form(primary));
 
     if (primary.kind === "operation") {
-      tables.operation.set(primary.name, {
-        namespace: operationNamespace(primary.name, primary.usage, declared),
+      const params = operationParams(variants);
+      const namespace = operationNamespace(primary.name, primary.usage, declared);
+      const signature = form(primary);
+      tables.operationDocs[primary.name] = {
+        namespace,
         name: primary.name,
-        signature: signature(primary, ""),
-        ...overloads(""),
-        snippet: operationSnippet(primary),
+        signature,
+        ...(overloads.length ? { overloads: overloads.map(([product, s]) => ({ product, signature: s })) } : {}),
+        snippet: operationSnippet(primary.name, signature, params),
         description: primary.description,
-        documentation: documentationFor(primary, products),
+        documentation: referenceDocumentation(null, products),
         products,
-        params: operationParams(variants),
-      });
+        params,
+      };
+      compact.operations[primary.name] = {
+        ...(namespace ? { n: namespace } : {}),
+        p,
+        d: primary.description,
+        ...compactParams(params),
+        ...(signature !== operationSignature(primary.name, params) ? { s: signature } : {}),
+        ...(overloads.length ? { o: overloads } : {}),
+      };
       continue;
     }
+
     const sigil = /^[$@%]/.exec(primary.name)?.[0];
     const bare = primary.name.replace(/^[$@%]/, "");
-    /** @type {[string, "scalar" | "vector" | "map"][]} */
-    const targets = sigil
-      ? [[sigil, sigil === "$" ? "scalar" : sigil === "@" ? "vector" : "map"]]
-      : [["$", "scalar"], ["@", "vector"], ["%", "map"]];
-    for (const [s, table] of targets) {
-      const isCall = signature(primary, s).includes("(");
-      tables[table].set(bare, {
+    const params = primary.params.map(cleanParam);
+    const base = form(primary);
+    for (const s of sigil ? [sigil] : ["$", "@", "%"]) {
+      const signature = `${s}${base}`;
+      tables[s === "$" ? "scalarFunctionDocs" : s === "@" ? "vectorFunctionDocs" : "mapFunctionDocs"][bare] = {
         namespace: null,
         name: `${s}${bare}`,
-        signature: signature(primary, s),
-        ...overloads(s),
-        ...(isCall ? {} : { snippet: `\\${s}${bare}` }),
+        signature,
+        ...(overloads.length ? { overloads: overloads.map(([product, f]) => ({ product, signature: `${s}${f}` })) } : {}),
+        ...(signature.includes("(") ? {} : { snippet: `\\${s}${bare}` }),
         description: primary.description,
-        documentation: documentationFor(primary, products),
+        documentation: referenceDocumentation(params, products),
         products,
         ...(sigil ? {} : { anySigil: /** @type {const} */ (true) }),
-      });
+      };
     }
+    compact.functions[sigil ? primary.name : bare] = {
+      p,
+      d: primary.description,
+      ...compactParams(params),
+      ...(base !== functionSignature(bare, params) ? { s: base } : {}),
+      ...(overloads.length ? { o: overloads } : {}),
+    };
   }
-  return tables;
+  return { tables, compact };
 }
 
 /**
- * Renders src/inedo-reference-data.js.
+ * Renders src/inedo-reference-data.js: the compact reference, one entry per
+ * line.
  *
  * @param {{ source: string, entries: RefEntry[] }} snapshot
  * @returns {string}
@@ -385,61 +396,40 @@ function buildTables(snapshot, declared) {
 function render(snapshot) {
   const { NAMESPACES } = require(path.join(__dirname, "..", "src", "namespaces.js"));
   const declared = new Set([...NAMESPACES].map((n) => n.toLowerCase()));
-  const tables = buildTables(snapshot, declared);
+  const { compact } = buildReference(snapshot, declared);
   /**
-   * @param {Map<string, GeneratedDoc>} table
+   * @param {Record<string, CompactEntry>} table
    * @returns {string} The table as an object literal, one entry per line
    */
   const renderTable = (table) =>
-    "{\n" + [...table].map(([key, doc]) => `  ${JSON.stringify(key)}: ${JSON.stringify(doc)},`).join("\n") + "\n}";
+    "{\n" + Object.entries(table).map(([key, entry]) => `  ${JSON.stringify(key)}: ${JSON.stringify(entry)},`).join("\n") + "\n}";
 
   return `// @ts-check
 // GENERATED by scripts/update-inedo-reference.js -- do not edit by hand.
 /**
- * @fileoverview Hover, completion and signature data for every function and
- * operation in Inedo's generated Otter and BuildMaster reference
- * (${snapshot.source}).
- * language-data.js merges these under its hand-written tables, whose entries
- * win; ProGet's notifier variables are only there.
+ * @fileoverview Every function and operation in Inedo's generated Otter and
+ * BuildMaster reference (${snapshot.source}),
+ * in compact form: src/inedo-reference.js expands it into docs entries, which
+ * language-data.js merges under its hand-written tables (whose entries win).
  *
  * To update: \`node scripts/update-inedo-reference.js --fetch\`.
  */
 
+/** @typedef {import("./inedo-reference").CompactEntry} CompactEntry */
+
 /**
- * The shape of a language-data.js DocEntry, spelled out here because
- * language-data.js loads this file (importing its type would be circular).
- * @typedef {{
- *   namespace: string | null,
- *   name: string,
- *   signature: string,
- *   overloads?: { product: string, signature: string }[],
- *   snippet?: string,
- *   description: string,
- *   documentation: string,
- *   products: string[],
- *   anySigil?: true,
- *   params?: { name: string, required: boolean, description?: string, format?: string }[]
- * }} ReferenceDoc
+ * Functions, keyed with their sigil -- or without, when any sigil works.
+ * @type {Record<string, CompactEntry>}
  */
+const functions = ${renderTable(compact.functions)};
 
-/** @type {Record<string, ReferenceDoc>} */
-const scalarFunctionDocs = ${renderTable(tables.scalar)};
+/**
+ * Operations, keyed by name.
+ * @type {Record<string, CompactEntry>}
+ */
+const operations = ${renderTable(compact.operations)};
 
-/** @type {Record<string, ReferenceDoc>} */
-const vectorFunctionDocs = ${renderTable(tables.vector)};
-
-/** @type {Record<string, ReferenceDoc>} */
-const mapFunctionDocs = ${renderTable(tables.map)};
-
-/** @type {Record<string, ReferenceDoc>} */
-const operationDocs = ${renderTable(tables.operation)};
-
-module.exports = {
-  mapFunctionDocs,
-  operationDocs,
-  scalarFunctionDocs,
-  vectorFunctionDocs,
-};
+module.exports = { functions, operations };
 `;
 }
 
@@ -474,10 +464,14 @@ async function main() {
   return 0;
 }
 
-main().then(
-  (code) => { process.exitCode = code; },
-  (err) => {
-    console.error(err instanceof Error ? err.message : err);
-    process.exitCode = 1;
-  }
-);
+if (require.main === module) {
+  main().then(
+    (code) => { process.exitCode = code; },
+    (err) => {
+      console.error(err instanceof Error ? err.message : err);
+      process.exitCode = 1;
+    }
+  );
+}
+
+module.exports = { buildReference };

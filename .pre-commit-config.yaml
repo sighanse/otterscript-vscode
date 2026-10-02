@@ -89,7 +89,7 @@ repos:
         entry: node scripts/check-language-sync.js
         language: system
         pass_filenames: false
-        files: ^(src/(language-data|inedo-reference-data|namespaces)\.js|syntaxes/otterscript\.tmLanguage\.json|scripts/check-language-sync\.js)$
+        files: ^(src/(language-data|inedo-reference-data|inedo-reference|namespaces)\.js|syntaxes/otterscript\.tmLanguage\.json|scripts/check-language-sync\.js)$
 
       # Before a push: the full `npm run check` (lint + type check + grammar
       # sync + unit tests), the same gate CI runs. The integration tests stay
