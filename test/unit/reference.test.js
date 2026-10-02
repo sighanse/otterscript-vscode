@@ -54,6 +54,26 @@ describe("generated Inedo reference, merged into language-data", () => {
     assert.equal(reference.operationDocs["SHExec"].namespace, "Linux", "corrected from source");
   });
 
+  it("hand-written entries use the parameter names of Inedo's reference", () => {
+    // Deliberate differences: ProGet's forms of $PackageHash/$PackageProperty
+    // (BuildMaster's are their overloads), and the vararg functions the
+    // reference prints without any parameter list.
+    const exceptions = new Set(["PackageHash", "PackageProperty", "Coalesce", "ListConcat"]);
+    /** @param {string | undefined} signature */
+    const params = (signature) =>
+      (/\(([\s\S]*)\)/.exec(signature ?? "")?.[1] ?? "").split(",")
+        .map((p) => p.replace(/[[\]\s]/g, "").replace(/(:|=>)[\s\S]*$/, ""))
+        .filter(Boolean)
+        .sort();
+    for (const table of /** @type {const} */ (["scalarFunctionDocs", "vectorFunctionDocs", "mapFunctionDocs", "operationDocs"])) {
+      for (const [key, doc] of Object.entries(data[table])) {
+        const generated = reference[table][key];
+        if (!generated || generated === doc || exceptions.has(key)) continue;
+        assert.deepEqual(params(doc.signature), params(generated.signature), `${doc.name}: ${doc.signature} vs ${generated.signature}`);
+      }
+    }
+  });
+
   describe("every merged table passes validateDocs", () => {
     const realWarn = console.warn;
     const realError = console.error;

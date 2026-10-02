@@ -54,8 +54,11 @@
  *     `<%(key1: value1, ...)>`); optional arguments are wrapped in `[ ]`; the
  *     statement terminator `;` is kept. Single positional-argument statements
  *     take no parentheses (`Log-Information "message";`, `Sleep <integer>;`).
- *   - `$`/`@` functions (positional arguments): `$FunctionName(paramName, [optionalParam], ...)`.
- *     Parameter names are lowerCamelCase descriptive labels, no type tokens, no
+ *   - `$`/`@` functions (positional arguments): `$FunctionName(Param, [OptionalParam], ...)`.
+ *     Parameter names are the ones Inedo's reference uses, as it writes them
+ *     (`$Substring(Text, Offset, [Length])`, `$FromJson(json)`), so they match
+ *     the generated entries and Inedo's docs; lowerCamelCase labels only where
+ *     Inedo documents none (ProGet's notifier functions). No type tokens, no
  *     trailing `;`; `...` marks a repeating tail argument.
  *   - Runtime values with no call syntax (`$WorkingDirectory`, `@AllRoles`): bare name.
  * @property {{ product: string, signature: string }[]=} overloads The same
@@ -2344,12 +2347,12 @@ $json = $ToJson(%(
   "HtmlEncode": {
     namespace: null,
     name: "$HtmlEncode",
-    signature: "$HtmlEncode(text)",
-    snippet: "\\$HtmlEncode(${1:text})",
+    signature: "$HtmlEncode(Text)",
+    snippet: "\\$HtmlEncode(${1:Text})",
     description: "Encodes a string for safe use in HTML.",
     documentation: `
 **Parameters:**
-- \`text\` - The string to HTML-encode
+- \`Text\` - The string to HTML-encode
 
 **Returns:** HTML-encoded string
 
@@ -2363,12 +2366,12 @@ $encoded = $HtmlEncode("<script>alert('xss')</script>");
   "UrlEncode": {
     namespace: null,
     name: "$UrlEncode",
-    signature: "$UrlEncode(text)",
-    snippet: "\\$UrlEncode(${1:text})",
+    signature: "$UrlEncode(Text)",
+    snippet: "\\$UrlEncode(${1:Text})",
     description: "Encodes a string for safe use in URLs.",
     documentation: `
 **Parameters:**
-- \`text\` - The string to URL-encode
+- \`Text\` - The string to URL-encode
 
 **Returns:** URL-encoded string
 
@@ -2381,14 +2384,14 @@ $url = "https://example.com/search?q=" + $UrlEncode($query);
   "PathCombine": {
     namespace: null,
     name: "$PathCombine",
-    signature: "$PathCombine(path1, path2, ...)",
-    snippet: "\\$PathCombine(${1:path1}, ${2:path2})",
+    signature: "$PathCombine(Path1, Path2, ...)",
+    snippet: "\\$PathCombine(${1:Path1}, ${2:Path2})",
     description: "Combines multiple path strings into a single path.",
     documentation: `
 Combines multiple path strings into a single path with the correct separators.
 
 **Parameters:**
-- \`path1, path2, ...\` - Path segments to combine
+- \`Path1, Path2, ...\` - Path segments to combine
 
 **Returns:** Combined path string
 
@@ -2402,12 +2405,12 @@ $fullPath = $PathCombine("C:\\Websites", "MyApp", "web.config");
   "Eval": {
     namespace: null,
     name: "$Eval",
-    signature: "$Eval(expression)",
-    snippet: "\\$Eval(${1:expression})",
+    signature: "$Eval(Text)",
+    snippet: "\\$Eval(${1:Text})",
     description: "Evaluates a string containing variable expressions.",
     documentation: `
 **Parameters:**
-- \`expression\` - String containing variable references to expand
+- \`Text\` - String containing variable references to expand
 
 **Returns:** Expanded string
 
@@ -2422,12 +2425,12 @@ $result = $Eval($template);  # Expands $name
   "ToLower": {
     namespace: null,
     name: "$ToLower",
-    signature: "$ToLower(text)",
-    snippet: "\\$ToLower(${1:text})",
+    signature: "$ToLower(Text)",
+    snippet: "\\$ToLower(${1:Text})",
     description: "Converts a string to lowercase characters.",
     documentation: `
 **Parameters:**
-- \`text\` - The string to convert to lowercase
+- \`Text\` - The string to convert to lowercase
 
 **Returns:** Lowercase string
 
@@ -2441,12 +2444,12 @@ $lower = $ToLower("Hello World");
   "ToUpper": {
     namespace: null,
     name: "$ToUpper",
-    signature: "$ToUpper(text)",
-    snippet: "\\$ToUpper(${1:text})",
+    signature: "$ToUpper(Text)",
+    snippet: "\\$ToUpper(${1:Text})",
     description: "Converts a string to uppercase characters.",
     documentation: `
 **Parameters:**
-- \`text\` - The string to convert to uppercase
+- \`Text\` - The string to convert to uppercase
 
 **Returns:** Uppercase string
 
@@ -2460,12 +2463,12 @@ $upper = $ToUpper("Hello World");
   "Trim": {
     namespace: null,
     name: "$Trim",
-    signature: "$Trim(text, ...)",
-    snippet: "\\$Trim(${1:text})",
+    signature: "$Trim(Text, ...)",
+    snippet: "\\$Trim(${1:Text})",
     description: "Returns a string with leading and trailing whitespace removed, or optionally a set of specified characters.",
     documentation: `
 **Parameters:**
-- \`text\` - The input string.
+- \`Text\` - The input string.
 - \`...\` - (Optional) One or more characters to trim instead of whitespace.
 
 **Returns:** Trimmed string
@@ -2482,23 +2485,23 @@ $trimmed = $Trim("--hello--", "-");
   "Substring": {
     namespace: null,
     name: "$Substring",
-    signature: "$Substring(text, startIndex, [length])",
-    snippet: "\\$Substring(${1:text}, ${2:startIndex}, ${3:length})",
+    signature: "$Substring(Text, Offset, [Length])",
+    snippet: "\\$Substring(${1:Text}, ${2:Offset}, ${3:Length})",
     description: "Extracts a substring from a string.",
     documentation: `
 Extracts a substring from the specified string starting at the given index.
 
 **Parameters:**
-- \`text\` - The source string
-- \`startIndex\` - The zero-based starting position
-- \`length\` - (Optional) The number of characters to extract. If omitted, the
+- \`Text\` - The source string
+- \`Offset\` - The zero-based starting position
+- \`Length\` - (Optional) The number of characters to extract. If omitted, the
   remainder of the string is used.
 
 **Returns:** Extracted substring
 
 **Notes:**
-- If \`startIndex\` is at or past the end of \`text\`, the result is \`""\`
-  rather than an error. A negative \`startIndex\` or \`length\` does throw.
+- If \`Offset\` is at or past the end of \`Text\`, the result is \`""\`
+  rather than an error. A negative \`Offset\` or \`Length\` does throw.
 
 **Example:**
 \`\`\`otterscript
@@ -2513,17 +2516,17 @@ $rest = $Substring("Hello World", 6);
   "Replace": {
     namespace: null,
     name: "$Replace",
-    signature: "$Replace(text, oldValue, newValue, [ignoreCase])",
-    snippet: "\\$Replace(${1:text}, ${2:oldValue}, ${3:newValue}, ${4|false,true|})",
+    signature: "$Replace(Text, Value, ReplaceWith, [IgnoreCase])",
+    snippet: "\\$Replace(${1:Text}, ${2:Value}, ${3:ReplaceWith}, ${4|false,true|})",
     description: "Replaces all occurrences of a substring within a string.",
     documentation: `
 Replaces all occurrences of a specified substring with another substring.
 
 **Parameters:**
-- \`text\` - The source string
-- \`oldValue\` - The substring to replace
-- \`newValue\` - The replacement substring
-- \`ignoreCase\` *(optional)* - When \`true\`, performs a case-insensitive comparison
+- \`Text\` - The source string
+- \`Value\` - The substring to replace
+- \`ReplaceWith\` - The replacement substring
+- \`IgnoreCase\` *(optional)* - When \`true\`, performs a case-insensitive comparison
 
 **Returns:** String with replacements
 
@@ -2537,15 +2540,15 @@ $result = $Replace("Hello World", "World", "Otter");
   "Join": {
     namespace: null,
     name: "$Join",
-    signature: "$Join(separator, vector)",
-    snippet: '\\$Join("${1:, }", @${2:vector})',
+    signature: "$Join(Separator, Values)",
+    snippet: '\\$Join("${1:, }", @${2:Values})',
     description: "Joins the elements of a vector into a single string.",
     documentation: `
 Concatenates all elements of a vector into a single string, separated by the specified separator.
 
 **Parameters:**
-- \`separator\` - The string to insert between each element
-- \`vector\` - The vector containing elements to join
+- \`Separator\` - The string to insert between each element
+- \`Values\` - The vector containing elements to join
 
 **Returns:** Joined string
 
@@ -2560,8 +2563,8 @@ $joined = $Join(", ", @("apple", "banana", "cherry"));
   "Date": {
     namespace: null,
     name: "$Date",
-    signature: "$Date([format])",
-    snippet: "\\$Date(${1:format})",
+    signature: "$Date([Format])",
+    snippet: "\\$Date(${1:Format})",
     description: 'Returns the current date and time of the local timezone.',
     documentation: `
 Returns the current date and time of the local timezone in the specified .NET datetime format string, or ISO 8601 format (yyyy-MM-ddTHH:mm:ss) if no format is specified.
@@ -2590,8 +2593,8 @@ $sortable = $Date("s");
   "DateUtc": {
     namespace: null,
     name: "$DateUtc",
-    signature: "$DateUtc([format])",
-    snippet: "\\$DateUtc(${1:format})",
+    signature: "$DateUtc([Format])",
+    snippet: "\\$DateUtc(${1:Format})",
     description: 'Returns the current UTC date and time.',
     documentation: `
 Returns the current UTC date and time in the specified .NET datetime format string,
@@ -2616,14 +2619,14 @@ $customUtc = $DateUtc("yyyy-MM-dd HH:mm:ss");
   "FromJson": {
     namespace: null,
     name: "$FromJson",
-    signature: "$FromJson(jsonString)",
-    snippet: '\\$FromJson("${1:jsonString}");$0',
+    signature: "$FromJson(json)",
+    snippet: '\\$FromJson("${1:json}");$0',
     description: "Parses a JSON string into an OtterScript value.",
     documentation: `
 Parses a JSON string and converts it into an OtterScript map, vector, or scalar value.
 
 **Parameters:**
-- \`jsonString\` - The JSON string to parse
+- \`json\` - The JSON string to parse
 
 **Returns:** OtterScript value (map, vector, or scalar) — see the sigil note below
 
@@ -2650,14 +2653,14 @@ $name = %data[name];
   "FileExists": {
     namespace: null,
     name: "$FileExists",
-    signature: "$FileExists(filePath)",
-    snippet: '\\$FileExists("${1:filePath}");$0',
+    signature: "$FileExists(name)",
+    snippet: '\\$FileExists("${1:name}");$0',
     description: "Checks if a file exists on the server.",
     documentation: `
 Determines whether the specified file exists on the server in context.
 
 **Parameters:**
-- \`filePath\` - The full path to the file to check
+- \`name\` - The full path to the file to check
 
 **Returns:** \`true\` if the file exists, \`false\` otherwise
 
@@ -2672,14 +2675,14 @@ if $FileExists("C:\\config\\app.config") {
   "DirectoryExists": {
     namespace: null,
     name: "$DirectoryExists",
-    signature: "$DirectoryExists(directoryPath)",
-    snippet: '\\$DirectoryExists("${1:directoryPath}");$0',
+    signature: "$DirectoryExists(name)",
+    snippet: '\\$DirectoryExists("${1:name}");$0',
     description: "Checks if a directory exists on the server.",
     documentation: `
 Determines whether the specified directory exists on the server in context.
 
 **Parameters:**
-- \`directoryPath\` - The full path to the directory to check
+- \`name\` - The full path to the directory to check
 
 **Returns:** \`true\` if the directory exists, \`false\` otherwise
 
@@ -2831,24 +2834,24 @@ $result = $Floor(3.8);
   "Compare": {
     namespace: null,
     name: "$Compare",
-    signature: "$Compare(arg1, operator, arg2, [asNumber])",
+    signature: "$Compare(Arg1, Operator, Arg2, [AsNumber])",
     snippet: "\\$Compare(${1:value1}, ${2|<,>,<=,>=,=,!=|}, ${3:value2}${4:, true})",
     description: "Compares two scalar values and returns \"true\" or \"false\".",
     documentation: `
 Compares two scalar values using the specified operator.
 
 **Parameters:**
-- \`arg1\` - Left-hand value
-- \`operator\` - One of: \`<\`, \`>\`, \`<=\`, \`>=\`, \`=\`, \`!=\`
-- \`arg2\` - Right-hand value
-- \`asNumber\` - (Optional) \`true\`/\`false\`/omitted — see Behavior below
+- \`Arg1\` - Left-hand value
+- \`Operator\` - One of: \`<\`, \`>\`, \`<=\`, \`>=\`, \`=\`, \`!=\`
+- \`Arg2\` - Right-hand value
+- \`AsNumber\` - (Optional) \`true\`/\`false\`/omitted — see Behavior below
 
 **Behavior:**
 - Omitted (default): numeric comparison if both values parse as numbers,
   otherwise a case-sensitive string comparison
-- \`asNumber: true\`: always numeric — **throws** if either side does not
+- \`AsNumber: true\`: always numeric — **throws** if either side does not
   parse as a number, rather than falling back to a string comparison
-- \`asNumber: false\`: always a string comparison, even if both values look
+- \`AsNumber: false\`: always a string comparison, even if both values look
   numeric
 
 **Returns:**
@@ -2873,15 +2876,15 @@ squiggle is a known false positive; \`=\` is correct and required by
   "MatchesRegex": {
     namespace: null,
     name: "$MatchesRegex",
-    signature: "$MatchesRegex(text, pattern)",
-    snippet: "\\$MatchesRegex(${1:text}, \"${2:pattern}\")",
+    signature: "$MatchesRegex(Text, RegexPattern)",
+    snippet: "\\$MatchesRegex(${1:Text}, \"${2:RegexPattern}\")",
     description: "Checks if a string matches a regular expression pattern.",
     documentation: `
 Determines whether the specified string matches the given regular expression pattern.
 
 **Parameters:**
-- \`text\` - The string to test
-- \`pattern\` - The regular expression pattern to match
+- \`Text\` - The string to test
+- \`RegexPattern\` - The regular expression pattern to match
 
 **Returns:** \`true\` if the pattern matches, \`false\` otherwise
 
@@ -2896,16 +2899,16 @@ if $MatchesRegex($email, "^[\\w\\.]+@[\\w\\.]+\\.\\w+$") {
   "RegexReplace": {
     namespace: null,
     name: "$RegexReplace",
-    signature: "$RegexReplace(text, pattern, replacement)",
-    snippet: "\\$RegexReplace(${1:text}, \"${2:pattern}\", \"${3:replacement}\")",
+    signature: "$RegexReplace(Text, MatchExpression, ReplaceWith)",
+    snippet: "\\$RegexReplace(${1:Text}, \"${2:MatchExpression}\", \"${3:ReplaceWith}\")",
     description: "Replaces text matching a regular expression pattern.",
     documentation: `
 Replaces all occurrences of a regular expression pattern in a string with a replacement string.
 
 **Parameters:**
-- \`text\` - The source string
-- \`pattern\` - The regular expression pattern to match
-- \`replacement\` - The replacement text
+- \`Text\` - The source string
+- \`MatchExpression\` - The regular expression pattern to match
+- \`ReplaceWith\` - The replacement text
 
 **Returns:** String with replacements applied
 
@@ -2959,14 +2962,14 @@ if $EnvironmentName == "Production" {
   "ListCount": {
     namespace: null,
     name: "$ListCount",
-    signature: "$ListCount(vector)",
-    snippet: "\\$ListCount(${1:vector})",
+    signature: "$ListCount(List)",
+    snippet: "\\$ListCount(${1:List})",
     description: "Returns the number of items in a vector.",
     documentation: `
 Returns the number of elements in the specified vector.
 
 **Parameters:**
-- \`vector\` - The vector to count
+- \`List\` - The vector to count
 
 **Returns:** Integer count of items
 
@@ -2981,15 +2984,15 @@ $count = $ListCount($items);
   "ListItem": {
     namespace: null,
     name: "$ListItem",
-    signature: "$ListItem(vector, index)",
-    snippet: "\\$ListItem(${1:vector}, ${2:index})",
+    signature: "$ListItem(List, Index)",
+    snippet: "\\$ListItem(${1:List}, ${2:Index})",
     description: "Gets an item from a vector by index.",
     documentation: `
 Retrieves an element from a vector at the specified index (0-based).
 
 **Parameters:**
-- \`vector\` - The source vector
-- \`index\` - The zero-based index of the item to retrieve
+- \`List\` - The source vector
+- \`Index\` - The zero-based index of the item to retrieve
 
 **Returns:** The item at the specified index — see the sigil note below
 
@@ -3158,7 +3161,7 @@ $name = $Coalesce($OverrideName, $DefaultName, "unnamed");
   "PadLeft": {
     namespace: null,
     name: "$PadLeft",
-    signature: "$PadLeft(text, length, [padCharacter])",
+    signature: "$PadLeft(Text, Length, [PadCharacter])",
     snippet: "\\$PadLeft(${1:Text}, ${2:Length})${0}",
     description: "Returns a new string that right-aligns the characters by padding them on the left with a specified character, for a specified total length.",
     documentation: `
@@ -3179,7 +3182,7 @@ $padded = $PadLeft("7", 3, "0");
   "PadRight": {
     namespace: null,
     name: "$PadRight",
-    signature: "$PadRight(text, length, [padCharacter])",
+    signature: "$PadRight(Text, Length, [PadCharacter])",
     snippet: "\\$PadRight(${1:Text}, ${2:Length})${0}",
     description: "Returns a new string that left-aligns the characters by padding them on the right with a specified character, for a specified total length.",
     documentation: `
@@ -3200,7 +3203,7 @@ $padded = $PadRight("Name", 10, ".");
   "TrimStart": {
     namespace: null,
     name: "$TrimStart",
-    signature: "$TrimStart(text, ...)",
+    signature: "$TrimStart(Text, ...)",
     snippet: "\\$TrimStart(${1:Text})${0}",
     description: "Returns a string with all leading whitespace characters removed, or optionally a set of specified characters.",
     documentation: `
@@ -3220,7 +3223,7 @@ $trimmed = $TrimStart("   hello");
   "TrimEnd": {
     namespace: null,
     name: "$TrimEnd",
-    signature: "$TrimEnd(text, ...)",
+    signature: "$TrimEnd(Text, ...)",
     snippet: "\\$TrimEnd(${1:Text})${0}",
     description: "Returns a string with all trailing whitespace characters removed, or optionally a set of specified characters.",
     documentation: `
@@ -3240,8 +3243,8 @@ $trimmed = $TrimEnd("hello   ");
   "IsVariableDefined": {
     namespace: null,
     name: "$IsVariableDefined",
-    signature: "$IsVariableDefined(variableName, [variableType])",
-    snippet: "\\$IsVariableDefined(\"${1:variableName}\")${0}",
+    signature: "$IsVariableDefined(VariableName, [VariableType])",
+    snippet: "\\$IsVariableDefined(\"${1:VariableName}\")${0}",
     description: "Returns true if the specified variable name is available in the current context; otherwise returns false.",
     documentation: `
 **Parameters:**
@@ -3262,8 +3265,8 @@ if $IsVariableDefined("OptionalSetting")
   "GetVariableValue": {
     namespace: null,
     name: "$GetVariableValue",
-    signature: "$GetVariableValue(variableName, [variableType])",
-    snippet: "\\$GetVariableValue(\"${1:variableName}\")${0}",
+    signature: "$GetVariableValue(VariableName, [VariableType])",
+    snippet: "\\$GetVariableValue(\"${1:VariableName}\")${0}",
     description: "Returns the value of a variable if it's defined in the current context; otherwise returns null.",
     documentation: `
 Unlike \`$IsVariableDefined\` (which only returns \`true\`/\`false\`), this
@@ -3272,8 +3275,8 @@ useful to avoid a separate existence check before reading an optional
 variable.
 
 **Parameters:**
-- \`variableName\` (required) - The name of the variable, without the \`$\`, \`@\`, or \`%\` sigil.
-- \`variableType\` - (Optional) Must be one of: \`any\`, \`scalar\`, \`vector\`, \`map\`.
+- \`VariableName\` (required) - The name of the variable, without the \`$\`, \`@\`, or \`%\` sigil.
+- \`VariableType\` - (Optional) Must be one of: \`any\`, \`scalar\`, \`vector\`, \`map\`.
 
 **Returns:** The variable's value, or \`null\` if not defined
 
@@ -3289,7 +3292,7 @@ if $value != null {
   "JSEncode": {
     namespace: null,
     name: "$JSEncode",
-    signature: "$JSEncode(text)",
+    signature: "$JSEncode(Text)",
     snippet: "\\$JSEncode(${1:Text})${0}",
     description: "Encodes a string for use in a JavaScript string literal.",
     documentation: `
@@ -3302,7 +3305,7 @@ if $value != null {
   "SHEval": {
     namespace: "Scripting",
     name: "$SHEval",
-    signature: "$SHEval(scriptText)",
+    signature: "$SHEval(ScriptText)",
     snippet: "\\$SHEval(${1:ScriptText})${0}",
     description: "Returns the output of a shell script.",
     documentation: `
@@ -3325,7 +3328,7 @@ Log-Information $NextYear;
   "ListIndexOf": {
     namespace: null,
     name: "$ListIndexOf",
-    signature: "$ListIndexOf(list, item)",
+    signature: "$ListIndexOf(List, Item)",
     snippet: "\\$ListIndexOf(${1:List}, ${2:Item})${0}",
     description: "Finds the index of an item in a list.",
     documentation: `
@@ -3339,7 +3342,7 @@ Log-Information $NextYear;
   "XmlEncode": {
     namespace: null,
     name: "$XmlEncode",
-    signature: "$XmlEncode(text)",
+    signature: "$XmlEncode(Text)",
     snippet: "\\$XmlEncode(${1:Text})${0}",
     description: "Encodes a string for use in an XML element.",
     documentation: `
@@ -3352,7 +3355,7 @@ Log-Information $NextYear;
   "NewLine": {
     namespace: null,
     name: "$NewLine",
-    signature: "$NewLine([windowsOrLinux])",
+    signature: "$NewLine([WindowsOrLinux])",
     snippet: "\\$NewLine(${1:WindowsOrLinux})${0}",
     description: "Returns the newline string for either the operating system of the current server in context, or specifically Windows or Linux.",
     documentation: `
@@ -3409,7 +3412,7 @@ if $IsSimulation() {
   "SpecialWindowsPath": {
     namespace: null,
     name: "$SpecialWindowsPath",
-    signature: "$SpecialWindowsPath(name)",
+    signature: "$SpecialWindowsPath(Name)",
     snippet: "\\$SpecialWindowsPath(${1:Name})${0}",
     description: "Returns the full path of a special directory on a Windows system.",
     documentation: `
@@ -3422,7 +3425,7 @@ if $IsSimulation() {
   "ResolvePath": {
     namespace: null,
     name: "$ResolvePath",
-    signature: "$ResolvePath(path)",
+    signature: "$ResolvePath(Path)",
     snippet: "\\$ResolvePath(${1:Path})${0}",
     description: "Provides an absolute path (terminated with a directory separator) based on a relative path and the current working directory.",
     documentation: `
@@ -3445,12 +3448,12 @@ $ResolvePath(~\\path)                      # -> {ExecutionDirectory}\\path
     namespace: null,
     name: "$FileContents",
     signature: "$FileContents(name, [maxLength])",
-    snippet: "\\$FileContents(${1:Name})${0}",
+    snippet: "\\$FileContents(${1:name})${0}",
     description: "Returns the contents of a file on the current server.",
     documentation: `
 **Parameters:**
-- \`Name\` (required) - The path of the file.
-- \`MaxLength\` - (Optional) The maximum length (in characters) of the file to read.
+- \`name\` (required) - The path of the file.
+- \`maxLength\` - (Optional) The maximum length (in characters) of the file to read.
 
 **Returns:** The file's text content.
 `
@@ -3458,7 +3461,7 @@ $ResolvePath(~\\path)                      # -> {ExecutionDirectory}\\path
   "EnvironmentVariable": {
     namespace: null,
     name: "$EnvironmentVariable",
-    signature: "$EnvironmentVariable(environmentVariableName)",
+    signature: "$EnvironmentVariable(EnvironmentVariableName)",
     snippet: "\\$EnvironmentVariable(${1:EnvironmentVariableName})${0}",
     description: "Returns the value of the specified environment variable on the current server.",
     documentation: `
@@ -3495,8 +3498,8 @@ const vectorFunctionDocs = {
   "Split": {
     namespace: null,
     name: "@Split",
-    signature: '@Split(text, separator, [count])',
-    snippet: "@Split(\"${1:text}\", \"${2:,}\"${3:, ${4:count}})",
+    signature: '@Split(Text, Separator, [Count])',
+    snippet: "@Split(\"${1:Text}\", \"${2:,}\"${3:, ${4:Count}})",
     description: 'Splits a string into substrings based on a specified separator.',
     documentation: `
 **Parameters:**
@@ -3522,15 +3525,15 @@ const vectorFunctionDocs = {
   "FromJson": {
     ...scalarFunctionDocs.FromJson,
     name: "@FromJson",
-    signature: "@FromJson(jsonString)",
-    snippet: "@FromJson(${1:jsonString})",
+    signature: "@FromJson(json)",
+    snippet: "@FromJson(${1:json})",
     description: "Parses a JSON array string into an OtterScript vector.",
   },
   "ListItem": {
     ...scalarFunctionDocs.ListItem,
     name: "@ListItem",
-    signature: "@ListItem(vector, index)",
-    snippet: "@ListItem(${1:@vector}, ${2:index})",
+    signature: "@ListItem(List, Index)",
+    snippet: "@ListItem(${1:@vector}, ${2:Index})",
     description: "Gets an item that is itself a vector from a vector by index.",
   },
   "ListConcat": {
@@ -3555,14 +3558,14 @@ const vectorFunctionDocs = {
   "ListInsert": {
     namespace: null,
     name: "@ListInsert",
-    signature: '@ListInsert(list, item, [index])',
-    snippet: "@ListInsert(${1:@list}, \"${2:item}\", ${3:index})",
+    signature: '@ListInsert(List, Item, [Index])',
+    snippet: "@ListInsert(${1:@list}, \"${2:Item}\", ${3:Index})",
     description: 'Inserts an item into a list, at a given position or at the end.',
     documentation: `
 **Parameters:**
-- \`list\` - The list to modify
-- \`item\` - The item to insert
-- \`index\` - (Optional) The zero-based position to insert the item. If
+- \`List\` - The list to modify
+- \`Item\` - The item to insert
+- \`Index\` - (Optional) The zero-based position to insert the item. If
   omitted, the item is appended to the end of the list.
 
 **Returns:** New list with item inserted
@@ -3581,13 +3584,13 @@ const vectorFunctionDocs = {
   "ListRemove": {
     namespace: null,
     name: "@ListRemove",
-    signature: '@ListRemove(list, index)',
-    snippet: "@ListRemove(${1:@list}, ${2:index})",
+    signature: '@ListRemove(List, Index)',
+    snippet: "@ListRemove(${1:@list}, ${2:Index})",
     description: 'Removes an item from a list at the specified index.',
     documentation: `
 **Parameters:**
-- \`list\` - The list to modify
-- \`index\` - The zero-based position to remove
+- \`List\` - The list to modify
+- \`Index\` - The zero-based position to remove
 
 **Returns:** New list with item removed
 
@@ -3602,14 +3605,14 @@ const vectorFunctionDocs = {
   "ListSet": {
     namespace: null,
     name: "@ListSet",
-    signature: '@ListSet(list, index, item)',
-    snippet: "@ListSet(${1:@list}, ${2:index}, \"${3:item}\")",
+    signature: '@ListSet(List, Index, Item)',
+    snippet: "@ListSet(${1:@list}, ${2:Index}, \"${3:Item}\")",
     description: 'Updates the value at a given position in the list to a new value.',
     documentation: `
 **Parameters:**
-- \`list\` - The list to modify
-- \`index\` - The zero-based position to update
-- \`item\` - The new value
+- \`List\` - The list to modify
+- \`Index\` - The zero-based position to update
+- \`Item\` - The new value
 
 **Returns:** New list with updated item
 
@@ -3624,12 +3627,12 @@ const vectorFunctionDocs = {
   "MapKeys": {
     namespace: null,
     name: "@MapKeys",
-    signature: '@MapKeys(map)',
+    signature: '@MapKeys(Map)',
     snippet: "@MapKeys(${1:@map})",
     description: 'Lists the keys of a map as a vector.',
     documentation: `
 **Parameters:**
-- \`map\` - The map to extract keys from
+- \`Map\` - The map to extract keys from
 
 **Returns:** Vector of map keys
 
@@ -3644,13 +3647,13 @@ const vectorFunctionDocs = {
   "Range": {
     namespace: null,
     name: "@Range",
-    signature: '@Range(start, count)',
-    snippet: "@Range(${1:start}, ${2:count})",
+    signature: '@Range(Start, Count)',
+    snippet: "@Range(${1:Start}, ${2:Count})",
     description: 'Returns a range of integers starting from a specified value.',
     documentation: `
 **Parameters:**
-- \`start\` - The starting integer
-- \`count\` - The number of integers to generate
+- \`Start\` - The starting integer
+- \`Count\` - The number of integers to generate
 
 **Returns:** Vector of integers
 
@@ -3664,14 +3667,14 @@ const vectorFunctionDocs = {
   "RegexFind": {
     namespace: null,
     name: "@RegexFind",
-    signature: '@RegexFind(text, matchExpression, [matchGroup])',
-    snippet: "@RegexFind(${1:text}, ${2:matchExpression}${3:, ${4:matchGroup}})",
+    signature: '@RegexFind(Text, MatchExpression, [MatchGroup])',
+    snippet: "@RegexFind(${1:Text}, ${2:MatchExpression}${3:, ${4:MatchGroup}})",
     description: 'Finds all matches of a regular expression in a string, optionally returning only a matched group.',
     documentation: `
 **Parameters:**
-- \`text\` - The string to search
-- \`matchExpression\` - The regular expression pattern
-- \`matchGroup\` - (Optional) Specific capture group to return
+- \`Text\` - The string to search
+- \`MatchExpression\` - The regular expression pattern
+- \`MatchGroup\` - (Optional) Specific capture group to return
 
 **Returns:** Vector of matches
 
@@ -3767,7 +3770,7 @@ set @ProjectFiles = @FilesOnDisk(*.csproj);
   "AcquiredServers": {
     namespace: null,
     name: "@AcquiredServers",
-    signature: '@AcquiredServers(role)',
+    signature: '@AcquiredServers(Role)',
     snippet: "@AcquiredServers(\"${1:roleName}\")",
     description: 'Returns the list of all servers acquired for a specified role.',
     documentation: `
@@ -3826,7 +3829,7 @@ foreach $Role in @AllRoles
   "AllServers": {
     namespace: null,
     name: "@AllServers",
-    signature: '@AllServers([includeInactive])',
+    signature: '@AllServers([IncludeInactive])',
     snippet: "@AllServers",
     description: 'Returns the list of all servers configured in the instance.',
     documentation: `
@@ -3848,8 +3851,8 @@ foreach $Server in @AllServers
   "ServersInEnvironment": {
     namespace: null,
     name: "@ServersInEnvironment",
-    signature: '@ServersInEnvironment([environmentName], [includeInactive])',
-    snippet: "@ServersInEnvironment(\"${1:environmentName}\")",
+    signature: '@ServersInEnvironment([EnvironmentName], [IncludeInactive])',
+    snippet: "@ServersInEnvironment(\"${1:EnvironmentName}\")",
     description: 'Returns the list of all the servers in the specified environment name.',
     documentation: `
 **Parameters:**
@@ -3869,8 +3872,8 @@ foreach $server in @ServersInEnvironment("Production") {
   "ServersInRole": {
     namespace: null,
     name: "@ServersInRole",
-    signature: '@ServersInRole([roleName], [includeInactive])',
-    snippet: "@ServersInRole(\"${1:roleName}\")",
+    signature: '@ServersInRole([RoleName], [IncludeInactive])',
+    snippet: "@ServersInRole(\"${1:RoleName}\")",
     description: 'Returns the list of servers in the specified role.',
     documentation: `
 **Parameters:**
@@ -3890,8 +3893,8 @@ foreach $server in @ServersInRole("WebServer") {
   "ServersInRoleAndEnvironment": {
     namespace: null,
     name: "@ServersInRoleAndEnvironment",
-    signature: '@ServersInRoleAndEnvironment([roleName], [environmentName], [includeInactive])',
-    snippet: "@ServersInRoleAndEnvironment(\"${1:roleName}\", \"${2:environmentName}\")",
+    signature: '@ServersInRoleAndEnvironment([RoleName], [EnvironmentName], [IncludeInactive])',
+    snippet: "@ServersInRoleAndEnvironment(\"${1:RoleName}\", \"${2:EnvironmentName}\")",
     description: 'Returns the list of all the servers in the specified role and environment name.',
     documentation: `
 **Parameters:**
@@ -3923,15 +3926,15 @@ const mapFunctionDocs = {
   "FromJson": {
     ...scalarFunctionDocs.FromJson,
     name: "%FromJson",
-    signature: "%FromJson(jsonString)",
-    snippet: "%FromJson(${1:jsonString})",
+    signature: "%FromJson(json)",
+    snippet: "%FromJson(${1:json})",
     description: "Parses a JSON object string into an OtterScript map.",
   },
   "ListItem": {
     ...scalarFunctionDocs.ListItem,
     name: "%ListItem",
-    signature: "%ListItem(vector, index)",
-    snippet: "%ListItem(${1:@vector}, ${2:index})",
+    signature: "%ListItem(List, Index)",
+    snippet: "%ListItem(${1:@vector}, ${2:Index})",
     description: "Gets an item that is itself a map from a vector by index.",
   },
 };

@@ -7,6 +7,10 @@
 - Hover, completion and signature help for every function and operation in Inedo's Otter and BuildMaster reference — about 100 operations and 80 functions more than before, such as `Extract-ZipFile`, `Replace-Text`, `IIS::Ensure-AppPool`, `Git::Checkout-Code`, `PSCall`, `%MapAdd` and `$PSCredential` — with their arguments and the products that have them, and syntax highlighting for their names
 - ProGet notifier variables `$EventName`, `$ProjectName` and `$ReleaseNumber`
 
+### Changed
+
+- Function parameter names in hover, signature help and completion are now the ones in Inedo's reference, such as `$Substring(Text, Offset, [Length])` (was `text, startIndex, [length]`) or `$RegexReplace(Text, MatchExpression, ReplaceWith)`
+
 ### Fixed
 
 - Operations and functions that exist in Otter or BuildMaster but weren't documented here, such as `Extract-ZipFile` or `Ensure-DscResource`, were flagged as unknown

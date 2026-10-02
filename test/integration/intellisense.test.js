@@ -78,11 +78,11 @@ describe("hover", () => {
   });
 
   it("documents a vector function", async () => {
-    assert.match(await hoverText(document, positionOf(document, "@Split", 2)), /@Split\(text, separator/);
+    assert.match(await hoverText(document, positionOf(document, "@Split", 2)), /@Split\(Text, Separator/);
   });
 
   it("documents the map form of FromJson", async () => {
-    assert.match(await hoverText(document, positionOf(document, "%FromJson", 2)), /%FromJson\(jsonString\)/);
+    assert.match(await hoverText(document, positionOf(document, "%FromJson", 2)), /%FromJson\(json\)/);
   });
 
   it("documents an operation that only Inedo's generated reference describes", async () => {
@@ -174,7 +174,7 @@ describe("signature help", () => {
     const document = await openContent("set $s = $Substring($text, 2, ");
     const help = await signatureHelp(document, positionOf(document, "2, ", 3));
     assert.ok(help, "signature help is shown");
-    assert.equal(help.signatures[0].label, "$Substring(text, startIndex, [length])");
+    assert.equal(help.signatures[0].label, "$Substring(Text, Offset, [Length])");
     assert.equal(help.activeParameter, 2);
   });
 
@@ -182,7 +182,7 @@ describe("signature help", () => {
     for (const source of ["set $s = $Substring($Trim($x), ", 'set $s = $Substring("a(b", ']) {
       const document = await openContent(source);
       const help = await signatureHelp(document, document.positionAt(source.length));
-      assert.equal(help?.signatures[0].label, "$Substring(text, startIndex, [length])", source);
+      assert.equal(help?.signatures[0].label, "$Substring(Text, Offset, [Length])", source);
       assert.equal(help?.activeParameter, 1, source);
     }
   });
@@ -190,7 +190,7 @@ describe("signature help", () => {
   it("works for the map form of FromJson", async () => {
     const document = await openContent("set %m = %FromJson(");
     const help = await signatureHelp(document, positionOf(document, "%FromJson(", 10));
-    assert.equal(help?.signatures[0].label, "%FromJson(jsonString)");
+    assert.equal(help?.signatures[0].label, "%FromJson(json)");
   });
 
   it("shows nothing outside a call", async () => {
