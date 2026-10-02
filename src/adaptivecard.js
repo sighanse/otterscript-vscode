@@ -23,6 +23,8 @@
  *   have one of its values, unless the value is filled in by OtterScript;
  * - Adaptive Card Templating keys (`"$data"`, ...) are flagged, since
  *   OtterScript expands them as its own variables;
+ * - every `Action.ToggleVisibility` target must be the `"id"` of an element
+ *   in the card, and no two elements may share an id;
  * - when the card is sent as a Teams message attachment, the attachment
  *   needs the Adaptive Card `contentType`, and `Action.Submit` (unsupported
  *   by incoming webhooks and Workflows) is flagged.
@@ -387,6 +389,115 @@ function findTemplatingKeywords(card) {
     .map((token) => ({ value: token.value, start: token.start + 1, end: token.end }));
 }
 
+/**
+ * One literal string in the card -- an element's `"id"` or a toggle target.
+ * `start`/`end` bracket the value without its quotes.
+ *
+ * @typedef {{ value: string, start: number, end: number }} CardString
+ */
+
+/**
+ * Every `"id": "..."` in the card, in text order. Counts objects without a
+ * `"type"` too (a `Column` or `TableCell` may leave it out), but not ids in
+ * free-form payloads such as a Teams mention's `msteams` entity.
+ *
+ * @param {JsonView} card
+ * @returns {CardString[]}
+ */
+function findElementIds(card) {
+  const freeFormSpans = findFreeFormSpans(card);
+  return findStringProperties(card, "id")
+    .filter(({ valueStart, objectStart }) => objectStart !== -1 && !isInsideAny(freeFormSpans, valueStart))
+    .map(({ value, valueStart, valueEnd }) => ({ value, start: valueStart, end: valueEnd }));
+}
+
+/**
+ * Every element id an `Action.ToggleVisibility` targets: the strings in its
+ * `"targetElements"` array, and the `"elementId"` of the
+ * `{ "elementId": ..., "isVisible": ... }` objects it may hold instead.
+ *
+ * @param {JsonView} card
+ * @returns {CardString[]}
+ */
+function findToggleTargets(card) {
+  const { text, tokens, enclosing, closeOf } = card;
+  const objectTypes = findObjectTypes(card);
+  /** @type {CardString[]} */
+  const targets = [];
+  tokens.forEach((token, i) => {
+    if (token.value !== "targetElements" || objectTypes.get(enclosing[i]) !== "Action.ToggleVisibility") return;
+    const arrayStart = valueStartAfterKey(text, token);
+    const arrayEnd = text[arrayStart] === "[" ? closeOf.get(arrayStart) : undefined;
+    if (arrayEnd === undefined) return;
+    for (let j = i + 1; j < tokens.length && tokens[j].start < arrayEnd; j++) {
+      const item = tokens[j];
+      // A plain string item belongs to the action's own object; anything
+      // in a nested object is a key or value of a target object.
+      if (enclosing[j] === enclosing[i] && valueStartAfterKey(text, item) === -1) {
+        targets.push({ value: item.value, start: item.start + 1, end: item.end });
+      }
+    }
+    for (const { value, valueStart, valueEnd } of findStringProperties(card, "elementId")) {
+      if (valueStart > arrayStart && valueEnd < arrayEnd) targets.push({ value, start: valueStart, end: valueEnd });
+    }
+  });
+  return targets.sort((a, b) => a.start - b.start);
+}
+
+/**
+ * One `Action.ToggleVisibility` target that no element in the card has as
+ * its id, with the closest id there is (a likely typo), if any.
+ *
+ * @typedef {CardString & { suggestion: string | undefined }} UnknownTarget
+ */
+
+/**
+ * Every toggle target with no matching element id. Ids are compared exactly,
+ * as hosts look them up. Templated targets are skipped, and so is the whole
+ * check when any id is templated (`"id": "row$i"`): a literal target may be
+ * what it renders to.
+ *
+ * @param {JsonView} card
+ * @returns {UnknownTarget[]}
+ */
+function findUnknownToggleTargets(card) {
+  const ids = findElementIds(card).map((id) => id.value);
+  if (ids.some(isTemplatedValue)) return [];
+  const known = new Set(ids);
+  return findToggleTargets(card)
+    .filter(({ value }) => value !== "" && !isTemplatedValue(value) && !known.has(value))
+    .map((target) => ({ ...target, suggestion: nearestAllowedValue(target.value, [...known]) }));
+}
+
+/**
+ * Every id that an earlier element in the card already has, paired with that
+ * first occurrence. A host finds only one of them, so a toggle can't reach
+ * the other. Two occurrences with a `<% %>` tag between them are skipped:
+ * they may be alternatives (`<% if %>` / `<% else %>`) of which only one is
+ * output.
+ *
+ * @param {JsonView} card
+ * @param {string} source - The card's original text, `<% %>` tags included
+ *   (same offsets as `card.text`)
+ * @returns {{ duplicate: CardString, first: CardString }[]}
+ */
+function findDuplicateIds(card, source) {
+  /** @type {Map<string, CardString>} */
+  const firsts = new Map();
+  /** @type {{ duplicate: CardString, first: CardString }[]} */
+  const results = [];
+  for (const id of findElementIds(card)) {
+    if (id.value === "" || isTemplatedValue(id.value)) continue;
+    const first = firsts.get(id.value);
+    if (!first) {
+      firsts.set(id.value, id);
+    } else if (!source.slice(first.end, id.start).includes("<%")) {
+      results.push({ duplicate: id, first });
+    }
+  }
+  return results;
+}
+
 /** The `contentType` a Teams message attachment needs for an Adaptive Card. */
 const ADAPTIVE_CARD_CONTENT_TYPE = "application/vnd.microsoft.card.adaptive";
 
@@ -509,6 +620,33 @@ function findAdaptiveCardDiagnostics(document, text, options = {}) {
       `'${value}'. Teams webhooks don't run templating; if a templating host expands this card, write '\`${value}'.`,
       "adaptivecard-templating-keyword"
     );
+  }
+
+  for (const { value, start, end, suggestion } of findUnknownToggleTargets(card)) {
+    addIssue(
+      start, end,
+      `No element in this card has the id '${value}', so 'Action.ToggleVisibility' does nothing for it.` +
+      (suggestion ? ` Did you mean '${suggestion}'?` : ""),
+      "adaptivecard-unknown-target"
+    );
+  }
+
+  const source = text.slice(objStart, objStart + card.text.length);
+  for (const { duplicate, first } of findDuplicateIds(card, source)) {
+    const diagnostic = addIssue(
+      duplicate.start, duplicate.end,
+      `Another element in this card already has the id '${duplicate.value}'. Ids must be unique; ` +
+      "a toggle reaches only one of them.",
+      "adaptivecard-duplicate-id"
+    );
+    diagnostic.relatedInformation = [
+      new vscode.DiagnosticRelatedInformation(
+        new vscode.Location(document.uri, new vscode.Range(
+          document.positionAt(objStart + first.start), document.positionAt(objStart + first.end)
+        )),
+        "First used here"
+      ),
+    ];
   }
 
   // -- Teams message checks: only when the card is an attachment's "content".
@@ -660,6 +798,31 @@ function createInvalidValueFix(document, diagnostic) {
 }
 
 /**
+ * Quick fix for `adaptivecard-unknown-target`: changes the target to the
+ * closest id the card has (`"detials"` -> `"details"`), when one is close
+ * enough. Re-derives the suggestion from the document text, like
+ * {@link createInvalidValueFix}.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Diagnostic} diagnostic
+ * @returns {vscode.CodeAction | null}
+ */
+function createToggleTargetFix(document, diagnostic) {
+  const located = locateCard(document.getText());
+  if (!located) return null;
+  const offset = document.offsetAt(diagnostic.range.start) - located.objStart;
+  const target = findUnknownToggleTargets(located.card).find((t) => t.start === offset);
+  if (!target?.suggestion) return null;
+
+  const action = new vscode.CodeAction(`Change to '${target.suggestion}'`, vscode.CodeActionKind.QuickFix);
+  action.diagnostics = [diagnostic];
+  action.isPreferred = true;
+  action.edit = new vscode.WorkspaceEdit();
+  action.edit.replace(document.uri, diagnostic.range, target.suggestion);
+  return action;
+}
+
+/**
  * Quick fix for `adaptivecard-templating-keyword`: escapes the keyword with a
  * backtick (`` "`$data" ``), so OtterScript outputs it literally for a
  * templating host to expand.
@@ -708,5 +871,6 @@ module.exports = {
   createContentTypeFix,
   createInvalidValueFix,
   createTemplatingKeywordFix,
+  createToggleTargetFix,
   findAdaptiveCardDiagnostics,
 };

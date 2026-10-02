@@ -18,6 +18,7 @@ const {
   createContentTypeFix,
   createInvalidValueFix,
   createTemplatingKeywordFix,
+  createToggleTargetFix,
 } = require("../../src/adaptivecard.js");
 
 /**
@@ -541,5 +542,71 @@ describe("findAdaptiveCardDiagnostics — Teams message", () => {
     // An attachment, but not in a "type": "message" object.
     const src = `{ "attachments": [ { "contentType": "application/vnd.microsoft.card.adaptive", "content": ${CARD} } ] }`;
     assert.deepEqual(only(src, "adaptivecard-webhook-submit"), []);
+  });
+});
+
+describe("findAdaptiveCardDiagnostics — ToggleVisibility targets and ids", () => {
+  /**
+   * A 1.2 card with the given body elements and one toggle action.
+   *
+   * @param {string} body
+   * @param {string} targets - The `targetElements` array's contents
+   */
+  const card = (body, targets) =>
+    `{ "type": "AdaptiveCard", "version": "1.2", "body": [ ${body} ], ` +
+    `"actions": [ { "type": "Action.ToggleVisibility", "title": "More", "targetElements": [ ${targets} ] } ] }`;
+  const details = '{ "type": "TextBlock", "id": "details", "text": "x", "isVisible": false }';
+
+  it("accepts targets that are element ids, as strings or elementId objects", () => {
+    const src = card(`${details}, { "type": "ColumnSet", "columns": [ { "id": "col", "items": [] } ] }`,
+      '"details", { "elementId": "col", "isVisible": true }');
+    assert.deepEqual(diagnose(src), []);
+  });
+
+  it("flags a target no element has, with a quick fix to the closest id", () => {
+    const src = card(details, '"detials"');
+    const [d] = only(src, "adaptivecard-unknown-target");
+    assert.match(d.message, /'detials'.*Did you mean 'details'\?/);
+    assert.equal(d.range.start.character, src.indexOf("detials"));
+    const fix = createToggleTargetFix(oneLineDocument(src), d);
+    assert.equal(fix?.title, "Change to 'details'");
+  });
+
+  it("flags an unknown elementId, and compares ids case-sensitively", () => {
+    const src = card(details, '{ "elementId": "Details" }');
+    assert.equal(only(src, "adaptivecard-unknown-target").length, 1);
+  });
+
+  it("offers no fix when no id is close", () => {
+    const src = card(details, '"somethingElse"');
+    const [d] = only(src, "adaptivecard-unknown-target");
+    assert.doesNotMatch(d.message, /Did you mean/);
+    assert.equal(createToggleTargetFix(oneLineDocument(src), d), null);
+  });
+
+  it("skips templated targets, and every target when an id is templated", () => {
+    assert.deepEqual(only(card(details, '"$Target"'), "adaptivecard-unknown-target"), []);
+    const templatedId = '{ "type": "TextBlock", "id": "row$i", "text": "x" }';
+    assert.deepEqual(only(card(templatedId, '"row1"'), "adaptivecard-unknown-target"), []);
+  });
+
+  it("ignores ids and targetElements in free-form payloads and other actions", () => {
+    const src = `{ "type": "AdaptiveCard", "version": "1.2", "body": [], "actions": [ ` +
+      '{ "type": "Action.Submit", "title": "Go", "data": { "id": "x", "targetElements": [ "nowhere" ] } } ] }';
+    assert.deepEqual(only(src, "adaptivecard-unknown-target"), []);
+    assert.deepEqual(only(src, "adaptivecard-duplicate-id"), []);
+  });
+
+  it("flags a duplicate id, pointing at the first one", () => {
+    const src = card(`${details}, ${details}`, '"details"');
+    const [d] = only(src, "adaptivecard-duplicate-id");
+    assert.equal(d.range.start.character, src.lastIndexOf("details\", \"text"));
+    assert.equal(d.relatedInformation[0].location.range.start.character, src.indexOf("details"));
+    assert.deepEqual(only(src, "adaptivecard-unknown-target"), []);
+  });
+
+  it("doesn't flag the same id in alternative <% %> branches", () => {
+    const src = card(`<% if $x { %>${details}<% } else { %>${details}<% } %>`, '"details"');
+    assert.deepEqual(only(src, "adaptivecard-duplicate-id"), []);
   });
 });

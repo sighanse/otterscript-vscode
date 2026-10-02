@@ -102,6 +102,8 @@ when no folder is open).
 | `adaptivecard-version-too-low` | Card element, action or property newer than the card's `"version"` |
 | `adaptivecard-version-too-high` | Card `"version"` newer than `otterscript.adaptiveCards.maxVersion` |
 | `adaptivecard-templating-keyword` | Adaptive Card Templating key (`"$data"`, `"$when"`, ...) that OtterScript expands |
+| `adaptivecard-unknown-target` | `Action.ToggleVisibility` target that no element in the card has as its `"id"` |
+| `adaptivecard-duplicate-id` | `"id"` that another element in the card already has |
 | `adaptivecard-content-type` | Teams message attachment without the Adaptive Card `"contentType"` |
 | `adaptivecard-webhook-submit` | `Action.Submit` in a Teams message (webhooks don't support it) |
 

@@ -11,6 +11,8 @@
 - Go to Definition (F12) on a variable goes to where the file assigns it; with several assignments, VS Code lists them all
 - Go to Definition on `call MyModule` also finds a module declared in another OtterScript file in the workspace
 - Rename (F2) for variables and modules. A variable is renamed everywhere in the file, including in strings, where OtterScript expands it; a new name with spaces gets the braces it needs (`${my var}`). A module is renamed with every `call` to it in the file. Invalid names and names already in use are refused
+- `adaptivecard-unknown-target` diagnostic: an `Action.ToggleVisibility` target that no element in the card has as its `"id"` — the button would silently do nothing — with a quick fix to the closest id (`"detials"` → `"details"`)
+- `adaptivecard-duplicate-id` diagnostic: an `"id"` that another element in the same card already has, so a toggle reaches only one of them. Ids in alternative `<% if %>` / `<% else %>` branches aren't flagged
 - `otterscript.product` setting (`any`, `ProGet`, `Otter` or `BuildMaster`): completion leaves out the functions, variables and operations the chosen product doesn't have, based on Inedo's Otter and BuildMaster reference (what both have counts as the core engine, which ProGet runs too)
 
 ### Changed
@@ -22,7 +24,6 @@
 - Operations and functions that exist in Otter or BuildMaster but weren't documented here, such as `Extract-ZipFile` or `Ensure-DscResource`, were flagged as unknown
 - `$Trim` accepts the characters to trim (`$Trim($x, "-")`), as `$TrimStart` and `$TrimEnd` already did; it was flagged as too many arguments
 - `$PackageHash` and `$PackageProperty` mixed ProGet's and BuildMaster's forms. Hover now shows ProGet's (`$PackageHash([format], [algorithm])`, `$PackageProperty(name, [default])`) with BuildMaster's below it, and a three-argument BuildMaster `$PackageProperty(...)` is no longer flagged as too many arguments
-
 - `unknown-namespace` flagged real namespaces of Inedo's extensions, such as `GitHub::`, `Jira::`, `NuGet::`, `MSBuild::`, `Kubernetes::` or `AzureDevOps::`. Every namespace declared in Inedo's public extensions is now known, and an operation behind a namespace whose operations the extension doesn't document yet (`GitHub::Ensure-Release`) is no longer flagged as unknown either
 
 ### Removed

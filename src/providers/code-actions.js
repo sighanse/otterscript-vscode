@@ -12,6 +12,7 @@ const {
   createContentTypeFix,
   createInvalidValueFix,
   createTemplatingKeywordFix,
+  createToggleTargetFix,
 } = require("../adaptivecard");
 const {
   createAssignmentInConditionFix,
@@ -60,6 +61,7 @@ function registerCodeActions(settings, diagnostics, runDiagnostics) {
     "adaptivecard-invalid-value":   createInvalidValueFix,
     "adaptivecard-templating-keyword": createTemplatingKeywordFix,
     "adaptivecard-content-type":    createContentTypeFix,
+    "adaptivecard-unknown-target":  createToggleTargetFix,
   });
 
   // ============================================================

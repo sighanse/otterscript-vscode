@@ -377,6 +377,28 @@
               ],
               "markdownDescription": "An Adaptive Card Templating key such as `\"$data\"` or `\"$when\"`, which OtterScript expands as a variable in a text template."
             },
+            "adaptivecard-unknown-target": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "An `Action.ToggleVisibility` target that isn't the `\"id\"` of any element in the Adaptive Card."
+            },
+            "adaptivecard-duplicate-id": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "An `\"id\"` that another element in the same Adaptive Card already has."
+            },
             "adaptivecard-content-type": {
               "type": "string",
               "enum": [

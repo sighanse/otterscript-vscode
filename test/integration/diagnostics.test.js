@@ -203,4 +203,21 @@ describe("quick fixes", () => {
     assert.ok(document.lineAt(1).text.includes('"weight": "bolder"'));
     assert.equal((await refreshDiagnostics(document)).length, 0);
   });
+
+  it("'Change to' points a ToggleVisibility target at the closest element id", async () => {
+    const document = await openContent(
+      "<% if $Notify { %>\n" +
+      '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "TextBlock", "id": "details", "text": "x" } ],\n' +
+      '  "actions": [ { "type": "Action.ToggleVisibility", "title": "More", "targetElements": [ "detials" ] } ] }\n' +
+      "<% } %>\n"
+    );
+    const [diagnostic] = await refreshDiagnostics(document);
+    assert.equal(diagnostic?.code, "adaptivecard-unknown-target");
+
+    const fix = (await quickFixes(document, diagnostic)).find((a) => a.title === "Change to 'details'");
+    assert.ok(fix?.edit, "the fix is offered");
+    await vscode.workspace.applyEdit(fix.edit);
+    assert.ok(document.lineAt(2).text.includes('[ "details" ]'));
+    assert.equal((await refreshDiagnostics(document)).length, 0);
+  });
 });
