@@ -20,10 +20,12 @@ const { findModuleDeclarations } = require("../scanner");
  *   indexModuleFile: (uri: vscode.Uri) => Promise<void>,
  *   removeModuleIndexEntry: (uri: vscode.Uri) => void,
  *   resetWorkspaceIndex: () => void,
- *   listModules: () => Promise<{ name: string, uri: vscode.Uri, range: vscode.Range }[]>
+ *   listModules: () => Promise<{ name: string, uri: vscode.Uri, range: vscode.Range }[]>,
+ *   listFiles: () => Promise<vscode.Uri[]>
  * }} The index operations extension.js calls on document events and
- *   settings changes, and `listModules` for module-name completion and
- *   Go to Definition across files
+ *   settings changes; `listModules` for module-name completion and Go to
+ *   Definition across files, and `listFiles` for module Rename and Find
+ *   References across files
  */
 function registerWorkspaceSymbols(settings) {
   // ============================================================
@@ -237,6 +239,27 @@ function registerWorkspaceSymbols(settings) {
     return [...workspaceModuleIndex.values()].flatMap(({ uri, symbols }) => symbols.map(({ name, range }) => ({ name, uri, range })));
   }
 
+  /**
+   * Every OtterScript file in the workspace, plus open untitled ones -- the
+   * files a module's calls may be in. Read fresh each time (the index keeps
+   * only files that declare modules). Empty when
+   * `otterscript.workspaceSymbols.enable` is off.
+   *
+   * @returns {Promise<vscode.Uri[]>}
+   */
+  async function listFiles() {
+    if (!settings.workspaceSymbolsEnabled) return [];
+    /** @type {Map<string, vscode.Uri>} */
+    const files = new Map();
+    for (const uri of await vscode.workspace.findFiles(OTTER_FILE_GLOB, undefined, WORKSPACE_SCAN_FILE_LIMIT)) {
+      files.set(uri.toString(), uri);
+    }
+    for (const doc of vscode.workspace.textDocuments) {
+      if (doc.languageId === "otterscript" && INDEXED_SCHEMES.has(doc.uri.scheme)) files.set(doc.uri.toString(), doc.uri);
+    }
+    return [...files.values()];
+  }
+
   return {
     disposables: [
       workspaceSymbolProvider,
@@ -249,6 +272,7 @@ function registerWorkspaceSymbols(settings) {
     removeModuleIndexEntry: (uri) => { workspaceModuleIndex.delete(uri.toString()); },
     resetWorkspaceIndex,
     listModules,
+    listFiles,
   };
 }
 

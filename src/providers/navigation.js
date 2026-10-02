@@ -2,8 +2,8 @@
 /**
  * @fileoverview Navigation for OtterScript: Go to Definition for variables
  * (their assignments) and modules (in this file, else elsewhere in the
- * workspace), Find References for modules, Rename (F2) for variables and
- * modules, highlighting a variable's or module's occurrences, the Outline,
+ * workspace), Find References and Rename (F2) for modules -- across workspace
+ * files -- and Rename for variables, highlighting a variable's or module's occurrences, the Outline,
  * reference-count CodeLens, and folding.
  */
 
@@ -47,11 +47,82 @@ function variableNameRange(tokenRange, braced) {
  *
  * @param {import("../helpers").Settings} settings - Live settings, updated in
  *   place by the settings listener in extension.js
- * @param {() => Promise<{ name: string, uri: vscode.Uri, range: vscode.Range }[]>} listWorkspaceModules -
- *   Every module declared in the workspace (workspace-symbols.js)
+ * @param {{
+ *   listModules: () => Promise<{ name: string, uri: vscode.Uri, range: vscode.Range }[]>,
+ *   listFiles: () => Promise<vscode.Uri[]>
+ * }} workspace - Every module declared in the workspace, and every
+ *   OtterScript file in it (workspace-symbols.js)
  * @returns {vscode.Disposable[]}
  */
-function registerNavigation(settings, listWorkspaceModules) {
+function registerNavigation(settings, workspace) {
+  /**
+   * The open document for `uri`, or -- when its text on disk mentions
+   * `name` at all -- the document VS Code loads for it (without showing it).
+   *
+   * @param {vscode.Uri} uri
+   * @param {string} name
+   * @returns {Promise<vscode.TextDocument | undefined>}
+   */
+  async function documentMentioning(uri, name) {
+    const open = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString());
+    if (open) return open;
+    try {
+      const text = new TextDecoder("utf-8").decode(await vscode.workspace.fs.readFile(uri));
+      return text.includes(name) ? await vscode.workspace.openTextDocument(uri) : undefined;
+    } catch {
+      return undefined; // gone or unreadable
+    }
+  }
+
+  /**
+   * Every place a module is declared or called, as `document` sees it. A
+   * `call` means the module its own file declares, or else the one workspace
+   * file that declares it (as Go to Definition resolves it). So the module's
+   * file is `document` when it declares the name, else that one other file;
+   * the calls are that file's plus those in every file that doesn't declare
+   * the name itself. When the module's file can't be told -- no file or
+   * several other files declare it -- only `document`'s own uses count.
+   *
+   * @param {vscode.TextDocument} document
+   * @param {string} name
+   * @returns {Promise<{ locations: vscode.Location[], declaration: vscode.Location | undefined, crossFile: boolean }>}
+   *   `locations` include the module's declaration, which `declaration` is
+   *   (when known); `crossFile` tells whether other files were searched.
+   */
+  async function findModuleUses(document, name) {
+    const self = document.uri.toString();
+    const declaredIn = new Set((await workspace.listModules()).filter((m) => m.name === name).map((m) => m.uri.toString()));
+    declaredIn.delete(self);
+    const localDeclaration = findModuleDeclarationRange(document, name);
+
+    /** @type {vscode.TextDocument | undefined} */
+    let home = document;
+    if (!localDeclaration) {
+      const [only] = declaredIn;
+      home = declaredIn.size === 1 ? await documentMentioning(vscode.Uri.parse(only), name) : undefined;
+    } else if (declaredIn.size > 0) {
+      home = undefined; // calls elsewhere may mean another file's module
+    }
+    if (!home) {
+      return {
+        locations: findModuleReferences(document, name, true),
+        declaration: localDeclaration ? new vscode.Location(document.uri, localDeclaration) : undefined,
+        crossFile: false,
+      };
+    }
+
+    const homeDeclaration = findModuleDeclarationRange(home, name);
+    const declaration = homeDeclaration ? new vscode.Location(home.uri, homeDeclaration) : undefined;
+    const locations = findModuleReferences(home, name, true);
+    for (const uri of await workspace.listFiles()) {
+      const key = uri.toString();
+      if (key === home.uri.toString() || declaredIn.has(key)) continue;
+      const other = await documentMentioning(uri, name);
+      if (other && !findModuleDeclarationRange(other, name)) locations.push(...findModuleReferences(other, name, false));
+    }
+    return { locations, declaration, crossFile: true };
+  }
+
   // ============================================================
   // GO TO DEFINITION PROVIDER (Variables & Modules)
   // ============================================================
@@ -81,7 +152,7 @@ function registerNavigation(settings, listWorkspaceModules) {
         const declarationRange = findModuleDeclarationRange(document, moduleAt.name);
         if (declarationRange) return new vscode.Location(document.uri, declarationRange);
 
-        const elsewhere = (await listWorkspaceModules()).filter((m) => m.name === moduleAt.name);
+        const elsewhere = (await workspace.listModules()).filter((m) => m.name === moduleAt.name);
         return elsewhere.length ? elsewhere.map((m) => new vscode.Location(m.uri, m.range)) : null;
       }
     }
@@ -92,8 +163,8 @@ function registerNavigation(settings, listWorkspaceModules) {
   // ============================================================
   // F2 on a variable renames every occurrence in the file -- in code and in
   // the strings OtterScript expands -- keeping or adding the braces a name
-  // needs. F2 on a module renames its declaration and every `call` in this
-  // file (calls in other files are left as they are).
+  // needs. F2 on a module renames its declaration and every `call` to it,
+  // in other workspace files too (see findModuleUses).
 
   const renameProvider = vscode.languages.registerRenameProvider(
     "otterscript",
@@ -117,9 +188,9 @@ function registerNavigation(settings, listWorkspaceModules) {
        * @param {vscode.TextDocument} document
        * @param {vscode.Position} position
        * @param {string} newName
-       * @returns {vscode.WorkspaceEdit}
+       * @returns {Promise<vscode.WorkspaceEdit>}
        */
-      provideRenameEdits(document, position, newName) {
+      async provideRenameEdits(document, position, newName) {
         const edit = new vscode.WorkspaceEdit();
         const variableAt = getVariableAt(document, position);
         if (variableAt?.isReference) {
@@ -150,9 +221,13 @@ function registerNavigation(settings, listWorkspaceModules) {
         if (target !== moduleAt.name && findModuleDeclarationRange(document, target)) {
           throw new Error(`A module named '${target}' is already declared in this file.`);
         }
-        for (const location of findModuleReferences(document, moduleAt.name, true)) {
-          edit.replace(document.uri, location.range, target);
+        const { locations, crossFile } = await findModuleUses(document, moduleAt.name);
+        if (crossFile && target !== moduleAt.name) {
+          // A call renamed in another file must still mean this module.
+          const clash = (await workspace.listModules()).find((m) => m.name === target);
+          if (clash) throw new Error(`A module named '${target}' is already declared in ${vscode.workspace.asRelativePath(clash.uri)}.`);
         }
+        for (const location of locations) edit.replace(location.uri, location.range, target);
         return edit;
       }
     }
@@ -161,7 +236,8 @@ function registerNavigation(settings, listWorkspaceModules) {
   // ============================================================
   // FIND REFERENCES PROVIDER (Modules)
   // ============================================================
-  // Enables Shift+F12 and powers CodeLens reference counts for module calls.
+  // Shift+F12 on a module: its declaration and calls, across workspace files
+  // (see findModuleUses). The CodeLens counts stay per file.
 
   const referenceProvider = vscode.languages.registerReferenceProvider(
     "otterscript",
@@ -172,12 +248,14 @@ function registerNavigation(settings, listWorkspaceModules) {
        * @param {vscode.TextDocument} document
        * @param {vscode.Position} position
        * @param {vscode.ReferenceContext} refContext
-       * @returns {vscode.Location[]}
+       * @returns {Promise<vscode.Location[]>}
        */
-      provideReferences(document, position, refContext) {
+      async provideReferences(document, position, refContext) {
         const moduleAt = getModuleNameAt(document, position);
         if (!moduleAt) return [];
-        return findModuleReferences(document, moduleAt.name, refContext.includeDeclaration);
+        const { locations, declaration } = await findModuleUses(document, moduleAt.name);
+        if (refContext.includeDeclaration || !declaration) return locations;
+        return locations.filter((l) => !(l.uri.toString() === declaration.uri.toString() && l.range.isEqual(declaration.range)));
       }
     }
   );

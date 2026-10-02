@@ -72,6 +72,53 @@ describe("navigation and highlighting (main.otter)", () => {
     assert.equal(source.getText(), "module New-Name {\n}\ncall New-Name;\n");
   });
 
+  /**
+   * The rename edit for the symbol at `needle` (+ `offset`), per file name
+   * (`<untitled>` for this test's document): how many edits, not applied.
+   *
+   * @param {vscode.TextDocument} source
+   * @param {string} needle
+   * @param {number} offset
+   * @param {string} newName
+   * @returns {Promise<Map<string, number>>}
+   */
+  async function renameEditCounts(source, needle, offset, newName) {
+    /** @type {vscode.WorkspaceEdit} */
+    const edit = await vscode.commands.executeCommand(
+      "vscode.executeDocumentRenameProvider", source.uri, positionOf(source, needle, offset), newName
+    );
+    return new Map(edit.entries().map(([uri, edits]) => [
+      uri.toString() === source.uri.toString() ? "<untitled>" : uri.path.split("/").pop() ?? "", edits.length,
+    ]));
+  }
+
+  it("renames a module in the workspace file that declares it, with its calls there and here", async () => {
+    const source = await openContent('call Greet(name: "x");\n');
+    const counts = await renameEditCounts(source, "Greet", 2, "Welcome");
+    assert.equal(counts.get("main.otter"), 3, "declaration and two calls");
+    assert.equal(counts.get("<untitled>"), 1);
+  });
+
+  it("finds a module's references across workspace files", async () => {
+    const source = await openContent('call Greet(name: "x");\n');
+    /** @type {vscode.Location[]} */
+    const references = await vscode.commands.executeCommand(
+      "vscode.executeReferenceProvider", source.uri, positionOf(source, "Greet", 2)
+    );
+    const inMain = references.filter((l) => l.uri.path.endsWith("main.otter"));
+    assert.equal(inMain.length, 3, "declaration and two calls");
+    assert.ok(references.some((l) => l.uri.toString() === source.uri.toString()));
+  });
+
+  it("renames only this file's module when it declares one of the same name", async () => {
+    const source = await openContent("module Greet {\n}\ncall Greet;\n");
+    const counts = await renameEditCounts(source, "call Greet", 6, "Welcome");
+    assert.deepEqual([...counts], [["<untitled>", 2]]);
+    // While open, this second `module Greet` makes main.otter's ambiguous to
+    // the other tests' calls.
+    await vscode.commands.executeCommand("workbench.action.revertAndCloseActiveEditor");
+  });
+
   it("refuses an invalid or already-used name", async () => {
     const source = await openContent("set $a = 1;\nset $b = 2;\n");
     await assert.rejects(rename(source, "$a", 1, "1bad"), /isn't a valid variable name/);
@@ -99,7 +146,8 @@ describe("navigation and highlighting (main.otter)", () => {
     const references = await vscode.commands.executeCommand(
       "vscode.executeReferenceProvider", document.uri, positionOf(document, "module Greet", 8)
     );
-    assert.equal(references.length, 3);
+    // Calls in the other tests' open documents count too.
+    assert.equal(references.filter((l) => l.uri.toString() === document.uri.toString()).length, 3);
   });
 
   it("lists the module in the outline", async () => {
