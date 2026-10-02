@@ -216,7 +216,8 @@ async function fetchSnapshot() {
  *   snippet?: string,
  *   description: string,
  *   documentation: string,
- *   products: string[]
+ *   products: string[],
+ *   anySigil?: true
  * }} GeneratedDoc
  */
 
@@ -282,7 +283,7 @@ function operationSnippet(entry) {
  * language-data.js (functions by bare name, operations by name). A function
  * the reference lists without a sigil (`MapAdd`, `Eval`, `FromJson`) can be
  * called with any sigil -- the sigil picks the return type -- so it goes into
- * all three function tables.
+ * all three function tables, marked `anySigil`.
  *
  * @param {{ source: string, entries: RefEntry[] }} snapshot
  * @param {ReadonlySet<string>} declared - NAMESPACES, lower-cased
@@ -341,6 +342,7 @@ function buildTables(snapshot, declared) {
         description: primary.description,
         documentation: documentationFor(primary, products),
         products,
+        ...(sigil ? {} : { anySigil: /** @type {const} */ (true) }),
       });
     }
   }
@@ -387,7 +389,8 @@ function render(snapshot) {
  *   snippet?: string,
  *   description: string,
  *   documentation: string,
- *   products: string[]
+ *   products: string[],
+ *   anySigil?: true
  * }} ReferenceDoc
  */
 

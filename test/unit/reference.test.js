@@ -45,6 +45,27 @@ describe("generated Inedo reference, merged into language-data", () => {
     assert.equal(data.mapFunctionDocs["MapAdd"]?.name, "%MapAdd");
   });
 
+  it("marks the functions Inedo lists without a sigil as anySigil", () => {
+    for (const table of /** @type {const} */ (["scalarFunctionDocs", "vectorFunctionDocs", "mapFunctionDocs"])) {
+      assert.equal(reference[table]["MapAdd"]?.anySigil, true, table);
+    }
+    assert.equal(reference.scalarFunctionDocs["ToJson"]?.anySigil, undefined);
+  });
+
+  it("derives the @ and % forms of a hand-written anySigil function from its $ entry", () => {
+    for (const key of ["FromJson", "ListItem", "Eval", "GetVariableValue"]) {
+      const scalar = data.scalarFunctionDocs[key];
+      assert.equal(scalar.anySigil, true, `$${key} takes the mark`);
+      for (const [sigil, table] of /** @type {const} */ ([["@", "vectorFunctionDocs"], ["%", "mapFunctionDocs"]])) {
+        const form = data[table][key];
+        assert.equal(form.name, `${sigil}${key}`);
+        assert.equal(form.signature, scalar.signature?.replace("$", sigil));
+        assert.equal(form.documentation, scalar.documentation, `${sigil}${key} shares the $ entry's docs`);
+        assert.ok(form.snippet?.startsWith(`${sigil}${key}(`), form.snippet);
+      }
+    }
+  });
+
   it("uses only declared namespaces (none for InedoCore and BuildMaster's DB/Packages/System)", () => {
     for (const doc of Object.values(reference.operationDocs)) {
       assert.ok(doc.namespace === null || data.NAMESPACES.has(doc.namespace), `${doc.name}: ${doc.namespace}`);

@@ -15,7 +15,8 @@
 - Completion inside an Adaptive Card in a text template, on typing the opening `"` of a value (or Ctrl+Space inside it): `"type"` values that fit where the object is (actions in `actions`, `Column` in `columns`, ...) and that the card's `"version"` supports, a property's allowed values (`"weight": "` → `default`, `lighter`, `bolder`), and the card's element ids as `Action.ToggleVisibility` targets
 - `adaptivecard-unknown-target` diagnostic: an `Action.ToggleVisibility` target that no element in the card has as its `"id"` — the button would silently do nothing — with a quick fix to the closest id (`"detials"` → `"details"`)
 - `adaptivecard-duplicate-id` diagnostic: an `"id"` that another element in the same card already has, so a toggle reaches only one of them. Ids in alternative `<% if %>` / `<% else %>` branches aren't flagged
-- `otterscript.product` setting (`any`, `ProGet`, `Otter` or `BuildMaster`): completion leaves out the functions, variables and operations the chosen product doesn't have, based on Inedo's Otter and BuildMaster reference (what both have counts as the core engine, which ProGet runs too)
+- `otterscript.product` setting (`any`, `ProGet`, `Otter` or `BuildMaster`): completion leaves out the functions, variables and operations the chosen product doesn't have, based on Inedo's Otter and BuildMaster reference (what both have counts as the core engine, which ProGet runs too). Hover notes it when a function, variable or operation isn't in the chosen product
+- Hover says when a function works with every sigil (`$FromJson`, `@FromJson`, `%FromJson`), where the sigil picks what it returns. The `@` and `%` forms of `$Eval` and `$GetVariableValue` now have the same full documentation as their `$` form
 
 ### Changed
 

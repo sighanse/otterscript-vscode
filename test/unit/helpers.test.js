@@ -288,6 +288,25 @@ describe("buildHoverMarkdown (other products' forms)", () => {
   });
 });
 
+describe("buildHoverMarkdown (otterscript.product and anySigil)", () => {
+  /** @param {any} md */
+  const text = (md) => md.value;
+
+  it("notes, under the name, when the entry isn't in the selected product", () => {
+    const doc = { name: "$ReleaseName", signature: "$ReleaseName", products: ["BuildMaster"] };
+    const value = text(buildHoverMarkdown(doc, "Otter"));
+    assert.match(value, /^### \$ReleaseName\n\n⚠️ \*\*Not in Otter:\*\* only in BuildMaster/);
+    assert.doesNotMatch(text(buildHoverMarkdown(doc, "BuildMaster")), /Not in/);
+    assert.doesNotMatch(text(buildHoverMarkdown(doc)), /Not in/, "'any' by default");
+    assert.doesNotMatch(text(buildHoverMarkdown({ ...doc, products: ["Otter", "BuildMaster"] }, "ProGet")), /Not in/, "core engine");
+  });
+
+  it("says when a function works with every sigil", () => {
+    assert.match(text(buildHoverMarkdown({ name: "@FromJson", anySigil: true })), /Works with `\$`, `@` and `%`/);
+    assert.doesNotMatch(text(buildHoverMarkdown({ name: "$ToJson" })), /Works with/);
+  });
+});
+
 describe("buildHoverMarkdown (namespace provenance)", () => {
   it("adds a **Namespace:** line for an entry that has one", () => {
     const md = buildHoverMarkdown({

@@ -72,6 +72,10 @@
  *   `signature`) vs BuildMaster's `$PackageHash(packageName, [sourceName])`.
  *   Shown in hover; the too-many-arguments check allows the largest count of
  *   any form.
+ * @property {true=} anySigil The function works with every sigil, which picks
+ *   what it returns (`$FromJson` / `@FromJson` / `%FromJson`), as Inedo's
+ *   reference marks it. A hand-written `$` entry's `@` and `%` forms are
+ *   derived from it (see `anySigilForms`).
  * @property {string=} snippet VS Code snippet insertion text
  * @property {string=} documentation Extended Markdown documentation. Do not repeat
  *   `description` verbatim as the first line — hover renders both.
@@ -3527,23 +3531,8 @@ const vectorFunctionDocs = {
 \`\`\`
 `
   },
-  // -- Sigil-polymorphic functions: the same function as the scalar entry, called
-  //    with `@` to get a vector back. Documentation is shared with the `$` entry
-  //    (which explains all sigil forms) so the two cannot drift apart.
-  "FromJson": {
-    ...scalarFunctionDocs.FromJson,
-    name: "@FromJson",
-    signature: "@FromJson(json)",
-    snippet: "@FromJson(${1:json})",
-    description: "Parses a JSON array string into an OtterScript vector.",
-  },
-  "ListItem": {
-    ...scalarFunctionDocs.ListItem,
-    name: "@ListItem",
-    signature: "@ListItem(List, Index)",
-    snippet: "@ListItem(${1:@vector}, ${2:Index})",
-    description: "Gets an item that is itself a vector from a vector by index.",
-  },
+  // The `@` forms of functions that work with every sigil (`@FromJson`,
+  // `@ListItem`, ...) are derived from their `$` entry: see anySigilForms.
   "ListConcat": {
     namespace: null,
     name: "@ListConcat",
@@ -3928,27 +3917,12 @@ foreach $server in @ServersInRoleAndEnvironment("WebServer", "Production") {
 // ============================================================
 // MAP FUNCTION DOCS
 // ============================================================
-// Functions callable with the `%` sigil to get a map back. These are the
-// sigil-polymorphic functions -- the same function as the `$` entry, whose
-// documentation (shared here so it cannot drift) explains every sigil form.
+// Functions callable with the `%` sigil to get a map back. All of them work
+// with every sigil, so their `%` forms are derived from the `$` entries or
+// come from Inedo's reference (see anySigilForms); none is written out here.
 
 /** @type {DocsTable} */
-const mapFunctionDocs = {
-  "FromJson": {
-    ...scalarFunctionDocs.FromJson,
-    name: "%FromJson",
-    signature: "%FromJson(json)",
-    snippet: "%FromJson(${1:json})",
-    description: "Parses a JSON object string into an OtterScript map.",
-  },
-  "ListItem": {
-    ...scalarFunctionDocs.ListItem,
-    name: "%ListItem",
-    signature: "%ListItem(List, Index)",
-    snippet: "%ListItem(${1:@vector}, ${2:Index})",
-    description: "Gets an item that is itself a map from a vector by index.",
-  },
-};
+const mapFunctionDocs = {};
 
 // Freeze the exported tables so no consumer can add, remove, or replace an
 // entry at runtime. Shallow: the individual DocEntry objects are not frozen.
@@ -3991,10 +3965,46 @@ function withReference(handWritten, generated, alsoCovered = []) {
   for (const [key, doc] of Object.entries(generated)) {
     const handKey = handKeys.get(key.toLowerCase());
     if (!covered.has(key.toLowerCase())) merged[key] = doc;
-    // A hand-written entry without its own product list takes the reference's.
-    else if (handKey && !merged[handKey].products && doc.products) merged[handKey] = { ...merged[handKey], products: doc.products };
+    // A hand-written entry takes the reference's product list when it has
+    // none of its own, and its `anySigil` mark.
+    else if (handKey) {
+      const own = merged[handKey];
+      merged[handKey] = {
+        ...own,
+        ...(!own.products && doc.products ? { products: doc.products } : {}),
+        ...(doc.anySigil ? { anySigil: doc.anySigil } : {}),
+      };
+    }
   }
   return merged;
+}
+
+/**
+ * The `@` or `%` form of every hand-written `$` function that Inedo's
+ * reference marks `anySigil`: the same entry with the other sigil. Derived
+ * rather than written out, so the forms can't drift apart; the `$` entry's
+ * documentation explains what each sigil returns.
+ *
+ * @param {"@" | "%"} sigil
+ * @returns {DocsTable}
+ */
+function anySigilForms(sigil) {
+  const marked = new Set(Object.entries(reference.scalarFunctionDocs)
+    .filter(([, doc]) => doc.anySigil)
+    .map(([key]) => key.toLowerCase()));
+  /** @type {DocsTable} */
+  const forms = {};
+  for (const [key, doc] of Object.entries(scalarFunctionDocs)) {
+    if (!marked.has(key.toLowerCase())) continue;
+    forms[key] = {
+      ...doc,
+      name: doc.name.replace(/^\$/, sigil),
+      ...(doc.signature ? { signature: doc.signature.replace(/^\$/, sigil) } : {}),
+      // A `$` snippet starts with an escaped `\$`.
+      ...(doc.snippet ? { snippet: doc.snippet.replace(/^\\?\$/, sigil) } : {}),
+    };
+  }
+  return forms;
 }
 
 /**
@@ -4016,6 +4026,6 @@ module.exports = {
   keywordDocs,
   variableDocs: forProducts(variableDocs, ["ProGet"]),
   scalarFunctionDocs: withReference(scalarFunctionDocs, reference.scalarFunctionDocs, [variableDocs]),
-  vectorFunctionDocs: withReference(vectorFunctionDocs, reference.vectorFunctionDocs),
-  mapFunctionDocs: withReference(mapFunctionDocs, reference.mapFunctionDocs),
+  vectorFunctionDocs: withReference({ ...anySigilForms("@"), ...vectorFunctionDocs }, reference.vectorFunctionDocs),
+  mapFunctionDocs: withReference({ ...anySigilForms("%"), ...mapFunctionDocs }, reference.mapFunctionDocs),
 };

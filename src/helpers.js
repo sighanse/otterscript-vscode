@@ -334,6 +334,11 @@ function validateDocs(label, docsTable) {
       warnings.push(`${label}.${key} 'products' must be an array of ${PRODUCTS.join(", ")}`);
     }
 
+    // Optional Field: 'anySigil' -- works with every sigil
+    if (doc.anySigil !== undefined && doc.anySigil !== true) {
+      warnings.push(`${label}.${key} 'anySigil' must be true when set`);
+    }
+
     // Optional Field: 'overloads' -- other products' forms of the function
     if (doc.overloads !== undefined && (!Array.isArray(doc.overloads) ||
         doc.overloads.some((/** @type {any} */ o) => typeof o?.product !== "string" || typeof o?.signature !== "string"))) {
@@ -474,7 +479,7 @@ function createRegexPatterns(knownOperations) {
  * This creates the formatted tooltip content shown when hovering over
  * symbols, keywords, operations, and syntax elements.
  *
- * @param {Readonly<{ name: string, signature?: string, overloads?: { product: string, signature: string }[], description?: string, documentation?: string, namespace?: string | null }>} doc
+ * @param {Readonly<{ name: string, signature?: string, overloads?: { product: string, signature: string }[], description?: string, documentation?: string, namespace?: string | null, products?: ReadonlyArray<string>, anySigil?: boolean }>} doc
  *   - name: Required - Display name (e.g., "$ToJson")
  *   - signature: Optional - Function signature (monospace formatted)
  *   - overloads: Optional - The function's form in other Inedo products, each
@@ -482,6 +487,10 @@ function createRegexPatterns(knownOperations) {
  *   - description: Optional - Short description
  *   - documentation: Optional - Extended Markdown documentation
  *   - namespace: Optional - Owning OtterScript namespace (shown as provenance)
+ *   - products: Optional - The products that have it; a note says so when
+ *     `product` isn't one of them (see {@link isAvailableIn})
+ *   - anySigil: Optional - Works with every sigil (noted below the signature)
+ * @param {string} [product] - The `otterscript.product` setting
  * @returns {vscode.MarkdownString} - Formatted hover content
  *
  * @example
@@ -492,11 +501,16 @@ function createRegexPatterns(knownOperations) {
  * // **Signature:** `$ToJson(data)`
  * // Converts to JSON
  */
-function buildHoverMarkdown(doc) {
+function buildHoverMarkdown(doc, product = "any") {
   const md = new vscode.MarkdownString();
 
   // Heading (### is h3 in Markdown, renders bold in VS Code)
   md.appendMarkdown(`### ${doc.name}\n\n`);
+
+  // Not in the product the user writes for -- right under the name, where it's seen.
+  if (doc.products && !isAvailableIn(doc, product)) {
+    md.appendMarkdown(`⚠️ **Not in ${product}:** only in ${doc.products.join(" and ")} (setting \`otterscript.product\`).\n\n`);
+  }
 
   // Signature (monospace for code clarity)
   if (doc.signature) {
@@ -505,6 +519,9 @@ function buildHoverMarkdown(doc) {
   // The same function's form in other Inedo products, when it differs
   for (const overload of doc.overloads ?? []) {
     md.appendMarkdown(`**In ${overload.product}:** \`${overload.signature}\`\n\n`);
+  }
+  if (doc.anySigil) {
+    md.appendMarkdown("Works with `$`, `@` and `%`: the sigil picks what it returns.\n\n");
   }
 
   // Namespace provenance -- the extension/namespace this construct belongs to.

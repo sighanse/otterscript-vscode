@@ -106,6 +106,19 @@ describe("hover", () => {
     assert.equal(await hoverText(document, positionOf(document, "# #endregion", 4)), "");
   });
 
+  it("notes when an entry isn't in the otterscript.product setting's product", async () => {
+    const config = vscode.workspace.getConfiguration("otterscript");
+    const source = await openContent("set $x = $ReleaseName;\n");
+    const at = positionOf(source, "$ReleaseName", 2);
+    try {
+      assert.doesNotMatch(await hoverText(source, at), /Not in/, "nothing with 'any'");
+      await config.update("product", "Otter", vscode.ConfigurationTarget.Global);
+      assert.match(await hoverText(source, at), /Not in Otter:\*\* only in BuildMaster/);
+    } finally {
+      await config.update("product", undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
+
   it("shows nothing for names that are only inherited Object members", async () => {
     assert.equal(await hoverText(document, positionOf(document, "$constructor", 2)), "");
   });

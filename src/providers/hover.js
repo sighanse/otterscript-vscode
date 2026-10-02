@@ -47,7 +47,7 @@ function registerHover(settings, operationRegex) {
           const end = start + regionMatch[2].length;
           if (position.character >= start && position.character <= end) {
             const doc = regionMatch[2].toLowerCase() === "#region" ? syntaxDocs.regionStart : syntaxDocs.regionEnd;
-            return new vscode.Hover(buildHoverMarkdown(doc), new vscode.Range(position.line, start, position.line, end));
+            return new vscode.Hover(buildHoverMarkdown(doc, settings.product), new vscode.Range(position.line, start, position.line, end));
           }
         }
 
@@ -64,11 +64,11 @@ function registerHover(settings, operationRegex) {
           const text = document.getText(templateRange);
           if (text === '<%') {
             return new vscode.Hover(
-              buildHoverMarkdown(syntaxDocs.templateOpen), templateRange);
+              buildHoverMarkdown(syntaxDocs.templateOpen, settings.product), templateRange);
           }
           if (text === '%>') {
             return new vscode.Hover(
-              buildHoverMarkdown(syntaxDocs.templateClose), templateRange);
+              buildHoverMarkdown(syntaxDocs.templateClose, settings.product), templateRange);
           }
         }
 
@@ -83,15 +83,15 @@ function registerHover(settings, operationRegex) {
             const text = document.getText(exprRange);
             if (text === '%(') {
               return new vscode.Hover(
-                buildHoverMarkdown(syntaxDocs.mapExpr), exprRange);
+                buildHoverMarkdown(syntaxDocs.mapExpr, settings.product), exprRange);
             }
             if (text === '@(') {
               return new vscode.Hover(
-                buildHoverMarkdown(syntaxDocs.vectorExpr), exprRange);
+                buildHoverMarkdown(syntaxDocs.vectorExpr, settings.product), exprRange);
             }
             if (text === '$(') {
               return new vscode.Hover(
-                buildHoverMarkdown(syntaxDocs.nestedEval), exprRange);
+                buildHoverMarkdown(syntaxDocs.nestedEval, settings.product), exprRange);
             }
         }
         // -- Keywords (if, foreach, with, set, etc.)
@@ -114,7 +114,7 @@ function registerHover(settings, operationRegex) {
 
           // -- Check if it's a known keyword
           const doc = lookupOwn(keywordDocs, word);
-          if (doc) return new vscode.Hover(buildHoverMarkdown(doc), wordRange);
+          if (doc) return new vscode.Hover(buildHoverMarkdown(doc, settings.product), wordRange);
         }
 
         // -- Swim-string delimiters (Fish Sentinels)
@@ -128,7 +128,7 @@ function registerHover(settings, operationRegex) {
 
         if (swimRange) {
           return new vscode.Hover(
-            buildHoverMarkdown(syntaxDocs.swimString), swimRange);
+            buildHoverMarkdown(syntaxDocs.swimString, settings.product), swimRange);
         }
 
         // -- Operations (Log-Information, Log-Warning, Log-Error, etc.)
@@ -146,7 +146,7 @@ function registerHover(settings, operationRegex) {
           if (!doc) return null;
 
           // -- Make hover
-          return new vscode.Hover(buildHoverMarkdown(doc), operationRange);
+          return new vscode.Hover(buildHoverMarkdown(doc, settings.product), operationRange);
         }
 
         // -- Symbols ($function, @vector, %map function, $variable)
@@ -181,7 +181,7 @@ function registerHover(settings, operationRegex) {
         if (!doc) return null;
 
         // -- Make hover
-        return new vscode.Hover(buildHoverMarkdown(doc), symbolRange);
+        return new vscode.Hover(buildHoverMarkdown(doc, settings.product), symbolRange);
       }
     }
   );
