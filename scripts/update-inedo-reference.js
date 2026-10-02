@@ -254,7 +254,10 @@ const cleanParam = ({ name, required, description, format }) => ({
 
 /**
  * An operation's arguments, for argument completion and hover: the first
- * product's, then any another product adds.
+ * product's, then any another product adds. An argument is required only
+ * when every page requires it: two products' same-named operations can be
+ * different ones (`DevEnv::Build` / `DotNet::Build`), and a call can't be
+ * told apart, so one's required argument mustn't be demanded of the other.
  *
  * @param {RefEntry[]} variants - The operation's pages, one per product
  * @returns {ReferenceParam[]}
@@ -263,7 +266,10 @@ function operationParams(variants) {
   /** @type {Map<string, ReferenceParam>} */
   const params = new Map();
   for (const param of variants.flatMap((v) => v.params)) {
-    if (!params.has(param.name.toLowerCase())) params.set(param.name.toLowerCase(), cleanParam(param));
+    const key = param.name.toLowerCase();
+    if (params.has(key)) continue;
+    const required = variants.every((v) => v.params.some((p) => p.name.toLowerCase() === key && p.required));
+    params.set(key, cleanParam({ ...param, required }));
   }
   return [...params.values()];
 }

@@ -97,11 +97,11 @@ function operationSignature(name, params) {
 }
 
 /**
- * The completion snippet for an operation: the required arguments of its
- * signature as tab stops when it's called with parentheses, else a single
- * argument. (`params` may also hold another product's same-named operation's
- * arguments -- `DevEnv::Build` and `DotNet::Build` -- which the snippet
- * leaves out.)
+ * The completion snippet for an operation: the arguments its signature
+ * requires (written without `[ ]`) as tab stops when it's called with
+ * parentheses, else a single argument. The signature, not `params`, says
+ * what's required: `params` also holds another product's same-named
+ * operation's arguments (`DevEnv::Build` / `DotNet::Build`).
  *
  * @param {string} name
  * @param {string} signature
@@ -110,7 +110,7 @@ function operationSignature(name, params) {
  */
 function operationSnippet(name, signature, params) {
   if (!/^\S+\s*\(/.test(signature)) return `${name} \${1};$0`;
-  const required = params.filter((p) => p.required && /^[A-Za-z]\w*$/.test(p.name) && new RegExp(`\\b${p.name}:`).test(signature));
+  const required = params.filter((p) => /^[A-Za-z]\w*$/.test(p.name) && new RegExp(`[(,]\\s*${p.name}:`).test(signature));
   if (!required.length) return `${name}($1);$0`;
   return `${name}(\n\t${required.map((p, i) => `${p.name}: \${${i + 1}}`).join(",\n\t")}\n);$0`;
 }

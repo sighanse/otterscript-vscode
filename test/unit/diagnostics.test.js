@@ -489,6 +489,8 @@ describe("updateDiagnostics — unknown namespace", () => {
     assert.deepEqual(only('Copy-Files(From: "a", to: "b");', "missing-required-argument"), [], "names ignore case");
     assert.deepEqual(only('Copy-Files("a");', "missing-required-argument"), [], "a positional argument: unknown which");
     assert.deepEqual(only('Log-Information "x";\ncall Copy-Files(From: "a");', "missing-required-argument"), [], "a module call");
+    // Same-named operations of different products: only what every one requires.
+    assert.deepEqual(only('GitHub::Create-Issue(Title: "x");\nDotNet::Build(Project: "a.csproj");', "missing-required-argument"), []);
   });
 
   it("flags a module declared twice in one file, pointing at the first", () => {
