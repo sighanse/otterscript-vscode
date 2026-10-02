@@ -39,6 +39,7 @@ const { isInStringOrCommentDoc } = require("./document-index");
  *   signatureHelpEnabled: boolean,
  *   codeLensEnabled: boolean,
  *   workspaceSymbolsEnabled: boolean,
+ *   parameterNameHints: boolean,
  *   diagnosticRules: Readonly<Record<string, string>>,
  *   adaptiveCardMaxVersion: string,
  *   product: string
@@ -61,6 +62,7 @@ function loadConfig() {
     signatureHelpEnabled: config.get("signatureHelp.enable", true),
     codeLensEnabled: config.get("codeLens.enable", true),
     workspaceSymbolsEnabled: config.get("workspaceSymbols.enable", true),
+    parameterNameHints: config.get("inlayHints.parameterNames", false),
     diagnosticRules: config.get("diagnostics.rules", {}),
     adaptiveCardMaxVersion: config.get("adaptiveCards.maxVersion", "1.6"),
     product: config.get("product", "any")

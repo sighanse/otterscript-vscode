@@ -51,6 +51,7 @@ const { clearDocumentCaches } = require("./document-index");
 const { registerCodeActions } = require("./providers/code-actions");
 const { registerCompletion } = require("./providers/completion");
 const { registerHover } = require("./providers/hover");
+const { registerInlayHints } = require("./providers/inlay-hints");
 const { registerNavigation } = require("./providers/navigation");
 const { registerSignatureHelp } = require("./providers/signature-help");
 const { registerWorkspaceSymbols } = require("./providers/workspace-symbols");
@@ -114,6 +115,7 @@ function activate(context) {
     ...registerCodeActions(settings, diagnostics, runDiagnostics),
     ...registerCompletion(settings, workspaceSymbols.listModules),
     ...registerHover(settings, workspaceSymbols.listModules),
+    ...registerInlayHints(settings),
     ...registerNavigation(settings, workspaceSymbols),
     ...registerSignatureHelp(settings, workspaceSymbols.listModules),
     ...workspaceSymbols.disposables,

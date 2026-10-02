@@ -310,6 +310,29 @@ describe("signature help", () => {
   });
 });
 
+describe("inlay hints", () => {
+  after(closeAllEditors);
+
+  it("names a call's positional arguments when otterscript.inlayHints.parameterNames is on", async () => {
+    const config = vscode.workspace.getConfiguration("otterscript");
+    const document = await openContent("set $s = $Substring($x, 2, 3);\n");
+    const range = new vscode.Range(0, 0, 1, 0);
+    /** @returns {Promise<string[]>} */
+    const labels = async () => {
+      /** @type {vscode.InlayHint[]} */
+      const hints = await vscode.commands.executeCommand("vscode.executeInlayHintProvider", document.uri, range);
+      return hints.map((hint) => (typeof hint.label === "string" ? hint.label : hint.label.map((part) => part.value).join("")));
+    };
+    try {
+      assert.deepEqual(await labels(), [], "off by default");
+      await config.update("inlayHints.parameterNames", true, vscode.ConfigurationTarget.Global);
+      assert.deepEqual(await labels(), ["Text:", "Offset:", "Length:"]);
+    } finally {
+      await config.update("inlayHints.parameterNames", undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
+});
+
 describe("snippets", () => {
   afterEach(closeAllEditors);
 

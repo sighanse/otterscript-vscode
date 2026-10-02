@@ -114,6 +114,11 @@
           "default": true,
           "description": "Index module declarations across .otter/.oscript files for 'Go to Symbol in Workspace' (Ctrl+T)"
         },
+        "otterscript.inlayHints.parameterNames": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Show parameter names before the positional arguments of a function call, such as `$Substring($x, Offset: 2, Length: 3)`. Functions with one parameter and arguments that are already a variable of that name get none."
+        },
         "otterscript.product": {
           "type": "string",
           "enum": [
