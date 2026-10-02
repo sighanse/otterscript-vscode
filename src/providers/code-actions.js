@@ -16,7 +16,7 @@ const {
   createToggleTargetFix,
 } = require("../adaptivecard");
 const {
-  editDistance,
+  closestMatch,
   log,
   lookupOwn,
 } = require("../helpers");
@@ -153,28 +153,14 @@ function createTemplateEndFix(document, diagnostic) {
 }
 
 /**
- * Picks the closest known namespace to `token`: an exact case-insensitive match
- * wins (canonical casing), otherwise the smallest edit distance within a small
- * threshold. Returns null when nothing is close enough to suggest.
+ * The known namespace closest to `token` (canonical casing for a case-only
+ * difference), or null when nothing is close enough to suggest.
  *
  * @param {string} token - The unrecognized namespace as written
  * @returns {string | null}
  */
 function nearestNamespace(token) {
-  const lower = token.toLowerCase();
-  /** @type {string | null} */
-  let best = null;
-  let bestDistance = Infinity;
-  for (const known of NAMESPACES) {
-    if (known.toLowerCase() === lower) return known;
-    const d = editDistance(lower, known.toLowerCase());
-    if (d < bestDistance) {
-      bestDistance = d;
-      best = known;
-    }
-  }
-  // Only suggest when it is a plausible typo, not an unrelated word.
-  return bestDistance <= Math.max(2, Math.ceil(token.length / 3)) ? best : null;
+  return closestMatch(token, NAMESPACES) ?? null;
 }
 
 /**

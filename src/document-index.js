@@ -13,6 +13,7 @@
 const vscode = require("vscode");
 const {
   advanceScanState,
+  BRACED_NAME_PATTERN,
   createCodeScanState,
   findModuleDeclarations,
   indexVariableOccurrences,
@@ -22,6 +23,7 @@ const {
   maskNonCodeSpans,
   MODULE_CALL_TARGET_GLOBAL_REGEX,
   MODULE_NAME_TOKEN_REGEX,
+  NAME_PATTERN,
   variableKey,
 } = require("./scanner");
 
@@ -228,7 +230,7 @@ function getVariableIndex(document) {
  * A `$name` / `@name` / `%name` token, or its braced `${name}` form (whose
  * name may contain spaces), per Inedo's variable-name rules.
  */
-const VARIABLE_AT_CURSOR_REGEX = /[$@%](?:\{[A-Za-z][A-Za-z0-9_ -]*\}|[A-Za-z](?:[A-Za-z0-9_-]*[A-Za-z0-9])?)/;
+const VARIABLE_AT_CURSOR_REGEX = new RegExp(String.raw`[$@%](?:\{${BRACED_NAME_PATTERN}\}|${NAME_PATTERN})`);
 
 /**
  * The variable token under the cursor, with every occurrence of that

@@ -17,15 +17,29 @@ const {
   getVariableAt,
   getVariableOccurrences,
 } = require("../document-index");
-const { createCodeScanState, findTemplateTagDelimiters, maskNonCodeSpans } = require("../scanner");
+const { createCodeScanState, findTemplateTagDelimiters, maskNonCodeSpans, NAME_PATTERN } = require("../scanner");
 
-
-/** A plain name, per Inedo's formal grammar: letters, digits, `-` and `_`; a letter first; not ending in `-` or `_`. */
-const PLAIN_NAME_REGEX = /^[A-Za-z](?:[A-Za-z0-9_-]*[A-Za-z0-9])?$/;
-/** A variable name that also has spaces -- only valid braced (`${my var}`). */
+/** A plain name, per Inedo's formal grammar (see NAME_PATTERN). */
+const PLAIN_NAME_REGEX = new RegExp(`^${NAME_PATTERN}$`);
+/**
+ * A new variable name that also has spaces -- only valid braced (`${my var}`).
+ * Stricter than what the scanner reads as a braced name: like a plain name it
+ * must end with a letter or digit, so a rename never produces `${my var }`.
+ */
 const BRACED_NAME_REGEX = /^[A-Za-z](?:[A-Za-z0-9_ -]*[A-Za-z0-9])?$/;
 /** Inedo's limit on a name's length. */
 const MAX_NAME_LENGTH = 50;
+
+/**
+ * The range of one variable occurrence (sigil and braces included).
+ *
+ * @param {import("../scanner").VariableOccurrence} occurrence
+ * @returns {vscode.Range}
+ */
+function occurrenceRange(occurrence) {
+  const { line, character, length } = occurrence;
+  return new vscode.Range(line, character, line, character + length);
+}
 
 /**
  * The range of just the name in a variable token, without its sigil and
@@ -141,7 +155,7 @@ function registerNavigation(settings, workspace) {
           if (!variableAt.isReference) return null;
           const writes = variableAt.occurrences.filter((o) => o.write);
           return writes.length
-            ? writes.map((o) => new vscode.Location(document.uri, new vscode.Range(o.line, o.character, o.line, o.character + o.length)))
+            ? writes.map((o) => new vscode.Location(document.uri, occurrenceRange(o)))
             : null;
         }
 
@@ -205,7 +219,7 @@ function registerNavigation(settings, workspace) {
           }
           const needsBraces = !PLAIN_NAME_REGEX.test(target);
           for (const o of variableAt.occurrences) {
-            const range = new vscode.Range(o.line, o.character, o.line, o.character + o.length);
+            const range = occurrenceRange(o);
             const braced = document.getText(range)[1] === "{";
             edit.replace(document.uri, range, braced || needsBraces ? `${sigil}{${target}}` : `${sigil}${target}`);
           }
@@ -282,7 +296,7 @@ function registerNavigation(settings, workspace) {
         if (variableAt) {
           if (!variableAt.isReference) return undefined;
           return variableAt.occurrences.map((o) => new vscode.DocumentHighlight(
-            new vscode.Range(o.line, o.character, o.line, o.character + o.length),
+            occurrenceRange(o),
             o.write ? vscode.DocumentHighlightKind.Write : vscode.DocumentHighlightKind.Read
           ));
         }

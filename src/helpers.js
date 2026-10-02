@@ -684,6 +684,31 @@ function editDistance(a, b) {
   return prev[cols - 1];
 }
 
+/**
+ * The candidate closest to `value` by edit distance, ignoring case -- a
+ * likely typo's intended word (`"bold"` -> `"bolder"`, `"Windoze"` ->
+ * `"Windows"`) -- or undefined when none is close enough to suggest. A
+ * case-only difference is distance 0, so it always wins.
+ *
+ * @param {string} value
+ * @param {Iterable<string>} candidates
+ * @returns {string | undefined}
+ */
+function closestMatch(value, candidates) {
+  const lower = value.toLowerCase();
+  let best;
+  let bestDistance = Infinity;
+  for (const candidate of candidates) {
+    const d = editDistance(lower, candidate.toLowerCase());
+    if (d < bestDistance) {
+      bestDistance = d;
+      best = candidate;
+    }
+  }
+  // Only a plausible typo, not an unrelated word.
+  return bestDistance <= Math.max(2, Math.ceil(value.length / 3)) ? best : undefined;
+}
+
 // ============================================================
 // EXPORTS
 // ============================================================
@@ -718,6 +743,6 @@ module.exports = {
   buildSigilCompletionItems,
 
   // -- Text utilities
-  editDistance,
+  closestMatch,
   createRegexPatterns,
 };

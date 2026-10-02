@@ -1018,7 +1018,6 @@ module.exports = {
   applyDiagnosticRules,
   checkMissingDollar,
   createUnbalancedDiagnostic,
-  findArgumentCountDiagnosticsFromMasked,
   findDuplicateMapKeyDiagnosticsFromMasked,
   getDiagnosticCode,
   updateDiagnostics,

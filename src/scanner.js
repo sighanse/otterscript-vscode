@@ -892,6 +892,15 @@ function templateVariableViews(lines) {
 }
 
 /**
+ * Inedo's name rule, as regex source (no anchors, no groups that capture):
+ * letters, digits, `-` and `_`, starting with a letter and not ending with
+ * `-` or `_`. For variable, module and parameter names.
+ */
+const NAME_PATTERN = "[A-Za-z](?:[A-Za-z0-9_-]*[A-Za-z0-9])?";
+/** An explicit variable name, inside braces (`${my var}`): spaces allowed too. */
+const BRACED_NAME_PATTERN = "[A-Za-z][A-Za-z0-9_ -]*";
+
+/**
  * A variable token: a sigil (group 1), then either a plain name (group 2) or
  * an explicit name in braces (group 3) -- `$name` or `${name}`, likewise for
  * `@` / `%`. Per Inedo's formal grammar a name is letters, digits, dashes and
@@ -904,8 +913,10 @@ function templateVariableViews(lines) {
  * `$Fo` of `$Foo(` or `$a` of `$a-b(`).
  * @type {RegExp}
  */
-const VARIABLE_TOKEN_REGEX =
-  /(?<![A-Za-z0-9_`$@%])([$@%])(?:([A-Za-z](?:[A-Za-z0-9_-]*[A-Za-z0-9])?)(?![A-Za-z0-9_(]|-[A-Za-z0-9])|\{([A-Za-z][A-Za-z0-9_ -]*)\})/g;
+const VARIABLE_TOKEN_REGEX = new RegExp(
+  String.raw`(?<![A-Za-z0-9_\`$@%])([$@%])(?:(${NAME_PATTERN})(?![A-Za-z0-9_(]|-[A-Za-z0-9])|\{(${BRACED_NAME_PATTERN})\})`,
+  "g"
+);
 
 /** Text before a token that makes it a `foreach` loop variable. */
 const FOREACH_VARIABLE_PREFIX_REGEX = /\bforeach\s+$/i;
@@ -1000,20 +1011,6 @@ function indexVariableOccurrences(text) {
   return index;
 }
 
-/**
- * Finds every reference to one variable in a document (see
- * {@link indexVariableOccurrences} for the rules). For repeated lookups on
- * the same text, build the index once and use {@link variableKey} instead.
- *
- * @param {string} text - Full document text
- * @param {string} sigil - `$`, `@`, or `%`
- * @param {string} name - Variable name without its sigil
- * @returns {VariableOccurrence[]}
- */
-function findVariableOccurrences(text, sigil, name) {
-  return indexVariableOccurrences(text).get(variableKey(sigil, name)) ?? [];
-}
-
 // ============================================================
 // EXPORTS
 // ============================================================
@@ -1042,9 +1039,10 @@ module.exports = {
 
   // -- Variable occurrences
   maskCommentSpans,
-  findVariableOccurrences,
   indexVariableOccurrences,
   variableKey,
+  NAME_PATTERN,
+  BRACED_NAME_PATTERN,
 
   // -- Argument helpers
   getActiveParameterIndex,

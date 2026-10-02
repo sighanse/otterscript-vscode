@@ -30,7 +30,8 @@ const {
   getActiveParameterIndex,
   splitSignatureParameters,
   maskCommentSpans,
-  findVariableOccurrences,
+  indexVariableOccurrences,
+  variableKey,
   maskClosedGroups,
   MODULE_NAME_TOKEN_REGEX,
   MODULE_DECLARATION_REGEX,
@@ -40,6 +41,16 @@ const {
   isModuleCallContext,
   findModuleDeclarations,
 } = require("../../src/scanner.js");
+
+/**
+ * Every reference to one variable in `text`, from the occurrence index.
+ *
+ * @param {string} text
+ * @param {string} sigil
+ * @param {string} name
+ * @returns {import("../../src/scanner.js").VariableOccurrence[]}
+ */
+const findVariableOccurrences = (text, sigil, name) => indexVariableOccurrences(text).get(variableKey(sigil, name)) ?? [];
 
 // ============================================================
 // createCodeScanState

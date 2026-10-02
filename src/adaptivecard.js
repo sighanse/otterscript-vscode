@@ -34,7 +34,7 @@
 
 const vscode = require("vscode");
 const { createTemplateScanState, maskTemplateTagContents } = require("./scanner");
-const { editDistance } = require("./helpers");
+const { closestMatch } = require("./helpers");
 const { analyzeJson, findStringProperties, hasOwnKeyProperty, scanJsonPrefix, valueStartAfterKey } = require("./json-view");
 const { ADAPTIVE_CARD_TYPES, ADAPTIVE_CARD_PROPERTIES, ADAPTIVE_CARD_VALUE_LISTS } = require("./adaptivecard-data");
 
@@ -131,6 +131,18 @@ function compareCardVersions(a, b) {
 }
 
 /**
+ * A document's literal text: everything a text template outputs as written,
+ * with the contents of its `<% %>` tags blanked (same length, same offsets).
+ *
+ * @param {string} text - Full document text
+ * @returns {string}
+ */
+function maskTemplateTags(text) {
+  const state = createTemplateScanState();
+  return text.split("\n").map((line) => maskTemplateTagContents(line, state)).join("\n");
+}
+
+/**
  * Locates the Adaptive Card in a document: the first literal (non-`<% %>`)
  * object with `"type": "AdaptiveCard"` that isn't a lookalike inside a
  * free-form payload.
@@ -143,8 +155,7 @@ function compareCardVersions(a, b) {
  *   at what surrounds the card (see {@link findWebhookEnvelope}).
  */
 function locateCard(text) {
-  const state = createTemplateScanState();
-  const literal = analyzeJson(text.split("\n").map((line) => maskTemplateTagContents(line, state)).join("\n"));
+  const literal = analyzeJson(maskTemplateTags(text));
 
   // A payload that merely looks like a card (e.g. an Action.Submit "data"
   // object with "type": "AdaptiveCard") is not the card -- skip such
@@ -300,28 +311,6 @@ function isTemplatedValue(value) {
 }
 
 /**
- * The allowed value closest to `value` -- a likely typo such as `"bold"` for
- * `"bolder"` -- or undefined when none is close enough to suggest.
- *
- * @param {string} value
- * @param {readonly string[]} allowed
- * @returns {string | undefined}
- */
-function nearestAllowedValue(value, allowed) {
-  const lower = value.toLowerCase();
-  let best;
-  let bestDistance = Infinity;
-  for (const candidate of allowed) {
-    const d = editDistance(lower, candidate.toLowerCase());
-    if (d < bestDistance) {
-      bestDistance = d;
-      best = candidate;
-    }
-  }
-  return bestDistance <= Math.max(2, Math.ceil(value.length / 3)) ? best : undefined;
-}
-
-/**
  * One property whose string value isn't in its fixed list. `start`/`end`
  * bracket the value without its quotes.
  *
@@ -361,7 +350,7 @@ function findInvalidValues(card) {
       type,
       key,
       allowed,
-      suggestion: nearestAllowedValue(value, allowed),
+      suggestion: closestMatch(value, allowed),
     });
   }
   return results;
@@ -466,7 +455,7 @@ function findUnknownToggleTargets(card) {
   const known = new Set(ids);
   return findToggleTargets(card)
     .filter(({ value }) => value !== "" && !isTemplatedValue(value) && !known.has(value))
-    .map((target) => ({ ...target, suggestion: nearestAllowedValue(target.value, [...known]) }));
+    .map((target) => ({ ...target, suggestion: closestMatch(target.value, known) }));
 }
 
 /**
@@ -570,8 +559,7 @@ const TYPES_BY_CONTAINER = (() => {
  *   null when the cursor isn't in a card value this knows about.
  */
 function findCardCompletions(text, offset) {
-  const state = createTemplateScanState();
-  const literal = text.split("\n").map((line) => maskTemplateTagContents(line, state)).join("\n");
+  const literal = maskTemplateTags(text);
   const { open, openString } = scanJsonPrefix(literal.slice(0, offset));
   if (openString === -1 || literal.slice(openString, offset).includes("\n")) return null;
 
@@ -946,53 +934,54 @@ function createCardVersionFix(document, diagnostic, options = {}) {
 }
 
 /**
- * Quick fix for `adaptivecard-invalid-value`: replaces the value with the
- * closest allowed one (`"bold"` -> `"bolder"`), when one is close enough to
- * be the intended value. Re-derives the suggestion from the document text,
- * since diagnostics handed back by VS Code keep only their public fields.
+ * A quick fix that replaces a flagged card value with its suggestion -- the
+ * closest valid value, when one is close enough to be the intended one.
+ * Re-derives the suggestion from the document text, since diagnostics handed
+ * back by VS Code keep only their public fields.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Diagnostic} diagnostic - Its range is the value without quotes
+ * @param {(card: JsonView) => { start: number, suggestion: string | undefined }[]} findFlagged -
+ *   The card's flagged values (`start` relative to the card)
+ * @returns {vscode.CodeAction | null}
+ */
+function createSuggestionFix(document, diagnostic, findFlagged) {
+  const located = locateCard(document.getText());
+  if (!located) return null;
+  const offset = document.offsetAt(diagnostic.range.start) - located.objStart;
+  const suggestion = findFlagged(located.card).find((v) => v.start === offset)?.suggestion;
+  if (!suggestion) return null;
+
+  const action = new vscode.CodeAction(`Change to '${suggestion}'`, vscode.CodeActionKind.QuickFix);
+  action.diagnostics = [diagnostic];
+  action.isPreferred = true;
+  action.edit = new vscode.WorkspaceEdit();
+  action.edit.replace(document.uri, diagnostic.range, suggestion);
+  return action;
+}
+
+/**
+ * Quick fix for `adaptivecard-invalid-value`: the closest allowed value
+ * (`"bold"` -> `"bolder"`).
  *
  * @param {vscode.TextDocument} document
  * @param {vscode.Diagnostic} diagnostic
  * @returns {vscode.CodeAction | null}
  */
 function createInvalidValueFix(document, diagnostic) {
-  const located = locateCard(document.getText());
-  if (!located) return null;
-  const offset = document.offsetAt(diagnostic.range.start) - located.objStart;
-  const invalid = findInvalidValues(located.card).find((v) => v.start === offset);
-  if (!invalid?.suggestion) return null;
-
-  const action = new vscode.CodeAction(`Change to '${invalid.suggestion}'`, vscode.CodeActionKind.QuickFix);
-  action.diagnostics = [diagnostic];
-  action.isPreferred = true;
-  action.edit = new vscode.WorkspaceEdit();
-  action.edit.replace(document.uri, diagnostic.range, invalid.suggestion);
-  return action;
+  return createSuggestionFix(document, diagnostic, findInvalidValues);
 }
 
 /**
- * Quick fix for `adaptivecard-unknown-target`: changes the target to the
- * closest id the card has (`"detials"` -> `"details"`), when one is close
- * enough. Re-derives the suggestion from the document text, like
- * {@link createInvalidValueFix}.
+ * Quick fix for `adaptivecard-unknown-target`: the closest id the card has
+ * (`"detials"` -> `"details"`).
  *
  * @param {vscode.TextDocument} document
  * @param {vscode.Diagnostic} diagnostic
  * @returns {vscode.CodeAction | null}
  */
 function createToggleTargetFix(document, diagnostic) {
-  const located = locateCard(document.getText());
-  if (!located) return null;
-  const offset = document.offsetAt(diagnostic.range.start) - located.objStart;
-  const target = findUnknownToggleTargets(located.card).find((t) => t.start === offset);
-  if (!target?.suggestion) return null;
-
-  const action = new vscode.CodeAction(`Change to '${target.suggestion}'`, vscode.CodeActionKind.QuickFix);
-  action.diagnostics = [diagnostic];
-  action.isPreferred = true;
-  action.edit = new vscode.WorkspaceEdit();
-  action.edit.replace(document.uri, diagnostic.range, target.suggestion);
-  return action;
+  return createSuggestionFix(document, diagnostic, findUnknownToggleTargets);
 }
 
 /**
