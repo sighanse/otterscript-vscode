@@ -115,7 +115,7 @@ function activate(context) {
     ...registerCompletion(settings, workspaceSymbols.listModules),
     ...registerHover(settings, workspaceSymbols.listModules),
     ...registerNavigation(settings, workspaceSymbols),
-    ...registerSignatureHelp(settings),
+    ...registerSignatureHelp(settings, workspaceSymbols.listModules),
     ...workspaceSymbols.disposables,
   );
 

@@ -48,7 +48,7 @@ const {
   scheduleTimerForUri,
 } = require("../../src/helpers.js");
 const { validateDocs } = require("./validate-docs");
-const { FUNCTION_SIGNATURE_REGEX, OPERATION_SIGNATURE_REGEX, findSignatureCall } = require("../../src/providers/signature-help.js");
+const { FUNCTION_SIGNATURE_REGEX, OPERATION_SIGNATURE_REGEX, activeParameterIndex, findSignatureCall } = require("../../src/providers/signature-help.js");
 const { isInStringOrCommentDoc } = require("../../src/document-index.js");
 const {
   checkMissingDollar,
@@ -323,7 +323,7 @@ describe("buildHoverMarkdown / buildArgumentHoverMarkdown (operation arguments)"
   });
 
   it("documents one argument with its operation", () => {
-    const value = /** @type {any} */ (buildArgumentHoverMarkdown({ name: "Copy-Files" }, params[0])).value;
+    const value = /** @type {any} */ (buildArgumentHoverMarkdown("Copy-Files", params[0])).value;
     assert.match(value, /### To\n\nArgument of `Copy-Files`: `To` \(required, text\) - Target directory/);
   });
 });
@@ -549,6 +549,13 @@ describe("signature help call regexes", () => {
     assert.equal("Copy-Files(Include: a".match(OPERATION_SIGNATURE_REGEX)?.[1], "Copy-Files");
     assert.equal("ProGet::Create-Directory foo (Path: b".match(OPERATION_SIGNATURE_REGEX)?.[1], "Create-Directory");
     assert.equal("set $x = (".match(OPERATION_SIGNATURE_REGEX), null);
+  });
+
+  it("activeParameterIndex follows a typed Name:, else the argument position", () => {
+    const params = ["[Include: <@(text)>]", "[From: <text>]", "To: <text>"];
+    assert.equal(activeParameterIndex("From: a, To: ", params), 2, "named, out of order");
+    assert.equal(activeParameterIndex("a, ", params), 1, "positional");
+    assert.equal(activeParameterIndex("result: ", ["name", "[out result]"]), 1, "a module's out parameter");
   });
 
   it("findSignatureCall prefers the function the cursor is in, then the operation", () => {

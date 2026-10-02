@@ -31,6 +31,7 @@ const {
   splitSignatureParameters,
   maskCommentSpans,
   findOperationArgumentContext,
+  parseModuleParameters,
   indexVariableOccurrences,
   variableKey,
   maskClosedGroups,
@@ -893,20 +894,45 @@ describe("findOperationArgumentContext", () => {
   };
 
   it("finds the call and the typed name, after '(' or a top-level ','", () => {
-    assert.deepEqual(at("Copy-Files("), { operation: "Copy-Files", namespace: null, typed: "", used: [] });
-    assert.deepEqual(at("Copy-Files (\n\tFr"), { operation: "Copy-Files", namespace: null, typed: "Fr", used: [] });
+    assert.deepEqual(at("Copy-Files("), { operation: "Copy-Files", namespace: null, module: false, typed: "", used: [] });
+    assert.deepEqual(at("Copy-Files (\n\tFr"), { operation: "Copy-Files", namespace: null, module: false, typed: "Fr", used: [] });
     assert.deepEqual(at("ProGet::Create-Directory(Path: ${my dir}, "),
-      { operation: "Create-Directory", namespace: "ProGet", typed: "", used: ["Path"] });
+      { operation: "Create-Directory", namespace: "ProGet", module: false, typed: "", used: ["Path"] });
+    assert.deepEqual(at("call Greet(name: $x, "), { operation: "Greet", namespace: null, module: true, typed: "", used: ["name"] });
   });
 
   it("lists the arguments given before, skipping commas in nested calls and strings", () => {
     assert.deepEqual(at('Copy-Files(From: "a,b", To: $PathCombine($a, $b), Inc')?.used, ["From", "To"]);
   });
 
-  it("is null in a value, outside a call, or in a function, literal or module call", () => {
+  it("is null in a value, outside a call, or in a function or literal", () => {
     for (const text of ["Copy-Files(From: ", "Copy-Files(To: x);\nLog", "if $x { Copy-Files(To: x) }", "$Substring(",
-      "set @x = @(", 'Copy-Files(Include: @("a", ', "call Greet(", 'Copy-Files(From: "(", To: "x" # (']) {
+      "set @x = @(", 'Copy-Files(Include: @("a", ', 'Copy-Files(From: "(", To: "x" # (']) {
       assert.equal(at(text), null, text);
     }
+  });
+});
+
+describe("parseModuleParameters", () => {
+  /**
+   * @param {string} text
+   * @returns {import("../../src/scanner.js").ModuleParameter[]}
+   */
+  const parse = (text) => {
+    const state = createCodeScanState();
+    return parseModuleParameters(text.split("\n").map((line) => maskNonCodeSpans(line, state)).join("\n"));
+  };
+
+  it("reads directions, sigils and defaults, over several lines", () => {
+    assert.deepEqual(parse("module Report <\n  in $path,\n  in @tags = @(),\n  out $result\n> {"), [
+      { name: "path", sigil: "$", direction: "in", optional: false },
+      { name: "tags", sigil: "@", direction: "in", optional: true },
+      { name: "result", sigil: "$", direction: "out", optional: true },
+    ]);
+  });
+
+  it("ignores a > or , in a default string, and reads braced names", () => {
+    assert.deepEqual(parse('module M<$a = "x>y, z", %{my map}> {').map((p) => p.name), ["a", "my map"]);
+    assert.deepEqual(parse("module M {"), []);
   });
 });

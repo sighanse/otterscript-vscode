@@ -1016,24 +1016,27 @@ function indexVariableOccurrences(text) {
 // ============================================================
 
 /**
- * Where an argument name may be typed in an operation call: right after its
- * `(` or a top-level `,` -- `Copy-Files(To: $x, |` or `Copy-Files(\n\tFr|`.
+ * Where an argument name may be typed in an operation or module call: right
+ * after its `(` or a top-level `,` -- `Copy-Files(To: $x, |`,
+ * `Copy-Files(\n\tFr|` or `call Greet(|`.
  *
  * @typedef {{
  *   operation: string,
  *   namespace: string | null,
+ *   module: boolean,
  *   typed: string,
  *   used: string[]
  * }} OperationArgumentContext
  *   `operation` / `namespace` name the call (`ProGet::Create-Directory`);
+ *   for a `call` (`module` true) they are the module and its raft, if any.
  *   `typed` is the part of the argument name before the cursor; `used` the
  *   names of the arguments already given before it.
  */
 
 /**
- * The operation-argument context at the end of `maskedPrefix`, or null when
- * the end isn't at an argument name inside an operation call (it's in a
- * value, outside any call, in a function call `$F(`, a `call Module(`, ...).
+ * The argument context at the end of `maskedPrefix`, or null when the end
+ * isn't at an argument name inside an operation or module call (it's in a
+ * value, outside any call, in a function call `$F(`, a literal, ...).
  *
  * @param {string} maskedPrefix - The code before the cursor, masked by
  *   {@link maskNonCodeSpans} (so brackets in strings and comments are gone);
@@ -1063,11 +1066,12 @@ function findOperationArgumentContext(maskedPrefix) {
   const typedMatch = /^\s*([A-Za-z]\w*)?$/.exec(text.slice(argumentStart === -1 ? open + 1 : argumentStart));
   if (!typedMatch) return null; // in a value
 
-  // The operation: a dashed or plain name right before `(`, not a function
-  // (`$F(`), a map or vector literal, or a `call Module(`.
+  // The operation or module: a dashed or plain name right before `(`, not a
+  // function (`$F(`) or a map or vector literal.
   const before = text.slice(0, open);
   const callee = /(?<![$@%\w:-])(?:([A-Za-z][A-Za-z0-9]*)::)?([A-Za-z][A-Za-z0-9-]*)\s*$/.exec(before);
-  if (!callee || /\bcall\s+(?:[A-Za-z]\w*::)?[A-Za-z][\w-]*\s*$/i.test(before)) return null;
+  if (!callee) return null;
+  const module = /\bcall\s+(?:[A-Za-z]\w*::)?[A-Za-z][\w-]*\s*$/i.test(before);
 
   // Arguments already given: each complete top-level `Name:` segment.
   /** @type {string[]} */
@@ -1085,7 +1089,40 @@ function findOperationArgumentContext(maskedPrefix) {
     }
   }
 
-  return { operation: callee[2], namespace: callee[1] ?? null, typed: typedMatch[1] ?? "", used };
+  return { operation: callee[2], namespace: callee[1] ?? null, module, typed: typedMatch[1] ?? "", used };
+}
+
+/**
+ * One parameter of a `module Name<...>` declaration.
+ *
+ * @typedef {{ name: string, sigil: string, direction: "in" | "out" | "ref", optional: boolean }} ModuleParameter
+ *   `name` without its sigil or braces; `optional` when it has a default
+ *   value or is an `out` parameter (the call needn't pass it).
+ */
+
+/**
+ * The parameters of the module declared at the start of `maskedText` --
+ * `module Name<in $path, in $count = 0, out $result>`, possibly over several
+ * lines.
+ *
+ * @param {string} maskedText - From the `module` line on, masked by
+ *   {@link maskNonCodeSpans} (so a `>` or `,` in a default string is gone)
+ * @returns {ModuleParameter[]}
+ */
+function parseModuleParameters(maskedText) {
+  const header = MODULE_PARAMETER_LIST_OPEN_REGEX.exec(maskedText);
+  if (!header) return [];
+  const close = maskedText.indexOf(">", header[0].length);
+  const list = maskedText.slice(header[0].length, close === -1 ? undefined : close);
+  /** @type {ModuleParameter[]} */
+  const params = [];
+  for (const part of list.split(",")) {
+    const match = /^\s*(?:(in|out|ref)\s+)?([$@%])(?:\{([^}]*)\}|([A-Za-z][\w-]*))\s*(=)?/i.exec(part);
+    if (!match) continue;
+    const direction = /** @type {"in" | "out" | "ref"} */ ((match[1] ?? "in").toLowerCase());
+    params.push({ name: (match[3] ?? match[4]).trim(), sigil: match[2], direction, optional: Boolean(match[5]) || direction === "out" });
+  }
+  return params;
 }
 
 // ============================================================
@@ -1120,6 +1157,7 @@ module.exports = {
   variableKey,
   NAME_PATTERN,
   findOperationArgumentContext,
+  parseModuleParameters,
   BRACED_NAME_PATTERN,
 
   // -- Argument helpers

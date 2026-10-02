@@ -97,6 +97,10 @@ describe("hover", () => {
     assert.match(await hoverText(source, positionOf(source, "To:", 1)), /Argument of `Copy-Files`: `To` \(required, text\) - Target directory/);
     assert.equal(await hoverText(source, positionOf(source, '"b"', 1)), "", "not in a value");
     assert.match(await hoverText(source, positionOf(source, "Copy-Files", 2)), /\*\*Arguments:\*\*\n- `Include`/);
+
+    const call = await openContent("module Report<in $path, out $result> {\n}\ncall Report(path: $p, result: $r);\n");
+    assert.match(await hoverText(call, positionOf(call, "result:", 1)), /Argument of `module Report`: `result` \(optional, out \$result\)/);
+    assert.match(await hoverText(call, positionOf(call, "call Report", 6)), /module Report<\$path, out \$result>/);
   });
 
   it("shows a called module's declaration and its comment, also from another workspace file", async () => {
@@ -238,6 +242,15 @@ describe("completion", () => {
     assert.deepEqual(await completionLabels(fn, positionOf(fn, "(", 1), "("), [], "nothing for a function's '('");
   });
 
+  it("offers a module's parameters inside call Module(, from this file or the workspace", async () => {
+    const local = await openContent("module Report<in $path, in $count = 0, out $result> {\n}\ncall Report(\n    path: $p,\n    \n);\n");
+    const labels = await completionLabels(local, new vscode.Position(4, 4));
+    assert.ok(labels.includes("count") && labels.includes("result"), labels.join(" "));
+    assert.ok(!labels.includes("path"), "path is given");
+    const elsewhere = await openContent("call Greet(");
+    assert.deepEqual(await completionLabels(elsewhere, positionOf(elsewhere, "(", 1), "("), ["name"], "Greet<$name> in main.otter");
+  });
+
   it("offers Adaptive Card values inside a card in a text template", async () => {
     const document = await openContent(
       "<% if $Notify { %>\n" +
@@ -275,6 +288,13 @@ describe("signature help", () => {
       assert.equal(help?.signatures[0].label, "$Substring(Text, Offset, [Length])", source);
       assert.equal(help?.activeParameter, 1, source);
     }
+  });
+
+  it("shows a module's parameters for call Module(, the named one active", async () => {
+    const document = await openContent("module Report<in $path, in $count = 0, out $result> {\n}\ncall Report(result: $r, path: ");
+    const help = await signatureHelp(document, positionOf(document, "path: ", 6));
+    assert.equal(help?.signatures[0].label, "Report(path, [count], [out result])");
+    assert.equal(help?.activeParameter, 0);
   });
 
   it("works for the map form of FromJson", async () => {

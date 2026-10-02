@@ -403,17 +403,17 @@ function argumentSummary(param) {
 }
 
 /**
- * Hover for an argument name inside an operation call (`To:` in
- * `Copy-Files(To: ...)`): the argument, and which operation it belongs to.
+ * Hover for an argument name inside an operation or module call (`To:` in
+ * `Copy-Files(To: ...)`): the argument, and what it belongs to.
  *
- * @param {{ name: string }} operation
+ * @param {string} callee - `Copy-Files`, `module Greet`
  * @param {OperationParam} param
  * @returns {vscode.MarkdownString}
  */
-function buildArgumentHoverMarkdown(operation, param) {
+function buildArgumentHoverMarkdown(callee, param) {
   const md = new vscode.MarkdownString();
   md.appendMarkdown(`### ${param.name}\n\n`);
-  md.appendMarkdown(`Argument of \`${operation.name}\`: ${argumentSummary(param)}\n`);
+  md.appendMarkdown(`Argument of \`${callee}\`: ${argumentSummary(param)}\n`);
   return md;
 }
 

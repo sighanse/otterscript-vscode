@@ -7,6 +7,7 @@
 const vscode = require("vscode");
 const { operationDocs, scalarFunctionDocs, vectorFunctionDocs, mapFunctionDocs } = require("../language-data");
 const { lookupOwn } = require("../helpers");
+const { getModuleParameters, resolveModule } = require("../document-index");
 const { getActiveParameterIndex, maskClosedGroups, splitSignatureParameters } = require("../scanner");
 
 /**
@@ -44,13 +45,59 @@ function findSignatureCall(textBeforeCursor) {
 }
 
 /**
+ * A module call the cursor is in: raft (group 1), module (group 2),
+ * arguments typed so far (group 3).
+ */
+const MODULE_SIGNATURE_REGEX = /\bcall\s+(?:([A-Za-z]\w*)::)?([A-Za-z][\w-]*)\s*\(([^()]*)$/i;
+
+/**
+ * The module call the cursor is in, with a signature built from the module's
+ * declaration (`Greet(name, [greeting], [out result])`), or null -- also for a
+ * module in another raft, which can't be seen.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {string} textBeforeCursor
+ * @param {() => Promise<{ name: string, uri: vscode.Uri }[]>} listWorkspaceModules
+ * @returns {Promise<{ doc: { name: string, signature: string, namespace: null, documentation?: string }, args: string, isOperation: boolean } | null>}
+ */
+async function findModuleSignatureCall(document, textBeforeCursor, listWorkspaceModules) {
+  const match = MODULE_SIGNATURE_REGEX.exec(textBeforeCursor);
+  if (!match || match[1]) return null;
+  const resolved = await resolveModule(document, match[2], listWorkspaceModules);
+  if (!resolved) return null;
+  const labels = getModuleParameters(resolved.document, resolved.range).map((p) => {
+    const label = `${p.direction === "in" ? "" : `${p.direction} `}${p.name}`;
+    return p.optional ? `[${label}]` : label;
+  });
+  return { doc: { name: match[2], signature: `${match[2]}(${labels.join(", ")})`, namespace: null }, args: match[3], isOperation: false };
+}
+
+/**
+ * The parameter the cursor is on: the one named by a `Name:` the current
+ * argument starts with (named arguments come in any order), else the one at
+ * the cursor's position in the list.
+ *
+ * @param {string} args - The arguments typed so far
+ * @param {string[]} parameters - The signature's parameter labels
+ * @returns {number}
+ */
+function activeParameterIndex(args, parameters) {
+  const named = /^\s*([A-Za-z]\w*)\s*:(?!:)/.exec(args.slice(args.lastIndexOf(",") + 1))?.[1]?.toLowerCase();
+  const byName = named === undefined ? -1 : parameters.findIndex((label) =>
+    label.replace(/^\[|\]$/g, "").replace(/^(?:in|out|ref)\s+/i, "").split(":")[0].trim().toLowerCase() === named);
+  return byName !== -1 ? byName : getActiveParameterIndex(args);
+}
+
+/**
  * Registers the signature help provider.
  *
  * @param {import("../helpers").Settings} settings - Live settings, updated in
  *   place by the settings listener in extension.js
+ * @param {() => Promise<{ name: string, uri: vscode.Uri }[]>} listWorkspaceModules -
+ *   Every module declared in the workspace (workspace-symbols.js)
  * @returns {vscode.Disposable[]}
  */
-function registerSignatureHelp(settings) {
+function registerSignatureHelp(settings, listWorkspaceModules) {
 
   // ============================================================
   // SIGNATURE HELP PROVIDER
@@ -59,12 +106,13 @@ function registerSignatureHelp(settings) {
   //   - Scalar functions: $ToJson(value)
   //   - Vector functions: @Split(text, delimiter)
   //   - Operations: Post-Http(Url: ..., [options...])
+  //   - Module calls: call Greet(name: ...)
 
   const signatureHelpProvider =
     vscode.languages.registerSignatureHelpProvider(
       "otterscript",
       {
-        provideSignatureHelp(document, position) {
+        async provideSignatureHelp(document, position) {
           // -- Check if the signature help provider is enabled in settings
           if (!settings.signatureHelpEnabled) return null;
 
@@ -76,21 +124,14 @@ function registerSignatureHelp(settings) {
             new vscode.Position(Math.max(0, position.line - 10), 0),
             position
           )));
-          // -- The documented call the cursor is in
-          const call = findSignatureCall(textBeforeCursor);
+          // -- The call the cursor is in: a module's (`call Greet(`), else a
+          // documented function's or operation's
+          const call = await findModuleSignatureCall(document, textBeforeCursor, listWorkspaceModules) ??
+            findSignatureCall(textBeforeCursor);
           if (!call?.doc.signature) return null;
           const { doc: fn, args, isOperation } = call;
           const signature = call.doc.signature;
-
-          // ------------------------------------------------------------
-          // Active parameter detection
-          // ------------------------------------------------------------
-
-          const activeParam = getActiveParameterIndex(args);
-
-          // ------------------------------------------------------------
-          // Build signature help UI
-          // ------------------------------------------------------------
+          const parameters = splitSignatureParameters(signature);
 
           // -- Qualify the displayed signature with its namespace when it belongs
           // to one and the stored signature string doesn't already spell it out.
@@ -102,8 +143,7 @@ function registerSignatureHelp(settings) {
               : signature;
 
           const sig = new vscode.SignatureInformation(signatureLabel, fn.documentation);
-
-          sig.parameters = splitSignatureParameters(signature).map(p => new vscode.ParameterInformation(p));
+          sig.parameters = parameters.map(p => new vscode.ParameterInformation(p));
 
           // -- Prepare the response
           const help = new vscode.SignatureHelp();
@@ -112,7 +152,7 @@ function registerSignatureHelp(settings) {
 
           // -- Only set activeParameter when parameters were extracted
           if (sig.parameters.length > 0) {
-            help.activeParameter = Math.min(activeParam, sig.parameters.length - 1);
+            help.activeParameter = Math.min(activeParameterIndex(args, parameters), sig.parameters.length - 1);
           }
 
           return help;
@@ -125,4 +165,4 @@ function registerSignatureHelp(settings) {
   return [signatureHelpProvider];
 }
 
-module.exports = { FUNCTION_SIGNATURE_REGEX, OPERATION_SIGNATURE_REGEX, findSignatureCall, registerSignatureHelp };
+module.exports = { FUNCTION_SIGNATURE_REGEX, OPERATION_SIGNATURE_REGEX, activeParameterIndex, findSignatureCall, registerSignatureHelp };

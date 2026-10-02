@@ -8,26 +8,27 @@
 const vscode = require("vscode");
 const { keywordDocs, mapFunctionDocs, operationDocs, scalarFunctionDocs, syntaxDocs, variableDocs, vectorFunctionDocs } = require("../language-data");
 const { buildArgumentHoverMarkdown, buildHoverMarkdown, lookupOwn } = require("../helpers");
-const { findModuleDeclarationRange, getMaskedTextBefore, getModuleNameAt, isInStringOrCommentDoc } = require("../document-index");
+const { findCallArguments, getMaskedTextBefore, getModuleNameAt, getModuleParameters, isInStringOrCommentDoc, resolveModule } = require("../document-index");
 const { findOperationArgumentContext } = require("../scanner");
 
 /**
- * Hover for an argument name of an operation call -- a name followed by `:`
- * (not `::`) where an argument starts -- or null.
+ * Hover for an argument name of an operation or module call -- a name
+ * followed by `:` (not `::`) where an argument starts -- or null.
  *
  * @param {vscode.TextDocument} document
  * @param {vscode.Position} position
- * @returns {vscode.Hover | null}
+ * @param {() => Promise<{ name: string, uri: vscode.Uri }[]>} listWorkspaceModules
+ * @returns {Promise<vscode.Hover | null>}
  */
-function hoverArgument(document, position) {
+async function hoverArgument(document, position, listWorkspaceModules) {
   const range = document.getWordRangeAtPosition(position, /[A-Za-z]\w*/);
   if (!range || !/^\s*:(?!:)/.test(document.lineAt(range.end.line).text.slice(range.end.character))) return null;
   const context = findOperationArgumentContext(getMaskedTextBefore(document, range.start));
   if (!context || context.typed) return null;
-  const operation = lookupOwn(operationDocs, context.operation);
+  const called = await findCallArguments(document, context, listWorkspaceModules);
   const name = document.getText(range).toLowerCase();
-  const param = operation?.params?.find((p) => p.name.toLowerCase() === name);
-  return operation && param ? new vscode.Hover(buildArgumentHoverMarkdown(operation, param), range) : null;
+  const param = called?.params.find((p) => p.name.toLowerCase() === name);
+  return called && param ? new vscode.Hover(buildArgumentHoverMarkdown(called.callee, param), range) : null;
 }
 
 /**
@@ -44,18 +45,21 @@ async function hoverModuleCall(document, position, listWorkspaceModules) {
   const moduleAt = getModuleNameAt(document, position);
   if (!moduleAt || moduleAt.isDeclaration) return null;
 
-  let home = document;
-  let declaration = findModuleDeclarationRange(document, moduleAt.name);
-  if (!declaration) {
-    const elsewhere = (await listWorkspaceModules()).filter((m) => m.name === moduleAt.name);
-    if (elsewhere.length !== 1) return null;
-    home = await vscode.workspace.openTextDocument(elsewhere[0].uri);
-    declaration = findModuleDeclarationRange(home, moduleAt.name);
-    if (!declaration) return null;
-  }
+  const resolved = await resolveModule(document, moduleAt.name, listWorkspaceModules);
+  if (!resolved) return null;
+  const { document: home, range: declaration } = resolved;
 
-  // The declaration up to its `{`, and the comment block right above it.
-  const header = home.lineAt(declaration.start.line).text.replace(/\{.*$/, "").trim();
+  // The declaration (its parameters spelled out, whatever lines they span),
+  // and the comment block right above it.
+  const params = getModuleParameters(home, declaration);
+  const header = params.length
+    ? `module ${moduleAt.name}<${params.map((param) => [
+      param.direction === "in" ? "" : `${param.direction} `,
+      param.sigil,
+      param.name.includes(" ") ? `{${param.name}}` : param.name,
+      param.optional && param.direction !== "out" ? " = …" : "",
+    ].join("")).join(", ")}>`
+    : home.lineAt(declaration.start.line).text.replace(/\{.*$/, "").trim();
   const comment = [];
   for (let line = declaration.start.line - 1; line >= 0; line--) {
     const match = /^\s*#\s?(.*)$/.exec(home.lineAt(line).text);
@@ -118,7 +122,7 @@ function registerHover(settings, listWorkspaceModules) {
         }
 
         // -- An argument name in an operation call (`To` in `Copy-Files(To: $x)`)
-        const argumentHover = hoverArgument(document, position);
+        const argumentHover = await hoverArgument(document, position, listWorkspaceModules);
         if (argumentHover) return argumentHover;
 
         // -- A module name in a `call`: the module's declaration

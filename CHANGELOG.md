@@ -22,6 +22,8 @@
 - `unknown-map-function` diagnostic: an unknown `%Name(...)` function, as `$Name(...)` and `@Name(...)` calls already are
 - `missing-required-argument` diagnostic, a hint by default: an operation call that leaves out a required argument, such as `Copy-Files(From: ...)` without `To`. Calls with a positional argument aren't checked
 - `duplicate-module` diagnostic: a second `module` with a name the file already declares
+- Module arguments: inside `call MyModule(`, completion offers the module's parameters not given yet (required ones first), signature help shows them, and hovering an argument name shows how the module declares it — for a module in this file or in another workspace file
+- Signature help for an operation or module call highlights the argument whose `Name:` you are typing, in whatever order the named arguments come
 - Hover on the module name in `call MyModule` shows the module's declaration and the `#` comment lines above it, also when the module is declared in another workspace file
 - `too-few-arguments` diagnostic: a function call with fewer arguments than the function requires (`$Substring($x)`), based on the `[optional]` parameters in its signature and the most lenient of its forms in Inedo's products
 

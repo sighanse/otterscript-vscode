@@ -24,8 +24,10 @@ const {
   MODULE_CALL_TARGET_GLOBAL_REGEX,
   MODULE_NAME_TOKEN_REGEX,
   NAME_PATTERN,
+  parseModuleParameters,
   variableKey,
 } = require("./scanner");
+const { operationDocs } = require("./language-data");
 
 // ============================================================
 // MODULE NAVIGATION
@@ -412,8 +414,79 @@ function getMaskedTextBefore(document, position) {
   return lines.join("\n");
 }
 
+/**
+ * Where the module a `call` in `document` names is declared: in `document`
+ * itself, or else in the one workspace file that declares it (as Go to
+ * Definition resolves it). Null when no file or several other files do.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {string} name
+ * @param {() => Promise<{ name: string, uri: vscode.Uri }[]>} listWorkspaceModules
+ * @returns {Promise<{ document: vscode.TextDocument, range: vscode.Range } | null>}
+ */
+async function resolveModule(document, name, listWorkspaceModules) {
+  const local = findModuleDeclarationRange(document, name);
+  if (local) return { document, range: local };
+  const elsewhere = (await listWorkspaceModules()).filter((m) => m.name === name);
+  if (elsewhere.length !== 1) return null;
+  const home = await vscode.workspace.openTextDocument(elsewhere[0].uri);
+  const range = findModuleDeclarationRange(home, name);
+  return range ? { document: home, range } : null;
+}
+
+/** How many lines a module's `< ... >` parameter list may span. */
+const MODULE_HEADER_MAX_LINES = 50;
+
+/**
+ * The parameters of the module declared at `range` (see
+ * {@link parseModuleParameters}).
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Range} range - The declaration's name
+ * @returns {import("./scanner").ModuleParameter[]}
+ */
+function getModuleParameters(document, range) {
+  const first = range.start.line;
+  const last = Math.min(document.lineCount - 1, first + MODULE_HEADER_MAX_LINES);
+  const state = getLineStartScanState(document, first);
+  const lines = [];
+  for (let line = first; line <= last; line++) lines.push(maskNonCodeSpans(document.lineAt(line).text, state));
+  return parseModuleParameters(lines.join("\n"));
+}
+
+/**
+ * The arguments the call in `context` takes: an operation's from its docs
+ * entry, a module's from its declaration (see {@link resolveModule}), in the
+ * shape of an operation's `params` -- a module parameter's `format` is how
+ * it's declared (`$path`, `out $result`). Null when the callee is unknown or
+ * is a module in another raft (`call Raft::Name`).
+ *
+ * @param {vscode.TextDocument} document
+ * @param {import("./scanner").OperationArgumentContext} context
+ * @param {() => Promise<{ name: string, uri: vscode.Uri }[]>} listWorkspaceModules
+ * @returns {Promise<{ callee: string, params: { name: string, required: boolean, format?: string, description?: string }[] } | null>}
+ */
+async function findCallArguments(document, context, listWorkspaceModules) {
+  if (!context.module) {
+    const doc = Object.hasOwn(operationDocs, context.operation) ? operationDocs[context.operation] : undefined;
+    return doc?.params ? { callee: doc.name, params: doc.params } : null;
+  }
+  if (context.namespace) return null;
+  const resolved = await resolveModule(document, context.operation, listWorkspaceModules);
+  if (!resolved) return null;
+  return {
+    callee: `module ${context.operation}`,
+    params: getModuleParameters(resolved.document, resolved.range).map((p) => ({
+      name: p.name,
+      required: !p.optional,
+      format: `${p.direction === "in" ? "" : `${p.direction} `}${p.sigil}${p.name}`,
+    })),
+  };
+}
+
 module.exports = {
   clearDocumentCaches,
+  findCallArguments,
   findModuleDeclarationRange,
   findModuleReferences,
   getDocumentVariables,
@@ -421,7 +494,9 @@ module.exports = {
   getModuleCallReferencesByName,
   getModuleDeclarations,
   getModuleNameAt,
+  getModuleParameters,
   getVariableAt,
   getVariableOccurrences,
   isInStringOrCommentDoc,
+  resolveModule,
 };
