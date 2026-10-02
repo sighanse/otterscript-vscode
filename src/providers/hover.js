@@ -7,7 +7,8 @@
 
 const vscode = require("vscode");
 const { keywordDocs, mapFunctionDocs, operationDocs, scalarFunctionDocs, syntaxDocs, variableDocs, vectorFunctionDocs } = require("../language-data");
-const { buildHoverMarkdown, isInStringOrCommentDoc, lookupOwn } = require("../helpers");
+const { buildHoverMarkdown, lookupOwn } = require("../helpers");
+const { isInStringOrCommentDoc } = require("../document-index");
 
 /**
  * Registers the hover provider.

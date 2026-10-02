@@ -8,20 +8,361 @@
 
 const vscode = require("vscode");
 const {
-  checkMissingDollar,
-  createCodeScanState,
-  createTemplateScanState,
-  createUnbalancedDiagnostic,
-  findDuplicateMapKeyDiagnosticsFromMasked,
-  findArgumentCountDiagnosticsFromMasked,
-  maskNonCodeSpans,
-  maskOutsideTemplateTags,
-  documentUsesTemplateTags,
-  getDiagnosticCode,
   isReadOnlyView,
   log,
+  lookupOwn,
 } = require("./helpers");
+const {
+  createCodeScanState,
+  createTemplateScanState,
+  documentUsesTemplateTags,
+  maskNonCodeSpans,
+  maskOutsideTemplateTags,
+} = require("./scanner");
 const { findAdaptiveCardDiagnostics } = require("./adaptivecard");
+
+// ============================================================
+// DIAGNOSTIC CHECKS
+// ============================================================
+
+/**
+ * Checks for missing '$' before variable names in if conditions.
+ *
+ * Only the first operand after `if` (and any opening parens) is checked, and
+ * only when it is directly followed by a comparison operator -- e.g.
+ * `if count == 5` or `if (count > 5)`.
+ *
+ * @param {string} line - The line, already masked by {@link maskNonCodeSpans}
+ *   (so identifiers inside strings/comments are not seen)
+ * @param {number} lineIndex - The line number (0-indexed)
+ * @param {Set<string>} nonVariableIdentifiers - Set of literals (true, false, null)
+ * @returns {vscode.Diagnostic | null} - Diagnostic if missing '$' found, null otherwise
+ */
+function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
+  const match = line.match(/^\s*if\s*(?:\(\s*)*([a-zA-Z][a-zA-Z0-9_]*)\s*(=|==|!=|<=|>=|<|>)/);
+
+  // -- Guard: ensure regex matched and we have a valid index position
+  if (!match || typeof match.index !== 'number') return null;
+
+  const varName = match[1];
+
+  // -- Skip known literals that don't need '$' (true, false, null)
+  if (nonVariableIdentifiers.has(varName)) {
+    return null;
+  }
+
+  // -- Calculate exact position of variable name within the line
+  const varNameIndex = match.index + match[0].indexOf(varName);
+  const diagnostic = new vscode.Diagnostic(
+    new vscode.Range(
+      new vscode.Position(lineIndex, varNameIndex),
+      new vscode.Position(lineIndex, varNameIndex + varName.length)
+    ),
+    `Missing '$' before variable: ${varName}. Use $${varName}`,
+    vscode.DiagnosticSeverity.Error
+  );
+  diagnostic.code = "missing-dollar";
+  diagnostic.source = "OtterScript";
+
+  return diagnostic;
+}
+
+/**
+ * Finds the matching ')' for the '(' at `openParenIndex` in text already
+ * masked by {@link maskNonCodeSpans} (so no string-awareness is needed).
+ * Unlike scanner's `findBalancedParenEnd`, this may cross line breaks.
+ *
+ * @param {string} maskedText
+ * @param {number} openParenIndex - Index of the opening '('
+ * @returns {number} Matching ')' index, or -1 when not found
+ * @private
+ */
+function findMatchingParen(maskedText, openParenIndex) {
+  let depth = 1;
+  for (let i = openParenIndex + 1; i < maskedText.length; i++) {
+    if (maskedText[i] === "(") depth++;
+    if (maskedText[i] === ")") depth--;
+    if (depth === 0) return i;
+  }
+  return -1;
+}
+
+/**
+ * Finds duplicate keys inside map expressions and returns diagnostics, given
+ * text that has ALREADY been masked by {@link maskNonCodeSpans}.
+ *
+ * This performs a best-effort scan of `%(... )` blocks and warns when the
+ * same key appears more than once at the top level of a map. `updateDiagnostics`
+ * masks every line during its own scan and passes that masked copy straight in,
+ * so strings, comments, and swim-strings are ignored identically to every other
+ * feature. A raw-text caller must run `maskNonCodeSpans` line by line first
+ * (see `createCodeScanState`).
+ *
+ * @param {vscode.TextDocument} document - Document to analyze; used only for
+ *   `positionAt()` offset-to-position conversion, not for its text.
+ * @param {string} maskedText - Document text already run through
+ *   `maskNonCodeSpans`, with strings, comments, and swim-strings blanked out
+ *   and line length/offsets preserved (so `document.positionAt()` stays valid).
+ * @returns {vscode.Diagnostic[]} Duplicate-key diagnostics
+ */
+function findDuplicateMapKeyDiagnosticsFromMasked(document, maskedText) {
+  /** @type {vscode.Diagnostic[]} */
+  const issues = [];
+
+  /**
+   * Parses a map expression body and reports duplicate top-level keys.
+   *
+   * @param {number} start - Start index of map body (after '%(')
+   * @param {number} end - End index of map body (at matching ')')
+   * @returns {void}
+   */
+  function scanMapBody(start, end) {
+    let nestingDepth = 0;
+    let segmentStart = start;
+    const seenKeys = new Set();
+
+    for (let i = start; i <= end; i++) {
+      const ch = i === end ? ',' : maskedText[i];
+
+      if (ch === '(' || ch === '[' || ch === '{') {
+        nestingDepth++;
+        continue;
+      }
+      if (ch === ')' || ch === ']' || ch === '}') {
+        if (nestingDepth > 0) nestingDepth--;
+        continue;
+      }
+
+      if (ch === ',' && nestingDepth === 0) {
+        const segmentText = maskedText.slice(segmentStart, i);
+        const keyMatch = segmentText.match(/^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*:/);
+
+        if (keyMatch) {
+          const key = keyMatch[1];
+          const keyStart = segmentStart + keyMatch[0].indexOf(key);
+
+          if (seenKeys.has(key)) {
+            const diagnostic = new vscode.Diagnostic(
+              new vscode.Range(
+                document.positionAt(keyStart),
+                document.positionAt(keyStart + key.length)
+              ),
+              `Duplicate key '${key}' in map expression.`,
+              vscode.DiagnosticSeverity.Warning
+            );
+            diagnostic.code = "duplicate-map-key";
+            diagnostic.source = "OtterScript";
+            issues.push(diagnostic);
+          } else {
+            seenKeys.add(key);
+          }
+        }
+
+        segmentStart = i + 1;
+      }
+    }
+  }
+
+  // Every `%(` gets its own scan -- including maps nested inside another map,
+  // whose keys scanMapBody deliberately ignores when scanning the outer one.
+  for (let i = 0; i < maskedText.length - 1; i++) {
+    if (maskedText[i] === '%' && maskedText[i + 1] === '(') {
+      const close = findMatchingParen(maskedText, i + 1);
+      if (close !== -1) {
+        scanMapBody(i + 2, close);
+      }
+    }
+  }
+
+  return issues;
+}
+
+/**
+ * Parses a `$Name(...)` / `@Name(...)` / `%Name(...)` doc signature and returns the maximum
+ * number of arguments the call can take, or `null` when the signature isn't a
+ * fixed-arity parenthesized call (a bare property like `$ExecutionId`, or a
+ * vararg signature containing a literal `...` parameter such as
+ * `$PathCombine(path1, path2, ...)`).
+ *
+ * Only the total slot count is computed -- required vs. `[optional]` isn't
+ * distinguished, since that's all a "too many arguments" check needs and it
+ * avoids relying on the optional-bracket convention being 100% consistent.
+ *
+ * @param {string} signature - e.g. `"$ToJson(data)"`
+ * @returns {number | null}
+ */
+function parseFixedMaxArity(signature) {
+  const m = signature.match(/^[$@%][A-Za-z]\w*\(([\s\S]*)\)$/);
+  if (!m) return null;
+
+  const argsText = m[1].trim();
+  if (argsText === "") return 0;
+
+  const parts = argsText.split(",").map((s) => s.trim());
+  if (parts.some((p) => p === "...")) return null;
+
+  return parts.length;
+}
+
+/**
+ * The signature fields the argument-count check reads from a docs entry.
+ * @typedef {{ signature?: string, overloads?: { product: string, signature: string }[] }} FunctionSignatures
+ */
+
+/**
+ * The most arguments any documented form of a function takes: its
+ * `signature` and its other products' `overloads` (e.g. BuildMaster's
+ * three-argument `$PackageProperty` next to ProGet's two-argument one). `null`
+ * when any form is not fixed-arity, so a call is never flagged for using a
+ * form that is valid somewhere.
+ *
+ * @param {FunctionSignatures} doc
+ * @returns {number | null}
+ */
+function maxFixedArity(doc) {
+  let max = 0;
+  for (const signature of [doc.signature, ...(doc.overloads ?? []).map((o) => o.signature)]) {
+    if (!signature) continue;
+    const arity = parseFixedMaxArity(signature);
+    if (arity === null) return null;
+    max = Math.max(max, arity);
+  }
+  return max;
+}
+
+/**
+ * Finds calls to known scalar/vector/map functions that pass more arguments than
+ * their documented signature allows, given text already masked by
+ * {@link maskNonCodeSpans} (and, for template-aware documents,
+ * {@link maskOutsideTemplateTags}). Only functions with a fixed-arity,
+ * parenthesized signature are checked -- see {@link parseFixedMaxArity}.
+ *
+ * This deliberately does NOT flag too few arguments: which parameters are
+ * truly required (vs. documented as optional) is a softer signal than the
+ * hard ceiling on total slots, so under-counting stays silent to avoid false
+ * positives.
+ *
+ * @param {vscode.TextDocument} document - Used only for `positionAt()`.
+ * @param {string} maskedText - Full document text, already masked.
+ * @param {Record<string, FunctionSignatures>} scalarFunctionDocs
+ * @param {Record<string, FunctionSignatures>} vectorFunctionDocs
+ * @param {Record<string, FunctionSignatures>} [mapFunctionDocs] - `%Name(...)` functions
+ * @returns {vscode.Diagnostic[]}
+ */
+function findArgumentCountDiagnosticsFromMasked(document, maskedText, scalarFunctionDocs, vectorFunctionDocs, mapFunctionDocs = {}) {
+  /** @type {vscode.Diagnostic[]} */
+  const issues = [];
+
+  /**
+   * @param {number} start - Index just after the call's '('
+   * @param {number} end - Index of the matching ')'
+   * @returns {number} Number of top-level comma-separated arguments
+   */
+  function countArgs(start, end) {
+    const body = maskedText.slice(start, end);
+    if (body.trim() === "") return 0;
+
+    let depth = 0;
+    let count = 1;
+    for (const ch of body) {
+      if (ch === "(" || ch === "[" || ch === "{") depth++;
+      else if (ch === ")" || ch === "]" || ch === "}") { if (depth > 0) depth--; }
+      else if (ch === "," && depth === 0) count++;
+    }
+    return count;
+  }
+
+  /**
+   * @param {RegExp} nameRegex - Global regex; group 1 is the function name
+   * @param {Record<string, FunctionSignatures>} docs
+   * @param {string} sigil - `"$"`, `"@"`, or `"%"`, for the diagnostic message
+   */
+  function scan(nameRegex, docs, sigil) {
+    for (const match of maskedText.matchAll(nameRegex)) {
+      const name = match[1];
+      const doc = lookupOwn(docs, name);
+      if (!doc?.signature) continue;
+
+      const maxArity = maxFixedArity(doc);
+      if (maxArity === null) continue;
+
+      const openParenIndex = /** @type {number} */ (match.index) + match[0].length - 1;
+      const closeParenIndex = findMatchingParen(maskedText, openParenIndex);
+      if (closeParenIndex === -1) continue;
+
+      const argCount = countArgs(openParenIndex + 1, closeParenIndex);
+      if (argCount <= maxArity) continue;
+
+      const nameStart = /** @type {number} */ (match.index) + 1;
+      const diagnostic = new vscode.Diagnostic(
+        new vscode.Range(
+          document.positionAt(nameStart),
+          document.positionAt(nameStart + name.length)
+        ),
+        `'${sigil}${name}' takes at most ${maxArity} argument${maxArity === 1 ? "" : "s"}, got ${argCount}.`,
+        vscode.DiagnosticSeverity.Warning
+      );
+      diagnostic.code = "too-many-arguments";
+      diagnostic.source = "OtterScript";
+      issues.push(diagnostic);
+    }
+  }
+
+  scan(/\$([A-Za-z][A-Za-z0-9_]*)\s*\(/g, scalarFunctionDocs, "$");
+  scan(/@([A-Za-z][A-Za-z0-9_]*)\s*\(/g, vectorFunctionDocs, "@");
+  scan(/%([A-Za-z][A-Za-z0-9_]*)\s*\(/g, mapFunctionDocs, "%");
+
+  return issues;
+}
+
+/**
+ * Gets the diagnostic code as a string, unwrapping the `{ value, target }`
+ * object form; returns '' when the diagnostic has no code.
+ * @param {vscode.Diagnostic} diagnostic
+ * @returns {string}
+ */
+function getDiagnosticCode(diagnostic) {
+  const code = diagnostic.code;
+  if (code === undefined || code === null) return '';
+  if (typeof code === 'object') return String(code.value);
+  return String(code);
+}
+
+// ============================================================
+// UNBALANCED SYMBOLS
+// ============================================================
+
+/**
+ * Creates a diagnostic for unbalanced symbols.
+ * @param {number} count - Current count (positive = unclosed, negative = extra closing)
+ * @param {number} lastPos - Document offset of the symbol to report: the
+ *   outermost still-open opener when `count > 0`, or the extra closer when
+ *   `count < 0`
+ * @param {string} openChar - Opening character ('{', '(', '[')
+ * @param {string} closeChar - Closing character ('}', ')', ']')
+ * @param {string} name - Display name ('brace', 'parenthesis', 'bracket')
+ * @param {vscode.TextDocument} document - The document
+ * @returns {vscode.Diagnostic | null}
+ */
+function createUnbalancedDiagnostic(count, lastPos, openChar, closeChar, name, document) {
+  if (count === 0) return null;
+
+  const pos = document.positionAt(lastPos);
+  const lineNum = pos.line + 1;
+  const colNum = pos.character + 1;
+  const message = count > 0
+    ? `Unclosed ${name}(s): ${count} '${openChar}' not closed (first at line ${lineNum}, col ${colNum})`
+    : `Unexpected closing ${name}: Extra '${closeChar}' at line ${lineNum}, col ${colNum}`;
+
+  const diagnostic = new vscode.Diagnostic(
+    new vscode.Range(pos, document.positionAt(lastPos + 1)),
+    message,
+    vscode.DiagnosticSeverity.Error
+  );
+  diagnostic.code = "unbalanced-symbol";
+  diagnostic.source = "OtterScript";
+  return diagnostic;
+}
 
 /**
  * Context object passed to updateDiagnostics to avoid hidden closures.
@@ -675,5 +1016,10 @@ function updateDiagnostics(document, collection, ctx) {
 module.exports = {
   DIAGNOSTIC_CODES,
   applyDiagnosticRules,
+  checkMissingDollar,
+  createUnbalancedDiagnostic,
+  findArgumentCountDiagnosticsFromMasked,
+  findDuplicateMapKeyDiagnosticsFromMasked,
+  getDiagnosticCode,
   updateDiagnostics,
 };

@@ -15,10 +15,8 @@
  * ({@link CodeScanState}, {@link TemplateScanState}); nothing here constructs a
  * `vscode.*` value.
  *
- * `helpers.js` re-exports the members its own callers need (the provider
- * modules and diagnostics.js import them from there); the rest — used only
- * internally, by adaptivecard.js / json-view.js, or by tests — are imported
- * from this module directly.
+ * Callers import from this module directly; document-index.js wraps its
+ * results in `vscode` ranges for open documents.
  *
  * @module scanner
  */
@@ -622,7 +620,7 @@ function documentUsesTemplateTags(text) {
  * reported per line (the grammar allows only one). Line endings may be LF or
  * CRLF -- suitable for scanning raw file contents read from disk.
  *
- * The single declaration scan: `helpers.getModuleInfo` wraps these hits in
+ * The single declaration scan: `document-index.getModuleInfo` wraps these hits in
  * `vscode` ranges for an open document, and the workspace-symbol index uses
  * them directly on raw file text read from disk.
  *

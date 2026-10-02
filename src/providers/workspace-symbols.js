@@ -6,7 +6,8 @@
  */
 
 const vscode = require("vscode");
-const { clearTimerForUri, findModuleDeclarations, log, mapWithConcurrency, scheduleTimerForUri } = require("../helpers");
+const { clearTimerForUri, log, mapWithConcurrency, scheduleTimerForUri } = require("../helpers");
+const { findModuleDeclarations } = require("../scanner");
 
 /**
  * Registers the workspace symbol provider and its file watcher.

@@ -11,12 +11,11 @@ const { keywordDocs, mapFunctionDocs, operationDocs, scalarFunctionDocs, syntaxD
 const {
   buildCompletionItem,
   buildSigilCompletionItems,
-  getDocumentVariables,
-  getModuleDeclarations,
   getTypedIdentifier,
   isAvailableIn,
   isValidCompletionPosition,
 } = require("../helpers");
+const { getDocumentVariables, getModuleDeclarations } = require("../document-index");
 const { findCardCompletions } = require("../adaptivecard");
 
 /**

@@ -9,7 +9,6 @@
 
 const vscode = require("vscode");
 const {
-  computeFoldingRanges,
   findModuleDeclarationRange,
   findModuleReferences,
   getModuleCallReferencesByName,
@@ -17,7 +16,9 @@ const {
   getModuleNameAt,
   getVariableAt,
   getVariableOccurrences,
-} = require("../helpers");
+} = require("../document-index");
+const { createCodeScanState, findTemplateTagDelimiters, maskNonCodeSpans } = require("../scanner");
+
 
 /** A plain name, per Inedo's formal grammar: letters, digits, `-` and `_`; a letter first; not ending in `-` or `_`. */
 const PLAIN_NAME_REGEX = /^[A-Za-z](?:[A-Za-z0-9_-]*[A-Za-z0-9])?$/;
@@ -317,4 +318,118 @@ function registerNavigation(settings, listWorkspaceModules) {
   return [definitionProvider, renameProvider, referenceProvider, documentHighlightProvider, documentSymbolProvider, codeLensProvider, foldingRangeProvider];
 }
 
-module.exports = { registerNavigation };
+// ============================================================
+// FOLDING RANGES
+// ============================================================
+
+/**
+ * Computes folding ranges for an OtterScript document.
+ *
+ * Folds `{ }` blocks, multi-line `%( )` / `@( )` literals, multi-line `<% %>`
+ * tags, `#region` / `#endregion` pairs, block comments, and swim-strings.
+ *
+ * Reuses the same `maskNonCodeSpans` pass as diagnostics, so folding respects
+ * strings, swim-strings, and block comments identically to every other feature
+ * in the extension — braces inside a string or a swim-string body are never
+ * treated as fold boundaries.
+ *
+ * @param {vscode.TextDocument} document
+ * @returns {vscode.FoldingRange[]}
+ */
+function computeFoldingRanges(document) {
+  /** @type {vscode.FoldingRange[]} */
+  const ranges = [];
+  const braceStack = [];
+  const regionStack = [];
+  const templateTagStack = [];
+  const mapStack = [];   // { line, depthAtOpen } for %(...) / @(... ) literals
+  let parenDepth = 0;    // carried across lines — map bodies can span multiple lines
+  let blockCommentStart = -1;
+  let swimStart = -1;
+  const state = createCodeScanState();
+
+  for (let lineIndex = 0; lineIndex < document.lineCount; lineIndex++) {
+    const rawLine = document.lineAt(lineIndex).text;
+    const wasInBlockComment = state.inBlockComment;
+    const wasInSwim = !!state.swimDelimiter;
+    const wasMidStringOrSwim = state.inString || wasInSwim;
+
+    if (!wasInBlockComment && !wasMidStringOrSwim) {
+      if (/^\s*#region\b/i.test(rawLine)) {
+        regionStack.push(lineIndex);
+      } else if (/^\s*#endregion\b/i.test(rawLine) && regionStack.length > 0) {
+        const start = regionStack.pop();
+        if (start !== undefined && lineIndex > start) {
+          ranges.push(new vscode.FoldingRange(start, lineIndex, vscode.FoldingRangeKind.Region));
+        }
+      }
+    }
+
+    const maskedLine = maskNonCodeSpans(rawLine, state);
+
+    // -- Block comments
+    if (!wasInBlockComment && state.inBlockComment) {
+      blockCommentStart = lineIndex;
+    } else if (wasInBlockComment && !state.inBlockComment && blockCommentStart !== -1) {
+      if (lineIndex > blockCommentStart) {
+        ranges.push(new vscode.FoldingRange(blockCommentStart, lineIndex, vscode.FoldingRangeKind.Comment));
+      }
+      blockCommentStart = -1;
+    }
+
+    // -- Swim-strings (e.g. >END>...multi-line body...>END>)
+    if (!wasInSwim && state.swimDelimiter) {
+      swimStart = lineIndex;
+    } else if (wasInSwim && !state.swimDelimiter && swimStart !== -1) {
+      if (lineIndex > swimStart) {
+        ranges.push(new vscode.FoldingRange(swimStart, lineIndex, vscode.FoldingRangeKind.Region));
+      }
+      swimStart = -1;
+    }
+
+    // -- <% %> template tags (multi-line tags only; brace folding still applies
+    //    inside tags). Delimiter detection is shared with diagnostics via
+    //    scanner.findTemplateTagDelimiters.
+    for (const delim of findTemplateTagDelimiters(maskedLine)) {
+      if (delim.open) {
+        templateTagStack.push(lineIndex);
+      } else {
+        const start = templateTagStack.pop();
+        if (start !== undefined && lineIndex > start) {
+          ranges.push(new vscode.FoldingRange(start, lineIndex, vscode.FoldingRangeKind.Region));
+        }
+      }
+    }
+
+    // -- Braces
+    for (let col = 0; col < maskedLine.length; col++) {
+      const ch = maskedLine[col];
+      if (ch === "{") {
+        braceStack.push(lineIndex);
+      } else if (ch === "}") {
+        const start = braceStack.pop();
+        if (start !== undefined && lineIndex > start) {
+          ranges.push(new vscode.FoldingRange(start, lineIndex, vscode.FoldingRangeKind.Region));
+        }
+      } else if (ch === "(") {
+        if (col > 0 && (maskedLine[col - 1] === "%" || maskedLine[col - 1] === "@")) {
+          mapStack.push({ line: lineIndex, depthAtOpen: parenDepth });
+        }
+        parenDepth++;
+      } else if (ch === ")") {
+        const prevDepth = parenDepth;
+        if (parenDepth > 0) parenDepth--;
+        if (prevDepth > 0 && mapStack.length > 0 && mapStack[mapStack.length - 1].depthAtOpen === parenDepth) {
+          const popped = mapStack.pop();
+          if (popped !== undefined && lineIndex > popped.line) {
+            ranges.push(new vscode.FoldingRange(popped.line, lineIndex, vscode.FoldingRangeKind.Region));
+          }
+        }
+      }
+    }
+  }
+
+  return ranges;
+}
+
+module.exports = { computeFoldingRanges, registerNavigation };

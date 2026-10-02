@@ -6,7 +6,8 @@
  */
 
 const vscode = require("vscode");
-const { DIAGNOSTIC_CODES } = require("../diagnostics");
+const { DIAGNOSTIC_CODES, getDiagnosticCode } = require("../diagnostics");
+const { NAMESPACES } = require("../language-data");
 const {
   createCardVersionFix,
   createContentTypeFix,
@@ -15,16 +16,185 @@ const {
   createToggleTargetFix,
 } = require("../adaptivecard");
 const {
-  createAssignmentInConditionFix,
-  createForToForeachFix,
-  createInvalidOperatorFix,
-  createMissingDollarFix,
-  createTemplateEndFix,
-  createUnknownNamespaceFix,
-  getDiagnosticCode,
+  editDistance,
   log,
   lookupOwn,
 } = require("../helpers");
+
+// ============================================================
+// CODE ACTION FACTORY
+// ============================================================
+
+/**
+ * Generic code action factory for creating quick-fix actions.
+ *
+ * This factory centralizes the creation of VS Code CodeAction objects,
+ * reducing duplication across multiple fix providers.
+ *
+ * @private
+ * @param {string} title - Human-readable action title shown in lightbulb menu
+ * @param {vscode.Diagnostic} diagnostic - The diagnostic this action fixes
+ * @param {(edit: vscode.WorkspaceEdit) => void} applyFix - Callback that applies the fix to a WorkspaceEdit
+ * @returns {vscode.CodeAction} Configured code action ready to be returned to VS Code
+ *
+ * @example
+ * // Create a fix that inserts a character
+ * createCodeAction("Insert '$'", diagnostic, (edit) => {
+ *   edit.insert(uri, position, "$");
+ * });
+ *
+ */
+function createCodeAction(title, diagnostic, applyFix) {
+  const action = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
+  action.diagnostics = [diagnostic];
+  action.isPreferred = true;
+  const edit = new vscode.WorkspaceEdit();
+  applyFix(edit);
+  action.edit = edit;
+  return action;
+}
+
+/**
+ * Creates a quick-fix that inserts a missing '$' at the diagnostic position.
+ *
+ * This code action appears in the lightbulb menu (💡) when a variable
+ * is used without a '$' prefix in an if condition.
+ *
+ * @param {vscode.TextDocument} document - The document containing the diagnostic
+ * @param {vscode.Diagnostic} diagnostic - The diagnostic with the missing '$' error
+ * @returns {vscode.CodeAction} A code action that inserts '$' at the diagnostic position
+ *
+ * @example
+ * // For diagnostic on "if x > 5"
+ * // The action inserts "$" before "x" -> "if $x > 5"
+ */
+function createMissingDollarFix(document, diagnostic) {
+  const uri = document.uri;
+  const start = diagnostic.range.start;
+
+  return createCodeAction("Insert missing '$'", diagnostic, (edit) => {
+    edit.insert(uri, start, "$");
+  });
+}
+
+/**
+ * Creates a quick-fix that replaces invalid boolean operators.
+ *
+ * This code action appears in the lightbulb menu (💡) when a single
+ * '&' or '|' is used instead of '&&' or '||'.
+ *
+ * @param {vscode.TextDocument} document - The document containing the diagnostic
+ * @param {vscode.Diagnostic} diagnostic - The diagnostic with the invalid operator
+ * @returns {vscode.CodeAction | null} Code action or null if replacement unknown
+ *
+ * @example
+ * // For diagnostic on "&" -> creates action to replace with "&&"
+ */
+function createInvalidOperatorFix(document, diagnostic) {
+  const text = document.getText(diagnostic.range);
+  const replacement = text === "&" ? "&&" : text === "|" ? "||" : null;
+
+  if (!replacement) return null;
+
+  return createCodeAction(`Replace '${text}' with '${replacement}'`, diagnostic, (edit) => {
+    edit.replace(document.uri, diagnostic.range, replacement);
+  });
+}
+
+/**
+ * Creates a quick-fix that replaces assignment-like '=' with '==' in conditions.
+ *
+ * @param {vscode.TextDocument} document - The document containing the diagnostic
+ * @param {vscode.Diagnostic} diagnostic - The diagnostic with assignment-like usage
+ * @returns {vscode.CodeAction | null} Code action or null if replacement unknown
+ */
+function createAssignmentInConditionFix(document, diagnostic) {
+  const text = document.getText(diagnostic.range);
+  if (text !== "=") return null;
+
+  return createCodeAction("Replace '=' with '=='", diagnostic, (edit) => {
+    edit.replace(document.uri, diagnostic.range, "==");
+  });
+}
+
+/**
+ * Creates a quick-fix that replaces incorrect 'for' loop usage with 'foreach'.
+ * Only for the `for $item in @list` form, which then reads as a valid
+ * `foreach`; the counting form (`for $i = 1 to 10`) has no `foreach`
+ * equivalent, so it gets no fix.
+ *
+ * @param {vscode.TextDocument} document - The document containing the diagnostic
+ * @param {vscode.Diagnostic} diagnostic - The diagnostic with the incorrect 'for' usage
+ * @returns {vscode.CodeAction | null} A code action that replaces 'for' with
+ *   'foreach', or null for the counting form
+ */
+function createForToForeachFix(document, diagnostic) {
+  const line = document.lineAt(diagnostic.range.start.line).text;
+  if (!/^\s*for\s+[$@%]?[A-Za-z](?:[\w-]*[A-Za-z0-9])?\s+in\s/i.test(line)) return null;
+
+  return createCodeAction("Replace 'for' with 'foreach'", diagnostic, (edit) => {
+    edit.replace(document.uri, diagnostic.range, 'foreach');
+  });
+}
+
+/**
+ * Creates a quick-fix that replaces a template block terminator keyword
+ * (`<% end %>`, `<% endforeach %>`, ...) with `}`, so it becomes `<% } %>`.
+ * The diagnostic range covers exactly the keyword token.
+ *
+ * @param {vscode.TextDocument} document - The document containing the diagnostic
+ * @param {vscode.Diagnostic} diagnostic - The `template-end-keyword` diagnostic
+ * @returns {vscode.CodeAction} A code action that replaces the keyword with `}`
+ */
+function createTemplateEndFix(document, diagnostic) {
+  return createCodeAction("Replace with '}'", diagnostic, (edit) => {
+    edit.replace(document.uri, diagnostic.range, "}");
+  });
+}
+
+/**
+ * Picks the closest known namespace to `token`: an exact case-insensitive match
+ * wins (canonical casing), otherwise the smallest edit distance within a small
+ * threshold. Returns null when nothing is close enough to suggest.
+ *
+ * @param {string} token - The unrecognized namespace as written
+ * @returns {string | null}
+ */
+function nearestNamespace(token) {
+  const lower = token.toLowerCase();
+  /** @type {string | null} */
+  let best = null;
+  let bestDistance = Infinity;
+  for (const known of NAMESPACES) {
+    if (known.toLowerCase() === lower) return known;
+    const d = editDistance(lower, known.toLowerCase());
+    if (d < bestDistance) {
+      bestDistance = d;
+      best = known;
+    }
+  }
+  // Only suggest when it is a plausible typo, not an unrelated word.
+  return bestDistance <= Math.max(2, Math.ceil(token.length / 3)) ? best : null;
+}
+
+/**
+ * Creates a quick-fix that replaces an unknown namespace token with the closest
+ * known one (`Frobnicate::Op` -> `Firewall::Op`, `proget::Op` -> `ProGet::Op`).
+ *
+ * @param {vscode.TextDocument} document - The document containing the diagnostic
+ * @param {vscode.Diagnostic} diagnostic - The unknown-namespace diagnostic; its
+ *   range covers exactly the namespace token (no `::`)
+ * @returns {vscode.CodeAction | null} Code action, or null when nothing is close
+ */
+function createUnknownNamespaceFix(document, diagnostic) {
+  const token = document.getText(diagnostic.range);
+  const suggestion = nearestNamespace(token);
+  if (!suggestion || suggestion === token) return null;
+
+  return createCodeAction(`Change namespace to '${suggestion}'`, diagnostic, (edit) => {
+    edit.replace(document.uri, diagnostic.range, suggestion);
+  });
+}
 
 const REFRESH_DIAGNOSTICS_COMMAND = "otterscript.refreshDiagnostics";
 /** Internal command behind the "Turn off '<code>'" quick fix; not in the palette. */
@@ -242,4 +412,13 @@ function registerCodeActions(settings, diagnostics, runDiagnostics) {
   return [codeActionsProvider, fixAllCommand, disableDiagnosticRuleCommand, refreshDiagnosticsCommand];
 }
 
-module.exports = { registerCodeActions };
+module.exports = {
+  createAssignmentInConditionFix,
+  createForToForeachFix,
+  createInvalidOperatorFix,
+  createMissingDollarFix,
+  createTemplateEndFix,
+  createUnknownNamespaceFix,
+  nearestNamespace,
+  registerCodeActions,
+};

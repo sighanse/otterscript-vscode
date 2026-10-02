@@ -15,7 +15,7 @@
  * - Each provider module receives what it needs from here (the live settings,
  *   regex patterns, a way to re-run diagnostics) instead of reaching for
  *   shared globals; reusable logic that builds vscode objects lives in
- *   helpers.js / diagnostics.js / adaptivecard.js
+ *   helpers.js / document-index.js / diagnostics.js / adaptivecard.js
  * - Snippets own insertion text; providers never guess prefixes
  *
  * DOCUMENTATION
@@ -23,7 +23,8 @@
  * @license MIT
  * @see src/providers/ - One module per group of language features
  * @see src/language-data.js - Plain data documentation module
- * @see src/helpers.js - Helpers, functions, constants
+ * @see src/helpers.js - Settings, logger, timers, docs tables, hover/completion builders
+ * @see src/document-index.js - Per-document module, variable and string/comment indexes
  * @see src/scanner.js - vscode-free text scanning (strings, comments, template tags)
  * @see src/diagnostics.js - Diagnostic checks and rules
  * @see src/adaptivecard.js - Adaptive Card checks for template JSON bodies
@@ -53,13 +54,13 @@ const {
   NON_VARIABLE_IDENTIFIERS,
   log,
   getOutputChannel,
-  clearDocumentCaches,
   clearTimerForUri,
   loadConfig,
   validateDocs,
   scheduleTimerForUri,
   createRegexPatterns,
 } = require("./helpers");
+const { clearDocumentCaches } = require("./document-index");
 
 // -- Language features
 const { registerCodeActions } = require("./providers/code-actions");

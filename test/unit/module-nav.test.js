@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * @fileoverview Unit tests for the module-navigation surface of src/helpers.js
+ * @fileoverview Unit tests for the module-navigation surface of src/document-index.js
  * (`getModuleInfo` and friends): declaration discovery, `call` reference
  * discovery, raft-qualified calls, and the per-document-version cache --
  * plus the matching per-version cache of the variable index used by
@@ -9,7 +9,7 @@
  * Guards the behavior before/after `getModuleInfo` is refactored to reuse
  * `scanner.findModuleDeclarations`.
  *
- * Requires the vscode stub before helpers.js loads.
+ * Requires the vscode stub before document-index.js loads.
  */
 
 require("../vscode-stub");
@@ -27,7 +27,7 @@ const {
   getDocumentVariables,
   getVariableAt,
   getVariableOccurrences,
-} = require("../../src/helpers.js");
+} = require("../../src/document-index.js");
 const { Position } = require("../vscode-stub");
 /**
  * A stub Position, typed loosely so it can stand in for vscode's.

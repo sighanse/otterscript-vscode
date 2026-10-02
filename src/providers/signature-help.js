@@ -6,7 +6,8 @@
 
 const vscode = require("vscode");
 const { operationDocs, scalarFunctionDocs, vectorFunctionDocs, mapFunctionDocs } = require("../language-data");
-const { getActiveParameterIndex, lookupOwn, maskClosedGroups, splitSignatureParameters } = require("../helpers");
+const { lookupOwn } = require("../helpers");
+const { getActiveParameterIndex, maskClosedGroups, splitSignatureParameters } = require("../scanner");
 
 /**
  * Registers the signature help provider.

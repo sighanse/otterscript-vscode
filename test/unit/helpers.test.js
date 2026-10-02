@@ -1,10 +1,12 @@
 // @ts-check
 /**
- * @fileoverview Unit tests for the diagnostic/folding helpers in src/helpers.js
- * that build `vscode.*` value objects.
+ * @fileoverview Unit tests for the helpers that build `vscode.*` value
+ * objects: in src/helpers.js, and the diagnostic checks (diagnostics.js),
+ * quick fixes (providers/code-actions.js) and folding (providers/navigation.js)
+ * that used to live there.
  *
  * These require the `vscode` module stub (test/vscode-stub.js) to be installed
- * before helpers.js is loaded — hence the ordering of the requires below.
+ * before those modules load — hence the ordering of the requires below.
  *
  * Covered:
  *   - checkMissingDollar
@@ -33,32 +35,36 @@ const stub = require("../vscode-stub");
 const { makeDocument } = require("./fake-document");
 const { advanceScanState, createCodeScanState, isInStringOrComment } = require("../../src/scanner.js");
 const {
-  checkMissingDollar,
-  findDuplicateMapKeyDiagnosticsFromMasked,
-  computeFoldingRanges,
-  buildHoverMarkdown,
   buildCompletionItem,
+  buildHoverMarkdown,
   buildSigilCompletionItems,
-  nearestNamespace,
-  createUnknownNamespaceFix,
-  createMissingDollarFix,
-  createInvalidOperatorFix,
-  createAssignmentInConditionFix,
-  createForToForeachFix,
-  createTemplateEndFix,
-  createUnbalancedDiagnostic,
-  getDiagnosticCode,
-  validateDocs,
+  clearTimerForUri,
   createRegexPatterns,
   getTypedIdentifier,
-  isInStringOrCommentDoc,
   isValidCompletionPosition,
   loadConfig,
   lookupOwn,
-  scheduleTimerForUri,
-  clearTimerForUri,
   mapWithConcurrency,
+  scheduleTimerForUri,
+  validateDocs,
 } = require("../../src/helpers.js");
+const { isInStringOrCommentDoc } = require("../../src/document-index.js");
+const {
+  checkMissingDollar,
+  createUnbalancedDiagnostic,
+  findDuplicateMapKeyDiagnosticsFromMasked,
+  getDiagnosticCode,
+} = require("../../src/diagnostics.js");
+const {
+  createAssignmentInConditionFix,
+  createForToForeachFix,
+  createInvalidOperatorFix,
+  createMissingDollarFix,
+  createTemplateEndFix,
+  createUnknownNamespaceFix,
+  nearestNamespace,
+} = require("../../src/providers/code-actions.js");
+const { computeFoldingRanges } = require("../../src/providers/navigation.js");
 
 const LITERALS = new Set(["true", "false", "null"]);
 

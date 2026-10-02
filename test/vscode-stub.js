@@ -11,7 +11,7 @@
  * Usage — require this **before** requiring anything that pulls in `vscode`:
  *
  *   require("../vscode-stub");
- *   const { checkMissingDollar } = require("../../src/helpers.js");
+ *   const { checkMissingDollar } = require("../../src/diagnostics.js");
  *
  * Only the members actually exercised by the tests are implemented; enum values
  * mirror the real `vscode` API so assertions on `.severity` / `.kind` are

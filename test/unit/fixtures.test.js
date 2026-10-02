@@ -24,7 +24,8 @@ const { makeDocument } = require("./fake-document");
 const { parse } = require("jsonc-parser");
 
 const { updateDiagnostics, DIAGNOSTIC_CODES } = require("../../src/diagnostics.js");
-const { createRegexPatterns, NON_VARIABLE_IDENTIFIERS, documentUsesTemplateTags } = require("../../src/helpers.js");
+const { createRegexPatterns, NON_VARIABLE_IDENTIFIERS } = require("../../src/helpers.js");
+const { documentUsesTemplateTags } = require("../../src/scanner.js");
 const data = require("../../src/language-data.js");
 
 const ctx = {
