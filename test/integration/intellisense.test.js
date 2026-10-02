@@ -148,7 +148,9 @@ describe("completion", () => {
   });
 
   it("offers operations and keywords by name", async () => {
-    const document = await openContent("Log-Inf");
+    // Not a one-line document: "Log-Inf" has a quick fix, and VS Code 1.85's
+    // lightbulb reads the line below it unchecked ("Illegal value for lineNumber").
+    const document = await openContent("Log-Inf\n");
     const labels = await completionLabels(document, positionOf(document, "Log-Inf", 7));
     assert.ok(labels.includes("Log-Information"));
   });
