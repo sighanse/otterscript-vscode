@@ -52,6 +52,11 @@ All features are enabled by default and can be toggled individually:
 - `otterscript.codeLens.enable` — CodeLens reference counts above module declarations
 - `otterscript.workspaceSymbols.enable` — index module declarations for Go to Symbol in Workspace (`Ctrl+T`)
 
+`otterscript.product` (default `"any"`) is the Inedo product your scripts
+run in: `ProGet`, `Otter` or `BuildMaster`. Completion then leaves out what
+that product doesn't have, such as BuildMaster's release functions in a ProGet
+notifier.
+
 `otterscript.adaptiveCards.maxVersion` (default `"1.6"`) is the highest
 Adaptive Card version the host that shows your cards supports. Lower it if
 your cards go to an older host.

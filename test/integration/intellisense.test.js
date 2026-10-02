@@ -179,6 +179,21 @@ describe("completion", () => {
     assert.ok(!labels.includes("Log-Information"), "no operations after call");
   });
 
+  it("leaves out what the otterscript.product setting's product doesn't have", async () => {
+    const config = vscode.workspace.getConfiguration("otterscript");
+    const document = await openContent("set $x = $Rel");
+    const at = positionOf(document, "$Rel", 4);
+    try {
+      assert.ok((await completionLabels(document, at)).includes("$ReleaseName"), "BuildMaster's, offered with 'any'");
+      await config.update("product", "ProGet", vscode.ConfigurationTarget.Global);
+      const labels = await completionLabels(document, at);
+      assert.ok(!labels.includes("$ReleaseName"), "BuildMaster-only, left out for ProGet");
+      assert.ok(labels.includes("$ReleaseNumber"), "ProGet's own variable stays");
+    } finally {
+      await config.update("product", undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
+
   it("offers nothing from this extension inside a comment", async () => {
     const document = await openContent("# $");
     const labels = await completionLabels(document, positionOf(document, "# $", 3), "$");

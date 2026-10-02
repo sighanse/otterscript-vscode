@@ -61,6 +61,11 @@
  *     Inedo documents none (ProGet's notifier functions). No type tokens, no
  *     trailing `;`; `...` marks a repeating tail argument.
  *   - Runtime values with no call syntax (`$WorkingDirectory`, `@AllRoles`): bare name.
+ * @property {string[]=} products The Inedo products that have this construct
+ *   ("ProGet", "Otter", "BuildMaster"); none listed means all of them. The
+ *   `otterscript.product` setting uses it to leave other products' entries out
+ *   of completion. Generated entries list the products whose reference has
+ *   them; a hand-written entry without its own list takes the generated one's.
  * @property {{ product: string, signature: string }[]=} overloads The same
  *   function's form in another Inedo product, when it differs from `signature`
  *   -- e.g. ProGet's notifier `$PackageHash(format, algorithm)` (the
@@ -3014,6 +3019,7 @@ $second = $ListItem(@items, 1);
   // ProGet Functions
   "EncodeBasicAuth": {
     namespace: null,
+    products: ["ProGet"],
     name: "$EncodeBasicAuth",
     signature: "$EncodeBasicAuth(userName, password)",
     snippet: "\\$EncodeBasicAuth(\"${1:userName}\", \"${2:password}\")",
@@ -3085,6 +3091,7 @@ Exec sometool.exe --host $host;
   },
   "PackageHash": {
     namespace: null,
+    products: ["ProGet", "BuildMaster"],
     name: "$PackageHash",
     signature: "$PackageHash([format], [algorithm])",
     overloads: [{ product: "BuildMaster", signature: "$PackageHash(packageName, [sourceName])" }],
@@ -3111,6 +3118,7 @@ $hash = $PackageHash("MyPackage");
   },
   "PackageProperty": {
     namespace: null,
+    products: ["ProGet", "BuildMaster"],
     name: "$PackageProperty",
     signature: "$PackageProperty(name, [default])",
     overloads: [{ product: "BuildMaster", signature: "$PackageProperty(packageName, packageProperty, [sourceName])" }],
@@ -3688,6 +3696,7 @@ const vectorFunctionDocs = {
   // Vector Variables (ProGet)
   "AffectedPackages": {
     namespace: null,
+    products: ["ProGet"],
     name: "@AffectedPackages",
     signature: '@AffectedPackages',
     description: 'Returns a list of packages affected by the vulnerability in the current scope.',
@@ -3706,6 +3715,7 @@ const vectorFunctionDocs = {
   },
   "ApiKeys": {
     namespace: null,
+    products: ["ProGet"],
     name: "@ApiKeys",
     signature: '@ApiKeys',
     description: 'Returns a list of API Keys in the current scope.',
@@ -3727,6 +3737,7 @@ foreach %key in @ApiKeys {
   },
   "BuildIssues": {
     namespace: null,
+    products: ["ProGet"],
     name: "@BuildIssues",
     signature: '@BuildIssues([includeClosed])',
     description: 'Returns a list of issues on the build in the current scope.',
@@ -3974,12 +3985,28 @@ const reference = require("./inedo-reference-data");
  */
 function withReference(handWritten, generated, alsoCovered = []) {
   const covered = new Set([handWritten, ...alsoCovered].flatMap((t) => Object.keys(t)).map((k) => k.toLowerCase()));
+  const handKeys = new Map(Object.keys(handWritten).map((k) => [k.toLowerCase(), k]));
   /** @type {DocsTable} */
   const merged = { ...handWritten };
   for (const [key, doc] of Object.entries(generated)) {
+    const handKey = handKeys.get(key.toLowerCase());
     if (!covered.has(key.toLowerCase())) merged[key] = doc;
+    // A hand-written entry without its own product list takes the reference's.
+    else if (handKey && !merged[handKey].products && doc.products) merged[handKey] = { ...merged[handKey], products: doc.products };
   }
   return merged;
+}
+
+/**
+ * A table whose entries without a product list get `products` -- for
+ * variableDocs, which holds only ProGet's notifier variables.
+ *
+ * @param {DocsTable} table
+ * @param {string[]} products
+ * @returns {DocsTable}
+ */
+function forProducts(table, products) {
+  return Object.fromEntries(Object.entries(table).map(([key, doc]) => [key, doc.products ? doc : { ...doc, products }]));
 }
 
 module.exports = {
@@ -3987,7 +4014,7 @@ module.exports = {
   operationDocs: withReference(operationDocs, reference.operationDocs),
   syntaxDocs,
   keywordDocs,
-  variableDocs,
+  variableDocs: forProducts(variableDocs, ["ProGet"]),
   scalarFunctionDocs: withReference(scalarFunctionDocs, reference.scalarFunctionDocs, [variableDocs]),
   vectorFunctionDocs: withReference(vectorFunctionDocs, reference.vectorFunctionDocs),
   mapFunctionDocs: withReference(mapFunctionDocs, reference.mapFunctionDocs),

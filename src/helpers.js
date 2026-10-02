@@ -67,7 +67,8 @@ const { NAMESPACES } = require("./language-data");
  *   codeLensEnabled: boolean,
  *   workspaceSymbolsEnabled: boolean,
  *   diagnosticRules: Readonly<Record<string, string>>,
- *   adaptiveCardMaxVersion: string
+ *   adaptiveCardMaxVersion: string,
+ *   product: string
  * }}
  *
  * @example
@@ -88,13 +89,17 @@ function loadConfig() {
     codeLensEnabled: config.get("codeLens.enable", true),
     workspaceSymbolsEnabled: config.get("workspaceSymbols.enable", true),
     diagnosticRules: config.get("diagnostics.rules", {}),
-    adaptiveCardMaxVersion: config.get("adaptiveCards.maxVersion", "1.6")
+    adaptiveCardMaxVersion: config.get("adaptiveCards.maxVersion", "1.6"),
+    product: config.get("product", "any")
   };
 }
 
 // ============================================================
 // CONSTANTS
 // ============================================================
+
+/** The Inedo products a docs entry's `products` may list. */
+const PRODUCTS = ["ProGet", "Otter", "BuildMaster"];
 
 /**
  * URI schemes of read-only views of a document's other versions -- the old
@@ -343,6 +348,12 @@ function validateDocs(label, docsTable) {
     // Optional Field: 'documentation'
     if (doc.documentation && typeof doc.documentation !== "string") {
       warnings.push(`${label}.${key} 'documentation' must be a string`);
+    }
+
+    // Optional Field: 'products' -- the Inedo products that have it
+    if (doc.products !== undefined && (!Array.isArray(doc.products) ||
+        doc.products.some((/** @type {any} */ p) => !PRODUCTS.includes(p)))) {
+      warnings.push(`${label}.${key} 'products' must be an array of ${PRODUCTS.join(", ")}`);
     }
 
     // Optional Field: 'overloads' -- other products' forms of the function
@@ -900,6 +911,24 @@ function buildHoverMarkdown(doc) {
 }
 
 /**
+ * Whether a docs entry exists in `product` (the `otterscript.product`
+ * setting). Entries without a product list, and every entry for `"any"`, are
+ * available. ProGet has no generated reference, so an entry that Otter and
+ * BuildMaster both have is taken to be part of the core execution engine,
+ * which ProGet runs too; one that only Otter or only BuildMaster has (Otter's
+ * `Ensure-Server`, BuildMaster's release functions) is not in ProGet.
+ *
+ * @param {{ products?: readonly string[] }} doc
+ * @param {string} product - "any", "ProGet", "Otter" or "BuildMaster"
+ * @returns {boolean}
+ */
+function isAvailableIn(doc, product) {
+  if (product === "any" || !doc.products) return true;
+  if (doc.products.includes(product)) return true;
+  return product === "ProGet" && doc.products.includes("Otter") && doc.products.includes("BuildMaster");
+}
+
+/**
  * Builds a completion item with consistent formatting.
  *
  * This centralizes completion item creation to ensure all providers
@@ -957,12 +986,14 @@ function buildCompletionItem(doc, kind, sortPrefix, insertText, triggerSignature
  * @param {string} typed - Identifier typed after the sigil (may be empty)
  * @param {{ functionSort: string, variableSort: string }} sort - Sort-text
  *   prefixes for functions and variables (lower sorts first)
+ * @param {string} [product] - The `otterscript.product` setting; entries the
+ *   product doesn't have are left out (see {@link isAvailableIn})
  * @returns {vscode.CompletionItem[]}
  */
-function buildSigilCompletionItems(table, typed, sort) {
+function buildSigilCompletionItems(table, typed, sort, product = "any") {
   const lowerTyped = typed.toLowerCase();
   return Object.entries(table)
-    .filter(([key]) => key.toLowerCase().startsWith(lowerTyped))
+    .filter(([key, doc]) => key.toLowerCase().startsWith(lowerTyped) && isAvailableIn(doc, product))
     .map(([, doc]) => {
       const isFunction = doc.signature?.includes("(") ?? false;
       const bareName = doc.name.replace(/^[$@%]/, "");
@@ -1684,6 +1715,7 @@ module.exports = {
   buildHoverMarkdown,
   buildCompletionItem,
   buildSigilCompletionItems,
+  isAvailableIn,
 
   // -- Code Actions
   createMissingDollarFix,

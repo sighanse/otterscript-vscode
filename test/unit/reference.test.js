@@ -17,7 +17,7 @@ const assert = require("node:assert/strict");
 
 const data = require("../../src/language-data.js");
 const reference = require("../../src/inedo-reference-data.js");
-const { validateDocs } = require("../../src/helpers.js");
+const { isAvailableIn, validateDocs } = require("../../src/helpers.js");
 
 describe("generated Inedo reference, merged into language-data", () => {
   it("adds functions and operations the hand-written tables don't have", () => {
@@ -72,6 +72,29 @@ describe("generated Inedo reference, merged into language-data", () => {
         assert.deepEqual(params(doc.signature), params(generated.signature), `${doc.name}: ${doc.signature} vs ${generated.signature}`);
       }
     }
+  });
+
+  it("knows which products have each entry", () => {
+    assert.deepEqual(data.operationDocs["Ensure-Server"].products, ["Otter"]);
+    assert.deepEqual(data.scalarFunctionDocs["ReleaseName"].products, ["BuildMaster"]);
+    // Hand-written: inherits the reference's list, or sets its own.
+    assert.deepEqual(data.scalarFunctionDocs["Substring"].products, ["Otter", "BuildMaster"]);
+    assert.deepEqual(data.scalarFunctionDocs["PackageHash"].products, ["ProGet", "BuildMaster"]);
+    assert.deepEqual(data.variableDocs["FeedName"].products, ["ProGet"]);
+    assert.equal(data.operationDocs["Log-Information"].products, undefined, "every product");
+  });
+
+  it("isAvailableIn: a product's own entries, core-engine ones for ProGet, everything for 'any'", () => {
+    const otterOnly = { products: ["Otter"] };
+    const both = { products: ["Otter", "BuildMaster"] };
+    const progetOnly = { products: ["ProGet"] };
+    assert.equal(isAvailableIn(otterOnly, "Otter"), true);
+    assert.equal(isAvailableIn(otterOnly, "BuildMaster"), false);
+    assert.equal(isAvailableIn(otterOnly, "ProGet"), false);
+    assert.equal(isAvailableIn(both, "ProGet"), true, "core engine");
+    assert.equal(isAvailableIn(progetOnly, "Otter"), false);
+    assert.equal(isAvailableIn(progetOnly, "any"), true);
+    assert.equal(isAvailableIn({}, "BuildMaster"), true, "no list = every product");
   });
 
   describe("every merged table passes validateDocs", () => {

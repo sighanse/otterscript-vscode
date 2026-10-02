@@ -13,6 +13,7 @@ const {
   getDocumentVariables,
   getModuleDeclarations,
   getTypedIdentifier,
+  isAvailableIn,
   isValidCompletionPosition,
 } = require("../helpers");
 
@@ -92,8 +93,8 @@ function registerCompletion(settings, listWorkspaceModules) {
           // (no '(' in the signature) sort with variableDocs.
           return [
             ...documentVariableItems(document, position, "$", typed, documentedScalars),
-            ...buildSigilCompletionItems(scalarFunctionDocs, typed, { functionSort: "1_", variableSort: "2_" }),
-            ...buildSigilCompletionItems(variableDocs, typed, { functionSort: "1_", variableSort: "2_" }),
+            ...buildSigilCompletionItems(scalarFunctionDocs, typed, { functionSort: "1_", variableSort: "2_" }, settings.product),
+            ...buildSigilCompletionItems(variableDocs, typed, { functionSort: "1_", variableSort: "2_" }, settings.product),
           ];
         }
       },
@@ -111,7 +112,7 @@ function registerCompletion(settings, listWorkspaceModules) {
           // Vector variables (@AffectedPackages) sort before the functions.
           return [
             ...documentVariableItems(document, position, "@", typed, documentedVectors),
-            ...buildSigilCompletionItems(vectorFunctionDocs, typed, { functionSort: "2_", variableSort: "1_" }),
+            ...buildSigilCompletionItems(vectorFunctionDocs, typed, { functionSort: "2_", variableSort: "1_" }, settings.product),
           ];
         }
       },
@@ -129,7 +130,7 @@ function registerCompletion(settings, listWorkspaceModules) {
 
           const items = [
             ...documentVariableItems(document, position, "%", typed, documentedMaps),
-            ...buildSigilCompletionItems(mapFunctionDocs, typed, { functionSort: "1_", variableSort: "2_" }),
+            ...buildSigilCompletionItems(mapFunctionDocs, typed, { functionSort: "1_", variableSort: "2_" }, settings.product),
           ];
 
           // -- The %( ... ) map literal, sorted last
@@ -212,6 +213,8 @@ function registerCompletion(settings, listWorkspaceModules) {
 
           // -- Operations (priority 0_)
           for (const [name, doc] of Object.entries(operationDocs)) {
+              // -- Not in the product the `otterscript.product` setting names.
+              if (!isAvailableIn(doc, settings.product)) continue;
               // -- When a "Namespace::" prefix is typed, only offer operations that
               // belong to that namespace -- inserting a core/other-namespace operation
               // after the prefix would produce invalid code ("ProGet::Log-Information").

@@ -11,6 +11,7 @@
 - Go to Definition (F12) on a variable goes to where the file assigns it; with several assignments, VS Code lists them all
 - Go to Definition on `call MyModule` also finds a module declared in another OtterScript file in the workspace
 - Rename (F2) for variables and modules. A variable is renamed everywhere in the file, including in strings, where OtterScript expands it; a new name with spaces gets the braces it needs (`${my var}`). A module is renamed with every `call` to it in the file. Invalid names and names already in use are refused
+- `otterscript.product` setting (`any`, `ProGet`, `Otter` or `BuildMaster`): completion leaves out the functions, variables and operations the chosen product doesn't have, based on Inedo's Otter and BuildMaster reference (what both have counts as the core engine, which ProGet runs too)
 
 ### Changed
 

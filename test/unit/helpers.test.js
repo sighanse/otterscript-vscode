@@ -838,6 +838,7 @@ describe("loadConfig", () => {
       workspaceSymbolsEnabled: true,
       diagnosticRules: {},
       adaptiveCardMaxVersion: "1.6",
+      product: "any",
     });
   });
 

@@ -215,7 +215,8 @@ async function fetchSnapshot() {
  *   overloads?: { product: string, signature: string }[],
  *   snippet?: string,
  *   description: string,
- *   documentation: string
+ *   documentation: string,
+ *   products: string[]
  * }} GeneratedDoc
  */
 
@@ -300,7 +301,7 @@ function buildTables(snapshot, declared) {
     // Otter first (it has most of them); other products' differing forms become overloads.
     variants.sort((a, b) => PRODUCTS.indexOf(a.products[0]) - PRODUCTS.indexOf(b.products[0]));
     const [primary, ...others] = variants;
-    const products = [...new Set(variants.flatMap((v) => v.products))];
+    const products = PRODUCTS.filter((product) => variants.some((v) => v.products.includes(product)));
     const signature = (/** @type {RefEntry} */ v, /** @type {string} */ sigil) =>
       v.kind === "operation" ? oneLine(v.usage.replace(/^\w+::/, "")) : `${sigil}${oneLine(v.usage).replace(/^[$@%]/, "")}`;
     const overloads = (/** @type {string} */ sigil) => {
@@ -319,6 +320,7 @@ function buildTables(snapshot, declared) {
         snippet: operationSnippet(primary),
         description: primary.description,
         documentation: documentationFor(primary, products),
+        products,
       });
       continue;
     }
@@ -338,6 +340,7 @@ function buildTables(snapshot, declared) {
         ...(isCall ? {} : { snippet: `\\${s}${bare}` }),
         description: primary.description,
         documentation: documentationFor(primary, products),
+        products,
       });
     }
   }
@@ -383,7 +386,8 @@ function render(snapshot) {
  *   overloads?: { product: string, signature: string }[],
  *   snippet?: string,
  *   description: string,
- *   documentation: string
+ *   documentation: string,
+ *   products: string[]
  * }} ReferenceDoc
  */
 

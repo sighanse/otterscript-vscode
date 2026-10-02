@@ -113,6 +113,23 @@
           "default": true,
           "description": "Index module declarations across .otter/.oscript files for 'Go to Symbol in Workspace' (Ctrl+T)"
         },
+        "otterscript.product": {
+          "type": "string",
+          "enum": [
+            "any",
+            "ProGet",
+            "Otter",
+            "BuildMaster"
+          ],
+          "default": "any",
+          "enumDescriptions": [
+            "Offer everything.",
+            "Leave out what only Otter or only BuildMaster has (ProGet runs the core execution engine both share), keeping ProGet's notifier variables.",
+            "Leave out what only BuildMaster or only ProGet has.",
+            "Leave out what only Otter or only ProGet has."
+          ],
+          "markdownDescription": "The Inedo product your scripts run in. Completion then leaves out the functions, variables and operations that product doesn't have, based on Inedo's Otter and BuildMaster reference. Diagnostics and hover are not affected."
+        },
         "otterscript.diagnostics.rules": {
           "type": "object",
           "default": {},
