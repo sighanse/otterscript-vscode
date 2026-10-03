@@ -18,11 +18,12 @@ const { findParameterNameHints } = require("../../src/providers/inlay-hints.js")
  * `text` with each hint written in at its place, `‹Name:›`.
  *
  * @param {string} text
+ * @param {string} [product] - The `otterscript.product` setting
  * @returns {string}
  */
-function withHints(text) {
+function withHints(text, product) {
   let out = text;
-  for (const { offset, label } of findParameterNameHints(text).reverse()) {
+  for (const { offset, label } of findParameterNameHints(text, product).reverse()) {
     out = `${out.slice(0, offset)}‹${label}›${out.slice(offset)}`;
   }
   return out;
@@ -52,6 +53,15 @@ describe("findParameterNameHints", () => {
       "set $s = $Substring(\n  # the text\n  ‹Text:›$x,\n  /* from */ ‹Offset:›1);");
     assert.equal(withHints("set $s = $Substring(\n  # just $Text\n  $Text, 1);"),
       "set $s = $Substring(\n  # just $Text\n  $Text, ‹Offset:›1);", "a commented variable of the name still counts as named");
+  });
+
+  it("uses the selected product's form of a function, and none when the forms disagree", () => {
+    assert.equal(withHints("set $p = $PackageProperty($a, $b, $c);", "BuildMaster"),
+      "set $p = $PackageProperty(‹packageName:›$a, ‹packageProperty:›$b, ‹sourceName:›$c);");
+    assert.equal(withHints("set $p = $PackageProperty($a, $b);", "ProGet"), "set $p = $PackageProperty(‹name:›$a, ‹default:›$b);");
+    assert.equal(withHints("set $p = $PackageProperty($a, $b, $c);"),
+      "set $p = $PackageProperty(‹packageName:›$a, ‹packageProperty:›$b, ‹sourceName:›$c);", "any: only BuildMaster's takes three");
+    assert.equal(withHints("set $p = $PackageProperty($a, $b);"), "set $p = $PackageProperty($a, $b);", "any: both take two");
   });
 
   it("stops an unclosed call at its statement", () => {

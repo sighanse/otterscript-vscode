@@ -108,10 +108,18 @@ describe("hover", () => {
   });
 
   it("documents an operation only where a statement starts, not as an argument", async () => {
-    const source = await openContent("Log-Information Build;\n<% Copy-Files(To: \"b\"); %>\nx; Copy-Files(To: \"c\");\n");
+    const source = await openContent("Log-Information Build;\nx; Copy-Files(To: \"c\");\n");
     assert.equal(await hoverText(source, positionOf(source, "Build;", 1)), "", "an implicit-string argument");
-    assert.match(await hoverText(source, positionOf(source, "Copy-Files", 2)), /### Copy-Files/, "after <%");
     assert.match(await hoverText(source, positionOf(source, "x; Copy-Files", 5)), /### Copy-Files/, "after ;");
+    const template = await openContent("<% Copy-Files(To: \"b\"); %>\n");
+    assert.match(await hoverText(template, positionOf(template, "Copy-Files", 2)), /### Copy-Files/, "after <%");
+  });
+
+  it("in a text template, documents the tags' code but not the literal text around them", async () => {
+    const source = await openContent("<% set $x = 1; %>\n# Notes for Copy-Files <% Copy-Files(To: \"b\"); %>\n");
+    assert.equal(await hoverText(source, positionOf(source, "Copy-Files <%", 2)), "", "literal text");
+    assert.match(await hoverText(source, positionOf(source, "Copy-Files(", 2)), /### Copy-Files/, "after a literal #");
+    assert.match(await hoverText(source, positionOf(source, "To:", 1)), /Argument of `Copy-Files`/);
   });
 
   it("shows no operation for a module named like one, declared or not", async () => {
@@ -329,6 +337,11 @@ describe("completion", () => {
     }
   });
 
+  it("offers arguments in a text template's tag after literal text that looks like a comment", async () => {
+    const document = await openContent("<% set $x = 1; %>\n# Notes <% Copy-Files(");
+    assert.ok((await completionLabels(document, positionOf(document, "Copy-Files(", 11), "(")).includes("To"));
+  });
+
   it("offers Adaptive Card values inside a card in a text template", async () => {
     const document = await openContent(
       "<% if $Notify { %>\n" +
@@ -374,6 +387,34 @@ describe("signature help", () => {
     const document = await openContent(source);
     const help = await signatureHelp(document, document.positionAt(source.length));
     assert.equal(help?.signatures.length ?? 0, 0);
+  });
+
+  it("finds the call in a text template's tag after literal text that looks like a comment", async () => {
+    const source = "<% set $x = 1; %>\n# Notes <% set $y = $Substring(";
+    const document = await openContent(source);
+    const help = await signatureHelp(document, document.positionAt(source.length));
+    assert.equal(help?.signatures[0].label, "$Substring(Text, Offset, [Length])");
+  });
+
+  it("shows the otterscript.product setting's form of a function, or every form for any", async () => {
+    const config = vscode.workspace.getConfiguration("otterscript");
+    const source = "set $p = $PackageProperty($a, $b, ";
+    const document = await openContent(source);
+    const at = document.positionAt(source.length);
+    try {
+      const any = await signatureHelp(document, at);
+      assert.deepEqual(any?.signatures.map((s) => s.label), [
+        "$PackageProperty(name, [default])",
+        "$PackageProperty(packageName, packageProperty, [sourceName])",
+      ]);
+      assert.equal(any?.activeSignature, 1, "only BuildMaster's takes a third argument");
+      await config.update("product", "BuildMaster", vscode.ConfigurationTarget.Global);
+      const buildMaster = await signatureHelp(document, at);
+      assert.deepEqual(buildMaster?.signatures.map((s) => s.label), ["$PackageProperty(packageName, packageProperty, [sourceName])"]);
+      assert.equal(buildMaster?.activeParameter, 2);
+    } finally {
+      await config.update("product", undefined, vscode.ConfigurationTarget.Global);
+    }
   });
 
   it("shows a module's parameters for call Module(, the named one active", async () => {

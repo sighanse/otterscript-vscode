@@ -6,7 +6,7 @@
 
 const vscode = require("vscode");
 const { FUNCTION_TABLES, lookupOperation } = require("../language-data");
-const { lookupOwn } = require("../helpers");
+const { lookupOwn, productSignatures } = require("../helpers");
 const { getMaskedTextBefore, getModuleParameters, resolveModule } = require("../document-index");
 const { ARGUMENT_NAME_REGEX, blankClosedGroups, getActiveParameterIndex, splitSignatureParameters } = require("../scanner");
 
@@ -79,6 +79,17 @@ async function findModuleSignatureCall(document, textBeforeCursor, listWorkspace
 }
 
 /**
+ * A signature parameter's name, lower case: `[ResponseBody => <text>]`,
+ * `To: <text>` and `[out result]` give `responsebody`, `to` and `result`.
+ *
+ * @param {string} label
+ * @returns {string}
+ */
+function parameterName(label) {
+  return label.replace(/^\[|\]$/g, "").replace(/^(?:in|out|ref)\s+/i, "").split(/:|=>/)[0].trim().toLowerCase();
+}
+
+/**
  * The parameter the cursor is on: the one named by a `Name:` (or an output's
  * `Name =>`) the current argument starts with (named arguments come in any
  * order), else the one at the cursor's position in the list.
@@ -90,9 +101,29 @@ async function findModuleSignatureCall(document, textBeforeCursor, listWorkspace
  */
 function activeParameterIndex(args, parameters) {
   const named = ARGUMENT_NAME_REGEX.exec(args.slice(args.lastIndexOf(",") + 1))?.[2]?.toLowerCase();
-  const byName = named === undefined ? -1 : parameters.findIndex((label) =>
-    label.replace(/^\[|\]$/g, "").replace(/^(?:in|out|ref)\s+/i, "").split(/:|=>/)[0].trim().toLowerCase() === named);
+  const byName = named === undefined ? -1 : parameters.findIndex((label) => parameterName(label) === named);
   return byName !== -1 ? byName : getActiveParameterIndex(args);
+}
+
+/**
+ * Which of a call's forms the arguments typed so far fit: the first with
+ * the `Name:` being typed or, without one, with a parameter at the cursor's
+ * position (a `...` takes any number). The first form when none fits.
+ *
+ * @param {string} args - The arguments typed so far
+ * @param {string[]} signatures - The forms, from `productSignatures`
+ * @returns {number}
+ */
+function activeSignatureIndex(args, signatures) {
+  const named = ARGUMENT_NAME_REGEX.exec(args.slice(args.lastIndexOf(",") + 1))?.[2];
+  const position = getActiveParameterIndex(args);
+  const fits = signatures.findIndex((signature) => {
+    const parameters = splitSignatureParameters(signature);
+    return named === undefined
+      ? position < parameters.length || parameters.some((p) => p.includes("..."))
+      : parameters.some((p) => parameterName(p) === named.toLowerCase());
+  });
+  return Math.max(fits, 0);
 }
 
 /**
@@ -159,33 +190,35 @@ function registerSignatureHelp(settings, listWorkspaceModules) {
           const call = MODULE_SIGNATURE_REGEX.test(textBeforeCursor)
             ? await findModuleSignatureCall(document, textBeforeCursor, listWorkspaceModules)
             : findSignatureCall(textBeforeCursor);
-          if (!call?.doc.signature) return null;
+          if (!call) return null;
           const { doc: fn, args, isOperation } = call;
-          const signature = call.doc.signature;
-          const parameters = splitSignatureParameters(signature);
+          // -- The forms the selected product has: its own where it differs
+          // (BuildMaster's `$PackageProperty`), every one for "any"
+          const signatures = productSignatures(fn, settings.product);
+          if (!signatures.length) return null;
 
-          // -- Qualify the displayed signature with its namespace when it belongs
-          // to one and the stored signature string doesn't already spell it out.
-          // Operations only: "Namespace::Operation" is grammatically valid, whereas
-          // the syntax for namespaced $/@ functions is not surfaced here.
-          const signatureLabel =
-            isOperation && fn.namespace && !signature.includes("::")
-              ? `${fn.namespace}::${signature}`
-              : signature;
-
-          const sig = new vscode.SignatureInformation(signatureLabel, fn.documentation);
-          sig.parameters = parameterLabels(signatureLabel, parameters).map((p) => new vscode.ParameterInformation(p));
-
-          // -- Prepare the response
           const help = new vscode.SignatureHelp();
-          help.signatures = [sig];
-          help.activeSignature = 0;
-
-          // -- Only set activeParameter when parameters were extracted
-          if (sig.parameters.length > 0) {
-            help.activeParameter = Math.min(activeParameterIndex(args, parameters), sig.parameters.length - 1);
-          }
-
+          help.signatures = signatures.map((signature) => {
+            const parameters = splitSignatureParameters(signature);
+            // -- Qualify the displayed signature with its namespace when it
+            // belongs to one and the stored signature string doesn't already
+            // spell it out. Operations only: "Namespace::Operation" is
+            // grammatically valid, whereas the syntax for namespaced $/@
+            // functions is not surfaced here.
+            const signatureLabel =
+              isOperation && fn.namespace && !signature.includes("::")
+                ? `${fn.namespace}::${signature}`
+                : signature;
+            const sig = new vscode.SignatureInformation(signatureLabel, fn.documentation);
+            sig.parameters = parameterLabels(signatureLabel, parameters).map((p) => new vscode.ParameterInformation(p));
+            // -- Only set activeParameter when parameters were extracted
+            if (parameters.length > 0) {
+              sig.activeParameter = Math.min(activeParameterIndex(args, parameters), parameters.length - 1);
+            }
+            return sig;
+          });
+          help.activeSignature = activeSignatureIndex(args, signatures);
+          help.activeParameter = help.signatures[help.activeSignature].activeParameter ?? 0;
           return help;
         }
       },
@@ -196,4 +229,4 @@ function registerSignatureHelp(settings, listWorkspaceModules) {
   return [signatureHelpProvider];
 }
 
-module.exports = { FUNCTION_SIGNATURE_REGEX, OPERATION_SIGNATURE_REGEX, activeParameterIndex, findSignatureCall, parameterLabels, registerSignatureHelp };
+module.exports = { FUNCTION_SIGNATURE_REGEX, OPERATION_SIGNATURE_REGEX, activeParameterIndex, activeSignatureIndex, findSignatureCall, parameterLabels, registerSignatureHelp };

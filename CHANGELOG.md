@@ -43,6 +43,7 @@
 
 ### Fixed
 
+- In a text template, hover, completion and signature help read the literal text around the `<% %>` tags as OtterScript: a `#` or `//` in it, as in `# Notes <% Copy-Files(`, hid the tag's code after it as a comment, and a word in it could get an operation's hover. Only the tags' code (and `$` expressions in the text) counts now, as in the diagnostics
 - Hovering a word that only looks like an operation, such as the argument `Build` in `Log-Information Build;`, showed that operation's documentation; operations are now recognized only where a statement starts
 - Hover and signature help showed an operation's output arguments as inputs, such as `[ResponseBody: <text>]` for `Get-Http`; they now show how they're written, `[ResponseBody => <text>]` (`ResponseBody => $body`)
 - **Fold All Regions** (`Ctrl+K Ctrl+8`) folded every `{ }` block, map, template tag and swim string; it now folds only `#region` blocks
@@ -57,7 +58,7 @@
 - Hovering a module name in `call Name` or `module Name` could show the documentation of an operation with the same name
 - An operation written right after `{`, `;` or `}` with no space, such as `if $x {Copy-Files(...)`, got no hover (after `{`) or signature help
 - `$Trim` accepts the characters to trim (`$Trim($x, "-")`), as `$TrimStart` and `$TrimEnd` already did; it was flagged as too many arguments
-- `$PackageHash` and `$PackageProperty` mixed ProGet's and BuildMaster's forms. Hover now shows ProGet's (`$PackageHash([format], [algorithm])`, `$PackageProperty(name, [default])`) with BuildMaster's below it, and a three-argument BuildMaster `$PackageProperty(...)` is no longer flagged as too many arguments
+- `$PackageHash` and `$PackageProperty` mixed ProGet's and BuildMaster's forms. Hover now shows ProGet's (`$PackageHash([format], [algorithm])`, `$PackageProperty(name, [default])`) with BuildMaster's below it, signature help shows the form of the selected `otterscript.product` (both for `any`, the one the arguments fit highlighted), and a three-argument BuildMaster `$PackageProperty(...)` is no longer flagged as too many arguments
 - `unknown-namespace` flagged real namespaces of Inedo's extensions, such as `GitHub::`, `Jira::`, `NuGet::`, `MSBuild::`, `Kubernetes::` or `AzureDevOps::`. Every namespace declared in Inedo's public extensions is now known, as are BuildMaster's own `DB::`, `Packages::` and `System::` (`DB::Backup-Database`), and an operation behind a namespace whose operations the extension doesn't document yet (`GitHub::Ensure-Release`) is no longer flagged as unknown either
 
 ### Removed

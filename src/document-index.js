@@ -15,12 +15,15 @@ const {
   advanceScanState,
   BRACED_NAME_PATTERN,
   createCodeScanState,
+  createTemplateScanState,
+  documentUsesTemplateTags,
   findModuleDeclarations,
   indexVariableOccurrences,
   isInStringOrComment,
   isModuleCallContext,
   isModuleDeclarationContext,
   maskNonCodeSpans,
+  maskOutsideTemplateTags,
   MODULE_CALL_TARGET_GLOBAL_REGEX,
   MODULE_NAME_TOKEN_REGEX,
   NAME_PATTERN,
@@ -76,6 +79,15 @@ const moduleInfoCache = new Map();
  * aliased here so JSDoc in this file can refer to it.
  *
  * @typedef {import("./scanner").CodeScanState} CodeScanState
+ */
+
+/**
+ * The scan state on entering a line: `code` for the OtterScript, and -- in a
+ * text template (see `documentUsesTemplateTags`) -- `tags`, whether the line
+ * starts inside a `<% %>` tag, for blanking the literal output around the
+ * tags first ({@link codeView}). `tags` is null outside a template.
+ *
+ * @typedef {{ code: CodeScanState, tags: import("./scanner").TemplateScanState | null }} LineScanState
  */
 
 /**
@@ -200,7 +212,7 @@ const variableIndexCache = new Map();
  * request has needed, so hover, completion and highlight on every keystroke
  * don't rescan the document from line 1. Dropped on close via
  * {@link clearDocumentCaches}.
- * @type {Map<string, { version: number, states: import("./scanner").CodeScanState[] }>}
+ * @type {Map<string, { version: number, states: LineScanState[] }>}
  */
 const lineStartStateCache = new Map();
 
@@ -365,36 +377,73 @@ function findModuleReferences(document, moduleName, includeDeclaration) {
  * @returns {boolean} true if the position is inside a string, comment, or swim-string
  */
 function isInStringOrCommentDoc(document, position) {
-  return isInStringOrComment(
-    document.lineAt(position.line).text,
-    position.character,
-    getLineStartScanState(document, position.line)
-  );
+  const { code, tags } = getLineStartScanState(document, position.line);
+  const text = document.lineAt(position.line).text;
+  if (!tags) return isInStringOrComment(text, position.character, code);
+
+  // In a text template, the literal output around the tags isn't code --
+  // except a `$` expression in it (`$PackageName`), which the template
+  // expands, and a `$` just typed there.
+  const before = { inTemplateTag: tags.inTemplateTag, code: { ...tags.code } };
+  maskOutsideTemplateTags(text.slice(0, position.character), before);
+  const view = codeView(text, tags);
+  const kept = (/** @type {number} */ i) => i >= 0 && i < view.length && view[i] !== " ";
+  const inExpression = kept(position.character) || kept(position.character - 1) ||
+    /\$\{?[\w-]*$/.test(text.slice(0, position.character));
+  if (!before.inTemplateTag && !inExpression) return true;
+  return isInStringOrComment(view, position.character, code);
+}
+
+/**
+ * A line as the OtterScript scan sees it: in a text template (`tags` not
+ * null) the literal output around the `<% %>` tags is blanked, offsets
+ * unchanged, as the diagnostics do (`maskOutsideTemplateTags`); else the line
+ * itself.
+ *
+ * @param {string} text - A whole line
+ * @param {import("./scanner").TemplateScanState | null} tags - Mutated in place
+ * @returns {string}
+ */
+function codeView(text, tags) {
+  return tags ? maskOutsideTemplateTags(text, tags) : text;
+}
+
+/**
+ * A copy of a {@link LineScanState} that can be changed without changing it.
+ *
+ * @param {LineScanState} state
+ * @returns {LineScanState}
+ */
+function copyLineScanState({ code, tags }) {
+  return { code: { ...code }, tags: tags && { inTemplateTag: tags.inTemplateTag, code: { ...tags.code } } };
 }
 
 /**
  * The scan state on entering `line` (a fresh copy the caller may change).
+ * Whether the document is a text template is decided once per version.
  *
  * @param {vscode.TextDocument} document
  * @param {number} line
- * @returns {import("./scanner").CodeScanState}
+ * @returns {LineScanState}
  */
 function getLineStartScanState(document, line) {
   const cacheKey = document.uri.toString();
   let cached = lineStartStateCache.get(cacheKey);
   if (!cached || cached.version !== document.version) {
-    cached = { version: document.version, states: [createCodeScanState()] };
+    const text = document.getText();
+    const template = text.includes("<%") && documentUsesTemplateTags(text);
+    cached = { version: document.version, states: [{ code: createCodeScanState(), tags: template ? createTemplateScanState() : null }] };
     lineStartStateCache.set(cacheKey, cached);
   }
   const { states } = cached;
   // Use advanceScanState (not maskNonCodeSpans) for the lines in between: only
   // the state is needed, not the masked text.
   while (states.length <= line) {
-    const state = { ...states[states.length - 1] };
-    advanceScanState(document.lineAt(states.length - 1).text, state);
+    const state = copyLineScanState(states[states.length - 1]);
+    advanceScanState(codeView(document.lineAt(states.length - 1).text, state.tags), state.code);
     states.push(state);
   }
-  return { ...states[line] };
+  return copyLineScanState(states[line]);
 }
 
 /** How far {@link getMaskedTextBefore} looks back, and {@link getMaskedTextAfter} ahead: plenty for one statement. */
@@ -403,7 +452,8 @@ const MASKED_CONTEXT_MAX_LINES = 200;
 /**
  * The code before `position`, from up to `maxLines` lines back, with
  * strings and comments masked ({@link maskNonCodeSpans}, from the cached
- * scan state at the first line) -- for finding the call the cursor is in.
+ * scan state at the first line), and in a text template the literal output
+ * too ({@link codeView}) -- for finding the call the cursor is in.
  *
  * @param {vscode.TextDocument} document
  * @param {vscode.Position} position
@@ -412,11 +462,13 @@ const MASKED_CONTEXT_MAX_LINES = 200;
  */
 function getMaskedTextBefore(document, position, maxLines = MASKED_CONTEXT_MAX_LINES) {
   const first = Math.max(0, position.line - maxLines);
-  const state = getLineStartScanState(document, first);
+  const { code, tags } = getLineStartScanState(document, first);
   const lines = [];
   for (let line = first; line <= position.line; line++) {
-    const text = document.lineAt(line).text;
-    lines.push(maskNonCodeSpans(line === position.line ? text.slice(0, position.character) : text, state));
+    // The whole line's view, then cut: the literal output's quotes are
+    // tracked per line, from its start.
+    const text = codeView(document.lineAt(line).text, tags);
+    lines.push(maskNonCodeSpans(line === position.line ? text.slice(0, position.character) : text, code));
   }
   return lines.join("\n");
 }
@@ -431,13 +483,13 @@ function getMaskedTextBefore(document, position, maxLines = MASKED_CONTEXT_MAX_L
  * @returns {string}
  */
 function getMaskedTextAfter(document, position) {
-  const state = getLineStartScanState(document, position.line);
-  const first = document.lineAt(position.line).text;
-  maskNonCodeSpans(first.slice(0, position.character), state);
-  const lines = [maskNonCodeSpans(first.slice(position.character), state)];
+  const { code, tags } = getLineStartScanState(document, position.line);
+  const first = codeView(document.lineAt(position.line).text, tags);
+  maskNonCodeSpans(first.slice(0, position.character), code);
+  const lines = [maskNonCodeSpans(first.slice(position.character), code)];
   const last = Math.min(document.lineCount - 1, position.line + MASKED_CONTEXT_MAX_LINES);
   for (let line = position.line + 1; line <= last; line++) {
-    lines.push(maskNonCodeSpans(document.lineAt(line).text, state));
+    lines.push(maskNonCodeSpans(codeView(document.lineAt(line).text, tags), code));
   }
   return lines.join("\n");
 }
@@ -482,9 +534,9 @@ const MODULE_HEADER_MAX_LINES = 50;
 function getModuleParameters(document, range) {
   const first = range.start.line;
   const last = Math.min(document.lineCount - 1, first + MODULE_HEADER_MAX_LINES);
-  const state = getLineStartScanState(document, first);
+  const { code, tags } = getLineStartScanState(document, first);
   const lines = [];
-  for (let line = first; line <= last; line++) lines.push(maskNonCodeSpans(document.lineAt(line).text, state));
+  for (let line = first; line <= last; line++) lines.push(maskNonCodeSpans(codeView(document.lineAt(line).text, tags), code));
   return parseModuleParameters(lines.join("\n"));
 }
 
@@ -526,6 +578,7 @@ async function findCallArguments(document, context, listWorkspaceModules) {
 
 module.exports = {
   clearDocumentCaches,
+  codeView,
   findCallArguments,
   findModuleDeclarationRange,
   findModuleReferences,

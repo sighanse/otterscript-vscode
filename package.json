@@ -149,7 +149,7 @@
             "Leave out what only BuildMaster or only ProGet has.",
             "Leave out what only Otter or only ProGet has."
           ],
-          "markdownDescription": "The Inedo product your scripts run in. Completion then leaves out the functions, variables and operations that product doesn't have, based on Inedo's Otter and BuildMaster reference. Hover notes when a function, variable or operation isn't in that product; diagnostics are not affected."
+          "markdownDescription": "The Inedo product your scripts run in. Completion then leaves out the functions, variables and operations that product doesn't have, based on Inedo's Otter and BuildMaster reference. Hover notes when a function, variable or operation isn't in that product, and signature help and parameter-name hints use the product's form of a function whose arguments differ between products; diagnostics are not affected."
         },
         "otterscript.diagnostics.rules": {
           "type": "object",

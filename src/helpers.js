@@ -417,6 +417,24 @@ function isAvailableIn(doc, product) {
 }
 
 /**
+ * The signatures of a docs entry that apply to `product` (the
+ * `otterscript.product` setting): the product's own form when the entry has
+ * one among its `overloads` (BuildMaster's `$PackageProperty(packageName,
+ * packageProperty, [sourceName])`), else the main signature; every form for
+ * `"any"`, the main one first.
+ *
+ * @param {{ signature?: string, overloads?: ReadonlyArray<{ product: string, signature: string }> }} doc
+ * @param {string} product - "any", "ProGet", "Otter" or "BuildMaster"
+ * @returns {string[]} Empty when the entry has no signature
+ */
+function productSignatures(doc, product) {
+  if (!doc.signature) return [];
+  const overloads = doc.overloads ?? [];
+  if (product === "any") return [doc.signature, ...overloads.map((o) => o.signature)];
+  return [overloads.find((o) => o.product === product)?.signature ?? doc.signature];
+}
+
+/**
  * The docs entry of each item {@link buildCompletionItem} made whose
  * documentation hasn't been built yet. Weak, so items VS Code drops are
  * garbage-collected.
@@ -619,6 +637,7 @@ module.exports = {
   // -- Docs tables
   lookupOwn,
   isAvailableIn,
+  productSignatures,
 
   // -- Completion & hover
   isReadOnlyView,

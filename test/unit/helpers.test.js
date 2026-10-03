@@ -46,11 +46,12 @@ const {
   loadConfig,
   lookupOwn,
   mapWithConcurrency,
+  productSignatures,
   scheduleTimerForUri,
 } = require("../../src/helpers.js");
 const { validateDocs } = require("./validate-docs");
-const { FUNCTION_SIGNATURE_REGEX, OPERATION_SIGNATURE_REGEX, activeParameterIndex, findSignatureCall, parameterLabels } = require("../../src/providers/signature-help.js");
-const { isInStringOrCommentDoc } = require("../../src/document-index.js");
+const { FUNCTION_SIGNATURE_REGEX, OPERATION_SIGNATURE_REGEX, activeParameterIndex, activeSignatureIndex, findSignatureCall, parameterLabels } = require("../../src/providers/signature-help.js");
+const { getMaskedTextAfter, getMaskedTextBefore, isInStringOrCommentDoc } = require("../../src/document-index.js");
 const {
   checkMissingDollar,
   createUnbalancedDiagnostic,
@@ -681,6 +682,28 @@ describe("signature help call regexes", () => {
     assert.equal(activeParameterIndex("ResponseBody => ", ["Url: <text>", "[ResponseBody => <text>]"]), 1, "an output's => label");
   });
 
+  it("productSignatures gives the selected product's form, or every form for any", () => {
+    const doc = {
+      signature: "$PackageProperty(name, [default])",
+      overloads: [{ product: "BuildMaster", signature: "$PackageProperty(packageName, packageProperty, [sourceName])" }],
+    };
+    assert.deepEqual(productSignatures(doc, "BuildMaster"), [doc.overloads[0].signature]);
+    assert.deepEqual(productSignatures(doc, "ProGet"), [doc.signature]);
+    assert.deepEqual(productSignatures(doc, "any"), [doc.signature, doc.overloads[0].signature]);
+    assert.deepEqual(productSignatures({ signature: "$X(a)" }, "Otter"), ["$X(a)"]);
+    assert.deepEqual(productSignatures({}, "any"), []);
+  });
+
+  it("activeSignatureIndex picks the first form the typed arguments fit", () => {
+    const forms = ["$PackageProperty(name, [default])", "$PackageProperty(packageName, packageProperty, [sourceName])"];
+    assert.equal(activeSignatureIndex("a", forms), 0);
+    assert.equal(activeSignatureIndex("a, b", forms), 0);
+    assert.equal(activeSignatureIndex("a, b, ", forms), 1, "a third argument only the second form takes");
+    assert.equal(activeSignatureIndex("a, b, c, d", forms), 0, "none fits: the first");
+    const ops = ["Ensure-Site(Name: <text>, [Binding: <text>])", "Ensure-Site(Name: <text>, [Bindings: <text>])"];
+    assert.equal(activeSignatureIndex("Name: a, Bindings: ", ops), 1, "the form that has the typed name");
+  });
+
   it("findSignatureCall prefers the function the cursor is in, then the operation", () => {
     assert.equal(findSignatureCall("Copy-Files(Include: $Trim(a")?.doc.name, "$Trim");
     assert.equal(findSignatureCall("Copy-Files(Include: a")?.isOperation, true);
@@ -974,6 +997,32 @@ describe("isInStringOrCommentDoc", () => {
     const doc = makeDoc("/* c\nstill inside\n*/ code");
     assert.equal(isInStringOrCommentDoc(doc, pos(1, 3)), true);
     assert.equal(isInStringOrCommentDoc(doc, pos(2, 4)), false);
+  });
+});
+
+describe("text templates: the literal output around the tags isn't code", () => {
+  const template = [
+    "Deployed <% Log-Information x; %>",
+    "# Heading: $PackageName <% Copy-Files(To: x",
+    "",
+  ].join("\n");
+
+  it("isInStringOrCommentDoc: only the code in a tag, and a $ expression in the text", () => {
+    const doc = makeDoc(template);
+    assert.equal(isInStringOrCommentDoc(doc, pos(1, 3)), true, "'Heading' is literal text, not a # comment");
+    assert.equal(isInStringOrCommentDoc(doc, pos(1, 15)), false, "$PackageName is expanded");
+    assert.equal(isInStringOrCommentDoc(doc, pos(1, 38)), false, "after '<% Copy-Files('");
+    assert.equal(isInStringOrCommentDoc(doc, pos(0, 3)), true, "'Deployed'");
+    assert.equal(isInStringOrCommentDoc(doc, pos(0, 15)), false, "Log-Information");
+    assert.equal(isInStringOrCommentDoc(makeDoc("# not a template <% x %>\n"), pos(0, 3)), true, "a comment, outside a template");
+  });
+
+  it("getMaskedTextBefore / getMaskedTextAfter see only the tags' code", () => {
+    const doc = makeDoc(template);
+    const before = getMaskedTextBefore(doc, pos(1, 42));
+    assert.match(before, /Copy-Files\(To:\s*$/);
+    assert.doesNotMatch(before, /Heading|Deployed/);
+    assert.equal(getMaskedTextAfter(doc, pos(1, 42)).trim(), "x");
   });
 });
 

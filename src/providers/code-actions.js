@@ -15,7 +15,7 @@ const {
   operationForms,
 } = require("../language-data");
 const { findOperationArgumentContext, maskComments, maskNonCodeSpans } = require("../scanner");
-const { getLineStartScanState, getMaskedTextBefore, MASKED_CONTEXT_MAX_LINES } = require("../document-index");
+const { codeView, getLineStartScanState, getMaskedTextBefore, MASKED_CONTEXT_MAX_LINES } = require("../document-index");
 const {
   createCardVersionFix,
   createContentTypeFix,
@@ -292,14 +292,15 @@ function createMissingArgumentFix(document, diagnostic) {
   // goes -- masked twice: for brackets and argument names (strings and
   // comments blanked), and for where the last argument ends (comments only).
   // Both start from the cached scan state at that line, so a lightbulb
-  // request doesn't rescan the whole document. Offsets below are relative to
-  // `base`, the start of the operation's line.
+  // request doesn't rescan the whole document, and in a text template see
+  // only the code (`codeView`). Offsets below are relative to `base`, the
+  // start of the operation's line.
   const firstLine = diagnostic.range.start.line;
   const windowEnd = Math.min(document.lineCount - 1, firstLine + MASKED_CONTEXT_MAX_LINES);
   const base = document.offsetAt(new vscode.Position(firstLine, 0));
   const text = document.getText(new vscode.Range(firstLine, 0, windowEnd, document.lineAt(windowEnd).text.length));
-  const lines = text.split("\n");
-  const codeState = getLineStartScanState(document, firstLine);
+  const { code: codeState, tags } = getLineStartScanState(document, firstLine);
+  const lines = text.split("\n").map((line) => codeView(line, tags));
   const commentState = { ...codeState };
   /** @type {boolean[]} Per line, whether it ends inside a block comment that goes on */
   const endsInComment = [];
