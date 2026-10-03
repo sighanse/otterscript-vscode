@@ -21,7 +21,7 @@ const { findOperationArgumentContext } = require("../scanner");
  * @returns {Promise<vscode.Hover | null>}
  */
 async function hoverArgument(document, position, listWorkspaceModules) {
-  const range = document.getWordRangeAtPosition(position, /[A-Za-z]\w*/);
+  const range = document.getWordRangeAtPosition(position, /[A-Za-z][\w-]*/);
   if (!range || !/^\s*:(?!:)/.test(document.lineAt(range.end.line).text.slice(range.end.character))) return null;
   const context = findOperationArgumentContext(getMaskedTextBefore(document, range.start));
   if (!context || context.typed) return null;
@@ -125,9 +125,10 @@ function registerHover(settings, listWorkspaceModules) {
         const argumentHover = await hoverArgument(document, position, listWorkspaceModules);
         if (argumentHover) return argumentHover;
 
-        // -- A module name in a `call`: the module's declaration
-        const moduleHover = await hoverModuleCall(document, position, listWorkspaceModules);
-        if (moduleHover) return moduleHover;
+        // -- A module name in a `call`: the module's declaration. A module name
+        // is never anything else, so nothing further is tried: an unresolved
+        // `call Build` or a `module Build` mustn't show the `Build` operation.
+        if (getModuleNameAt(document, position)) return hoverModuleCall(document, position, listWorkspaceModules);
 
         // -- Template tags (<% and %>)
         // OtterScript uses ASP-style template tags for embedding code

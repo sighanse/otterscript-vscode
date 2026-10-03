@@ -102,6 +102,18 @@ describe("hover", () => {
     assert.match(bare, /Also `DotNet::Build` \(BuildMaster\): write the namespace to pick one/);
   });
 
+  it("shows no operation for a module named like one, declared or not", async () => {
+    const call = await openContent("call Build;\n");
+    assert.equal(await hoverText(call, positionOf(call, "Build;", 1)), "", "a module no file declares");
+    const declaration = await openContent("module Build {\n}\n");
+    assert.equal(await hoverText(declaration, positionOf(declaration, "module Build", 8)), "", "the declaration");
+  });
+
+  it("says which name to write for PSCall2", async () => {
+    const source = await openContent("PSCall2 MyScript;\n");
+    assert.match(await hoverText(source, positionOf(source, "PSCall2", 2)), /`PSCall` is the alias for `PSCall2`, and the name to write/);
+  });
+
   it("documents an operation's argument name, and lists the arguments on the operation", async () => {
     const source = await openContent('Copy-Files(\n    From: "a",\n    To: "b"\n);\n');
     assert.match(await hoverText(source, positionOf(source, "To:", 1)), /Argument of `Copy-Files`: `To` \(required, text\) - Target directory/);

@@ -641,6 +641,7 @@ describe("signature help call regexes", () => {
     assert.equal("Copy-Files(Include: a".match(OPERATION_SIGNATURE_REGEX)?.[2], "Copy-Files");
     assert.deepEqual("ProGet::Create-Directory foo (Path: b".match(OPERATION_SIGNATURE_REGEX)?.slice(1, 3), ["ProGet", "Create-Directory"]);
     assert.equal("set $x = (".match(OPERATION_SIGNATURE_REGEX), null);
+    assert.equal("Linux::SHEnsure2(Name: a".match(OPERATION_SIGNATURE_REGEX)?.[2], "SHEnsure2", "digits in the name");
   });
 
   it("activeParameterIndex follows a typed Name:, else the argument position", () => {
@@ -648,6 +649,7 @@ describe("signature help call regexes", () => {
     assert.equal(activeParameterIndex("From: a, To: ", params), 2, "named, out of order");
     assert.equal(activeParameterIndex("a, ", params), 1, "positional");
     assert.equal(activeParameterIndex("result: ", ["name", "[out result]"]), 1, "a module's out parameter");
+    assert.equal(activeParameterIndex("output-file: ", ["name", "[output-file]"]), 1, "a dashed name");
   });
 
   it("findSignatureCall prefers the function the cursor is in, then the operation", () => {
@@ -713,6 +715,13 @@ describe("buildCompletionItem", () => {
     assert.equal(item.kind, KIND);
     assert.equal(item.sortText, "1_$ToJson");
     assert.equal(item.insertText, "snippet-text");
+  });
+
+  it("strikes a superseded name through and lists it last", () => {
+    const item = buildCompletionItem({ ...doc, name: "PSCall2", superseded: { by: "PSCall", note: "n" } }, KIND, "0_", "x");
+    assert.deepEqual(item.tags, [stub.CompletionItemTag.Deprecated]);
+    assert.equal(item.sortText, "0_~PSCall2");
+    assert.equal(buildCompletionItem(doc, KIND, "1_", "x").tags, undefined);
   });
 
   it("detail is the signature, falling back to description", () => {
@@ -858,6 +867,11 @@ describe("getTypedIdentifier", () => {
     assert.equal(getTypedIdentifier(makeDoc("x = $To"), pos(0, 7), "$"), "To");
     assert.equal(getTypedIdentifier(makeDoc("@Sp"), pos(0, 3), "@"), "Sp");
     assert.equal(getTypedIdentifier(makeDoc("set %m = %From"), pos(0, 14), "%"), "From");
+  });
+
+  it("takes digits, '_' and '-' in a name, as variable names have", () => {
+    assert.equal(getTypedIdentifier(makeDoc("Log-Information $item2"), pos(0, 22), "$"), "item2");
+    assert.equal(getTypedIdentifier(makeDoc("set @my-li"), pos(0, 10), "@"), "my-li");
   });
 
   it("returns '' right after the bare sigil", () => {

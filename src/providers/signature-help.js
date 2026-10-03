@@ -24,7 +24,7 @@ const FUNCTION_SIGNATURE_REGEX = /([$@%])([A-Za-z][A-Za-z0-9_]*)\s*\(([^()]*)$/;
  * `ProGet::Create-Directory my/folder/path\n(` -- but no whitespace or `=`,
  * so it can't swallow an assignment like `set $x = (`.
  */
-const OPERATION_SIGNATURE_REGEX = /(?:^|\s)(?:([A-Za-z][\w-]*)::)?([A-Za-z][A-Za-z-]*)(?:[ \t]+(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s(){};=]+))?\s*\(([^()]*)$/;
+const OPERATION_SIGNATURE_REGEX = /(?:^|\s)(?:([A-Za-z][\w-]*)::)?([A-Za-z][A-Za-z0-9-]*)(?:[ \t]+(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s(){};=]+))?\s*\(([^()]*)$/;
 
 /** The function table for each call sigil. */
 const FUNCTION_TABLES = Object.freeze({ "$": scalarFunctionDocs, "@": vectorFunctionDocs, "%": mapFunctionDocs });
@@ -82,7 +82,7 @@ async function findModuleSignatureCall(document, textBeforeCursor, listWorkspace
  * @returns {number}
  */
 function activeParameterIndex(args, parameters) {
-  const named = /^\s*([A-Za-z]\w*)\s*:(?!:)/.exec(args.slice(args.lastIndexOf(",") + 1))?.[1]?.toLowerCase();
+  const named = /^\s*([A-Za-z][\w-]*)\s*:(?!:)/.exec(args.slice(args.lastIndexOf(",") + 1))?.[1]?.toLowerCase();
   const byName = named === undefined ? -1 : parameters.findIndex((label) =>
     label.replace(/^\[|\]$/g, "").replace(/^(?:in|out|ref)\s+/i, "").split(":")[0].trim().toLowerCase() === named);
   return byName !== -1 ? byName : getActiveParameterIndex(args);

@@ -134,8 +134,6 @@ function activate(context) {
       Object.assign(settings, loadConfig());
       log.info(`Settings reloaded: ${describeSettings()}`);
 
-      if (e.affectsConfiguration("otterscript.workspaceSymbols.enable")) workspaceSymbols.resetWorkspaceIndex();
-
       if (e.affectsConfiguration("otterscript.diagnostics.rules") ||
           e.affectsConfiguration("otterscript.adaptiveCards.maxVersion")) {
         for (const document of vscode.workspace.textDocuments) runDiagnostics(document);

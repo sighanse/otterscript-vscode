@@ -120,7 +120,7 @@
         "otterscript.workspaceSymbols.enable": {
           "type": "boolean",
           "default": true,
-          "description": "Index module declarations across .otter/.oscript files for 'Go to Symbol in Workspace' (Ctrl+T)"
+          "description": "List the modules declared in .otter/.oscript files in 'Go to Symbol in Workspace' (Ctrl+T). Cross-file Go to Definition, Rename and Find References work either way."
         },
         "otterscript.inlayHints.parameterNames": {
           "type": "boolean",

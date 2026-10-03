@@ -919,6 +919,12 @@ describe("findOperationArgumentContext", () => {
     assert.deepEqual(at('Copy-Files(From: "a,b", To: $PathCombine($a, $b), Inc')?.used, ["From", "To"]);
   });
 
+  it("reads dashed argument names, as a module parameter may have", () => {
+    assert.deepEqual(at("call Report(output-file: $f, out-"), { operation: "Report", namespace: null, module: true, typed: "out-", used: ["output-file"] });
+    assert.deepEqual(at("call Report(", "log-level: 1)")?.used, [], "the name being typed");
+    assert.deepEqual(at("call Report(", " log-level: 1)")?.used, ["log-level"]);
+  });
+
   it("lists the arguments given after the cursor, past the one being typed, up to the call's end", () => {
     assert.deepEqual(at("Copy-Files(From: $a, ", '\n\tTo: $PathCombine($b, "c, d"),\n\tInclude: @("*")\n);\nLog-Information "Overwrite: x";')?.used,
       ["From", "To", "Include"]);
@@ -955,5 +961,10 @@ describe("parseModuleParameters", () => {
   it("ignores a > or , in a default string, and reads braced names", () => {
     assert.deepEqual(parse('module M<$a = "x>y, z", %{my map}> {').map((p) => p.name), ["a", "my map"]);
     assert.deepEqual(parse("module M {"), []);
+  });
+
+  it("keeps the commas of a default value inside it", () => {
+    assert.deepEqual(parse("module M<in @tags = @($a, $b), in %m = %(k: $Coalesce($x, $y)), $x> {").map((p) => [p.name, p.optional]),
+      [["tags", true], ["m", true], ["x", false]]);
   });
 });

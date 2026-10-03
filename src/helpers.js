@@ -280,9 +280,9 @@ function isValidCompletionPosition(document, position, completionEnabled) {
 
 /** @type {Readonly<Record<"$" | "@" | "%", RegExp>>} */
 const TYPED_IDENTIFIER_PATTERNS = Object.freeze({
-  "$": /\$([a-zA-Z]*)$/,
-  "@": /@([a-zA-Z]*)$/,
-  "%": /%([a-zA-Z]*)$/,
+  "$": /\$((?:[A-Za-z][\w-]*)?)$/,
+  "@": /@((?:[A-Za-z][\w-]*)?)$/,
+  "%": /%((?:[A-Za-z][\w-]*)?)$/,
 });
 
 /**
@@ -321,7 +321,7 @@ function getTypedIdentifier(document, position, triggerChar) {
  * This creates the formatted tooltip content shown when hovering over
  * symbols, keywords, operations, and syntax elements.
  *
- * @param {Readonly<{ name: string, signature?: string, overloads?: { product: string, signature: string }[], description?: string, documentation?: string, namespace?: string | null, products?: ReadonlyArray<string>, anySigil?: boolean, params?: ReadonlyArray<OperationParam> }>} doc
+ * @param {Readonly<{ name: string, signature?: string, overloads?: { product: string, signature: string }[], description?: string, documentation?: string, namespace?: string | null, products?: ReadonlyArray<string>, anySigil?: boolean, superseded?: { by: string, note: string }, params?: ReadonlyArray<OperationParam> }>} doc
  *   - name: Required - Display name (e.g., "$ToJson")
  *   - signature: Optional - Function signature (monospace formatted)
  *   - overloads: Optional - The function's form in other Inedo products, each
@@ -354,6 +354,11 @@ function buildHoverMarkdown(doc, product = "any") {
   // Not in the product the user writes for -- right under the name, where it's seen.
   if (doc.products && !isAvailableIn(doc, product)) {
     md.appendMarkdown(`⚠️ **Not in ${product}:** only in ${doc.products.join(" and ")} (setting \`otterscript.product\`).\n\n`);
+  }
+
+  // A name Inedo recommends against writing, and what to write instead
+  if (doc.superseded) {
+    md.appendMarkdown(`⚠️ ${doc.superseded.note}\n\n`);
   }
 
   // Signature (monospace for code clarity)
@@ -467,7 +472,9 @@ function buildCompletionItem(doc, kind, sortPrefix, insertText, triggerSignature
   item.insertText = insertText;
   item.detail = doc.signature ?? doc.description;
   item.documentation = buildHoverMarkdown(doc);
-  item.sortText = `${sortPrefix}${doc.name}`;
+  // A superseded name is struck through and listed after the rest.
+  item.sortText = `${sortPrefix}${doc.superseded ? "~" : ""}${doc.name}`;
+  if (doc.superseded) item.tags = [vscode.CompletionItemTag.Deprecated];
 
   // Trigger signature help after insertion (for functions with parameters)
   if (triggerSignatureHelp) {

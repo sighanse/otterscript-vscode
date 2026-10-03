@@ -105,7 +105,7 @@ function registerCompletion(settings, listWorkspaceModules) {
       {
         provideCompletionItems(document, position) {
           if (!isValidCompletionPosition(document, position, settings.completionEnabled)) return [];
-          const sigil = /([$@%])[a-zA-Z]*$/.exec(document.lineAt(position.line).text.slice(0, position.character))?.[1];
+          const sigil = /([$@%])(?:[A-Za-z][\w-]*)?$/.exec(document.lineAt(position.line).text.slice(0, position.character))?.[1];
           if (!sigil) return [];
           const typed = getTypedIdentifier(document, position, /** @type {"$" | "@" | "%"} */ (sigil));
           if (typed === null) return [];
@@ -160,7 +160,7 @@ function registerCompletion(settings, listWorkspaceModules) {
           // hyphens), plus an optional "Namespace::" prefix the user may have already
           // typed (e.g. "ProGet::Cr").
           // Manual invoke (Ctrl+Space) should still return suggestions even when typed is empty.
-          const match = prefix.match(/(?:([A-Za-z][A-Za-z0-9]*)::)?([A-Za-z][A-Za-z-]*)?$/);
+          const match = prefix.match(/(?:([A-Za-z][A-Za-z0-9]*)::)?([A-Za-z][A-Za-z0-9-]*)?$/);
           const namespaceTyped = match?.[1] ?? "";
           const typed = match?.[2] ?? "";
           const isManualInvoke = localContext.triggerKind === vscode.CompletionTriggerKind.Invoke;

@@ -41,6 +41,25 @@ describe("navigation and highlighting (main.otter)", () => {
     assert.ok(uris.some((p) => p.endsWith("main.otter")), uris.join(", "));
   });
 
+  it("matches module names case-insensitively, also with Go to Symbol in Workspace turned off", async () => {
+    const config = vscode.workspace.getConfiguration("otterscript");
+    await config.update("workspaceSymbols.enable", false, vscode.ConfigurationTarget.Workspace);
+    try {
+      const source = await openContent('call greet(name: "x");\n');
+      /** @type {(vscode.Location | vscode.LocationLink)[]} */
+      const results = await vscode.commands.executeCommand(
+        "vscode.executeDefinitionProvider", source.uri, positionOf(source, "greet", 2)
+      );
+      const uris = results.map((l) => ("targetUri" in l ? l.targetUri : l.uri).fsPath);
+      assert.ok(uris.some((p) => p.endsWith("main.otter")), uris.join(", "));
+      /** @type {vscode.SymbolInformation[]} */
+      const symbols = await vscode.commands.executeCommand("vscode.executeWorkspaceSymbolProvider", "Greet");
+      assert.deepEqual(symbols.filter((s) => s.name === "Greet"), [], "Ctrl+T is off");
+    } finally {
+      await config.update("workspaceSymbols.enable", undefined, vscode.ConfigurationTarget.Workspace);
+    }
+  });
+
   /**
    * Renames the symbol at `needle` (+ `offset`) and applies the edit.
    *

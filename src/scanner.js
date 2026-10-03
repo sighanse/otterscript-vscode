@@ -1086,7 +1086,7 @@ function findOperationArgumentContext(maskedPrefix, maskedSuffix = "") {
   }
   if (open === -1) return null;
 
-  const typedMatch = /^\s*([A-Za-z]\w*)?$/.exec(text.slice(argumentStart === -1 ? open + 1 : argumentStart));
+  const typedMatch = /^\s*([A-Za-z][\w-]*)?$/.exec(text.slice(argumentStart === -1 ? open + 1 : argumentStart));
   if (!typedMatch) return null; // in a value
 
   // The operation or module: a dashed or plain name right before `(`, not a
@@ -1106,7 +1106,7 @@ function findOperationArgumentContext(maskedPrefix, maskedSuffix = "") {
     if (ch === "(" || ch === "[") depth++;
     else if (ch === ")" || ch === "]") depth--;
     else if (ch === "," && depth === 0) {
-      const name = /^\s*([A-Za-z]\w*)\s*:(?!:)/.exec(text.slice(segmentStart, i))?.[1];
+      const name = /^\s*([A-Za-z][\w-]*)\s*:(?!:)/.exec(text.slice(segmentStart, i))?.[1];
       if (name) used.push(name);
       segmentStart = i + 1;
     }
@@ -1139,7 +1139,7 @@ function findOperationArgumentContext(maskedPrefix, maskedSuffix = "") {
 
   /** @param {string} segment - One argument, masked */
   function addUsed(segment) {
-    const name = /^\s*([A-Za-z]\w*)\s*:(?!:)/.exec(segment)?.[1];
+    const name = /^\s*([A-Za-z][\w-]*)\s*:(?!:)/.exec(segment)?.[1];
     if (name) used.push(name);
   }
 }
@@ -1164,11 +1164,25 @@ function findOperationArgumentContext(maskedPrefix, maskedSuffix = "") {
 function parseModuleParameters(maskedText) {
   const header = MODULE_PARAMETER_LIST_OPEN_REGEX.exec(maskedText);
   if (!header) return [];
-  const close = maskedText.indexOf(">", header[0].length);
-  const list = maskedText.slice(header[0].length, close === -1 ? undefined : close);
+  // The parameters: split at the top-level commas up to the list's `>`, so a
+  // default value's own commas (`in @tags = @($a, $b)`) stay inside it.
+  /** @type {string[]} */
+  const parts = [];
+  let depth = 0;
+  let start = header[0].length;
+  for (let i = start; i <= maskedText.length; i++) {
+    const ch = maskedText[i];
+    if (ch === "(" || ch === "[") depth++;
+    else if ((ch === ")" || ch === "]") && depth > 0) depth--;
+    else if (i === maskedText.length || (depth === 0 && (ch === "," || ch === ">"))) {
+      parts.push(maskedText.slice(start, i));
+      if (ch !== ",") break;
+      start = i + 1;
+    }
+  }
   /** @type {ModuleParameter[]} */
   const params = [];
-  for (const part of list.split(",")) {
+  for (const part of parts) {
     const match = /^\s*(?:(in|out|ref)\s+)?([$@%])(?:\{([^}]*)\}|([A-Za-z][\w-]*))\s*(=)?/i.exec(part);
     if (!match) continue;
     const direction = /** @type {"in" | "out" | "ref"} */ ((match[1] ?? "in").toLowerCase());

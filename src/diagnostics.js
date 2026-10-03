@@ -430,7 +430,7 @@ function parseCallArguments(maskedText, text, open) {
     else if ((ch === ")" || ch === "]") && i < close) depth--;
     if (i === close || (ch === "," && depth === 0)) {
       const segment = maskedText.slice(segmentStart, i);
-      const argument = /^(\s*)([A-Za-z]\w*)\s*:(?!:)/.exec(segment);
+      const argument = /^(\s*)([A-Za-z][\w-]*)\s*:(?!:)/.exec(segment);
       if (argument) named.push({ name: argument[2], start: segmentStart + argument[1].length });
       else if (hasArgumentText(text, segmentStart, i)) positional = true;
       segmentStart = i + 1;
@@ -1017,7 +1017,7 @@ function updateDiagnostics(document, collection, ctx) {
     //    (`$my-var`), map keys and parameter names (`my-key: 1`, also when
     //    one starts a line), module names (`call My-Module`) and implicit
     //    string arguments (`Ensure-Thing My-Arg`).
-    for (const match of line.matchAll(/\b([A-Za-z][A-Za-z-]*)\b/g)) {
+    for (const match of line.matchAll(/\b([A-Za-z][A-Za-z0-9-]*)\b/g)) {
       const name = match[1];
       const before = line.slice(0, match.index);
 

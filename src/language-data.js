@@ -76,6 +76,10 @@
  *   An operation's named arguments (`Copy-Files(To: ...)`), from Inedo's
  *   reference: for argument completion and hover, which lists them unless
  *   `documentation` has its own **Arguments:** section.
+ * @property {{ by: string, note: string }=} superseded Inedo recommends
+ *   writing `by` instead of this name, as `note` explains (`PSCall1` and
+ *   `PSCall2` -> `PSCall`). Hover shows the note; completion lists the
+ *   entry struck through, after the others.
  * @property {true=} anySigil The function works with every sigil, which picks
  *   what it returns (`$FromJson` / `@FromJson` / `%FromJson`), as Inedo's
  *   reference marks it. A hand-written `$` entry's `@` and `%` forms are
@@ -4027,6 +4031,39 @@ function forProducts(table, products) {
 }
 
 const mergedOperationDocs = withReference(operationDocs, reference.operationDocs);
+
+/**
+ * PowerShell operation names Inedo recommends against writing (BuildMaster
+ * 2022 notes): `PSCall1`, `PSEnsure1` and `PSVerify1` are the old
+ * operations; `PSCall2`, `PSEnsure2` and `PSVerify2` the current ones,
+ * whose aliases `PSCall`, `PSEnsure` and `PSVerify` are what to write. The
+ * `2` names aren't in Inedo's reference, so they get the alias's entry.
+ */
+const SUPERSEDED_OPERATIONS = Object.freeze({
+  PSCall1: "PSCall",
+  PSEnsure1: "PSEnsure",
+  PSVerify1: "PSVerify",
+  PSCall2: "PSCall",
+  PSEnsure2: "PSEnsure",
+  PSVerify2: "PSVerify",
+});
+for (const [name, by] of Object.entries(SUPERSEDED_OPERATIONS)) {
+  const current = mergedOperationDocs[by];
+  if (Object.hasOwn(mergedOperationDocs, name)) {
+    mergedOperationDocs[name] = {
+      ...mergedOperationDocs[name],
+      superseded: { by, note: `The older operation: write \`${by}\` for the current one.` },
+    };
+  } else {
+    mergedOperationDocs[name] = {
+      ...current,
+      name,
+      ...(current.signature ? { signature: current.signature.replace(by, name) } : {}),
+      ...(current.snippet ? { snippet: current.snippet.replace(by, name) } : {}),
+      superseded: { by, note: `\`${by}\` is the alias for \`${name}\`, and the name to write.` },
+    };
+  }
+}
 
 /**
  * Same-named operations of other namespaces than the operationDocs entry

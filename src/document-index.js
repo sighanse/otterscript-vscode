@@ -64,6 +64,17 @@ const moduleInfoCache = new Map();
  */
 
 /**
+ * The key a module name is compared by: names are case-insensitive, as
+ * variable names are (`call greet` calls `module Greet`).
+ *
+ * @param {string} name
+ * @returns {string}
+ */
+function moduleKey(name) {
+  return name.toLowerCase();
+}
+
+/**
  * Returns all module declarations in a document (cached per document version).
  *
  * @param {vscode.TextDocument} document
@@ -78,6 +89,7 @@ function getModuleDeclarations(document) {
  *
  * @param {vscode.TextDocument} document
  * @returns {{ declarations: ModuleDeclaration[], refsByName: Map<string, vscode.Location[]> }}
+ *   `refsByName` is keyed by {@link moduleKey}.
  */
 function getModuleInfo(document) {
   const cacheKey = document.uri.toString();
@@ -120,11 +132,11 @@ function getModuleInfo(document) {
       );
       const location = new vscode.Location(document.uri, range);
 
-      const existing = refsByName.get(moduleName);
+      const existing = refsByName.get(moduleKey(moduleName));
       if (existing) {
         existing.push(location);
       } else {
-        refsByName.set(moduleName, [location]);
+        refsByName.set(moduleKey(moduleName), [location]);
       }
     }
   }
@@ -147,7 +159,7 @@ function getModuleInfo(document) {
  */
 function findModuleDeclarationRange(document, moduleName) {
   const { declarations } = getModuleInfo(document);
-  const declaration = declarations.find(entry => entry.name === moduleName);
+  const declaration = declarations.find(entry => moduleKey(entry.name) === moduleKey(moduleName));
   return declaration?.range ?? null;
 }
 
@@ -159,7 +171,7 @@ function findModuleDeclarationRange(document, moduleName) {
  *
  * @param {vscode.TextDocument} document
  * @param {ReadonlySet<string>} [allowedModuleNames] - Optional filter of module names to include
- * @returns {Map<string, vscode.Location[]>}
+ * @returns {Map<string, vscode.Location[]>} Keyed by {@link moduleKey}
  */
 function getModuleCallReferencesByName(document, allowedModuleNames) {
   const { refsByName } = getModuleInfo(document);
@@ -170,9 +182,9 @@ function getModuleCallReferencesByName(document, allowedModuleNames) {
   /** @type {Map<string, vscode.Location[]>} */
   const filtered = new Map();
   for (const moduleName of allowedModuleNames) {
-    const refs = refsByName.get(moduleName);
+    const refs = refsByName.get(moduleKey(moduleName));
     if (refs) {
-      filtered.set(moduleName, refs);
+      filtered.set(moduleKey(moduleName), refs);
     }
   }
 
@@ -325,13 +337,13 @@ function findModuleReferences(document, moduleName, includeDeclaration) {
   const { declarations, refsByName } = getModuleInfo(document);
 
   if (includeDeclaration) {
-    const declaration = declarations.find(entry => entry.name === moduleName);
+    const declaration = declarations.find(entry => moduleKey(entry.name) === moduleKey(moduleName));
     if (declaration) {
       locations.push(new vscode.Location(document.uri, declaration.range));
     }
   }
 
-  const callRefs = refsByName.get(moduleName);
+  const callRefs = refsByName.get(moduleKey(moduleName));
   if (callRefs) {
     locations.push(...callRefs);
   }
@@ -448,7 +460,7 @@ function getMaskedTextAfter(document, position) {
 async function resolveModule(document, name, listWorkspaceModules) {
   const local = findModuleDeclarationRange(document, name);
   if (local) return { document, range: local };
-  const elsewhere = (await listWorkspaceModules()).filter((m) => m.name === name);
+  const elsewhere = (await listWorkspaceModules()).filter((m) => moduleKey(m.name) === moduleKey(name));
   if (elsewhere.length !== 1) return null;
   const home = await vscode.workspace.openTextDocument(elsewhere[0].uri);
   const range = findModuleDeclarationRange(home, name);
@@ -524,5 +536,6 @@ module.exports = {
   getVariableAt,
   getVariableOccurrences,
   isInStringOrCommentDoc,
+  moduleKey,
   resolveModule,
 };

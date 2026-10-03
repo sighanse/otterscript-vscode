@@ -254,6 +254,7 @@ const vscode = {
   MarkdownString,
   CompletionItem,
   CompletionItemKind,
+  CompletionItemTag: Object.freeze({ Deprecated: 1 }),
   SnippetString,
   CodeAction,
   CodeActionKind,

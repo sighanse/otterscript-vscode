@@ -41,6 +41,10 @@
 ### Fixed
 
 - Operations and functions that exist in Otter or BuildMaster but weren't documented here, such as `Extract-ZipFile` or `Ensure-DscResource`, were flagged as unknown
+- `PSCall2`, `PSEnsure2` and `PSVerify2` were flagged as unknown operations. Hover on them, and on the older `PSCall1`, `PSEnsure1` and `PSVerify1`, now says to write `PSCall`, `PSEnsure` or `PSVerify`, as Inedo recommends; completion lists them struck through
+- Module names are matched case-insensitively, as variable names already were: `call greet` goes to, highlights and counts as a reference of `module Greet`
+- Completion stopped while typing a name with a digit, `_` or `-` in it, such as `$item2` or `$my-var`; signature help was missing for operations with a digit in their name, such as `SHEnsure2`
+- Hovering a module name in `call Name` or `module Name` could show the documentation of an operation with the same name
 - `$Trim` accepts the characters to trim (`$Trim($x, "-")`), as `$TrimStart` and `$TrimEnd` already did; it was flagged as too many arguments
 - `$PackageHash` and `$PackageProperty` mixed ProGet's and BuildMaster's forms. Hover now shows ProGet's (`$PackageHash([format], [algorithm])`, `$PackageProperty(name, [default])`) with BuildMaster's below it, and a three-argument BuildMaster `$PackageProperty(...)` is no longer flagged as too many arguments
 - `unknown-namespace` flagged real namespaces of Inedo's extensions, such as `GitHub::`, `Jira::`, `NuGet::`, `MSBuild::`, `Kubernetes::` or `AzureDevOps::`. Every namespace declared in Inedo's public extensions is now known, and an operation behind a namespace whose operations the extension doesn't document yet (`GitHub::Ensure-Release`) is no longer flagged as unknown either

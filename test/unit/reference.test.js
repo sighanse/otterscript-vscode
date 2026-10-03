@@ -69,7 +69,7 @@ describe("generated Inedo reference, merged into language-data", () => {
       for (const [sigil, table] of /** @type {const} */ ([["@", "vectorFunctionDocs"], ["%", "mapFunctionDocs"]])) {
         const form = data[table][key];
         assert.equal(form.name, `${sigil}${key}`);
-        assert.equal(form.signature, scalar.signature?.replace("$", sigil));
+        assert.equal(form.signature, scalar.signature?.replace(/^\$/, sigil));
         assert.equal(form.documentation, scalar.documentation, `${sigil}${key} shares the $ entry's docs`);
         assert.ok(form.snippet?.startsWith(`${sigil}${key}(`), form.snippet);
       }
@@ -110,6 +110,14 @@ describe("generated Inedo reference, merged into language-data", () => {
     // Unqualified: every form's arguments, required only where all require it.
     assert.deepEqual(required(data.operationArguments("Create-Issue")), ["Title"]);
     assert.ok(data.operationArguments("Create-Issue")?.some((p) => p.name === "Type"));
+  });
+
+  it("marks the PowerShell names Inedo recommends against, pointing at the alias to write", () => {
+    assert.equal(data.operationDocs["PSCall1"].superseded?.by, "PSCall", "the older operation");
+    assert.equal(data.operationDocs["PSEnsure2"].superseded?.by, "PSEnsure", "the alias's own name");
+    assert.match(data.operationDocs["PSVerify2"].signature ?? "", /^PSVerify2\(/);
+    assert.equal(data.operationDocs["PSVerify2"].namespace, data.operationDocs["PSVerify"].namespace);
+    assert.equal(data.operationDocs["PSCall"].superseded, undefined);
   });
 
   it("hand-written entries use the parameter names of Inedo's reference", () => {

@@ -16,6 +16,7 @@ const {
   getModuleNameAt,
   getVariableAt,
   getVariableOccurrences,
+  moduleKey,
 } = require("../document-index");
 const { createCodeScanState, findTemplateTagDelimiters, maskNonCodeSpans, NAME_PATTERN } = require("../scanner");
 
@@ -82,7 +83,7 @@ function registerNavigation(settings, workspace) {
     if (open) return open;
     try {
       const text = new TextDecoder("utf-8").decode(await vscode.workspace.fs.readFile(uri));
-      return text.includes(name) ? await vscode.workspace.openTextDocument(uri) : undefined;
+      return text.toLowerCase().includes(moduleKey(name)) ? await vscode.workspace.openTextDocument(uri) : undefined;
     } catch {
       return undefined; // gone or unreadable
     }
@@ -105,7 +106,7 @@ function registerNavigation(settings, workspace) {
    */
   async function findModuleUses(document, name) {
     const self = document.uri.toString();
-    const declaredIn = new Set((await workspace.listModules()).filter((m) => m.name === name).map((m) => m.uri.toString()));
+    const declaredIn = new Set((await workspace.listModules()).filter((m) => moduleKey(m.name) === moduleKey(name)).map((m) => m.uri.toString()));
     declaredIn.delete(self);
     const localDeclaration = findModuleDeclarationRange(document, name);
 
@@ -166,7 +167,7 @@ function registerNavigation(settings, workspace) {
         const declarationRange = findModuleDeclarationRange(document, moduleAt.name);
         if (declarationRange) return new vscode.Location(document.uri, declarationRange);
 
-        const elsewhere = (await workspace.listModules()).filter((m) => m.name === moduleAt.name);
+        const elsewhere = (await workspace.listModules()).filter((m) => moduleKey(m.name) === moduleKey(moduleAt.name));
         return elsewhere.length ? elsewhere.map((m) => new vscode.Location(m.uri, m.range)) : null;
       }
     }
@@ -232,13 +233,15 @@ function registerNavigation(settings, workspace) {
         if (target.length > MAX_NAME_LENGTH || !PLAIN_NAME_REGEX.test(target)) {
           throw new Error(`'${target}' isn't a valid module name: letters, digits, '-' and '_', starting with a letter and ending with a letter or digit.`);
         }
-        if (target !== moduleAt.name && findModuleDeclarationRange(document, target)) {
+        // A new casing of the same name is the same module, so no clash.
+        const sameName = moduleKey(target) === moduleKey(moduleAt.name);
+        if (!sameName && findModuleDeclarationRange(document, target)) {
           throw new Error(`A module named '${target}' is already declared in this file.`);
         }
         const { locations, crossFile } = await findModuleUses(document, moduleAt.name);
-        if (crossFile && target !== moduleAt.name) {
+        if (crossFile && !sameName) {
           // A call renamed in another file must still mean this module.
-          const clash = (await workspace.listModules()).find((m) => m.name === target);
+          const clash = (await workspace.listModules()).find((m) => moduleKey(m.name) === moduleKey(target));
           if (clash) throw new Error(`A module named '${target}' is already declared in ${vscode.workspace.asRelativePath(clash.uri)}.`);
         }
         for (const location of locations) edit.replace(location.uri, location.range, target);
@@ -370,7 +373,7 @@ function registerNavigation(settings, workspace) {
 
         for (const declaration of declarations) {
           const range = declaration.range;
-          const usageRefs = refsByName.get(declaration.name) ?? [];
+          const usageRefs = refsByName.get(moduleKey(declaration.name)) ?? [];
 
           lenses.push(
             new vscode.CodeLens(range, {

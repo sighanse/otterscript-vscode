@@ -273,6 +273,12 @@ describe("updateDiagnostics — unknown operation", () => {
 
   it("does not flag a known operation", () => {
     assert.deepEqual(only('Log-Information "hi";', "unknown-operation"), []);
+    // PSCall2 isn't in Inedo's reference but is PSCall's own name.
+    assert.deepEqual(only('PSCall2 MyScript;\nPSCall1 MyScript;', "unknown-operation"), []);
+  });
+
+  it("flags a dashed name with digits", () => {
+    assert.equal(only('Copy-Files2 "x";', "unknown-operation")[0]?.message, "Unknown operation 'Copy-Files2'");
   });
 
   it("does not flag a non-dashed identifier", () => {
