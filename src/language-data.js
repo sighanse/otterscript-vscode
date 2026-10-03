@@ -4092,8 +4092,8 @@ function operationForms(name) {
 /**
  * The docs entry for operation `name` as it's called: with a namespace,
  * that namespace's form (`DotNet::Build`; `Core` names a built-in, whose
- * namespace is null), else -- or when no form has that namespace -- the
- * operationDocs entry.
+ * namespace is null) -- none when no form has it (`Kubernetes::Copy-Files`
+ * is some other extension's operation) -- else the operationDocs entry.
  *
  * @param {string} name
  * @param {string | null} [namespace]
@@ -4103,7 +4103,7 @@ function lookupOperation(name, namespace) {
   const forms = operationForms(name);
   if (!namespace) return forms[0];
   const wanted = namespace.toLowerCase();
-  return forms.find((doc) => (doc.namespace ?? "Core").toLowerCase() === wanted) ?? forms[0];
+  return forms.find((doc) => (doc.namespace ?? "Core").toLowerCase() === wanted);
 }
 
 /**

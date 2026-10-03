@@ -374,6 +374,7 @@ describe("createInvalidValueFix", () => {
     const [[, , range, text]] = fix.edit.edits;
     assert.equal(range.start.character, src.indexOf("bold\""));
     assert.equal(text, "bolder");
+    assert.equal(fix.isPreferred, false, "a guess: left to the lightbulb, not Fix All");
   });
 
   it("offers nothing when no allowed value is close", () => {
@@ -571,6 +572,7 @@ describe("findAdaptiveCardDiagnostics — ToggleVisibility targets and ids", () 
     assert.equal(d.range.start.character, src.indexOf("detials"));
     const fix = createToggleTargetFix(oneLineDocument(src), d);
     assert.equal(fix?.title, "Change to 'details'");
+    assert.equal(fix?.isPreferred, false, "a guess: left to the lightbulb, not Fix All");
   });
 
   it("flags an unknown elementId, and compares ids case-sensitively", () => {

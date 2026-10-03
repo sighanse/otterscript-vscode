@@ -124,10 +124,13 @@ function registerSignatureHelp(settings, listWorkspaceModules) {
             new vscode.Position(Math.max(0, position.line - 10), 0),
             position
           )));
-          // -- The call the cursor is in: a module's (`call Greet(`), else a
-          // documented function's or operation's
-          const call = await findModuleSignatureCall(document, textBeforeCursor, listWorkspaceModules) ??
-            findSignatureCall(textBeforeCursor);
+          // -- The call the cursor is in: a module's (`call Greet(`) -- none
+          // when it can't be found, such as one in another raft, rather than
+          // a same-named operation's -- else a documented function's or
+          // operation's
+          const call = MODULE_SIGNATURE_REGEX.test(textBeforeCursor)
+            ? await findModuleSignatureCall(document, textBeforeCursor, listWorkspaceModules)
+            : findSignatureCall(textBeforeCursor);
           if (!call?.doc.signature) return null;
           const { doc: fn, args, isOperation } = call;
           const signature = call.doc.signature;

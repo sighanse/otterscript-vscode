@@ -351,6 +351,12 @@ describe("signature help", () => {
     assert.equal(help?.signatures[0].label, "%FromJson(json)");
   });
 
+  it("shows no operation's signature in a call of a module it can't find", async () => {
+    const document = await openContent("call Jira::Create-Issue(Title: 1, \n");
+    const help = await signatureHelp(document, new vscode.Position(0, 34));
+    assert.equal(help?.signatures.length ?? 0, 0);
+  });
+
   it("shows nothing outside a call", async () => {
     const document = await openContent("set $s = 1;");
     const help = await signatureHelp(document, positionOf(document, "1;", 1));

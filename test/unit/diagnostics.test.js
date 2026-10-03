@@ -502,6 +502,10 @@ describe("updateDiagnostics — unknown namespace", () => {
     assert.equal(only('DevEnv::Build(Configuration: "Release");', "missing-required-argument")[0]?.message, "'Build' is missing its required argument 'ProjectFile'.");
   });
 
+  it("doesn't check an operation's arguments behind a namespace none of its forms has", () => {
+    assert.deepEqual(only('Kubernetes::Copy-Files(From: "a");', "missing-required-argument"), []);
+  });
+
   it("reads an output capture (`Name => $x`) as a named argument", () => {
     assert.equal(only('Get-Http(ResponseBody => $body);', "missing-required-argument")[0]?.message,
       "'Get-Http' is missing its required argument 'Url'.", "not taken for a positional argument");

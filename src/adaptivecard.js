@@ -942,7 +942,9 @@ function createCardVersionFix(document, diagnostic, options = {}) {
  * A quick fix that replaces a flagged card value with its suggestion -- the
  * closest valid value, when one is close enough to be the intended one.
  * Re-derives the suggestion from the document text, since diagnostics handed
- * back by VS Code keep only their public fields.
+ * back by VS Code keep only their public fields. Preferred -- so Fix All
+ * applies it -- only when just the casing differs; a merely close value is a
+ * guess for the user to confirm.
  *
  * @param {vscode.TextDocument} document
  * @param {vscode.Diagnostic} diagnostic - Its range is the value without quotes
@@ -959,7 +961,7 @@ function createSuggestionFix(document, diagnostic, findFlagged) {
 
   const action = new vscode.CodeAction(`Change to '${suggestion}'`, vscode.CodeActionKind.QuickFix);
   action.diagnostics = [diagnostic];
-  action.isPreferred = true;
+  action.isPreferred = suggestion.toLowerCase() === document.getText(diagnostic.range).toLowerCase();
   action.edit = new vscode.WorkspaceEdit();
   action.edit.replace(document.uri, diagnostic.range, suggestion);
   return action;

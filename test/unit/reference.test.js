@@ -102,6 +102,9 @@ describe("generated Inedo reference, merged into language-data", () => {
     assert.equal(data.lookupOperation("Ensure-Release", "Core")?.namespace, null, "Core:: names the built-in");
     assert.equal(data.lookupOperation("Copy-Files", "Files"), data.operationDocs["Copy-Files"]);
     assert.equal(data.lookupOperation("Frobnicate"), undefined);
+    // A namespace none of its forms has: some other extension's operation.
+    assert.equal(data.lookupOperation("Copy-Files", "Kubernetes"), undefined);
+    assert.equal(data.operationArguments("Copy-Files", "Kubernetes"), undefined);
     // Each its own arguments and overloads: NuGet's isn't an overload of ProGet's.
     assert.ok(data.operationDocs["Create-Package"].overloads?.every((o) => o.signature.startsWith("Create-Package(Name:")));
     /** @param {import("../../src/language-data.js").DocParam[] | undefined} params */
