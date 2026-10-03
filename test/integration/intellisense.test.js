@@ -354,6 +354,14 @@ describe("signature help", () => {
     }
   });
 
+  it("knows a block comment opened more than 10 lines up is still a comment", async () => {
+    // Inside the comment, `$Substring(` is text: no call is open at the end.
+    const source = `/*\n${"x\n".repeat(12)}$Substring(\n*/\nLog-Information x`;
+    const document = await openContent(source);
+    const help = await signatureHelp(document, document.positionAt(source.length));
+    assert.equal(help?.signatures.length ?? 0, 0);
+  });
+
   it("shows a module's parameters for call Module(, the named one active", async () => {
     const document = await openContent("module Report<in $path, in $count = 0, out $result> {\n}\ncall Report(result: $r, path: ");
     const help = await signatureHelp(document, positionOf(document, "path: ", 6));

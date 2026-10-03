@@ -70,7 +70,7 @@ function variableNameRange(tokenRange, braced) {
  * @param {import("../helpers").Settings} settings - Live settings, updated in
  *   place by the settings listener in extension.js
  * @param {{
- *   listModules: () => Promise<{ name: string, uri: vscode.Uri, range: vscode.Range }[]>,
+ *   listModules: import("../document-index").ListWorkspaceModules,
  *   listFiles: () => Promise<vscode.Uri[]>
  * }} workspace - Every module declared in the workspace, and every
  *   OtterScript file in it (workspace-symbols.js)
@@ -394,9 +394,18 @@ function registerNavigation(settings, workspace) {
   // VS Code's reference peek UI. Counts the calls in this file only; Find
   // References (Shift+F12) searches the workspace.
 
+  // Switching the setting re-requests the lenses, so they appear or go at
+  // once rather than at the next edit (VS Code asks again later, after
+  // extension.js has reloaded the settings).
+  const codeLensesChanged = new vscode.EventEmitter();
+  const codeLensSettingListener = vscode.workspace.onDidChangeConfiguration((e) => {
+    if (e.affectsConfiguration("otterscript.codeLens")) codeLensesChanged.fire(undefined);
+  });
+
   const codeLensProvider = vscode.languages.registerCodeLensProvider(
     "otterscript",
     {
+      onDidChangeCodeLenses: codeLensesChanged.event,
       /**
        * Builds code lenses for module declarations.
        *
@@ -408,8 +417,7 @@ function registerNavigation(settings, workspace) {
         /** @type {vscode.CodeLens[]} */
         const lenses = [];
         const declarations = getModuleDeclarations(document);
-        const declarationNames = new Set(declarations.map(declaration => declaration.name));
-        const refsByName = getModuleCallReferencesByName(document, declarationNames);
+        const refsByName = getModuleCallReferencesByName(document);
 
         for (const declaration of declarations) {
           const range = declaration.range;
@@ -450,7 +458,10 @@ function registerNavigation(settings, workspace) {
     }
   );
 
-  return [definitionProvider, renameProvider, referenceProvider, documentHighlightProvider, documentSymbolProvider, codeLensProvider, foldingRangeProvider];
+  return [
+    definitionProvider, renameProvider, referenceProvider, documentHighlightProvider, documentSymbolProvider,
+    codeLensProvider, codeLensSettingListener, codeLensesChanged, foldingRangeProvider,
+  ];
 }
 
 // ============================================================
@@ -462,6 +473,9 @@ function registerNavigation(settings, workspace) {
  *
  * Folds `{ }` blocks, multi-line `%( )` / `@( )` literals, multi-line `<% %>`
  * tags, `#region` / `#endregion` pairs, block comments, and swim-strings.
+ * Only `#region` pairs get `FoldingRangeKind.Region` and block comments
+ * `Comment`: VS Code's Fold All Regions / Fold All Block Comments commands
+ * act on those kinds, so an ordinary block has none.
  *
  * Reuses the same `maskNonCodeSpans` pass as diagnostics, so folding respects
  * strings, swim-strings, and block comments identically to every other feature
@@ -517,7 +531,7 @@ function computeFoldingRanges(document) {
       swimStart = lineIndex;
     } else if (wasInSwim && !state.swimDelimiter && swimStart !== -1) {
       if (lineIndex > swimStart) {
-        ranges.push(new vscode.FoldingRange(swimStart, lineIndex, vscode.FoldingRangeKind.Region));
+        ranges.push(new vscode.FoldingRange(swimStart, lineIndex));
       }
       swimStart = -1;
     }
@@ -531,7 +545,7 @@ function computeFoldingRanges(document) {
       } else {
         const start = templateTagStack.pop();
         if (start !== undefined && lineIndex > start) {
-          ranges.push(new vscode.FoldingRange(start, lineIndex, vscode.FoldingRangeKind.Region));
+          ranges.push(new vscode.FoldingRange(start, lineIndex));
         }
       }
     }
@@ -544,7 +558,7 @@ function computeFoldingRanges(document) {
       } else if (ch === "}") {
         const start = braceStack.pop();
         if (start !== undefined && lineIndex > start) {
-          ranges.push(new vscode.FoldingRange(start, lineIndex, vscode.FoldingRangeKind.Region));
+          ranges.push(new vscode.FoldingRange(start, lineIndex));
         }
       } else if (ch === "(") {
         if (col > 0 && (maskedLine[col - 1] === "%" || maskedLine[col - 1] === "@")) {
@@ -557,7 +571,7 @@ function computeFoldingRanges(document) {
         if (prevDepth > 0 && mapStack.length > 0 && mapStack[mapStack.length - 1].depthAtOpen === parenDepth) {
           const popped = mapStack.pop();
           if (popped !== undefined && lineIndex > popped.line) {
-            ranges.push(new vscode.FoldingRange(popped.line, lineIndex, vscode.FoldingRangeKind.Region));
+            ranges.push(new vscode.FoldingRange(popped.line, lineIndex));
           }
         }
       }

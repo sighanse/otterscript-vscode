@@ -7,7 +7,7 @@
  */
 
 const vscode = require("vscode");
-const { mapFunctionDocs, scalarFunctionDocs, vectorFunctionDocs } = require("../language-data");
+const { FUNCTION_TABLES } = require("../language-data");
 const { lookupOwn } = require("../helpers");
 const {
   createCodeScanState,
@@ -17,9 +17,6 @@ const {
   maskOutsideTemplateTags,
   splitSignatureParameters,
 } = require("../scanner");
-
-/** The function table for each call sigil. */
-const FUNCTION_TABLES = Object.freeze({ "$": scalarFunctionDocs, "@": vectorFunctionDocs, "%": mapFunctionDocs });
 
 /** A function call: sigil (group 1), name (group 2), up to its `(`. Not `<%` or a `%(` literal. */
 const FUNCTION_CALL_REGEX = /(?<!<)([$@%])([A-Za-z][A-Za-z0-9_]*)\s*\(/g;

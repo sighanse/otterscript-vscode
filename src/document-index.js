@@ -57,6 +57,21 @@ const { lookupOperation, operationArguments, operationForms } = require("./langu
 const moduleInfoCache = new Map();
 
 /**
+ * A module declared in a workspace file: its name, file and name range
+ * (from the workspace module index, workspace-symbols.js).
+ *
+ * @typedef {{ name: string, uri: vscode.Uri, range: vscode.Range }} WorkspaceModule
+ */
+
+/**
+ * Every module declared in the workspace, building the index on first use
+ * (`listModules` of workspace-symbols.js). Passed to the providers that
+ * resolve a `call` in another file.
+ *
+ * @typedef {() => Promise<WorkspaceModule[]>} ListWorkspaceModules
+ */
+
+/**
  * Carried scanning state for cross-line constructs. Defined in {@link module:scanner};
  * aliased here so JSDoc in this file can refer to it.
  *
@@ -118,14 +133,10 @@ function getModuleInfo(document) {
   for (let line = 0; line < document.lineCount; line++) {
     const maskedLineText = maskNonCodeSpans(document.lineAt(line).text, scanState);
 
-    MODULE_CALL_TARGET_GLOBAL_REGEX.lastIndex = 0;
+    // matchAll works on a copy of the regex, so its lastIndex needs no reset.
     for (const callMatch of maskedLineText.matchAll(MODULE_CALL_TARGET_GLOBAL_REGEX)) {
       const moduleName = callMatch[1];
-      if (typeof moduleName !== "string" || typeof callMatch.index !== "number") {
-        continue;
-      }
-
-      const start = callMatch.index + callMatch[0].indexOf(moduleName);
+      const start = /** @type {number} */ (callMatch.index) + callMatch[0].indexOf(moduleName);
       const range = new vscode.Range(
         new vscode.Position(line, start),
         new vscode.Position(line, start + moduleName.length)
@@ -164,31 +175,14 @@ function findModuleDeclarationRange(document, moduleName) {
 }
 
 /**
- * Returns module call references by name from cached module analysis.
- *
- * This reuses `getModuleInfo(document)` and optionally filters to a subset
- * of module names.
+ * The document's module call references, by module name (from the cached
+ * module analysis; the caller must not change the map).
  *
  * @param {vscode.TextDocument} document
- * @param {ReadonlySet<string>} [allowedModuleNames] - Optional filter of module names to include
- * @returns {Map<string, vscode.Location[]>} Keyed by {@link moduleKey}
+ * @returns {ReadonlyMap<string, vscode.Location[]>} Keyed by {@link moduleKey}
  */
-function getModuleCallReferencesByName(document, allowedModuleNames) {
-  const { refsByName } = getModuleInfo(document);
-  if (!allowedModuleNames) {
-    return refsByName;
-  }
-
-  /** @type {Map<string, vscode.Location[]>} */
-  const filtered = new Map();
-  for (const moduleName of allowedModuleNames) {
-    const refs = refsByName.get(moduleKey(moduleName));
-    if (refs) {
-      filtered.set(moduleKey(moduleName), refs);
-    }
-  }
-
-  return filtered;
+function getModuleCallReferencesByName(document) {
+  return getModuleInfo(document).refsByName;
 }
 
 /**
@@ -407,16 +401,17 @@ function getLineStartScanState(document, line) {
 const MASKED_CONTEXT_MAX_LINES = 200;
 
 /**
- * The code before `position`, from up to {@link MASKED_CONTEXT_MAX_LINES}
- * lines back, with strings and comments masked ({@link maskNonCodeSpans}) --
- * for finding the call the cursor is in.
+ * The code before `position`, from up to `maxLines` lines back, with
+ * strings and comments masked ({@link maskNonCodeSpans}, from the cached
+ * scan state at the first line) -- for finding the call the cursor is in.
  *
  * @param {vscode.TextDocument} document
  * @param {vscode.Position} position
+ * @param {number} [maxLines] - Default {@link MASKED_CONTEXT_MAX_LINES}
  * @returns {string}
  */
-function getMaskedTextBefore(document, position) {
-  const first = Math.max(0, position.line - MASKED_CONTEXT_MAX_LINES);
+function getMaskedTextBefore(document, position, maxLines = MASKED_CONTEXT_MAX_LINES) {
+  const first = Math.max(0, position.line - maxLines);
   const state = getLineStartScanState(document, first);
   const lines = [];
   for (let line = first; line <= position.line; line++) {
@@ -454,7 +449,7 @@ function getMaskedTextAfter(document, position) {
  *
  * @param {vscode.TextDocument} document
  * @param {string} name
- * @param {() => Promise<{ name: string, uri: vscode.Uri }[]>} listWorkspaceModules
+ * @param {ListWorkspaceModules} listWorkspaceModules
  * @returns {Promise<{ document: vscode.TextDocument, range: vscode.Range } | null>}
  */
 async function resolveModule(document, name, listWorkspaceModules) {
@@ -505,7 +500,7 @@ function getModuleParameters(document, range) {
  *
  * @param {vscode.TextDocument} document
  * @param {import("./scanner").OperationArgumentContext} context
- * @param {() => Promise<{ name: string, uri: vscode.Uri }[]>} listWorkspaceModules
+ * @param {ListWorkspaceModules} listWorkspaceModules
  * @returns {Promise<{ callee: string, params: { name: string, required: boolean, format?: string, description?: string, output?: true }[] } | null>}
  */
 async function findCallArguments(document, context, listWorkspaceModules) {

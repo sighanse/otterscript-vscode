@@ -66,7 +66,7 @@ function documentVariableItems(document, position, sigil, typed, documented) {
  *
  * @param {import("../helpers").Settings} settings - Live settings, updated in
  *   place by the settings listener in extension.js
- * @param {() => Promise<{ name: string, uri: vscode.Uri }[]>} listWorkspaceModules -
+ * @param {import("../document-index").ListWorkspaceModules} listWorkspaceModules -
  *   Every module declared in the workspace (workspace-symbols.js)
  * @returns {vscode.Disposable[]}
  */

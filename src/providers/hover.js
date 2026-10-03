@@ -18,7 +18,7 @@ const { findOperationArgumentContext } = require("../scanner");
  *
  * @param {vscode.TextDocument} document
  * @param {vscode.Position} position
- * @param {() => Promise<{ name: string, uri: vscode.Uri }[]>} listWorkspaceModules
+ * @param {import("../document-index").ListWorkspaceModules} listWorkspaceModules
  * @returns {Promise<vscode.Hover | null>}
  */
 async function hoverArgument(document, position, listWorkspaceModules) {
@@ -39,7 +39,7 @@ async function hoverArgument(document, position, listWorkspaceModules) {
  *
  * @param {vscode.TextDocument} document
  * @param {vscode.Position} position
- * @param {() => Promise<{ name: string, uri: vscode.Uri }[]>} listWorkspaceModules
+ * @param {import("../document-index").ListWorkspaceModules} listWorkspaceModules
  * @returns {Promise<vscode.Hover | null>}
  */
 async function hoverModuleCall(document, position, listWorkspaceModules) {
@@ -80,7 +80,7 @@ async function hoverModuleCall(document, position, listWorkspaceModules) {
  *
  * @param {import("../helpers").Settings} settings - Live settings, updated in
  *   place by the settings listener in extension.js
- * @param {() => Promise<{ name: string, uri: vscode.Uri, range: vscode.Range }[]>} listWorkspaceModules -
+ * @param {import("../document-index").ListWorkspaceModules} listWorkspaceModules -
  *   Every module declared in the workspace (workspace-symbols.js)
  * @returns {vscode.Disposable[]}
  */

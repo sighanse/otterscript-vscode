@@ -3941,7 +3941,7 @@ const mapFunctionDocs = {};
 // Freeze the hand-written tables so nothing can add, remove, or replace an
 // entry at runtime. Shallow: the individual DocEntry objects are not frozen.
 // syntaxDocs and keywordDocs are exported as they are; the others are
-// exported as the new tables merged below.
+// merged with the generated reference below, and those tables frozen too.
 Object.freeze(operationDocs);
 Object.freeze(syntaxDocs);
 Object.freeze(keywordDocs);
@@ -4133,6 +4133,26 @@ function operationArguments(name, namespace) {
   return merged.size ? [...merged.values()] : undefined;
 }
 
+// The exported tables, frozen like the hand-written ones (shallowly).
+Object.freeze(mergedOperationDocs);
+const exportedVariableDocs = Object.freeze(forProducts(variableDocs, ["ProGet"]));
+const exportedScalarFunctionDocs = Object.freeze(withReference(scalarFunctionDocs, reference.scalarFunctionDocs, [variableDocs]));
+const exportedVectorFunctionDocs = Object.freeze(withReference({ ...anySigilForms("@"), ...vectorFunctionDocs }, reference.vectorFunctionDocs));
+const exportedMapFunctionDocs = Object.freeze(withReference({ ...anySigilForms("%"), ...mapFunctionDocs }, reference.mapFunctionDocs));
+
+/**
+ * The function table for each call sigil: `$Name(` is looked up in
+ * scalarFunctionDocs, `@Name(` in vectorFunctionDocs, `%Name(` in
+ * mapFunctionDocs.
+ *
+ * @type {Readonly<Record<"$" | "@" | "%", DocsTable>>}
+ */
+const FUNCTION_TABLES = Object.freeze({
+  "$": exportedScalarFunctionDocs,
+  "@": exportedVectorFunctionDocs,
+  "%": exportedMapFunctionDocs,
+});
+
 module.exports = {
   NAMESPACES,
   operationDocs: mergedOperationDocs,
@@ -4142,8 +4162,9 @@ module.exports = {
   operationArguments,
   syntaxDocs,
   keywordDocs,
-  variableDocs: forProducts(variableDocs, ["ProGet"]),
-  scalarFunctionDocs: withReference(scalarFunctionDocs, reference.scalarFunctionDocs, [variableDocs]),
-  vectorFunctionDocs: withReference({ ...anySigilForms("@"), ...vectorFunctionDocs }, reference.vectorFunctionDocs),
-  mapFunctionDocs: withReference({ ...anySigilForms("%"), ...mapFunctionDocs }, reference.mapFunctionDocs),
+  variableDocs: exportedVariableDocs,
+  scalarFunctionDocs: exportedScalarFunctionDocs,
+  vectorFunctionDocs: exportedVectorFunctionDocs,
+  mapFunctionDocs: exportedMapFunctionDocs,
+  FUNCTION_TABLES,
 };

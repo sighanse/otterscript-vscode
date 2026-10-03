@@ -69,6 +69,10 @@
     "webhook"
   ],
   "main": "./dist/extension.js",
+  "activationEvents": [
+    "workspaceContains:**/*.otter",
+    "workspaceContains:**/*.oscript"
+  ],
   "contributes": {
     "languages": [
       {

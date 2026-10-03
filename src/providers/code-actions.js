@@ -8,13 +8,11 @@
 const vscode = require("vscode");
 const { DIAGNOSTIC_CODES, findArgumentProblems, getDiagnosticCode, parseCallArguments } = require("../diagnostics");
 const {
+  FUNCTION_TABLES,
   NAMESPACES,
-  mapFunctionDocs,
   operationArguments,
   operationDocs,
   operationForms,
-  scalarFunctionDocs,
-  vectorFunctionDocs,
 } = require("../language-data");
 const { findOperationArgumentContext, maskComments, maskNonCodeSpans } = require("../scanner");
 const { getLineStartScanState, getMaskedTextBefore, MASKED_CONTEXT_MAX_LINES } = require("../document-index");
@@ -216,9 +214,6 @@ function createRenameFix(document, diagnostic, suggestion, label = suggestion) {
   action.isPreferred = suggestion.toLowerCase() === document.getText(diagnostic.range).toLowerCase();
   return action;
 }
-
-/** The docs table for each function sigil. */
-const FUNCTION_TABLES = Object.freeze({ "$": scalarFunctionDocs, "@": vectorFunctionDocs, "%": mapFunctionDocs });
 
 /**
  * Replaces an unknown function's name with the closest one of its sigil that
@@ -597,14 +592,10 @@ function registerCodeActions(settings, diagnostics, runDiagnostics) {
 
   const refreshDiagnosticsCommand = vscode.commands.registerCommand(
     REFRESH_DIAGNOSTICS_COMMAND,
-    async (uri) => {
-      if (!uri) return;
-
-      const existing = vscode.workspace.textDocuments.find(doc => doc.uri.toString() === uri.toString());
-      const document = existing ?? await vscode.workspace.openTextDocument(uri);
-      if (document.languageId !== "otterscript") return;
-
-      runDiagnostics(document);
+    (uri) => {
+      // Only an open document has diagnostics (they're cleared on close).
+      const document = uri && vscode.workspace.textDocuments.find((doc) => doc.uri.toString() === uri.toString());
+      if (document?.languageId === "otterscript") runDiagnostics(document);
     }
   );
 

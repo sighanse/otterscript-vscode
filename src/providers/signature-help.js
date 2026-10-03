@@ -5,10 +5,17 @@
  */
 
 const vscode = require("vscode");
-const { lookupOperation, scalarFunctionDocs, vectorFunctionDocs, mapFunctionDocs } = require("../language-data");
+const { FUNCTION_TABLES, lookupOperation } = require("../language-data");
 const { lookupOwn } = require("../helpers");
-const { getModuleParameters, resolveModule } = require("../document-index");
-const { ARGUMENT_NAME_REGEX, getActiveParameterIndex, maskClosedGroups, splitSignatureParameters } = require("../scanner");
+const { getMaskedTextBefore, getModuleParameters, resolveModule } = require("../document-index");
+const { ARGUMENT_NAME_REGEX, blankClosedGroups, getActiveParameterIndex, splitSignatureParameters } = require("../scanner");
+
+/**
+ * How far back signature help looks for the call the cursor is in: enough
+ * for a call written one argument per line, without offering help for a
+ * `(` left unclosed far above.
+ */
+const SIGNATURE_HELP_MAX_LINES = 10;
 
 /**
  * The function call the cursor is in, from the text before the cursor:
@@ -27,9 +34,6 @@ const FUNCTION_SIGNATURE_REGEX = /([$@%])([A-Za-z][A-Za-z0-9_]*)\s*\(([^()]*)$/;
  * so it can't swallow an assignment like `set $x = (`.
  */
 const OPERATION_SIGNATURE_REGEX = /(?:^|[\s;{}])(?:([A-Za-z][\w-]*)::)?([A-Za-z][A-Za-z0-9-]*)(?:[ \t]+(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s(){};=]+))?\s*\(([^()]*)$/;
-
-/** The function table for each call sigil. */
-const FUNCTION_TABLES = Object.freeze({ "$": scalarFunctionDocs, "@": vectorFunctionDocs, "%": mapFunctionDocs });
 
 /**
  * The documented call the cursor is in, given the (masked) text before it.
@@ -59,7 +63,7 @@ const MODULE_SIGNATURE_REGEX = /\bcall\s+(?:([A-Za-z]\w*)::)?([A-Za-z][\w-]*)\s*
  *
  * @param {vscode.TextDocument} document
  * @param {string} textBeforeCursor
- * @param {() => Promise<{ name: string, uri: vscode.Uri }[]>} listWorkspaceModules
+ * @param {import("../document-index").ListWorkspaceModules} listWorkspaceModules
  * @returns {Promise<{ doc: { name: string, signature: string, namespace: null, documentation?: string }, args: string, isOperation: boolean } | null>}
  */
 async function findModuleSignatureCall(document, textBeforeCursor, listWorkspaceModules) {
@@ -116,7 +120,7 @@ function parameterLabels(label, parameters) {
  *
  * @param {import("../helpers").Settings} settings - Live settings, updated in
  *   place by the settings listener in extension.js
- * @param {() => Promise<{ name: string, uri: vscode.Uri }[]>} listWorkspaceModules -
+ * @param {import("../document-index").ListWorkspaceModules} listWorkspaceModules -
  *   Every module declared in the workspace (workspace-symbols.js)
  * @returns {vscode.Disposable[]}
  */
@@ -139,14 +143,14 @@ function registerSignatureHelp(settings, listWorkspaceModules) {
           // -- Check if the signature help provider is enabled in settings
           if (!settings.signatureHelpEnabled) return null;
 
-          // -- Get the text before the cursor, up to 10 lines back, so a call
-          // whose arguments span several lines is still detected. Closed
-          // groups and strings are blanked, so an earlier nested call such as
-          // `$Substring($Trim($x), ` doesn't hide the call the cursor is in.
-          const textBeforeCursor = maskClosedGroups(document.getText(new vscode.Range(
-            new vscode.Position(Math.max(0, position.line - 10), 0),
-            position
-          )));
+          // -- Get the code before the cursor, up to SIGNATURE_HELP_MAX_LINES
+          // back, so a call whose arguments span several lines is still
+          // detected. Strings and comments are masked from the scan state at
+          // that line (a block comment or swim string opened further up is
+          // still seen as one), and closed groups are blanked, so an earlier
+          // nested call such as `$Substring($Trim($x), ` doesn't hide the
+          // call the cursor is in.
+          const textBeforeCursor = blankClosedGroups(getMaskedTextBefore(document, position, SIGNATURE_HELP_MAX_LINES));
           // -- The call the cursor is in: a module's (`call Greet(`) -- none
           // when it can't be found, such as one in another raft, rather than
           // a same-named operation's -- else a documented function's or

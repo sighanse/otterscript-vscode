@@ -35,7 +35,7 @@ const {
   parseModuleParameters,
   indexVariableOccurrences,
   variableKey,
-  maskClosedGroups,
+  blankClosedGroups,
   MODULE_NAME_TOKEN_REGEX,
   MODULE_DECLARATION_REGEX,
   MODULE_CALL_TARGET_REGEX,
@@ -878,10 +878,22 @@ describe("findVariableOccurrences", () => {
 });
 
 // ============================================================
-// maskClosedGroups
+// blankClosedGroups
 // ============================================================
 
-describe("maskClosedGroups", () => {
+describe("blankClosedGroups", () => {
+  /**
+   * Masks `text` (from a fresh scan state) and blanks its closed groups,
+   * as signature help does with the code before the cursor.
+   *
+   * @param {string} text
+   * @returns {string}
+   */
+  const maskClosedGroups = (text) => {
+    const state = createCodeScanState();
+    return blankClosedGroups(text.split("\n").map((line) => maskNonCodeSpans(line, state)).join("\n"));
+  };
+
   it("blanks closed groups so only still-open calls keep their '('", () => {
     const text = "$Substring($Trim($x), ";
     assert.equal(maskClosedGroups(text), "$Substring($Trim    , ");

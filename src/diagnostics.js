@@ -20,14 +20,12 @@ const {
   NON_VARIABLE_IDENTIFIERS,
 } = require("./helpers");
 const {
+  FUNCTION_TABLES,
   NAMESPACES,
   keywordDocs,
-  mapFunctionDocs,
   operationArguments,
   operationDocs,
   operationVariants,
-  scalarFunctionDocs,
-  vectorFunctionDocs,
 } = require("./language-data");
 const {
   ARGUMENT_NAME_REGEX,
@@ -38,18 +36,16 @@ const {
   maskNonCodeSpans,
   maskOutsideTemplateTags,
   MODULE_DECLARATION_REGEX,
+  splitSignatureParameters,
 } = require("./scanner");
 const { findAdaptiveCardDiagnostics } = require("./adaptivecard");
 
 /**
- * The function table, kind and diagnostic code for each call sigil.
- * @type {Readonly<Record<string, { docs: Readonly<Record<string, import("./language-data").DocEntry>>, kind: string }>>}
+ * The kind of function each call sigil calls, for messages and the
+ * `unknown-<kind>-function` diagnostic codes (the tables are FUNCTION_TABLES).
+ * @type {Readonly<Record<"$" | "@" | "%", string>>}
  */
-const FUNCTION_TABLES = Object.freeze({
-  "$": { docs: scalarFunctionDocs, kind: "scalar" },
-  "@": { docs: vectorFunctionDocs, kind: "vector" },
-  "%": { docs: mapFunctionDocs, kind: "map" },
-});
+const FUNCTION_KINDS = Object.freeze({ "$": "scalar", "@": "vector", "%": "map" });
 
 /** A function call: sigil (group 1) and name (group 2). Not `<%`, nor a `%(` map literal. */
 const FUNCTION_CALL_REGEX = /(?<!<)([$@%])([A-Za-z][A-Za-z0-9_]*)\s*\(/g;
@@ -85,8 +81,7 @@ const DOCUMENTED_OPERATION_NAMESPACES = new Set([...Object.values(operationDocs)
 function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
   const match = line.match(/^\s*if\s*(?:\(\s*)*([a-zA-Z][a-zA-Z0-9_]*)\s*(=|==|!=|<=|>=|<|>)/);
 
-  // -- Guard: ensure regex matched and we have a valid index position
-  if (!match || typeof match.index !== "number") return null;
+  if (!match) return null;
 
   const varName = match[1];
 
@@ -96,7 +91,7 @@ function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
   }
 
   // -- Calculate exact position of variable name within the line
-  const varNameIndex = match.index + match[0].indexOf(varName);
+  const varNameIndex = /** @type {number} */ (match.index) + match[0].indexOf(varName);
   const diagnostic = new vscode.Diagnostic(
     new vscode.Range(
       new vscode.Position(lineIndex, varNameIndex),
@@ -246,12 +241,10 @@ function hasArgumentText(text, start, end) {
  * @returns {{ min: number, max: number } | null}
  */
 function parseArity(signature) {
-  const m = signature.match(/^[$@%][A-Za-z]\w*\(([\s\S]*)\)$/);
-  if (!m) return null;
-  const argsText = m[1].trim();
-  if (argsText === "") return { min: 0, max: 0 };
-
-  const parts = argsText.split(",").map((s) => s.trim());
+  if (!/^[$@%][A-Za-z]\w*\([\s\S]*\)$/.test(signature)) return null;
+  // The same split signature help uses: a comma inside a nested bracket
+  // doesn't end a parameter.
+  const parts = splitSignatureParameters(signature);
   const vararg = parts.includes("...");
   const params = parts.filter((p) => p !== "...");
   return {
@@ -327,7 +320,7 @@ function findArgumentCountDiagnosticsFromMasked(document, maskedText, text = doc
 
   for (const match of maskedText.matchAll(FUNCTION_CALL_REGEX)) {
     const [whole, sigil, name] = match;
-    const doc = lookupOwn(FUNCTION_TABLES[sigil].docs, name);
+    const doc = lookupOwn(FUNCTION_TABLES[/** @type {"$" | "@" | "%"} */ (sigil)], name);
     const arity = doc && arityOf(doc);
     if (!arity) continue;
 
@@ -1008,7 +1001,8 @@ function updateDiagnostics(document, collection, ctx) {
     // -- Unknown `$Name(`, `@Name(` and `%Name(` functions
     for (const match of line.matchAll(FUNCTION_CALL_REGEX)) {
       const [, sigil, name] = match;
-      const { docs, kind } = FUNCTION_TABLES[sigil];
+      const docs = FUNCTION_TABLES[/** @type {"$" | "@" | "%"} */ (sigil)];
+      const kind = FUNCTION_KINDS[/** @type {"$" | "@" | "%"} */ (sigil)];
       if (lookupOwn(docs, name)) continue;
       const start = /** @type {number} */ (match.index) + 1;
       issues.push(lineDiagnostic(

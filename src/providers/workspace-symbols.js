@@ -43,7 +43,7 @@ function matchesQuery(name, query) {
  *   setModuleIndexEntry: (uri: vscode.Uri, text: string) => void,
  *   indexModuleFile: (uri: vscode.Uri) => Promise<void>,
  *   removeModuleIndexEntry: (uri: vscode.Uri) => void,
- *   listModules: () => Promise<{ name: string, uri: vscode.Uri, range: vscode.Range }[]>,
+ *   listModules: import("../document-index").ListWorkspaceModules,
  *   listFiles: () => Promise<vscode.Uri[]>
  * }} The index operations extension.js calls on document events;
  *   `listModules` for the cross-file module features (completion, hover and
@@ -247,7 +247,7 @@ function registerWorkspaceSymbols(settings) {
    * Every module declared in the workspace, building the index first if
    * nothing has yet.
    *
-   * @returns {Promise<{ name: string, uri: vscode.Uri, range: vscode.Range }[]>}
+   * @returns {Promise<import("../document-index").WorkspaceModule[]>}
    */
   async function listModules() {
     await ensureWorkspaceIndex();

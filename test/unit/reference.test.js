@@ -199,3 +199,17 @@ describe("generated grammar lists", () => {
     assert.ok(!operations.includes("Test"), "DotNet::Test");
   });
 });
+
+describe("exported docs tables", () => {
+  it("are frozen, so no consumer can add, remove or replace an entry", () => {
+    for (const name of ["operationDocs", "syntaxDocs", "keywordDocs", "variableDocs", "scalarFunctionDocs", "vectorFunctionDocs", "mapFunctionDocs", "operationVariants", "FUNCTION_TABLES"]) {
+      assert.ok(Object.isFrozen(/** @type {Record<string, unknown>} */ (/** @type {unknown} */ (data))[name]), name);
+    }
+  });
+
+  it("FUNCTION_TABLES maps each sigil to its function table", () => {
+    assert.equal(data.FUNCTION_TABLES["$"], data.scalarFunctionDocs);
+    assert.equal(data.FUNCTION_TABLES["@"], data.vectorFunctionDocs);
+    assert.equal(data.FUNCTION_TABLES["%"], data.mapFunctionDocs);
+  });
+});

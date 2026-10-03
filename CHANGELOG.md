@@ -45,6 +45,10 @@
 
 ### Fixed
 
+- **Fold All Regions** (`Ctrl+K Ctrl+8`) folded every `{ }` block, map, template tag and swim string; it now folds only `#region` blocks
+- Signature help could mistake text in a block comment or swim string for code when the comment or string opened more than 10 lines above the cursor
+- Turning `otterscript.codeLens.enable` on or off changed the reference counts only after the next edit
+- Go to Symbol in Workspace (`Ctrl+T`) found no modules until an OtterScript file had been opened: the extension now also starts in a workspace that has `.otter` or `.oscript` files
 - Signature help highlighted part of the function's name instead of the parameter when the parameter has the same name, such as `List` in `$ListCount(List)`
 - Operations and functions that exist in Otter or BuildMaster but weren't documented here, such as `Extract-ZipFile` or `Ensure-DscResource`, were flagged as unknown
 - `PSCall2`, `PSEnsure2` and `PSVerify2` were flagged as unknown operations. Hover on them, and on the older `PSCall1`, `PSEnsure1` and `PSVerify1`, now says to write `PSCall`, `PSEnsure` or `PSVerify`, as Inedo recommends; completion lists them struck through

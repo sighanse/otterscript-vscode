@@ -134,17 +134,10 @@ describe("findModuleReferences", () => {
 // ============================================================
 
 describe("getModuleCallReferencesByName", () => {
-  const doc = makeDoc(["call A;", "call B;", "call A;"].join("\n"));
-
-  it("returns all call references grouped by name (case-insensitively) when unfiltered", () => {
+  it("returns all call references grouped by name (case-insensitively)", () => {
     const map = getModuleCallReferencesByName(makeDoc(["call A;", "call B;", "call a;"].join("\n")));
     assert.equal(map.get("a")?.length, 2);
     assert.equal(map.get("b")?.length, 1);
-  });
-
-  it("filters to the requested names", () => {
-    const map = getModuleCallReferencesByName(doc, new Set(["A"]));
-    assert.deepEqual([...map.keys()], ["a"]);
   });
 });
 

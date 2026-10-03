@@ -362,15 +362,9 @@ function buildReference(snapshot, declared) {
     // Otter first (it has most of them); other products' differing forms become overloads.
     variants.sort((a, b) => PRODUCTS.indexOf(a.products[0]) - PRODUCTS.indexOf(b.products[0]));
     const [primary, ...others] = variants;
-    const products = PRODUCTS.filter((product) => variants.some((v) => v.products.includes(product)));
-    const p = letters.filter(([, product]) => products.includes(product)).map(([letter]) => letter).join("");
     // A function's forms without their sigil; an operation's without its namespace.
     const form = (/** @type {RefEntry} */ v) =>
       v.kind === "operation" ? oneLine(v.usage.replace(/^\w+::/, "")) : oneLine(v.usage).replace(/^[$@%]/, "");
-    /** @type {[string, string][]} */
-    const overloads = others
-      .map((v) => /** @type {[string, string]} */ ([v.products.join(" and "), form(v)]))
-      .filter(([, f]) => f !== form(primary));
 
     if (primary.kind === "operation") {
       // Same-named operations in different namespaces are different ones
@@ -423,6 +417,13 @@ function buildReference(snapshot, declared) {
       continue;
     }
 
+    // A function: one entry for every product, other products' differing forms as overloads.
+    const products = PRODUCTS.filter((product) => variants.some((v) => v.products.includes(product)));
+    const p = letters.filter(([, product]) => products.includes(product)).map(([letter]) => letter).join("");
+    /** @type {[string, string][]} */
+    const overloads = others
+      .map((v) => /** @type {[string, string]} */ ([v.products.join(" and "), form(v)]))
+      .filter(([, f]) => f !== form(primary));
     const sigil = /^[$@%]/.exec(primary.name)?.[0];
     const bare = primary.name.replace(/^[$@%]/, "");
     const params = primary.params.map(cleanParam);

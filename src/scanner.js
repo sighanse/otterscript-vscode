@@ -291,13 +291,26 @@ function stepCodeScan(line, i, state) {
 }
 
 /**
- * Core line scanner shared by {@link maskNonCodeSpans} and {@link advanceScanState}.
+ * Which kinds of span ({@link ScanKind}) each mask keeps; every other
+ * character is blanked:
+ * - `code` -- only code ({@link maskNonCodeSpans})
+ * - `stringContent` -- code and what's inside strings, their delimiters
+ *   blanked ({@link maskCommentSpans})
+ * - `strings` -- code and whole strings, delimiters included ({@link maskComments})
+ * @type {Readonly<Record<"code" | "stringContent" | "strings", ReadonlySet<ScanKind>>>}
+ */
+const KEPT_KINDS = Object.freeze({
+  code: new Set(/** @type {ScanKind[]} */ (["code"])),
+  stringContent: new Set(/** @type {ScanKind[]} */ (["code", "stringContent"])),
+  strings: new Set(/** @type {ScanKind[]} */ (["code", "stringContent", "stringDelimiter"])),
+});
+
+/**
+ * Core line scanner shared by every mask in this module and {@link advanceScanState}.
  *
  * Advances `state` by processing every character of `lineText`.  When `chars`
  * is non-null it is treated as a split-string output buffer: every character
- * that belongs to a non-code span is replaced with a space in that buffer --
- * except, with `keepStrings`, the contents of quoted strings and swim-strings
- * (see {@link maskCommentSpans}).
+ * of a span `keep` doesn't list is replaced with a space in that buffer.
  *
  * Exported (rather than kept file-private) so unit tests can exercise the
  * character-classification logic directly.
@@ -305,16 +318,17 @@ function stepCodeScan(line, i, state) {
  * @param {string} lineText
  * @param {CodeScanState} state - Mutated in place.
  * @param {string[] | null} chars - Output buffer, or null for state-only mode.
- * @param {boolean} [keepStrings] - Leave quoted-string and swim-string
- *   contents unmasked (their delimiters are still blanked).
+ * @param {keyof typeof KEPT_KINDS} [keep] - What stays unmasked (default:
+ *   code only)
  * @returns {void}
  * @internal
  */
-function scanLineState(lineText, state, chars, keepStrings = false) {
+function scanLineState(lineText, state, chars, keep = "code") {
+  const kept = KEPT_KINDS[keep];
   let i = 0;
   while (i < lineText.length) {
     const { kind, next } = stepCodeScan(lineText, i, state);
-    if (chars && kind !== "code" && !(keepStrings && kind === "stringContent")) {
+    if (chars && !kept.has(kind)) {
       for (let j = i; j < next && j < chars.length; j++) chars[j] = " ";
     }
     i = next;
@@ -350,14 +364,7 @@ function maskNonCodeSpans(lineText, state) {
  */
 function maskComments(lineText, state) {
   const chars = lineText.split("");
-  let i = 0;
-  while (i < lineText.length) {
-    const { kind, next } = stepCodeScan(lineText, i, state);
-    if (kind === "lineComment" || kind === "blockComment") {
-      for (let j = i; j < next && j < chars.length; j++) chars[j] = " ";
-    }
-    i = next;
-  }
+  scanLineState(lineText, state, chars, "strings");
   return chars.join("");
 }
 
@@ -719,26 +726,23 @@ function isInStringOrComment(line, position, initialState) {
 // ============================================================
 
 /**
- * Prepares the text before the cursor for signature-help matching: blanks
- * strings and comments, then every fully closed `( ... )` group, so only the
- * still-open calls keep their parentheses. Length-preserving (blanked chars
- * become spaces).
+ * Prepares the code before the cursor for signature-help matching: blanks
+ * every fully closed `( ... )` group, so only the still-open calls keep their
+ * parentheses. Length-preserving (blanked chars become spaces; line breaks
+ * stay).
  *
  * This is what lets signature help find the call the cursor is really in
- * when an earlier argument contains a nested call or a parenthesis inside a
- * string -- e.g. `$Substring($Trim($x), ` or `$Substring("a(b", ` -- and
- * keeps commas inside those closed groups from shifting the active parameter.
+ * when an earlier argument contains a nested call -- e.g.
+ * `$Substring($Trim($x), ` -- and keeps commas inside those closed groups
+ * from shifting the active parameter.
  *
- * @param {string} text - Document text up to the cursor
+ * @param {string} maskedText - The code before the cursor, with strings and
+ *   comments already masked by {@link maskNonCodeSpans} (so a `(` inside a
+ *   string, as in `$Substring("a(b", `, doesn't count)
  * @returns {string}
  */
-function maskClosedGroups(text) {
-  const state = createCodeScanState();
-  const chars = text
-    .split("\n")
-    .map((line) => maskNonCodeSpans(line, state))
-    .join("\n")
-    .split("");
+function blankClosedGroups(maskedText) {
+  const chars = maskedText.split("");
 
   /** @type {number[]} indexes of the currently open '(' */
   const open = [];
@@ -861,7 +865,7 @@ function getActiveParameterIndex(argsText) {
  */
 function maskCommentSpans(lineText, state) {
   const chars = lineText.split("");
-  scanLineState(lineText, state, chars, true);
+  scanLineState(lineText, state, chars, "stringContent");
   return chars.join("");
 }
 
@@ -1249,7 +1253,7 @@ module.exports = {
   // -- Argument helpers
   getActiveParameterIndex,
   splitSignatureParameters,
-  maskClosedGroups,
+  blankClosedGroups,
 
   // -- Module-name regexes & context predicates
   MODULE_NAME_TOKEN_REGEX,
