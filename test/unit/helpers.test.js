@@ -947,7 +947,7 @@ describe("loadConfig", () => {
       signatureHelpEnabled: true,
       codeLensEnabled: true,
       workspaceSymbolsEnabled: true,
-      parameterNameHints: false,
+      parameterNameHints: true,
       diagnosticRules: {},
       adaptiveCardMaxVersion: "1.6",
       product: "any",

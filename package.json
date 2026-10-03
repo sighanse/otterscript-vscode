@@ -124,8 +124,8 @@
         },
         "otterscript.inlayHints.parameterNames": {
           "type": "boolean",
-          "default": false,
-          "markdownDescription": "Show parameter names before the positional arguments of a function call, such as `$Substring($x, Offset: 2, Length: 3)`. Functions with one parameter and arguments that are already a variable of that name get none."
+          "default": true,
+          "markdownDescription": "Show parameter names before the positional arguments of a function call, such as `$Substring($x, Offset: 2, Length: 3)`. Functions with one parameter and arguments that are already a variable of that name get none. VS Code's `#editor.inlayHints.enabled#` setting also hides or shows all inlay hints."
         },
         "otterscript.product": {
           "type": "string",

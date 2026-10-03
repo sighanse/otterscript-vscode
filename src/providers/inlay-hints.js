@@ -1,7 +1,7 @@
 // @ts-check
 /**
  * @fileoverview Parameter-name inlay hints for function calls (the
- * `otterscript.inlayHints.parameterNames` setting, off by default):
+ * `otterscript.inlayHints.parameterNames` setting, on by default):
  * `$Substring($x, Offset: 2, Length: 3)`, where `Offset:` and `Length:` are
  * shown by the editor, not part of the text.
  */
@@ -98,8 +98,12 @@ function findParameterNameHints(text) {
  * @returns {vscode.Disposable[]}
  */
 function registerInlayHints(settings) {
-  /** The last document's hints, by URI and version: scrolling asks per range. */
-  /** @type {{ key: string, hints: { offset: number, label: string }[] } | null} */
+  /**
+   * The last document's hints, for that document object and version:
+   * scrolling asks per range. Not by URI: a new untitled document can reuse
+   * a closed one's name (`Untitled-1`) and version.
+   * @type {{ document: vscode.TextDocument, version: number, hints: { offset: number, label: string }[] } | null}
+   */
   let cache = null;
 
   // Switching the setting re-requests the hints (VS Code asks again later,
@@ -113,8 +117,9 @@ function registerInlayHints(settings) {
     onDidChangeInlayHints: changed.event,
     provideInlayHints(document, range) {
       if (!settings.parameterNameHints) return [];
-      const key = `${document.uri.toString()}@${document.version}`;
-      if (cache?.key !== key) cache = { key, hints: findParameterNameHints(document.getText()) };
+      if (cache?.document !== document || cache.version !== document.version) {
+        cache = { document, version: document.version, hints: findParameterNameHints(document.getText()) };
+      }
       const start = document.offsetAt(range.start);
       const end = document.offsetAt(range.end);
       return cache.hints

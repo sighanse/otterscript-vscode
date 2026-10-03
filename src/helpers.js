@@ -62,7 +62,7 @@ function loadConfig() {
     signatureHelpEnabled: config.get("signatureHelp.enable", true),
     codeLensEnabled: config.get("codeLens.enable", true),
     workspaceSymbolsEnabled: config.get("workspaceSymbols.enable", true),
-    parameterNameHints: config.get("inlayHints.parameterNames", false),
+    parameterNameHints: config.get("inlayHints.parameterNames", true),
     diagnosticRules: config.get("diagnostics.rules", {}),
     adaptiveCardMaxVersion: config.get("adaptiveCards.maxVersion", "1.6"),
     product: config.get("product", "any")

@@ -44,14 +44,14 @@ If hover or completion doesn't appear, check that the language mode in the statu
 
 ## Settings
 
-Each feature can be toggled individually; all are on by default except the inlay hints:
+All features are enabled by default and can be toggled individually:
 
 - `otterscript.completion.enable` — completion suggestions
 - `otterscript.signatureHelp.enable` — signature help for functions and operations
 - `otterscript.hover.enable` — hover documentation
 - `otterscript.codeLens.enable` — CodeLens reference counts above module declarations
 - `otterscript.workspaceSymbols.enable` — index module declarations for Go to Symbol in Workspace (`Ctrl+T`)
-- `otterscript.inlayHints.parameterNames` — parameter names before a function call's positional arguments, `$Substring($x, Offset: 2)` (off by default)
+- `otterscript.inlayHints.parameterNames` — parameter names before a function call's positional arguments, `$Substring($x, Offset: 2)` (VS Code's `editor.inlayHints.enabled` also turns all inlay hints off, or on only while you hold `Ctrl+Alt`)
 
 `otterscript.product` (default `"any"`) is the Inedo product your scripts
 run in: `ProGet`, `Otter` or `BuildMaster`. Completion then leaves out what
