@@ -85,12 +85,14 @@ describe("generated Inedo reference, merged into language-data", () => {
     assert.ok(data.operationDocs["Execute-PowerShell"].params?.some((p) => p.name === "Text"));
   });
 
-  it("uses only declared namespaces (none for InedoCore and BuildMaster's DB/Packages/System)", () => {
+  it("uses only declared namespaces (none for InedoCore; BuildMaster's own DB, Packages and System kept)", () => {
     for (const doc of Object.values(reference.operationDocs)) {
       assert.ok(doc.namespace === null || data.NAMESPACES.has(doc.namespace), `${doc.name}: ${doc.namespace}`);
     }
     assert.equal(reference.operationDocs["Sleep"].namespace, null, "InedoCore::Sleep");
-    assert.equal(reference.operationDocs["Backup-Database"].namespace, null, "DB::Backup-Database");
+    assert.equal(reference.operationDocs["Backup-Database"].namespace, "DB", "DB::Backup-Database");
+    assert.equal(reference.operationDocs["Attach-Package"].namespace, "Packages");
+    assert.equal(reference.operationDocs["Backup-Application"].namespace, "System");
     assert.equal(reference.operationDocs["SHExec"].namespace, "Linux", "corrected from source");
     assert.equal(reference.operationDocs["Ensure-Release"].namespace, null, "BuildMaster's own; GitHub's is a variant");
   });

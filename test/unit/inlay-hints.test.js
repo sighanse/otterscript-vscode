@@ -47,6 +47,13 @@ describe("findParameterNameHints", () => {
     assert.equal(withHints('<% set $x = $Substring($y, 1); %>\n{ "a": "b" }'), '<% set $x = $Substring(‹Text:›$y, ‹Offset:›1); %>\n{ "a": "b" }');
   });
 
+  it("puts a hint before the argument, not before a comment in front of it", () => {
+    assert.equal(withHints("set $s = $Substring(\n  # the text\n  $x,\n  /* from */ 1);"),
+      "set $s = $Substring(\n  # the text\n  ‹Text:›$x,\n  /* from */ ‹Offset:›1);");
+    assert.equal(withHints("set $s = $Substring(\n  # just $Text\n  $Text, 1);"),
+      "set $s = $Substring(\n  # just $Text\n  $Text, ‹Offset:›1);", "a commented variable of the name still counts as named");
+  });
+
   it("stops an unclosed call at its statement", () => {
     assert.equal(withHints('set $s = $Substring($x,\nLog-Information "a, b";'), 'set $s = $Substring(‹Text:›$x,\nLog-Information "a, b";');
   });

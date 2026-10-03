@@ -21,11 +21,13 @@
  * `Files`, `HTTP`, `Network`, `ProGet`, `UPack`, `Otter`; there is no
  * `InedoCore::` prefix.
  *
- * Not included, because no public source declares them: `DB::`, `Packages::`
- * and `System::`, which only BuildMaster's generated operation reference
- * shows (`DB::Backup-Database`, `Packages::Attach-Package`,
- * `System::Backup-Application` -- BuildMaster's own, closed-source
- * operations).
+ * Also `DB`, `Packages` and `System`, which no public source declares but
+ * BuildMaster's generated operation reference shows on its own,
+ * closed-source operations (`DB::Backup-Database`, `Packages::Attach-Package`,
+ * `System::Backup-Application`). Where a construct declares no namespace,
+ * that reference prints its extension's name -- one name for the whole
+ * extension (`InedoCore::`) -- so three different prefixes on one product's
+ * operations are their declared namespaces, not that fallback.
  *
  * Single source of truth for diagnostics, the docs-table check in the tests, the grammar sync
  * check, and any namespace-aware editor feature.
@@ -75,6 +77,8 @@ const NAMESPACES = Object.freeze(
     "TeamCity",                                             // inedox-teamcity
     "TFS",                                                  // inedox-tfs
     "YouTrack",                                             // inedox-youtrack
+    // -- BuildMaster's own operations (closed source; see above)
+    "DB", "Packages", "System",
   ])
 );
 

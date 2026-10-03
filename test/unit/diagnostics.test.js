@@ -485,8 +485,10 @@ describe("updateDiagnostics — unknown namespace", () => {
     }
   });
 
-  it("still flags prefixes no public source declares (BuildMaster's DB::, InedoCore::)", () => {
-    assert.equal(namespaceIssues("DB::Backup-Database;").length, 1);
+  it("knows BuildMaster's own namespaces, but not an extension's name (InedoCore::)", () => {
+    for (const source of ["DB::Backup-Database;", "Packages::Attach-Package;", "System::Backup-Application;"]) {
+      assert.deepEqual(namespaceIssues(source), [], source);
+    }
     assert.equal(namespaceIssues("InedoCore::Sleep 5;").length, 1);
   });
 

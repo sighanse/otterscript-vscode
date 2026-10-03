@@ -13,6 +13,7 @@ const {
   createCodeScanState,
   createTemplateScanState,
   documentUsesTemplateTags,
+  maskComments,
   maskNonCodeSpans,
   maskOutsideTemplateTags,
   splitSignatureParameters,
@@ -22,18 +23,21 @@ const {
 const FUNCTION_CALL_REGEX = /(?<!<)([$@%])([A-Za-z][A-Za-z0-9_]*)\s*\(/g;
 
 /**
- * The code of `text` with strings, comments and -- in a text template -- the
- * literal output blanked, offsets unchanged.
+ * The code of `text` with comments and -- in a text template -- the literal
+ * output blanked, offsets unchanged; strings are blanked too, unless
+ * `keepStrings` (quotes included).
  *
  * @param {string} text
+ * @param {boolean} [keepStrings]
  * @returns {string}
  */
-function maskCode(text) {
+function maskCode(text, keepStrings = false) {
   const scanState = createCodeScanState();
+  const mask = keepStrings ? maskComments : maskNonCodeSpans;
   const lines = text.split("\n");
-  if (!documentUsesTemplateTags(text)) return lines.map((line) => maskNonCodeSpans(line, scanState)).join("\n");
+  if (!documentUsesTemplateTags(text)) return lines.map((line) => mask(line, scanState)).join("\n");
   const templateState = createTemplateScanState();
-  return lines.map((line) => maskNonCodeSpans(maskOutsideTemplateTags(line, templateState), scanState)).join("\n");
+  return lines.map((line) => mask(maskOutsideTemplateTags(line, templateState), scanState)).join("\n");
 }
 
 /**
@@ -48,6 +52,8 @@ function maskCode(text) {
 function findParameterNameHints(text) {
   // A braced variable's `{ }` (`${my var}`) isn't a block's.
   const masked = maskCode(text).replace(/[$@%]\{[^{}\n]*\}/g, (m) => `${m[0]}${"_".repeat(m.length - 1)}`);
+  // The arguments as written, comments blanked: where one starts, and what it is.
+  const withStrings = maskCode(text, true);
   /** @type {{ offset: number, label: string }[]} */
   const hints = [];
   for (const match of masked.matchAll(FUNCTION_CALL_REGEX)) {
@@ -70,9 +76,10 @@ function findParameterNameHints(text) {
       if (ch === "(" || ch === "[") depth++;
       else if (ch === ")" || ch === "]") depth--;
       if (depth >= 0 && !(ch === "," && depth === 0)) continue;
-      // An argument ends: hint at its first character (strings are blank in
-      // `masked`, so look in the text).
-      const segment = text.slice(segmentStart, i);
+      // An argument ends: hint at its first character -- looked up in
+      // `withStrings`, as strings are blank in `masked` and a comment before
+      // the argument (`$F(\n  # why\n  $x, ...`) isn't its start.
+      const segment = withStrings.slice(segmentStart, i);
       const start = segment.search(/\S/);
       const param = params[index];
       // Already self-describing: a variable of the parameter's name

@@ -63,9 +63,9 @@ const {
 // extension's *name* where a construct declares none (`InedoCore::Sleep`),
 // and leaves out some that the extension source declares. The extension uses
 // the namespace declared by `[ScriptNamespace]` in Inedo's source (see
-// NAMESPACES in src/namespaces.js), so:
-// - a namespace that isn't a declared one (InedoCore, and BuildMaster's DB,
-//   Packages and System, which no public source declares) becomes `null`;
+// NAMESPACES in src/namespaces.js, which also lists BuildMaster's own `DB`,
+// `Packages` and `System`), so:
+// - a namespace that isn't a declared one (InedoCore) becomes `null`;
 // - the operations below, which the reference prints without a namespace but
 //   whose github.com/Inedo/inedox-* source declares one, get that namespace.
 
