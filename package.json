@@ -48,7 +48,7 @@
     "globals": "^17.13.0",
     "jsonc-parser": "^3.3.1",
     "ovsx": "^1.2.0",
-    "typescript": "6.0.3"
+    "typescript": "7.0.2"
   },
   "categories": [
     "Programming Languages",
