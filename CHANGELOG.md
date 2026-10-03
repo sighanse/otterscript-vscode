@@ -53,7 +53,7 @@
 - Go to Symbol in Workspace (`Ctrl+T`) found no modules until an OtterScript file had been opened: the extension now also starts in a workspace that has `.otter` or `.oscript` files
 - Signature help highlighted part of the function's name instead of the parameter when the parameter has the same name, such as `List` in `$ListCount(List)`
 - Operations and functions that exist in Otter or BuildMaster but weren't documented here, such as `Extract-ZipFile` or `Ensure-DscResource`, were flagged as unknown
-- `PSCall2`, `PSEnsure2` and `PSVerify2` were flagged as unknown operations. Hover on them, and on the older `PSCall1`, `PSEnsure1` and `PSVerify1`, now says to write `PSCall`, `PSEnsure` or `PSVerify`, as Inedo recommends; completion lists them struck through
+- Hover and completion now recognize `PSCall2`, `PSEnsure2` and `PSVerify2`, and the older `PSCall1`, `PSEnsure1` and `PSVerify1`; hover says to write `PSCall`, `PSEnsure` or `PSVerify`, as Inedo recommends, and completion lists the superseded names struck through
 - Module names are matched case-insensitively, as variable names already were: `call greet` goes to, highlights and counts as a reference of `module Greet`
 - Completion stopped while typing a name with a digit, `_` or `-` in it, such as `$item2` or `$my-var`; signature help was missing for operations with a digit in their name, such as `SHEnsure2`
 - Hovering a module name in `call Name` or `module Name` could show the documentation of an operation with the same name
