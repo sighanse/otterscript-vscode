@@ -101,7 +101,7 @@ function isReadOnlyView(document) {
  *
  * Used by diagnostics to avoid false "missing $" errors on literals.
  * @readonly
- * @type {Set<string>}
+ * @type {ReadonlySet<string>}
  */
 const NON_VARIABLE_IDENTIFIERS = new Set([
   "true",   // Boolean literal
@@ -110,55 +110,43 @@ const NON_VARIABLE_IDENTIFIERS = new Set([
 ]);
 
 // ============================================================
-// TIME UTILITIES
-// ============================================================
-
-/**
- * Returns the current local time as a 24-hour clock string (e.g. "14:03:59";
- * exact format follows the host locale).
- * @returns {string}
- * @private
- */
-function timestamp() {
-  return new Date().toLocaleTimeString([], { hour12: false });
-}
-
-// ============================================================
 // LOGGER
 // ============================================================
 
-const LOGPREFIX = '[OtterScript] ';
-/** @type {import('vscode').OutputChannel | null} */
+/** @type {import('vscode').LogOutputChannel | null} */
 let outputChannel = null;
 
 /**
- * Gets or creates the OtterScript output channel.
- * The channel appears in VS Code under View → Output → OtterScript.
+ * Gets or creates the OtterScript log output channel, which appears under
+ * View → Output → OtterScript. A log channel: VS Code timestamps each line,
+ * tags its level, and shows only the levels the user picks (the gear in the
+ * Output view, or "Developer: Set Log Level...").
  *
- * @returns {import('vscode').OutputChannel}
+ * @returns {import('vscode').LogOutputChannel}
  */
 function getOutputChannel() {
   if (!outputChannel) {
-    outputChannel = vscode.window.createOutputChannel('OtterScript');
+    outputChannel = vscode.window.createOutputChannel("OtterScript", { log: true });
   }
   return outputChannel;
 }
 
 /**
- * Appends a line to the cached output channel with lazy initialization.
+ * The message and the rest of a log call's arguments, as a LogOutputChannel
+ * method takes them (it formats the rest, an Error with its stack).
  *
- * @param {string} line
- * @returns {void}
+ * @param {unknown[]} args
+ * @returns {[string, ...unknown[]]}
  */
-function appendOutputLine(line) {
-  getOutputChannel().appendLine(line);
+function logArguments(args) {
+  const [first, ...rest] = args;
+  return [String(first), ...rest];
 }
 
 /**
- * Centralized logger for OtterScript Language extension.
- *
- * `info` / `warn` / `error` write to both the developer console and the
- * OtterScript output channel; `debug` writes to the console only.
+ * Centralized logger for OtterScript Language extension: writes to the
+ * OtterScript log output channel ({@link getOutputChannel}). `debug` lines
+ * show only when the user sets the channel's level to Debug or Trace.
  *
  * @example
  * log.info('Extension activated');
@@ -167,34 +155,17 @@ function appendOutputLine(line) {
  * log.debug('Processing line', lineIndex);
  */
 const log = {
-  /** @param {...any} args - e.g. `log.info('Extension activated')` */
-  info: (...args) => {
-    const now = timestamp();
-    console.log(LOGPREFIX, `[${now}]`, ...args);
-    appendOutputLine(`[${now}] ${args.join(' ')}`);
-  },
+  /** @param {...unknown} args - e.g. `log.info('Extension activated')` */
+  info: (...args) => { getOutputChannel().info(...logArguments(args)); },
 
-  /** @param {...any} args - e.g. `log.warn('Missing field')` */
-  warn: (...args) => {
-    const now = timestamp();
-    console.warn(LOGPREFIX, `[${now}]`, ...args);
-    appendOutputLine(`⚠️ [${now}] ${args.join(' ')}`);
-  },
+  /** @param {...unknown} args - e.g. `log.warn('Missing field')` */
+  warn: (...args) => { getOutputChannel().warn(...logArguments(args)); },
 
-  /** @param {...any} args - e.g. `log.error('Failed', err)` */
-  error: (...args) => {
-    const now = timestamp();
-    console.error(LOGPREFIX, `[${now}]`, ...args);
-    appendOutputLine(`❌ [${now}] ${args.join(' ')}`);
-  },
+  /** @param {...unknown} args - e.g. `log.error('Failed', err)` */
+  error: (...args) => { getOutputChannel().error(...logArguments(args)); },
 
-  /** @param {...any} args - e.g. `log.debug('Processing', lineIndex)` */
-  debug: (...args) => {
-    const now = timestamp();
-    // Debug logs go to console only - intentionally excluded from Output Channel
-    // to avoid flooding the user-visible log with internal diagnostics.
-    console.debug(LOGPREFIX, `[${now}]`, '[DEBUG]', ...args);
-  }
+  /** @param {...unknown} args - e.g. `log.debug('Processing', lineIndex)` */
+  debug: (...args) => { getOutputChannel().debug(...logArguments(args)); },
 };
 
 // ============================================================
@@ -495,8 +466,8 @@ function buildCompletionItem(doc, kind, sortPrefix, insertText, triggerSignature
   // Trigger signature help after insertion (for functions with parameters)
   if (triggerSignatureHelp) {
     item.command = {
-      command: 'editor.action.triggerParameterHints',
-      title: ''  // Title required but not shown for built-in commands
+      command: "editor.action.triggerParameterHints",
+      title: ""  // Title required but not shown for built-in commands
     };
   }
 

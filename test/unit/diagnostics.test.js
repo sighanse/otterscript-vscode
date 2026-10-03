@@ -34,7 +34,10 @@ function diagnose(source, languageId = "otterscript", extraCtx = {}) {
   /** @type {any[]} */
   let collected = [];
   const collection = /** @type {any} */ ({
-    set: (/** @type {unknown} */ _uri, /** @type {any[]} */ issues) => { collected = issues; },
+    // Plain string codes, for comparing: the links are tested on their own.
+    set: (/** @type {unknown} */ _uri, /** @type {any[]} */ issues) => {
+      collected = issues.map((d) => Object.assign(d, { code: d.code.value }));
+    },
   });
   updateDiagnostics(document, collection, { ...ctx, ...extraCtx });
   return collected;
@@ -61,6 +64,18 @@ describe("updateDiagnostics — languageId guard", () => {
 
   it("runs for an otterscript document", () => {
     assert.ok(diagnose("if x = 5").length > 0);
+  });
+
+  it("links each code to the README's table of codes", () => {
+    /** @type {any[]} */
+    let published = [];
+    const collection = /** @type {any} */ ({ set: (/** @type {unknown} */ _uri, /** @type {any[]} */ issues) => { published = issues; } });
+    updateDiagnostics(makeDocument("if x = 5"), collection, ctx);
+    assert.ok(published.length > 0);
+    for (const d of published) {
+      assert.equal(typeof d.code.value, "string");
+      assert.match(d.code.target.toString(), /^https:\/\/github\.com\/sighanse\/otterscript-vscode#turning-individual-diagnostics-off$/);
+    }
   });
 });
 
@@ -154,7 +169,7 @@ describe("updateDiagnostics — unknown scalar function", () => {
   });
 
   it("does not flag a known scalar function", () => {
-    assert.deepEqual(only('$r = $ToJson($d);', "unknown-scalar-function"), []);
+    assert.deepEqual(only("$r = $ToJson($d);", "unknown-scalar-function"), []);
   });
 
   it("does not flag inside a string", () => {
@@ -203,7 +218,7 @@ describe("updateDiagnostics — too many arguments (Inedo's arity)", () => {
 
 describe("updateDiagnostics — too many arguments", () => {
   it("flags a fixed-arity scalar function called with an extra argument", () => {
-    const [d] = only('$r = $ToJson($a, $b);', "too-many-arguments");
+    const [d] = only("$r = $ToJson($a, $b);", "too-many-arguments");
     assert.ok(d);
     assert.equal(d.message, "'$ToJson' takes at most 1 argument, got 2.");
     assert.equal(d.severity, DiagnosticSeverity.Warning);
@@ -224,7 +239,7 @@ describe("updateDiagnostics — too many arguments", () => {
   });
 
   it("does not flag a call within the documented argument count", () => {
-    assert.deepEqual(only('$r = $ToJson($a);', "too-many-arguments"), []);
+    assert.deepEqual(only("$r = $ToJson($a);", "too-many-arguments"), []);
     assert.deepEqual(only("$r = @Split($a, $b, $c);", "too-many-arguments"), []);
     assert.deepEqual(only("set %m = %ListItem(@x, 0);", "too-many-arguments"), []);
   });
@@ -235,12 +250,12 @@ describe("updateDiagnostics — too many arguments", () => {
 
   it("does not flag implicit-string juxtaposition as extra arguments", () => {
     // $a $b with no comma is ONE implicit-string argument, not two.
-    assert.deepEqual(only('$r = $ToJson($a $b);', "too-many-arguments"), []);
+    assert.deepEqual(only("$r = $ToJson($a $b);", "too-many-arguments"), []);
   });
 
   it("does not flag a nested map/vector literal as multiple top-level arguments", () => {
     assert.deepEqual(
-      only('$r = $ToJson(%( a: $x, b: $y ));', "too-many-arguments"),
+      only("$r = $ToJson(%( a: $x, b: $y ));", "too-many-arguments"),
       []
     );
   });
@@ -253,7 +268,7 @@ describe("updateDiagnostics — too many arguments", () => {
   });
 
   it("does not flag an unknown function (that check is owned by unknown-scalar-function)", () => {
-    assert.deepEqual(only('$r = $Frobnicate($a, $b, $c);', "too-many-arguments"), []);
+    assert.deepEqual(only("$r = $Frobnicate($a, $b, $c);", "too-many-arguments"), []);
   });
 });
 
@@ -274,7 +289,7 @@ describe("updateDiagnostics — unknown operation", () => {
   it("does not flag a known operation", () => {
     assert.deepEqual(only('Log-Information "hi";', "unknown-operation"), []);
     // PSCall2 isn't in Inedo's reference but is PSCall's own name.
-    assert.deepEqual(only('PSCall2 MyScript;\nPSCall1 MyScript;', "unknown-operation"), []);
+    assert.deepEqual(only("PSCall2 MyScript;\nPSCall1 MyScript;", "unknown-operation"), []);
   });
 
   it("flags a dashed name with digits", () => {
@@ -299,7 +314,7 @@ describe("updateDiagnostics — unknown operation", () => {
       "Log-Information (\n    Some-Param: x\n);",
       "module My-Module {\n}",
       "call My-Module;",
-      'Log-Information My-Arg;',
+      "Log-Information My-Arg;",
     ]) {
       assert.deepEqual(only(source, "unknown-operation"), [], source);
     }
@@ -507,9 +522,9 @@ describe("updateDiagnostics — unknown namespace", () => {
   });
 
   it("reads an output capture (`Name => $x`) as a named argument", () => {
-    assert.equal(only('Get-Http(ResponseBody => $body);', "missing-required-argument")[0]?.message,
+    assert.equal(only("Get-Http(ResponseBody => $body);", "missing-required-argument")[0]?.message,
       "'Get-Http' is missing its required argument 'Url'.", "not taken for a positional argument");
-    assert.equal(only('Get-Http(Url: $u, ResponseBdy => $body);', "unknown-argument")[0]?.message,
+    assert.equal(only("Get-Http(Url: $u, ResponseBdy => $body);", "unknown-argument")[0]?.message,
       "'ResponseBdy' isn't a documented argument of 'Get-Http'. Did you mean 'ResponseBody'?");
   });
 

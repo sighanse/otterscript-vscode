@@ -19,8 +19,8 @@
 
 "use strict";
 
-const fs = require("fs");
-const path = require("path");
+const fs = require("node:fs");
+const path = require("node:path");
 
 /** The newest published schema (the adaptivecards.microsoft.com one stops at 1.5). */
 const SCHEMA_URL = "https://raw.githubusercontent.com/microsoft/AdaptiveCards/main/schemas/1.6.0/adaptive-card.json";

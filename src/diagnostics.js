@@ -79,14 +79,14 @@ const DOCUMENTED_OPERATION_NAMESPACES = new Set([...Object.values(operationDocs)
  * @param {string} line - The line, already masked by {@link maskNonCodeSpans}
  *   (so identifiers inside strings/comments are not seen)
  * @param {number} lineIndex - The line number (0-indexed)
- * @param {Set<string>} nonVariableIdentifiers - Set of literals (true, false, null)
+ * @param {ReadonlySet<string>} nonVariableIdentifiers - Set of literals (true, false, null)
  * @returns {vscode.Diagnostic | null} - Diagnostic if missing '$' found, null otherwise
  */
 function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
   const match = line.match(/^\s*if\s*(?:\(\s*)*([a-zA-Z][a-zA-Z0-9_]*)\s*(=|==|!=|<=|>=|<|>)/);
 
   // -- Guard: ensure regex matched and we have a valid index position
-  if (!match || typeof match.index !== 'number') return null;
+  if (!match || typeof match.index !== "number") return null;
 
   const varName = match[1];
 
@@ -166,18 +166,18 @@ function findDuplicateMapKeyDiagnosticsFromMasked(document, maskedText) {
     const seenKeys = new Set();
 
     for (let i = start; i <= end; i++) {
-      const ch = i === end ? ',' : maskedText[i];
+      const ch = i === end ? "," : maskedText[i];
 
-      if (ch === '(' || ch === '[' || ch === '{') {
+      if (ch === "(" || ch === "[" || ch === "{") {
         nestingDepth++;
         continue;
       }
-      if (ch === ')' || ch === ']' || ch === '}') {
+      if (ch === ")" || ch === "]" || ch === "}") {
         if (nestingDepth > 0) nestingDepth--;
         continue;
       }
 
-      if (ch === ',' && nestingDepth === 0) {
+      if (ch === "," && nestingDepth === 0) {
         const segmentText = maskedText.slice(segmentStart, i);
         const keyMatch = segmentText.match(/^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*:/);
 
@@ -210,7 +210,7 @@ function findDuplicateMapKeyDiagnosticsFromMasked(document, maskedText) {
   // Every `%(` gets its own scan -- including maps nested inside another map,
   // whose keys scanMapBody deliberately ignores when scanning the outer one.
   for (let i = 0; i < maskedText.length - 1; i++) {
-    if (maskedText[i] === '%' && maskedText[i + 1] === '(') {
+    if (maskedText[i] === "%" && maskedText[i + 1] === "(") {
       const close = findMatchingParen(maskedText, i + 1);
       if (close !== -1) {
         scanMapBody(i + 2, close);
@@ -540,8 +540,8 @@ function findOperationArgumentDiagnosticsFromMasked(document, maskedText, text =
  */
 function getDiagnosticCode(diagnostic) {
   const code = diagnostic.code;
-  if (code === undefined || code === null) return '';
-  if (typeof code === 'object') return String(code.value);
+  if (code === undefined || code === null) return "";
+  if (typeof code === "object") return String(code.value);
   return String(code);
 }
 
@@ -1180,7 +1180,28 @@ function updateDiagnostics(document, collection, ctx) {
     log.error(`Cross-line diagnostic scan failed for ${document.uri.toString()}:`, err);
   }
 
-  collection.set(document.uri, applyDiagnosticRules(issues, diagnosticRules));
+  collection.set(document.uri, linkDiagnosticCodes(applyDiagnosticRules(issues, diagnosticRules)));
+}
+
+/**
+ * Where a diagnostic code links to from the Problems panel: the README's
+ * table of every code, next to how to turn one off.
+ */
+const DIAGNOSTIC_CODES_HELP = "https://github.com/sighanse/otterscript-vscode#turning-individual-diagnostics-off";
+
+/**
+ * Turns each diagnostic's code into a link to {@link DIAGNOSTIC_CODES_HELP}
+ * (`{ value, target }`, which VS Code shows as a clickable code). Done last,
+ * so every check can set a plain string code; read a code back with
+ * {@link getDiagnosticCode}.
+ *
+ * @param {vscode.Diagnostic[]} issues - Mutated in place
+ * @returns {vscode.Diagnostic[]} `issues`
+ */
+function linkDiagnosticCodes(issues) {
+  const target = vscode.Uri.parse(DIAGNOSTIC_CODES_HELP);
+  for (const issue of issues) issue.code = { value: getDiagnosticCode(issue), target };
+  return issues;
 }
 
 module.exports = {

@@ -146,7 +146,7 @@ function createForToForeachFix(document, diagnostic) {
   if (!/^\s*for\s+[$@%]?[A-Za-z](?:[\w-]*[A-Za-z0-9])?\s+in\s/i.test(line)) return null;
 
   return createCodeAction("Replace 'for' with 'foreach'", diagnostic, (edit) => {
-    edit.replace(document.uri, diagnostic.range, 'foreach');
+    edit.replace(document.uri, diagnostic.range, "foreach");
   });
 }
 
@@ -459,87 +459,119 @@ function registerCodeActions(settings, diagnostics, runDiagnostics) {
   );
 
   // ============================================================
-  // FIX ALL COMMAND
+  // FIX ALL
   // ============================================================
+
   /**
-   * Command to fix all auto-fixable diagnostics in the current OtterScript
-   * document: every fix that is preferred (see the comment in the loop).
-   * All fixes are applied in a single WorkspaceEdit (single undo step).
-   *
-   * Triggered by: Command Palette or Ctrl+Shift+Alt+F
+   * One edit with every auto-applicable fix for the document's diagnostics:
+   * each preferred fix (see the comment in the loop). Re-runs the checks
+   * first: the published diagnostics lag 400 ms behind typing, and a fix
+   * built from a stale range would edit the wrong place.
    *
    * @see FIX_FACTORIES - the diagnostic-code -> fix-factory dispatch table
+   * @param {vscode.TextDocument} document
+   * @returns {{ edit: vscode.WorkspaceEdit, fixable: number, fixed: number }}
+   *   `fixable`: diagnostics with a fix factory; `fixed`: how many of them
+   *   `edit` fixes
+   */
+  function buildFixAllEdit(document) {
+    runDiagnostics(document);
+    const fixableDiagnostics = (diagnostics.get(document.uri) ?? [])
+      .filter((d) => Object.hasOwn(FIX_FACTORIES, getDiagnosticCode(d)));
+
+    // -- Sort from end to start to avoid position shifts
+    const sorted = [...fixableDiagnostics].sort((a, b) => b.range.start.compareTo(a.range.start));
+    const edit = new vscode.WorkspaceEdit();
+    // Several diagnostics can share one fix (e.g. every version-too-low in
+    // a card raises the same "version" value); applying an identical edit
+    // twice would be rejected as overlapping, so each is added once.
+    const addedEdits = new Set();
+    let fixed = 0;
+
+    for (const diagnostic of sorted) {
+      const factory = lookupOwn(FIX_FACTORIES, getDiagnosticCode(diagnostic));
+      const action = factory?.(document, diagnostic) ?? null;
+
+      // A fix that isn't preferred is left to the user: it guesses a name
+      // that's merely close, needs values only the user knows (missing
+      // arguments), or trades this problem for another (a card version
+      // above the host's maximum).
+      if (!action?.edit || action.isPreferred === false) continue;
+
+      // -- Copy the action's edits into the combined edit. entries() yields
+      // TextEdits; an insert is a TextEdit with an empty range, so replace()
+      // reproduces inserts and replacements alike.
+      let hasEdits = false;
+      for (const [uri, uriEdits] of action.edit.entries()) {
+        if (uriEdits.length) hasEdits = true;
+        for (const { range, newText } of uriEdits) {
+          const key = `${uri.toString()}:${document.offsetAt(range.start)}:${document.offsetAt(range.end)}:${newText}`;
+          if (addedEdits.has(key)) continue;
+          addedEdits.add(key);
+          edit.replace(uri, range, newText);
+        }
+      }
+      if (hasEdits) fixed++;
+    }
+    return { edit, fixable: fixableDiagnostics.length, fixed };
+  }
+
+  /**
+   * The Fix All command: applies {@link buildFixAllEdit}'s edit as one undo
+   * step and says how many issues it fixed.
+   *
+   * Triggered by: Command Palette, the editor context menu, or Ctrl+Shift+Alt+F
    */
   const fixAllCommand = vscode.commands.registerCommand(
-    'otterscript.fixAll',
+    "otterscript.fixAll",
     async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor || editor.document.languageId !== "otterscript") return;
 
       const document = editor.document;
-      // -- Re-run the checks first: the published diagnostics lag 400 ms
-      // behind typing, and a fix built from a stale range would edit the
-      // wrong place.
-      runDiagnostics(document);
-      const docDiagnostics = diagnostics.get(document.uri) ?? [];
-      // -- Filter to fixable diagnostic codes (keys of FIX_FACTORIES)
-      const fixableDiagnostics = docDiagnostics.filter(d => Object.hasOwn(FIX_FACTORIES, getDiagnosticCode(d)));
+      const { edit, fixable, fixed } = buildFixAllEdit(document);
 
       /** @param {string} msg */
       const report = (msg) => {
         vscode.window.showInformationMessage(msg);
         log.info(msg);
       };
-      if (fixableDiagnostics.length === 0) {
+      if (fixable === 0) {
         report(`No fixable OtterScript issues found in ${document.fileName}`);
         return;
       }
-
-      // -- Sort from end to start to avoid position shifts
-      const sorted = [...fixableDiagnostics].sort((a, b) => b.range.start.compareTo(a.range.start));
-      const workspaceEdit = new vscode.WorkspaceEdit();
-      // Several diagnostics can share one fix (e.g. every version-too-low in
-      // a card raises the same "version" value); applying an identical edit
-      // twice would be rejected as overlapping, so each is added once.
-      const addedEdits = new Set();
-      let fixedCount = 0;
-
-      for (const diagnostic of sorted) {
-        const factory = lookupOwn(FIX_FACTORIES, getDiagnosticCode(diagnostic));
-        const action = factory?.(document, diagnostic) ?? null;
-
-        // A fix that isn't preferred is left to the user: it guesses a name
-        // that's merely close, needs values only the user knows (missing
-        // arguments), or trades this problem for another (a card version
-        // above the host's maximum).
-        if (!action?.edit || action.isPreferred === false) continue;
-
-        // -- Copy the action's edits into the combined edit. entries() yields
-        // TextEdits; an insert is a TextEdit with an empty range, so replace()
-        // reproduces inserts and replacements alike.
-        let hasEdits = false;
-        for (const [uri, uriEdits] of action.edit.entries()) {
-          if (uriEdits.length) hasEdits = true;
-          for (const { range, newText } of uriEdits) {
-            const key = `${uri.toString()}:${document.offsetAt(range.start)}:${document.offsetAt(range.end)}:${newText}`;
-            if (addedEdits.has(key)) continue;
-            addedEdits.add(key);
-            workspaceEdit.replace(uri, range, newText);
-          }
-        }
-        if (hasEdits) fixedCount++;
-      }
-
       // -- Every fix may have been skipped (none preferred, or no edit);
       // say so rather than doing nothing silently.
-      if (fixedCount === 0) {
+      if (fixed === 0) {
         report(`No issues in ${document.fileName} can be fixed automatically; see the lightbulb for the remaining fixes`);
         return;
       }
-      await vscode.workspace.applyEdit(workspaceEdit);
+      await vscode.workspace.applyEdit(edit);
       runDiagnostics(document);
-      report(`Fixed ${fixedCount} issue(s) in ${document.fileName}`);
+      report(`Fixed ${fixed} issue(s) in ${document.fileName}`);
     }
+  );
+
+  /**
+   * The same fixes as the Fix All command, as a `source.fixAll.otterscript`
+   * code action: what `"editor.codeActionsOnSave": { "source.fixAll": "explicit" }`
+   * runs on save, and what Source Action... lists. Computed only when asked
+   * for that kind, not for every lightbulb.
+   */
+  const FIX_ALL_KIND = vscode.CodeActionKind.SourceFixAll.append("otterscript");
+  const fixAllProvider = vscode.languages.registerCodeActionsProvider(
+    "otterscript",
+    {
+      provideCodeActions(document, _range, codeActionContext) {
+        if (!codeActionContext.only?.intersects(FIX_ALL_KIND)) return [];
+        const { edit, fixed } = buildFixAllEdit(document);
+        if (fixed === 0) return [];
+        const action = new vscode.CodeAction("Fix all auto-fixable OtterScript issues", FIX_ALL_KIND);
+        action.edit = edit;
+        return [action];
+      },
+    },
+    { providedCodeActionKinds: [FIX_ALL_KIND] }
   );
 
   /**
@@ -576,7 +608,7 @@ function registerCodeActions(settings, diagnostics, runDiagnostics) {
     }
   );
 
-  return [codeActionsProvider, fixAllCommand, disableDiagnosticRuleCommand, refreshDiagnosticsCommand];
+  return [codeActionsProvider, fixAllProvider, fixAllCommand, disableDiagnosticRuleCommand, refreshDiagnosticsCommand];
 }
 
 module.exports = {

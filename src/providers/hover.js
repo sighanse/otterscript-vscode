@@ -137,11 +137,11 @@ function registerHover(settings, listWorkspaceModules) {
         const templateRange = document.getWordRangeAtPosition(position, /<%|%>/);
         if (templateRange) {
           const text = document.getText(templateRange);
-          if (text === '<%') {
+          if (text === "<%") {
             return new vscode.Hover(
               buildHoverMarkdown(syntaxDocs.templateOpen, settings.product), templateRange);
           }
-          if (text === '%>') {
+          if (text === "%>") {
             return new vscode.Hover(
               buildHoverMarkdown(syntaxDocs.templateClose, settings.product), templateRange);
           }
@@ -156,15 +156,15 @@ function registerHover(settings, listWorkspaceModules) {
         const exprRange = document.getWordRangeAtPosition(position, /%\(|@\(|\$\(/);
         if (exprRange) {
           const text = document.getText(exprRange);
-          if (text === '%(') {
+          if (text === "%(") {
             return new vscode.Hover(
               buildHoverMarkdown(syntaxDocs.mapExpr, settings.product), exprRange);
           }
-          if (text === '@(') {
+          if (text === "@(") {
             return new vscode.Hover(
               buildHoverMarkdown(syntaxDocs.vectorExpr, settings.product), exprRange);
           }
-          if (text === '$(') {
+          if (text === "$(") {
             return new vscode.Hover(
               buildHoverMarkdown(syntaxDocs.nestedEval, settings.product), exprRange);
           }

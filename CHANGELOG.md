@@ -32,15 +32,20 @@
 - Signature help for an operation or module call highlights the argument whose `Name:` you are typing, in whatever order the named arguments come
 - Hover on the module name in `call MyModule` shows the module's declaration and the `#` comment lines above it, also when the module is declared in another workspace file
 - `too-few-arguments` diagnostic: a function call with fewer arguments than the function requires (`$Substring($x)`), based on the `[optional]` parameters in its signature and the most lenient of its forms in Inedo's products
+- Fix All on save: the fixes **Fix All Issues** applies are also a `source.fixAll.otterscript` code action, so `"editor.codeActionsOnSave": { "source.fixAll": "explicit" }` applies them when you save
+- Each diagnostic's code in the Problems panel links to the README's table of codes, which also says how to turn one off
 
 ### Changed
 
 - The extension package is about 30% smaller (from about 178 KB to 125 KB): it now ships as a single bundled file, with Inedo's reference data stored compactly
 - Function parameter names in hover, signature help and completion are now the ones in Inedo's reference, such as `$Substring(Text, Offset, [Length])` (was `text, startIndex, [length]`) or `$RegexReplace(Text, MatchExpression, ReplaceWith)`
 - **Fix All Issues** no longer applies fixes that guess the intended name: an Adaptive Card value changed to the closest allowed one (`"weight": "bold"` to `"bolder"`), or an unknown namespace changed to the closest known one (`Frobnicate::` to `Firewall::`). They stay in the lightbulb, like the other "Change to" fixes; a namespace that only differs in casing (`proget::`) is still fixed
+- Go to Symbol in Workspace (`Ctrl+T`) finds a module by the characters of its name in order, as VS Code's other symbol searches do: `dpm` finds `Deploy-Module`
+- The OtterScript output channel is now a log: VS Code timestamps each line and shows its level, and setting the channel's level to Debug (the gear in the Output view) shows the extension's debug messages too
 
 ### Fixed
 
+- Signature help highlighted part of the function's name instead of the parameter when the parameter has the same name, such as `List` in `$ListCount(List)`
 - Operations and functions that exist in Otter or BuildMaster but weren't documented here, such as `Extract-ZipFile` or `Ensure-DscResource`, were flagged as unknown
 - `PSCall2`, `PSEnsure2` and `PSVerify2` were flagged as unknown operations. Hover on them, and on the older `PSCall1`, `PSEnsure1` and `PSVerify1`, now says to write `PSCall`, `PSEnsure` or `PSVerify`, as Inedo recommends; completion lists them struck through
 - Module names are matched case-insensitively, as variable names already were: `call greet` goes to, highlights and counts as a reference of `module Greet`

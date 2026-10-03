@@ -235,3 +235,24 @@ describe("getVariableOccurrences", () => {
     assert.notEqual(getVariableOccurrences(doc, "$", "x"), cached);
   });
 });
+
+// ============================================================
+// matchesQuery (Go to Symbol in Workspace)
+// ============================================================
+
+describe("matchesQuery", () => {
+  const { matchesQuery } = require("../../src/providers/workspace-symbols.js");
+
+  it("matches the query's characters in order, ignoring case and spaces", () => {
+    assert.ok(matchesQuery("Deploy-Module", ""));
+    assert.ok(matchesQuery("Deploy-Module", "deploy"));
+    assert.ok(matchesQuery("Deploy-Module", "dpm"));
+    assert.ok(matchesQuery("Deploy-Module", "DM"));
+    assert.ok(matchesQuery("Deploy-Module", "dep mod"));
+  });
+
+  it("rejects characters missing or out of order", () => {
+    assert.ok(!matchesQuery("Deploy-Module", "mdp"));
+    assert.ok(!matchesQuery("Deploy-Module", "deployx"));
+  });
+});

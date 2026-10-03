@@ -49,7 +49,7 @@ const {
   scheduleTimerForUri,
 } = require("../../src/helpers.js");
 const { validateDocs } = require("./validate-docs");
-const { FUNCTION_SIGNATURE_REGEX, OPERATION_SIGNATURE_REGEX, activeParameterIndex, findSignatureCall } = require("../../src/providers/signature-help.js");
+const { FUNCTION_SIGNATURE_REGEX, OPERATION_SIGNATURE_REGEX, activeParameterIndex, findSignatureCall, parameterLabels } = require("../../src/providers/signature-help.js");
 const { isInStringOrCommentDoc } = require("../../src/document-index.js");
 const {
   checkMissingDollar,
@@ -650,6 +650,14 @@ describe("signature help call regexes", () => {
     assert.equal("Linux::SHEnsure2(Name: a".match(OPERATION_SIGNATURE_REGEX)?.[2], "SHEnsure2", "digits in the name");
     assert.equal("Log-Information x;Copy-Files(To: a".match(OPERATION_SIGNATURE_REGEX)?.[2], "Copy-Files", "right after ';'");
     assert.equal("if $x {Copy-Files(To: a".match(OPERATION_SIGNATURE_REGEX)?.[2], "Copy-Files", "right after '{'");
+  });
+
+  it("parameterLabels gives each parameter's own offsets in the label", () => {
+    const label = "$Pad(pad, padding, [p])";
+    const labels = parameterLabels(label, ["pad", "padding", "[p]"]);
+    assert.deepEqual(labels.map((l) => (typeof l === "string" ? l : label.slice(l[0], l[1]))), ["pad", "padding", "[p]"]);
+    assert.deepEqual(labels[0], [5, 8], "not the 'Pad' of the name, nor inside 'padding'");
+    assert.deepEqual(parameterLabels("F(a)", ["zz"]), ["zz"], "not found: a string label");
   });
 
   it("activeParameterIndex follows a typed Name:, else the argument position", () => {

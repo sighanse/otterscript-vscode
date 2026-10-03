@@ -65,16 +65,16 @@ describe("findAdaptiveCardDiagnostics — card detection", () => {
 
   it("does not flag a 'type' field outside the Adaptive Card object (e.g. a Teams envelope)", () => {
     const src = [
-      '{',
+      "{",
       '  "type": "message",',
       '  "attachments": [',
       '    { "contentType": "application/vnd.microsoft.card.adaptive", "content": {',
       '      "type": "AdaptiveCard",',
       '      "version": "1.2",',
       '      "body": []',
-      '    } }',
-      '  ]',
-      '}',
+      "    } }",
+      "  ]",
+      "}",
     ].join("\n");
     assert.deepEqual(diagnose(src), []);
   });
@@ -142,17 +142,17 @@ describe("findAdaptiveCardDiagnostics — unknown type", () => {
 
   it("does not flag known element and action types, including nested ones", () => {
     const src = [
-      '{',
+      "{",
       '  "type": "AdaptiveCard", "version": "1.2",',
       '  "body": [',
       '    { "type": "TextBlock", "text": "hi" },',
       '    { "type": "ColumnSet", "columns": [',
       '      { "type": "Column", "items": [ { "type": "Image", "url": "x" } ] }',
-      '    ] },',
+      "    ] },",
       '    { "type": "FactSet", "facts": [ { "title": "a", "value": "b" } ] }',
-      '  ],',
+      "  ],",
       '  "actions": [ { "type": "Action.OpenUrl", "title": "View", "url": "x" } ]',
-      '}',
+      "}",
     ].join("\n");
     assert.deepEqual(only(src, "adaptivecard-unknown-type"), []);
   });
@@ -199,10 +199,10 @@ describe("findAdaptiveCardDiagnostics — <% %> template regions", () => {
     const src = [
       '{ "type": "AdaptiveCard", "version": "1.2", "body": [',
       '  { "type": "TextBlock", "text": "hi" }',
-      '<% foreach %p in @AffectedPackages { %>',
+      "<% foreach %p in @AffectedPackages { %>",
       '  ,{ "type": "TextBlock", "text": $ToJson(%p.Name) }',
-      '<% } %>',
-      '] }',
+      "<% } %>",
+      "] }",
     ].join("\n");
     assert.deepEqual(diagnose(src), []);
   });
@@ -214,7 +214,7 @@ describe("findAdaptiveCardDiagnostics — <% %> template regions", () => {
     const src = [
       '{ "type": "AdaptiveCard", "version": "1.2", "body": [',
       '<% $m = %( type: "NotARealType" ) %>',
-      '] }',
+      "] }",
     ].join("\n");
     assert.deepEqual(diagnose(src), []);
   });
@@ -601,7 +601,7 @@ describe("findAdaptiveCardDiagnostics — ToggleVisibility targets and ids", () 
   });
 
   it("ignores ids and targetElements in free-form payloads and other actions", () => {
-    const src = `{ "type": "AdaptiveCard", "version": "1.2", "body": [], "actions": [ ` +
+    const src = "{ \"type\": \"AdaptiveCard\", \"version\": \"1.2\", \"body\": [], \"actions\": [ " +
       '{ "type": "Action.Submit", "title": "Go", "data": { "id": "x", "targetElements": [ "nowhere" ] } } ] }';
     assert.deepEqual(only(src, "adaptivecard-unknown-target"), []);
     assert.deepEqual(only(src, "adaptivecard-duplicate-id"), []);

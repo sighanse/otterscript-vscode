@@ -23,9 +23,9 @@
 
 "use strict";
 
-const fs = require("fs");
-const path = require("path");
-const zlib = require("zlib");
+const fs = require("node:fs");
+const path = require("node:path");
+const zlib = require("node:zlib");
 
 /** The docs repository and branch the reference archives are read from. */
 const REFERENCE_REPO = "Inedo/inedo-docs";

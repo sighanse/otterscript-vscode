@@ -175,6 +175,24 @@ describe("quick fixes", () => {
     assert.equal((await refreshDiagnostics(document)).length, 0);
   });
 
+  it("offers Fix All as a source.fixAll action, for fixing on save", async () => {
+    const document = await openContent("if count == 1 {\n}\nif $a & $b {\n}\n");
+    /** @type {vscode.CodeAction[]} */
+    const actions = await vscode.commands.executeCommand(
+      "vscode.executeCodeActionProvider", document.uri, new vscode.Range(0, 0, 0, 0), "source.fixAll"
+    );
+    const fixAll = actions.find((a) => a.kind?.value === "source.fixAll.otterscript");
+    assert.ok(fixAll?.edit, "offered with an edit");
+    await vscode.workspace.applyEdit(fixAll.edit);
+    assert.equal(document.getText(), "if $count == 1 {\n}\nif $a && $b {\n}\n");
+
+    /** @type {vscode.CodeAction[]} */
+    const quick = await vscode.commands.executeCommand(
+      "vscode.executeCodeActionProvider", document.uri, new vscode.Range(0, 0, 0, 0), vscode.CodeActionKind.QuickFix.value
+    );
+    assert.ok(!quick.some((a) => a.kind?.value === "source.fixAll.otterscript"), "not in the lightbulb");
+  });
+
   it("'Change to' fixes a misspelt function, operation and argument name", async () => {
     const document = await openContent('set $s = $Substrng($x, 1);\nCopy-Fils(To: "b");\nCopy-Files(Fomr: "a", To: "b");\n');
     for (const [code, title] of [
@@ -222,7 +240,7 @@ describe("quick fixes", () => {
       "<% } %>\n"
     );
     const [diagnostic] = await refreshDiagnostics(document);
-    assert.equal(diagnostic?.code, "adaptivecard-invalid-value");
+    assert.equal(codeOf(diagnostic), "adaptivecard-invalid-value");
 
     const fix = (await quickFixes(document, diagnostic)).find((a) => a.title === "Change to 'bolder'");
     assert.ok(fix?.edit, "the fix is offered");
@@ -239,7 +257,7 @@ describe("quick fixes", () => {
       "<% } %>\n"
     );
     const [diagnostic] = await refreshDiagnostics(document);
-    assert.equal(diagnostic?.code, "adaptivecard-unknown-target");
+    assert.equal(codeOf(diagnostic), "adaptivecard-unknown-target");
 
     const fix = (await quickFixes(document, diagnostic)).find((a) => a.title === "Change to 'details'");
     assert.ok(fix?.edit, "the fix is offered");

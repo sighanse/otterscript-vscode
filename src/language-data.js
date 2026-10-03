@@ -180,9 +180,9 @@ Log-Error "Failed to connect to server";
   "Post-Http": {
     namespace: "HTTP",
     name: "Post-Http",
-    signature: 'Post-Http(Url: <text>, [Method: POST|PUT|PATCH], [ContentType: <text>], [TextData: <text>], [FormData: <%(key1: value1, ...)>], [LogRequestData: <true/false>], [LogResponseBody: <true/false>], [ResponseBody: <text>], [ErrorStatusCodes: <text>], [RequestHeaders: <%(key1: value1, ...)>], [MaxResponseLength: <integer>], [ProxyRequest: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [IgnoreSslErrors: <true/false>]);',
+    signature: "Post-Http(Url: <text>, [Method: POST|PUT|PATCH], [ContentType: <text>], [TextData: <text>], [FormData: <%(key1: value1, ...)>], [LogRequestData: <true/false>], [LogResponseBody: <true/false>], [ResponseBody: <text>], [ErrorStatusCodes: <text>], [RequestHeaders: <%(key1: value1, ...)>], [MaxResponseLength: <integer>], [ProxyRequest: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [IgnoreSslErrors: <true/false>]);",
     snippet: 'Post-Http(\n    Url: "${1:https://example.com}",\n    ${2:ContentType: "application/json",}\n    ${3:TextData: "${4:request body}"},\n    ${5:FormData: %(\n        ${6:key}: "${7:value}"\n    )},\n    ${8:LogResponseBody: true}\n);',
-    description: 'Executes an HTTP POST/PUT/PATCH request to a URL, typically used for RESTful operations.',
+    description: "Executes an HTTP POST/PUT/PATCH request to a URL, typically used for RESTful operations.",
     documentation: `
 **Required Argument:**
 - \`Url\` - The target URL (text)
@@ -1676,7 +1676,7 @@ If break is used outside of an iteration block, a warning will be written to the
   "foreach": {
     namespace: null,
     name: "foreach",
-    description: 'Iterates over items in a vector. Works in both OtterScript code and template tags.',
+    description: "Iterates over items in a vector. Works in both OtterScript code and template tags.",
     documentation: `
 Two forms:
 
@@ -2328,7 +2328,7 @@ const scalarFunctionDocs = {
     namespace: null,
     name: "$ToJson",
     signature: "$ToJson(data)",
-    snippet: '\\$ToJson(${1:data})${0}',
+    snippet: "\\$ToJson(${1:data})${0}",
     description: "Converts an OtterScript value to JSON.",
     documentation: `
 **Parameters:**
@@ -2588,7 +2588,7 @@ $joined = $Join(", ", @("apple", "banana", "cherry"));
     name: "$Date",
     signature: "$Date([Format])",
     snippet: "\\$Date(${1:Format})",
-    description: 'Returns the current date and time of the local timezone.',
+    description: "Returns the current date and time of the local timezone.",
     documentation: `
 Returns the current date and time of the local timezone in the specified .NET datetime format string, or ISO 8601 format (yyyy-MM-ddTHH:mm:ss) if no format is specified.
 
@@ -2618,7 +2618,7 @@ $sortable = $Date("s");
     name: "$DateUtc",
     signature: "$DateUtc([Format])",
     snippet: "\\$DateUtc(${1:Format})",
-    description: 'Returns the current UTC date and time.',
+    description: "Returns the current UTC date and time.",
     documentation: `
 Returns the current UTC date and time in the specified .NET datetime format string,
 or ISO 8601 format (yyyy-MM-ddTHH:mm:ss) if no format is specified.
@@ -3524,9 +3524,9 @@ const vectorFunctionDocs = {
   "Split": {
     namespace: null,
     name: "@Split",
-    signature: '@Split(Text, Separator, [Count])',
+    signature: "@Split(Text, Separator, [Count])",
     snippet: "@Split(\"${1:Text}\", \"${2:,}\"${3:, ${4:Count}})",
-    description: 'Splits a string into substrings based on a specified separator.',
+    description: "Splits a string into substrings based on a specified separator.",
     documentation: `
 **Parameters:**
 - \`Text\` - The string to split
@@ -3550,9 +3550,9 @@ const vectorFunctionDocs = {
   "ListConcat": {
     namespace: null,
     name: "@ListConcat",
-    signature: '@ListConcat(list1, list2, ...)',
+    signature: "@ListConcat(list1, list2, ...)",
     snippet: "@ListConcat(${1:@list1}, ${2:@list2})",
-    description: 'Creates a list containing the contents of each list in sequence.',
+    description: "Creates a list containing the contents of each list in sequence.",
     documentation: `
 **Parameters:**
 - \`list1, list2, ...\` - Lists to concatenate
@@ -3569,9 +3569,9 @@ const vectorFunctionDocs = {
   "ListInsert": {
     namespace: null,
     name: "@ListInsert",
-    signature: '@ListInsert(List, Item, [Index])',
+    signature: "@ListInsert(List, Item, [Index])",
     snippet: "@ListInsert(${1:@list}, \"${2:Item}\", ${3:Index})",
-    description: 'Inserts an item into a list, at a given position or at the end.',
+    description: "Inserts an item into a list, at a given position or at the end.",
     documentation: `
 **Parameters:**
 - \`List\` - The list to modify
@@ -3595,9 +3595,9 @@ const vectorFunctionDocs = {
   "ListRemove": {
     namespace: null,
     name: "@ListRemove",
-    signature: '@ListRemove(List, Index)',
+    signature: "@ListRemove(List, Index)",
     snippet: "@ListRemove(${1:@list}, ${2:Index})",
-    description: 'Removes an item from a list at the specified index.',
+    description: "Removes an item from a list at the specified index.",
     documentation: `
 **Parameters:**
 - \`List\` - The list to modify
@@ -3616,9 +3616,9 @@ const vectorFunctionDocs = {
   "ListSet": {
     namespace: null,
     name: "@ListSet",
-    signature: '@ListSet(List, Index, Item)',
+    signature: "@ListSet(List, Index, Item)",
     snippet: "@ListSet(${1:@list}, ${2:Index}, \"${3:Item}\")",
-    description: 'Updates the value at a given position in the list to a new value.',
+    description: "Updates the value at a given position in the list to a new value.",
     documentation: `
 **Parameters:**
 - \`List\` - The list to modify
@@ -3638,9 +3638,9 @@ const vectorFunctionDocs = {
   "MapKeys": {
     namespace: null,
     name: "@MapKeys",
-    signature: '@MapKeys(Map)',
+    signature: "@MapKeys(Map)",
     snippet: "@MapKeys(${1:@map})",
-    description: 'Lists the keys of a map as a vector.',
+    description: "Lists the keys of a map as a vector.",
     documentation: `
 **Parameters:**
 - \`Map\` - The map to extract keys from
@@ -3658,9 +3658,9 @@ const vectorFunctionDocs = {
   "Range": {
     namespace: null,
     name: "@Range",
-    signature: '@Range(Start, Count)',
+    signature: "@Range(Start, Count)",
     snippet: "@Range(${1:Start}, ${2:Count})",
-    description: 'Returns a range of integers starting from a specified value.',
+    description: "Returns a range of integers starting from a specified value.",
     documentation: `
 **Parameters:**
 - \`Start\` - The starting integer
@@ -3678,9 +3678,9 @@ const vectorFunctionDocs = {
   "RegexFind": {
     namespace: null,
     name: "@RegexFind",
-    signature: '@RegexFind(Text, MatchExpression, [MatchGroup])',
+    signature: "@RegexFind(Text, MatchExpression, [MatchGroup])",
     snippet: "@RegexFind(${1:Text}, ${2:MatchExpression}${3:, ${4:MatchGroup}})",
-    description: 'Finds all matches of a regular expression in a string, optionally returning only a matched group.',
+    description: "Finds all matches of a regular expression in a string, optionally returning only a matched group.",
     documentation: `
 **Parameters:**
 - \`Text\` - The string to search
@@ -3701,8 +3701,8 @@ const vectorFunctionDocs = {
     namespace: null,
     products: ["ProGet"],
     name: "@AffectedPackages",
-    signature: '@AffectedPackages',
-    description: 'Returns a list of packages affected by the vulnerability in the current scope.',
+    signature: "@AffectedPackages",
+    description: "Returns a list of packages affected by the vulnerability in the current scope.",
     documentation: `
 **Properties:**
 - \`Name\` - Package name (string)
@@ -3720,8 +3720,8 @@ const vectorFunctionDocs = {
     namespace: null,
     products: ["ProGet"],
     name: "@ApiKeys",
-    signature: '@ApiKeys',
-    description: 'Returns a list of API Keys in the current scope.',
+    signature: "@ApiKeys",
+    description: "Returns a list of API Keys in the current scope.",
     documentation: `
 **Properties:**
 - \`Name\` - API Key name
@@ -3742,8 +3742,8 @@ foreach %key in @ApiKeys {
     namespace: null,
     products: ["ProGet"],
     name: "@BuildIssues",
-    signature: '@BuildIssues([includeClosed])',
-    description: 'Returns a list of issues on the build in the current scope.',
+    signature: "@BuildIssues([includeClosed])",
+    description: "Returns a list of issues on the build in the current scope.",
     documentation: `
 **Parameters:**
 - \`includeClosed\` - (Optional) Include closed issues
@@ -3763,9 +3763,9 @@ foreach %issue in @BuildIssues(true) {
   "FilesOnDisk": {
     namespace: null,
     name: "@FilesOnDisk",
-    signature: '@FilesOnDisk(includes, [excludes], [directory])',
+    signature: "@FilesOnDisk(includes, [excludes], [directory])",
     snippet: "@FilesOnDisk(\"${1:*.txt}\")",
-    description: 'Returns a list of files matching the mask on the current server.',
+    description: "Returns a list of files matching the mask on the current server.",
     documentation: `
 **Parameters:**
 - \`includes\` (required) - File mask(s) to include
@@ -3784,9 +3784,9 @@ set @ProjectFiles = @FilesOnDisk(*.csproj);
   "AcquiredServers": {
     namespace: null,
     name: "@AcquiredServers",
-    signature: '@AcquiredServers(Role)',
+    signature: "@AcquiredServers(Role)",
     snippet: "@AcquiredServers(\"${1:roleName}\")",
-    description: 'Returns the list of all servers acquired for a specified role.',
+    description: "Returns the list of all servers acquired for a specified role.",
     documentation: `
 **Parameters:**
 - \`Role\` (required) - The name of the server role.
@@ -3807,8 +3807,8 @@ foreach $server in @AcquiredServers("WebServer") {
   "AllEnvironments": {
     namespace: null,
     name: "@AllEnvironments",
-    signature: '@AllEnvironments',
-    description: 'Returns the list of all environments configured in the instance.',
+    signature: "@AllEnvironments",
+    description: "Returns the list of all environments configured in the instance.",
     documentation: `
 **Returns:** Vector of environment names
 
@@ -3825,8 +3825,8 @@ foreach $Env in @AllEnvironments
   "AllRoles": {
     namespace: null,
     name: "@AllRoles",
-    signature: '@AllRoles',
-    description: 'Returns the list of all server roles configured in the instance.',
+    signature: "@AllRoles",
+    description: "Returns the list of all server roles configured in the instance.",
     documentation: `
 **Returns:** Vector of role names
 
@@ -3843,9 +3843,9 @@ foreach $Role in @AllRoles
   "AllServers": {
     namespace: null,
     name: "@AllServers",
-    signature: '@AllServers([IncludeInactive])',
+    signature: "@AllServers([IncludeInactive])",
     snippet: "@AllServers",
-    description: 'Returns the list of all servers configured in the instance.',
+    description: "Returns the list of all servers configured in the instance.",
     documentation: `
 **Parameters:**
 - \`IncludeInactive\` - (Optional) If true, includes servers marked as inactive.
@@ -3865,9 +3865,9 @@ foreach $Server in @AllServers
   "ServersInEnvironment": {
     namespace: null,
     name: "@ServersInEnvironment",
-    signature: '@ServersInEnvironment([EnvironmentName], [IncludeInactive])',
+    signature: "@ServersInEnvironment([EnvironmentName], [IncludeInactive])",
     snippet: "@ServersInEnvironment(\"${1:EnvironmentName}\")",
-    description: 'Returns the list of all the servers in the specified environment name.',
+    description: "Returns the list of all the servers in the specified environment name.",
     documentation: `
 **Parameters:**
 - \`EnvironmentName\` - (Optional) The name of the environment. If not supplied, the current environment in context is used.
@@ -3886,9 +3886,9 @@ foreach $server in @ServersInEnvironment("Production") {
   "ServersInRole": {
     namespace: null,
     name: "@ServersInRole",
-    signature: '@ServersInRole([RoleName], [IncludeInactive])',
+    signature: "@ServersInRole([RoleName], [IncludeInactive])",
     snippet: "@ServersInRole(\"${1:RoleName}\")",
-    description: 'Returns the list of servers in the specified role.',
+    description: "Returns the list of servers in the specified role.",
     documentation: `
 **Parameters:**
 - \`RoleName\` - (Optional) The name of the server role. If not supplied, the current role in context is used.
@@ -3907,9 +3907,9 @@ foreach $server in @ServersInRole("WebServer") {
   "ServersInRoleAndEnvironment": {
     namespace: null,
     name: "@ServersInRoleAndEnvironment",
-    signature: '@ServersInRoleAndEnvironment([RoleName], [EnvironmentName], [IncludeInactive])',
+    signature: "@ServersInRoleAndEnvironment([RoleName], [EnvironmentName], [IncludeInactive])",
     snippet: "@ServersInRoleAndEnvironment(\"${1:RoleName}\", \"${2:EnvironmentName}\")",
-    description: 'Returns the list of all the servers in the specified role and environment name.',
+    description: "Returns the list of all the servers in the specified role and environment name.",
     documentation: `
 **Parameters:**
 - \`RoleName\` - (Optional) The name of the server role. If not supplied, the current role in context is used.

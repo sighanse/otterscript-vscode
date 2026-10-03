@@ -91,6 +91,27 @@ function activeParameterIndex(args, parameters) {
 }
 
 /**
+ * Where each parameter is in the signature label, as `[start, end)`
+ * offsets: VS Code then highlights exactly that parameter, where a string
+ * label would highlight its first occurrence anywhere in the signature. The
+ * parameters are found in order after the `(`; one that can't be found
+ * stays a string label.
+ *
+ * @param {string} label - The signature as shown
+ * @param {string[]} parameters - From `splitSignatureParameters`, in order
+ * @returns {(string | [number, number])[]}
+ */
+function parameterLabels(label, parameters) {
+  let at = label.indexOf("(") + 1;
+  return parameters.map((parameter) => {
+    const start = label.indexOf(parameter, at);
+    if (start === -1) return parameter;
+    at = start + parameter.length;
+    return /** @type {[number, number]} */ ([start, at]);
+  });
+}
+
+/**
  * Registers the signature help provider.
  *
  * @param {import("../helpers").Settings} settings - Live settings, updated in
@@ -148,7 +169,7 @@ function registerSignatureHelp(settings, listWorkspaceModules) {
               : signature;
 
           const sig = new vscode.SignatureInformation(signatureLabel, fn.documentation);
-          sig.parameters = parameters.map(p => new vscode.ParameterInformation(p));
+          sig.parameters = parameterLabels(signatureLabel, parameters).map((p) => new vscode.ParameterInformation(p));
 
           // -- Prepare the response
           const help = new vscode.SignatureHelp();
@@ -170,4 +191,4 @@ function registerSignatureHelp(settings, listWorkspaceModules) {
   return [signatureHelpProvider];
 }
 
-module.exports = { FUNCTION_SIGNATURE_REGEX, OPERATION_SIGNATURE_REGEX, activeParameterIndex, findSignatureCall, registerSignatureHelp };
+module.exports = { FUNCTION_SIGNATURE_REGEX, OPERATION_SIGNATURE_REGEX, activeParameterIndex, findSignatureCall, parameterLabels, registerSignatureHelp };

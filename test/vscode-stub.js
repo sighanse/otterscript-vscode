@@ -220,10 +220,15 @@ class WorkspaceEdit {
   }
 }
 
-// Only `appendLine` is exercised (helpers.js `appendOutputLine`); extend if a
+// A log output channel (helpers.js `log`) that drops every line; extend if a
 // future test drives more of the logger.
 const outputChannel = {
   appendLine() {},
+  info() {},
+  warn() {},
+  error() {},
+  debug() {},
+  trace() {},
   name: "OtterScript (stub)",
 };
 /** Mirrors `vscode.CompletionItemKind` (only the members the providers use). */
@@ -260,6 +265,11 @@ const vscode = {
   CodeActionKind,
   WorkspaceEdit,
   EndOfLine: Object.freeze({ LF: 1, CRLF: 2 }),
+  /** Mirrors `vscode.Uri.parse` (only `toString` is read). */
+  Uri: Object.freeze({
+    /** @param {string} value */
+    parse: (value) => ({ toString: () => value }),
+  }),
   window: {
     createOutputChannel: () => outputChannel,
   },

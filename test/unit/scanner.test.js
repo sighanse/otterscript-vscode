@@ -495,8 +495,8 @@ describe("maskOutsideTemplateTags", () => {
   const mask = (line, st = createTemplateScanState()) => maskOutsideTemplateTags(line, st);
 
   it("keeps only the tag body on a single-line tag; blanks text and delimiters", () => {
-    const out = mask('text <% code %> more');
-    assert.equal(out.length, 'text <% code %> more'.length);
+    const out = mask("text <% code %> more");
+    assert.equal(out.length, "text <% code %> more".length);
     assert.equal(out.trimEnd().trimStart(), "code");
     assert.ok(!out.includes("<%") && !out.includes("%>"));
     assert.ok(!out.includes("text") && !out.includes("more"));
@@ -508,12 +508,12 @@ describe("maskOutsideTemplateTags", () => {
 
   it("carries an open tag across lines", () => {
     const st = createTemplateScanState();
-    const a = maskOutsideTemplateTags('foo <% if $x {', st);
+    const a = maskOutsideTemplateTags("foo <% if $x {", st);
     assert.equal(st.inTemplateTag, true);
     assert.equal(a.trim(), "if $x {");
-    const b = maskOutsideTemplateTags('  set $y = 1', st);
+    const b = maskOutsideTemplateTags("  set $y = 1", st);
     assert.equal(b.trim(), "set $y = 1"); // still inside the tag
-    const c = maskOutsideTemplateTags('} %> trailing text', st);
+    const c = maskOutsideTemplateTags("} %> trailing text", st);
     assert.equal(st.inTemplateTag, false);
     assert.equal(c.trim(), "}");
     assert.ok(!c.includes("trailing"));
@@ -557,12 +557,12 @@ describe("maskOutsideTemplateTags", () => {
   });
 
   it("handles two tags on one line", () => {
-    const out = mask('a <% one %> b <% two %> c');
+    const out = mask("a <% one %> b <% two %> c");
     assert.equal(out.replace(/\s+/g, " ").trim(), "one two");
   });
 
   it("is length-preserving", () => {
-    for (const line of ['', '<%%>', 'plain', '<% x', 'y %>', '<% a %> <% b %>']) {
+    for (const line of ["", "<%%>", "plain", "<% x", "y %>", "<% a %> <% b %>"]) {
       assert.equal(mask(line).length, line.length, JSON.stringify(line));
     }
   });
@@ -579,14 +579,14 @@ describe("maskOutsideTemplateTags", () => {
   });
 
   it("keeps a bare $Name / $Name.Prop.Chain variable reference", () => {
-    const out = mask('* $p.Name and $p.AffectedVersions here');
+    const out = mask("* $p.Name and $p.AffectedVersions here");
     assert.ok(out.includes("$p.Name"), out);
     assert.ok(out.includes("$p.AffectedVersions"), out);
     assert.ok(!out.includes("here"));
   });
 
   it("keeps a $(expression) wrapper", () => {
-    const out = mask('note: $(@list[0]) end');
+    const out = mask("note: $(@list[0]) end");
     assert.ok(out.includes("$(@list[0])"), out);
     assert.ok(!out.includes("note") && !out.includes("end"));
   });
@@ -612,7 +612,7 @@ describe("maskOutsideTemplateTags", () => {
   });
 
   it("does not treat '$' followed by a digit (e.g. a price) as an expression", () => {
-    assert.equal(mask('Costs $5.00 today').trim(), "");
+    assert.equal(mask("Costs $5.00 today").trim(), "");
   });
 
   it("does not recognize an embedded expression inside a literal-text string", () => {
@@ -622,7 +622,7 @@ describe("maskOutsideTemplateTags", () => {
   });
 
   it("is length-preserving with embedded expressions present", () => {
-    for (const line of ['$ToJson($x, $y)', '{ "v": $ToJson($x) },', 'a $Name(1, (2), 3) b']) {
+    for (const line of ["$ToJson($x, $y)", '{ "v": $ToJson($x) },', "a $Name(1, (2), 3) b"]) {
       assert.equal(mask(line).length, line.length, JSON.stringify(line));
     }
   });
@@ -686,7 +686,7 @@ describe("findEmbeddedExpressionEnd", () => {
 
 describe("documentUsesTemplateTags", () => {
   it("is true for a real <% ... %> pair", () => {
-    assert.equal(documentUsesTemplateTags('a <% b %> c'), true);
+    assert.equal(documentUsesTemplateTags("a <% b %> c"), true);
   });
 
   it("is true when the tags span lines", () => {
@@ -771,7 +771,7 @@ describe("maskComments", () => {
 
 describe("maskCommentSpans", () => {
   it("keeps quoted-string contents (blanking the quotes) and blanks comments", () => {
-    const line = `Log "a $x" 'b $y' # $z`;
+    const line = "Log \"a $x\" 'b $y' # $z";
     assert.equal(maskCommentSpans(line, createCodeScanState()), "Log  a $x   b $y ".padEnd(line.length));
   });
 
@@ -825,12 +825,12 @@ describe("findVariableOccurrences", () => {
   });
 
   it("counts quoted strings and swim-strings but not comments", () => {
-    const lines = [`Log "v $x";`, `Log 'v $x';`, "# $x", "/* $x */", "$t = >>", "$x", ">>;"];
+    const lines = ["Log \"v $x\";", "Log 'v $x';", "# $x", "/* $x */", "$t = >>", "$x", ">>;"];
     assert.deepEqual(find(lines, "$", "x"), ["0:7:r", "1:7:r", "5:0:r"]);
   });
 
   it("inside a string, counts @ / % only within $( ... )", () => {
-    assert.deepEqual(find([`Log "a %p and $(%p.Name)";`, "Log %p;"], "%", "p"), ["0:16:r", "1:4:r"]);
+    assert.deepEqual(find(["Log \"a %p and $(%p.Name)\";", "Log %p;"], "%", "p"), ["0:16:r", "1:4:r"]);
   });
 
   it("treats @{name} / %{name} as the same variable as @name / %name", () => {

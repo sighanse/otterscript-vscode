@@ -217,7 +217,7 @@ function registerCompletion(settings, listWorkspaceModules) {
               const snippetText = `${qualifier}${doc.snippet ?? `${name} "\${0}";`}`;
               const snippet = new vscode.SnippetString(stripTypedNamespace(snippetText));
               const shown = qualifier ? { ...doc, name: `${qualifier}${doc.name}` } : doc;
-              const item = buildCompletionItem(shown, vscode.CompletionItemKind.Function, '0_', snippet, true);
+              const item = buildCompletionItem(shown, vscode.CompletionItemKind.Function, "0_", snippet, true);
               item.filterText = name;
               item.range = replaceRange;
               items.push(item);
@@ -230,7 +230,7 @@ function registerCompletion(settings, listWorkspaceModules) {
             for (const [name, doc] of Object.entries(keywordDocs)) {
               if (typed && !name.toLowerCase().startsWith(lowerTyped)) continue;
               const snippet = doc.snippet ? new vscode.SnippetString(doc.snippet) : name;
-              const item = buildCompletionItem(doc, vscode.CompletionItemKind.Keyword, '1_', snippet, false);
+              const item = buildCompletionItem(doc, vscode.CompletionItemKind.Keyword, "1_", snippet, false);
               item.range = replaceRange;
               items.push(item);
             }

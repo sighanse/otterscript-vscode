@@ -13,6 +13,27 @@ const { findModuleDeclarations } = require("../scanner");
 const UTF8 = new TextDecoder("utf-8");
 
 /**
+ * Whether a Go to Symbol in Workspace query matches a module name: its
+ * characters appear in the name in order, ignoring case (`dpm` matches
+ * `Deploy-Module`). VS Code asks providers to match this loosely and then
+ * ranks and highlights the results itself.
+ *
+ * @param {string} name
+ * @param {string} query
+ * @returns {boolean}
+ */
+function matchesQuery(name, query) {
+  const lowerName = name.toLowerCase();
+  let at = 0;
+  for (const ch of query.toLowerCase()) {
+    if (/\s/.test(ch)) continue;
+    at = lowerName.indexOf(ch, at) + 1;
+    if (at === 0) return false;
+  }
+  return true;
+}
+
+/**
  * Registers the workspace symbol provider and its file watcher.
  *
  * @param {import("../helpers").Settings} settings - Live settings, updated in
@@ -174,12 +195,11 @@ function registerWorkspaceSymbols(settings) {
       if (!settings.workspaceSymbolsEnabled) return [];
       await ensureWorkspaceIndex();
 
-      const needle = query.toLowerCase();
       /** @type {vscode.SymbolInformation[]} */
       const results = [];
       for (const { uri, symbols } of workspaceModuleIndex.values()) {
         for (const { name, range } of symbols) {
-          if (needle && !name.toLowerCase().includes(needle)) continue;
+          if (!matchesQuery(name, query)) continue;
           results.push(new vscode.SymbolInformation(
             name,
             vscode.SymbolKind.Module,
@@ -268,4 +288,4 @@ function registerWorkspaceSymbols(settings) {
   };
 }
 
-module.exports = { registerWorkspaceSymbols };
+module.exports = { matchesQuery, registerWorkspaceSymbols };

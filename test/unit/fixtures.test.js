@@ -53,7 +53,10 @@ function diagnoseSource(source, relativePath, extraCtx = {}) {
   /** @type {any[]} */
   let collected = [];
   const collection = /** @type {any} */ ({
-    set: (/** @type {unknown} */ _uri, /** @type {any[]} */ issues) => { collected = issues; },
+    // Plain string codes, for comparing: the links are tested on their own.
+    set: (/** @type {unknown} */ _uri, /** @type {any[]} */ issues) => {
+      collected = issues.map((d) => Object.assign(d, { code: d.code.value }));
+    },
   });
   updateDiagnostics(document, collection, { ...ctx, ...extraCtx });
   return collected;

@@ -42,8 +42,8 @@
  * @typedef {Record<string, { signature?: string, namespace?: string | null }>} DocsTable
  */
 
-const fs = require("fs");
-const path = require("path");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const data = require(path.join(__dirname, "..", "src", "language-data.js"));
 const GRAMMAR_PATH = path.join(__dirname, "..", "syntaxes", "otterscript.tmLanguage.json");
@@ -165,7 +165,7 @@ if (process.argv.includes("--write")) {
   for (const check of checks) {
     const names = [...new Set(check.expected)].sort(byLengthThenName);
     const scopeAt = text.indexOf(`"name": "${check.scope}"`);
-    const matchAt = text.indexOf(`"match": "`, scopeAt);
+    const matchAt = text.indexOf("\"match\": \"", scopeAt);
     const lineEnd = text.indexOf("\n", matchAt);
     const line = text.slice(matchAt, lineEnd);
     const listPattern = /\(([A-Za-z0-9_:|-]+\|[A-Za-z0-9_:|-]+)\)/;
@@ -248,7 +248,7 @@ for (const [tableName, table] of Object.entries(nsTables)) {
 
 if (badNamespaces.length) {
   drift = true;
-  console.log(`\nDRIFT  namespaces  [not null and not in NAMESPACES]`);
+  console.log("\nDRIFT  namespaces  [not null and not in NAMESPACES]");
   console.log(`  ${badNamespaces.join("\n  ")}`);
   console.log(`  allowed: ${[...namespaces].join(", ")}`);
 }
