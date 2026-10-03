@@ -7,7 +7,8 @@
  *      (syntaxes/otterscript.tmLanguage.json) have drifted out of sync with the
  *      authoritative docs tables in src/language-data.js, or
  *   2. any docs-table entry carries a `namespace` that is neither `null` nor a
- *      member of the `NAMESPACES` allowlist exported by language-data.js.
+ *      member of the `NAMESPACES` allowlist (src/namespaces.js, re-exported
+ *      by language-data.js).
  *
  * Background: the grammar matches scalar, vector, and map functions and
  * operations with regex alternations, e.g.

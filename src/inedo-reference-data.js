@@ -6,7 +6,8 @@
  * in compact form: src/inedo-reference.js expands it into docs entries, which
  * language-data.js merges under its hand-written tables (whose entries win).
  *
- * To update: `node scripts/update-inedo-reference.js --fetch`.
+ * To update: `npm run update:reference` (fetches the reference, then
+ * regenerates this file and the grammar's name lists).
  */
 
 /** @typedef {import("./inedo-reference").CompactEntry} CompactEntry */

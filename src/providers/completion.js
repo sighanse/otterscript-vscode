@@ -123,9 +123,14 @@ function registerCompletion(settings, listWorkspaceModules) {
   // ============================================================
   // OPERATION COMPLETION PROVIDER
   // ============================================================
-  // Provides completions for OtterScript operations and keywords.
+  // Provides completions for OtterScript operations and keywords, argument
+  // names inside an operation or module call, and module names after `call`.
   //
-  // Unlike scalar ($) and vector (@) completions, operations have NO prefix.
+  // Unlike the sigil completions above, operations have NO prefix character.
+  // Manual invoke (Ctrl+Space) can return every operation and keyword;
+  // auto-trigger needs two typed characters to reduce noise. `(` and `,`
+  // trigger only argument names (the opening of an argument list, or the
+  // next argument).
 
   const operationCompletionProvider =
     vscode.languages.registerCompletionItemProvider(
@@ -156,9 +161,9 @@ function registerCompletion(settings, listWorkspaceModules) {
             return moduleItems(document, range);
           }
 
-          // -- Match the identifier fragment immediately before the cursor (letters +
-          // hyphens), plus an optional "Namespace::" prefix the user may have already
-          // typed (e.g. "ProGet::Cr").
+          // -- Match the identifier fragment immediately before the cursor (letters,
+          // digits and hyphens), plus an optional "Namespace::" prefix the user may
+          // have already typed (e.g. "ProGet::Cr").
           // Manual invoke (Ctrl+Space) should still return suggestions even when typed is empty.
           const match = prefix.match(/(?:([A-Za-z][A-Za-z0-9]*)::)?([A-Za-z][A-Za-z0-9-]*)?$/);
           const namespaceTyped = match?.[1] ?? "";
@@ -221,24 +226,18 @@ function registerCompletion(settings, listWorkspaceModules) {
           // only operations are valid there.
           if (!namespaceTyped) {
             for (const [name, doc] of Object.entries(keywordDocs)) {
-                if (!typed || name.toLowerCase().startsWith(lowerTyped)) {
-                    const snippet = doc.snippet
-                      ? new vscode.SnippetString(doc.snippet)
-                      : name;
-                    const item = buildCompletionItem(doc, vscode.CompletionItemKind.Keyword, '1_', snippet, false);
-                    item.range = replaceRange;
-                    items.push(item);
-                }
+              if (typed && !name.toLowerCase().startsWith(lowerTyped)) continue;
+              const snippet = doc.snippet ? new vscode.SnippetString(doc.snippet) : name;
+              const item = buildCompletionItem(doc, vscode.CompletionItemKind.Keyword, '1_', snippet, false);
+              item.range = replaceRange;
+              items.push(item);
             }
           }
 
           return items;
         }
-      }
-      // Manual invoke (Ctrl+Space) can return all operations/keywords.
-      // Auto-trigger still requires a short typed prefix to reduce noise.
-      // `(` and `,` open an argument list or the next argument.
-      , "(", ","
+      },
+      "(", ","
     );
 
   /**

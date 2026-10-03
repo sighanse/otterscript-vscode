@@ -40,7 +40,9 @@ const {
  * Generic code action factory for creating quick-fix actions.
  *
  * This factory centralizes the creation of VS Code CodeAction objects,
- * reducing duplication across multiple fix providers.
+ * reducing duplication across multiple fix providers. The action is
+ * preferred (so Fix All applies it); a factory whose fix is a guess sets
+ * `isPreferred` back to false.
  *
  * @private
  * @param {string} title - Human-readable action title shown in lightbulb menu
@@ -453,7 +455,8 @@ function registerCodeActions(settings, diagnostics, runDiagnostics) {
   // FIX ALL COMMAND
   // ============================================================
   /**
-   * Command to fix all auto-fixable diagnostics in the current OtterScript document.
+   * Command to fix all auto-fixable diagnostics in the current OtterScript
+   * document: every fix that is preferred (see the comment in the loop).
    * All fixes are applied in a single WorkspaceEdit (single undo step).
    *
    * Triggered by: Command Palette or Ctrl+Shift+Alt+F
@@ -498,8 +501,10 @@ function registerCodeActions(settings, diagnostics, runDiagnostics) {
         const factory = lookupOwn(FIX_FACTORIES, getDiagnosticCode(diagnostic));
         const action = factory?.(document, diagnostic) ?? null;
 
-        // A fix that isn't preferred trades this problem for another (e.g.
-        // a card version above the host's maximum), so it's left to the user.
+        // A fix that isn't preferred is left to the user: it guesses a name
+        // that's merely close, needs values only the user knows (missing
+        // arguments), or trades this problem for another (a card version
+        // above the host's maximum).
         if (!action?.edit || action.isPreferred === false) continue;
 
         // -- Copy the action's edits into the combined edit. entries() yields

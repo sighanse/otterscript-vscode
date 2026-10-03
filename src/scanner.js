@@ -10,7 +10,9 @@
  * spans — quoted strings, line comments, block comments, and swim-strings — plus
  * what builds on that scan: the `<% %>` text-template tag masking, the
  * signature-help helpers (active parameter, parameter splitting), the
- * variable-occurrence index behind highlighting, and the module-name regexes.
+ * variable-occurrence index behind highlighting and rename, the module-name
+ * regexes, and the operation-argument helpers (the argument context at the
+ * cursor, module parameter lists).
  * Everything here operates on plain strings, numbers, and plain state objects
  * ({@link CodeScanState}, {@link TemplateScanState}); nothing here constructs a
  * `vscode.*` value.
@@ -336,8 +338,11 @@ function maskNonCodeSpans(lineText, state) {
 }
 
 /**
- * A length-preserving mask of comments only: strings stay whole, delimiters
- * included -- for where code, strings and all, ends.
+ * A length-preserving mask of comments only: strings stay whole, their quotes
+ * included. Unlike {@link maskCommentSpans}, which blanks string delimiters,
+ * this keeps every non-comment character, so a caller can find where the
+ * last argument of a call really ends (the add-missing-argument fix inserts
+ * after a trailing string argument, not inside it).
  *
  * @param {string} lineText
  * @param {CodeScanState} state - Mutated in place.
@@ -1234,10 +1239,12 @@ module.exports = {
   indexVariableOccurrences,
   variableKey,
   NAME_PATTERN,
+  BRACED_NAME_PATTERN,
+
+  // -- Operation arguments
   findOperationArgumentContext,
   ARGUMENT_NAME_REGEX,
   parseModuleParameters,
-  BRACED_NAME_PATTERN,
 
   // -- Argument helpers
   getActiveParameterIndex,

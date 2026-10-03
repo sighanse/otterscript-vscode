@@ -1,8 +1,9 @@
 // @ts-check
 /**
  * @fileoverview Shared helpers for the OtterScript extension: settings, the
- * logger, per-document timers, docs-table validation and lookup, and the
- * hover and completion item builders.
+ * logger, per-document timers and bounded concurrency, docs-table lookup and
+ * product filtering, the hover and completion item builders, and typo
+ * suggestions ({@link closestMatch}).
  *
  * Elsewhere: text scanning in {@link module:scanner}, per-document indexes
  * (modules, variables, string/comment state) in {@link module:document-index},
@@ -332,6 +333,8 @@ function getTypedIdentifier(document, position, triggerChar) {
  *   - products: Optional - The products that have it; a note says so when
  *     `product` isn't one of them (see {@link isAvailableIn})
  *   - anySigil: Optional - Works with every sigil (noted below the signature)
+ *   - superseded: Optional - A name Inedo recommends against writing; its
+ *     `note` is shown right under the name
  *   - params: Optional - An operation's arguments, listed unless
  *     `documentation` has its own **Arguments:** section
  * @param {string} [product] - The `otterscript.product` setting
@@ -373,8 +376,8 @@ function buildHoverMarkdown(doc, product = "any") {
     md.appendMarkdown("Works with `$`, `@` and `%`: the sigil picks what it returns.\n\n");
   }
 
-  // Namespace provenance -- the extension/namespace this construct belongs to.
-  // Omitted for pure language constructs (keywords, syntax, Log-*) where it is null.
+  // Namespace provenance -- the `[ScriptNamespace]` this construct belongs to.
+  // Omitted when it is null: keywords, syntax and every `Core::` built-in.
   if (doc.namespace) {
     md.appendMarkdown(`**Namespace:** \`${doc.namespace}\`\n\n`);
   }

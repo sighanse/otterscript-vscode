@@ -4,9 +4,11 @@
  * OtterScript language documentation model.
  *
  * IMPORTANT:
- * - This file contains plain data ONLY.
- * - No vscode imports, no MarkdownString, no runtime logic.
- * - All documentation values are plain strings.
+ * - The tables in this file are plain data: no vscode imports, no
+ *   MarkdownString; all documentation values are plain strings.
+ * - The only logic is at the end (GENERATED REFERENCE): merging Inedo's
+ *   generated reference under the hand-written tables, and the operation
+ *   lookups (`operationForms`, `lookupOperation`, `operationArguments`).
  *
  * Rendering rules:
  * - helpers.js (`buildHoverMarkdown` / `buildCompletionItem`) converts these
@@ -70,8 +72,8 @@
  *   function's form in another Inedo product, when it differs from `signature`
  *   -- e.g. ProGet's notifier `$PackageHash(format, algorithm)` (the
  *   `signature`) vs BuildMaster's `$PackageHash(packageName, [sourceName])`.
- *   Shown in hover; the too-many-arguments check allows the largest count of
- *   any form.
+ *   Shown in hover; the argument-count checks allow anything from the fewest
+ *   any form requires to the most any form takes.
  * @property {DocParam[]=} params
  *   An operation's named arguments (`Copy-Files(To: ...)`), from Inedo's
  *   reference: for argument completion and hover, which lists them unless
@@ -3936,8 +3938,10 @@ foreach $server in @ServersInRoleAndEnvironment("WebServer", "Production") {
 /** @type {DocsTable} */
 const mapFunctionDocs = {};
 
-// Freeze the exported tables so no consumer can add, remove, or replace an
+// Freeze the hand-written tables so nothing can add, remove, or replace an
 // entry at runtime. Shallow: the individual DocEntry objects are not frozen.
+// syntaxDocs and keywordDocs are exported as they are; the others are
+// exported as the new tables merged below.
 Object.freeze(operationDocs);
 Object.freeze(syntaxDocs);
 Object.freeze(keywordDocs);
@@ -3946,7 +3950,6 @@ Object.freeze(scalarFunctionDocs);
 Object.freeze(vectorFunctionDocs);
 Object.freeze(mapFunctionDocs);
 
-// Export
 // ============================================================
 // GENERATED REFERENCE
 // ============================================================
@@ -4107,7 +4110,7 @@ function lookupOperation(name, namespace) {
 }
 
 /**
- * The documented arguments of operation \`name\` as it's called. With a
+ * The documented arguments of operation `name` as it's called. With a
  * namespace, that form's (see {@link lookupOperation}); without one, every
  * form's -- the call could mean any of them -- an argument required only
  * when every form requires it. Undefined when nothing documents them.

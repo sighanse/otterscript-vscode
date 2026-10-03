@@ -63,7 +63,7 @@ const {
 // extension's *name* where a construct declares none (`InedoCore::Sleep`),
 // and leaves out some that the extension source declares. The extension uses
 // the namespace declared by `[ScriptNamespace]` in Inedo's source (see
-// NAMESPACES in src/language-data.js), so:
+// NAMESPACES in src/namespaces.js), so:
 // - a namespace that isn't a declared one (InedoCore, and BuildMaster's DB,
 //   Packages and System, which no public source declares) becomes `null`;
 // - the operations below, which the reference prints without a namespace but
@@ -289,20 +289,21 @@ const cleanParam = ({ name, required, description, format }) => ({
 
 /**
  * An operation's arguments, for argument completion and hover: the first
- * product's, then any another product adds. An argument is required only
- * when every product's page requires it (Otter's `ProGet::Promote` doesn't
- * need the `ToFeed` BuildMaster's does).
+ * product's, then any that another product adds. An argument is required
+ * only when every product's page requires it (Otter's `ProGet::Promote`
+ * doesn't need the `ToFeed` BuildMaster's does).
  *
- * @param {RefEntry[]} variants - The operation's pages, one per product
+ * @param {RefEntry[]} pages - The operation's pages in one namespace, one
+ *   per product
  * @returns {ReferenceParam[]}
  */
-function operationParams(variants) {
+function operationParams(pages) {
   /** @type {Map<string, ReferenceParam>} */
   const params = new Map();
-  for (const param of variants.flatMap((v) => v.params)) {
+  for (const param of pages.flatMap((v) => v.params)) {
     const key = param.name.toLowerCase();
     if (params.has(key)) continue;
-    const required = variants.every((v) => v.params.some((p) => p.name.toLowerCase() === key && p.required));
+    const required = pages.every((v) => v.params.some((p) => p.name.toLowerCase() === key && p.required));
     params.set(key, cleanParam({ ...param, required }));
   }
   return [...params.values()];
@@ -477,7 +478,8 @@ function render(snapshot) {
  * in compact form: src/inedo-reference.js expands it into docs entries, which
  * language-data.js merges under its hand-written tables (whose entries win).
  *
- * To update: \`node scripts/update-inedo-reference.js --fetch\`.
+ * To update: \`npm run update:reference\` (fetches the reference, then
+ * regenerates this file and the grammar's name lists).
  */
 
 /** @typedef {import("./inedo-reference").CompactEntry} CompactEntry */

@@ -99,7 +99,7 @@ function getModuleInfo(document) {
   }
 
   // Declarations: reuse the shared pure scanner so the `module <Name>` scan
-  // lives in exactly one place ({@link module:scanner}.findModuleDeclarations).
+  // lives in exactly one place (`findModuleDeclarations` in scanner.js).
   /** @type {ModuleDeclaration[]} */
   const declarations = findModuleDeclarations(document.getText()).map(hit => ({
     name: hit.name,
@@ -403,11 +403,11 @@ function getLineStartScanState(document, line) {
   return { ...states[line] };
 }
 
-/** How far back {@link getMaskedTextBefore} looks: plenty for one statement. */
-const MASKED_PREFIX_MAX_LINES = 200;
+/** How far {@link getMaskedTextBefore} looks back, and {@link getMaskedTextAfter} ahead: plenty for one statement. */
+const MASKED_CONTEXT_MAX_LINES = 200;
 
 /**
- * The code before `position`, from up to {@link MASKED_PREFIX_MAX_LINES}
+ * The code before `position`, from up to {@link MASKED_CONTEXT_MAX_LINES}
  * lines back, with strings and comments masked ({@link maskNonCodeSpans}) --
  * for finding the call the cursor is in.
  *
@@ -416,7 +416,7 @@ const MASKED_PREFIX_MAX_LINES = 200;
  * @returns {string}
  */
 function getMaskedTextBefore(document, position) {
-  const first = Math.max(0, position.line - MASKED_PREFIX_MAX_LINES);
+  const first = Math.max(0, position.line - MASKED_CONTEXT_MAX_LINES);
   const state = getLineStartScanState(document, first);
   const lines = [];
   for (let line = first; line <= position.line; line++) {
@@ -427,7 +427,7 @@ function getMaskedTextBefore(document, position) {
 }
 
 /**
- * The code from `position` on, to up to {@link MASKED_PREFIX_MAX_LINES}
+ * The code from `position` on, to up to {@link MASKED_CONTEXT_MAX_LINES}
  * lines further, masked like {@link getMaskedTextBefore} -- for the rest of
  * the call the cursor is in.
  *
@@ -440,7 +440,7 @@ function getMaskedTextAfter(document, position) {
   const first = document.lineAt(position.line).text;
   maskNonCodeSpans(first.slice(0, position.character), state);
   const lines = [maskNonCodeSpans(first.slice(position.character), state)];
-  const last = Math.min(document.lineCount - 1, position.line + MASKED_PREFIX_MAX_LINES);
+  const last = Math.min(document.lineCount - 1, position.line + MASKED_CONTEXT_MAX_LINES);
   for (let line = position.line + 1; line <= last; line++) {
     lines.push(maskNonCodeSpans(document.lineAt(line).text, state));
   }
@@ -495,11 +495,13 @@ function getModuleParameters(document, range) {
 
 /**
  * The arguments the call in `context` takes: an operation's from its docs
- * (see `operationArguments`; a same-named operation's callee is shown with
- * its namespace, `DotNet::Build`), a module's from its declaration (see {@link resolveModule}), in the
- * shape of an operation's `params` -- a module parameter's `format` is how
- * it's declared (`$path`, `out $result`). Null when the callee is unknown or
- * is a module in another raft (`call Raft::Name`).
+ * (see `operationArguments`; when the call names a namespace and other
+ * namespaces have a same-named operation, the callee is shown qualified,
+ * `DotNet::Build`), a module's from its declaration (see
+ * {@link resolveModule}), in the shape of an operation's `params` -- a
+ * module parameter's `format` is how it's declared (`$path`, `out $result`).
+ * Null when the callee is unknown or is a module in another raft
+ * (`call Raft::Name`).
  *
  * @param {vscode.TextDocument} document
  * @param {import("./scanner").OperationArgumentContext} context

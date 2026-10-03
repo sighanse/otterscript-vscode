@@ -21,10 +21,10 @@ const { findModuleDeclarations } = require("../scanner");
  *   removeModuleIndexEntry: (uri: vscode.Uri) => void,
  *   listModules: () => Promise<{ name: string, uri: vscode.Uri, range: vscode.Range }[]>,
  *   listFiles: () => Promise<vscode.Uri[]>
- * }} The index operations extension.js calls on document events and
- *   settings changes; `listModules` for module-name completion and Go to
- *   Definition across files, and `listFiles` for module Rename and Find
- *   References across files
+ * }} The index operations extension.js calls on document events;
+ *   `listModules` for the cross-file module features (completion, hover and
+ *   signature help on `call`, Go to Definition, Rename, Find References), and
+ *   `listFiles` for module Rename and Find References across files
  */
 function registerWorkspaceSymbols(settings) {
   // ============================================================
@@ -190,7 +190,7 @@ function registerWorkspaceSymbols(settings) {
   });
 
   // Watcher events only matter once the index has actually been built: before
-  // the first Ctrl+T there is nothing to keep fresh, and touching it here would
+  // its first use there is nothing to keep fresh, and touching it here would
   // leave a misleading partial index. `!workspaceIndexReady` covers both "never
   // built" and "last build failed"; the next query rebuilds from scratch anyway.
   const otterFileWatcher = vscode.workspace.createFileSystemWatcher(OTTER_FILE_GLOB);

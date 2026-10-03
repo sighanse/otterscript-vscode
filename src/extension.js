@@ -124,10 +124,10 @@ function activate(context) {
   // ============================================================
   // SETTINGS CHANGES
   // ============================================================
-  // The one listener for `otterscript.*` settings: reloads them all at once,
-  // then does what a particular change needs -- reset the workspace index, or
-  // re-run diagnostics in every open file so new rules or a new Adaptive Card
-  // version limit apply without an edit.
+  // The one listener for `otterscript.*` settings: reloads them all at once
+  // (the providers read the shared object, so they see the change at once),
+  // then re-runs diagnostics in every open file when the rules or the
+  // Adaptive Card version limit changed, so those apply without an edit.
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
       if (!e.affectsConfiguration("otterscript")) return;

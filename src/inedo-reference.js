@@ -129,8 +129,9 @@ function operationSignature(name, params) {
  * The completion snippet for an operation: the arguments its signature
  * requires (written without `[ ]`) as tab stops when it's called with
  * parentheses, else a single argument. The signature, not `params`, says
- * what's required: `params` also holds another product's same-named
- * operation's arguments (`DevEnv::Build` / `DotNet::Build`).
+ * what's required: `params` merges every product's page of the operation,
+ * and an argument one product requires may be optional, or missing, in the
+ * other (BuildMaster's `ProGet::Promote` requires `ToFeed`, Otter's doesn't).
  *
  * @param {string} name
  * @param {string} signature

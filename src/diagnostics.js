@@ -2,8 +2,13 @@
 /**
  * @fileoverview Diagnostics engine for OtterScript documents.
  *
- * This module performs a full analysis pass and writes diagnostics to a
- * provided VS Code DiagnosticCollection.
+ * {@link updateDiagnostics} performs a full analysis pass and writes the
+ * diagnostics to a provided VS Code DiagnosticCollection. Per line: missing
+ * `$`, symbol balance, unknown functions, operations and namespaces, `if`
+ * condition operators, `for` loops, and (in a text template) the `<% %>` tag
+ * checks. Over the whole masked document afterwards: duplicate map keys and
+ * modules, argument counts and names, and the Adaptive Card checks
+ * (adaptivecard.js). {@link DIAGNOSTIC_CODES} lists every code emitted.
  */
 
 const vscode = require("vscode");
@@ -732,10 +737,10 @@ function locateInSegments(segments, needle) {
 }
 
 /**
- * Checks 2 & 3: given one complete `<% ... %>` tag's body -- possibly
- * accumulated across multiple physical lines -- flags a bare terminator
- * keyword (`<% end %>`) or a block opener missing its `{` (`<% foreach ... %>`
- * with no brace before `%>`).
+ * The `template-end-keyword` and `template-missing-brace` checks: given one
+ * complete `<% ... %>` tag's body -- possibly accumulated across multiple
+ * physical lines -- flags a bare terminator keyword (`<% end %>`) or a block
+ * opener missing its `{` (`<% foreach ... %>` with no brace before `%>`).
  *
  * @param {{ lineIndex: number, startCol: number, text: string }[]} segments -
  *   One entry per physical line the tag body spans, in source order.
@@ -772,11 +777,13 @@ function checkTagBody(segments, issues) {
 }
 
 /**
- * Emits the `<% %>` structural diagnostics (Phase 1) and the template/expression
- * mode-mixing check (Phase 2, check 4) for one line of a template-aware
- * document. Consumes the string/comment-masked line (delimiters still visible);
- * pushes onto `issues` and advances the cross-line `tagBalance` / `exprState` /
- * `tagBody`.
+ * Emits the `<% %>` diagnostics for one line of a template-aware document:
+ * tag balance (`template-unexpected-close`; `template-unclosed` is reported by
+ * the caller at the end), the tag-body checks of {@link checkTagBody} once a
+ * tag closes, and `template-in-expression` (a tag inside an unclosed
+ * expression). Consumes the string/comment-masked line (delimiters still
+ * visible); pushes onto `issues` and advances the cross-line `tagBalance` /
+ * `exprState` / `tagBody`.
  *
  * @param {string} tagView - `maskNonCodeSpans` output for the raw line
  * @param {number} lineIndex
@@ -786,8 +793,8 @@ function checkTagBody(segments, issues) {
  *   in the literal text (`$(`, `%(`, `@(`, `$Name(`), carried across lines.
  * @param {{ segments: { lineIndex: number, startCol: number, text: string }[] }} tagBody -
  *   The currently-open tag's body, accumulated one segment per physical line
- *   it spans (checks 2 & 3 run once the closing `%>` is reached, however many
- *   lines away that is).
+ *   it spans ({@link checkTagBody} runs once the closing `%>` is reached,
+ *   however many lines away that is).
  * @returns {void}
  */
 function checkTemplateTags(tagView, lineIndex, issues, tagBalance, exprState, tagBody) {
@@ -795,9 +802,10 @@ function checkTemplateTags(tagView, lineIndex, issues, tagBalance, exprState, ta
   // 0 for a line that starts already inside a tag opened on a previous line.
   let segmentStart = 0;
 
-  // Check 1: `<%` / `%>` balance (mirrors the brace/paren/bracket balance loop).
-  // Check 4: a `<%` reached while an OtterScript expression opened in the literal
-  //   text is still unclosed -- text templating and expressions cannot nest.
+  // Tag balance: `<%` / `%>` pairs (mirrors the brace/paren/bracket balance loop).
+  // template-in-expression: a `<%` reached while an OtterScript expression
+  //   opened in the literal text is still unclosed -- text templating and
+  //   expressions cannot nest.
   for (let col = 0; col < tagView.length; col++) {
     const ch = tagView[col];
     const next = tagView[col + 1];
@@ -833,8 +841,8 @@ function checkTemplateTags(tagView, lineIndex, issues, tagBalance, exprState, ta
       } else {
         tagBalance.count--;
         if (tagBalance.count === 0) {
-          // The tag closes here -- run checks 2 & 3 over its full body,
-          // however many lines it took to get here, then start fresh.
+          // The tag closes here -- run the tag-body checks over its full
+          // body, however many lines it took to get here, then start fresh.
           tagBody.segments.push({ lineIndex, startCol: segmentStart, text: tagView.slice(segmentStart, col) });
           checkTagBody(tagBody.segments, issues);
           tagBody.segments = [];
@@ -906,7 +914,7 @@ function findIfConditionEnd(line) {
  *
  * @param {vscode.TextDocument} document - Document to analyze
  * @param {vscode.DiagnosticCollection} collection - Target diagnostics collection
- * @param {DiagnosticsContext} ctx - Explicit diagnostics dependencies
+ * @param {DiagnosticsContext} ctx - The settings the checks read
  * @returns {void}
  */
 function updateDiagnostics(document, collection, ctx) {

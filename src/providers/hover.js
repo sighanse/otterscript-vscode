@@ -155,20 +155,21 @@ function registerHover(settings, listWorkspaceModules) {
 
         const exprRange = document.getWordRangeAtPosition(position, /%\(|@\(|\$\(/);
         if (exprRange) {
-            const text = document.getText(exprRange);
-            if (text === '%(') {
-              return new vscode.Hover(
-                buildHoverMarkdown(syntaxDocs.mapExpr, settings.product), exprRange);
-            }
-            if (text === '@(') {
-              return new vscode.Hover(
-                buildHoverMarkdown(syntaxDocs.vectorExpr, settings.product), exprRange);
-            }
-            if (text === '$(') {
-              return new vscode.Hover(
-                buildHoverMarkdown(syntaxDocs.nestedEval, settings.product), exprRange);
-            }
+          const text = document.getText(exprRange);
+          if (text === '%(') {
+            return new vscode.Hover(
+              buildHoverMarkdown(syntaxDocs.mapExpr, settings.product), exprRange);
+          }
+          if (text === '@(') {
+            return new vscode.Hover(
+              buildHoverMarkdown(syntaxDocs.vectorExpr, settings.product), exprRange);
+          }
+          if (text === '$(') {
+            return new vscode.Hover(
+              buildHoverMarkdown(syntaxDocs.nestedEval, settings.product), exprRange);
+          }
         }
+
         // -- Keywords (if, foreach, with, set, etc.)
         // Control flow and language keywords.
 
@@ -230,7 +231,8 @@ function registerHover(settings, listWorkspaceModules) {
 
         // -- Symbols ($function, @vector, %map function, $variable)
         // Most general case - matches any $, @, or % prefixed identifier
-        // Checks scalar/vector/map functions and variables
+        // Checks scalar/vector/map functions and the documented runtime
+        // variables; the file's own variables have no docs, so no hover.
         // Must be LAST because it matches many things
         const symbolRange = document.getWordRangeAtPosition(
           position,

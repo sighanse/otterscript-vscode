@@ -3,8 +3,9 @@
  * @fileoverview Navigation for OtterScript: Go to Definition for variables
  * (their assignments) and modules (in this file, else elsewhere in the
  * workspace), Find References and Rename (F2) for modules -- across workspace
- * files -- and Rename for variables, highlighting a variable's or module's occurrences, the Outline,
- * reference-count CodeLens, and folding.
+ * files -- and Rename for variables (within the file), highlighting a
+ * variable's or module's occurrences, the Outline, reference-count CodeLens,
+ * and folding.
  */
 
 const vscode = require("vscode");
@@ -320,7 +321,6 @@ function registerNavigation(settings, workspace) {
   // Clicking a variable or module name highlights every use of it in the
   // file; declarations and assignment targets are marked as writes.
 
-
   const documentHighlightProvider = vscode.languages.registerDocumentHighlightProvider(
     "otterscript",
     {
@@ -389,7 +389,8 @@ function registerNavigation(settings, workspace) {
   // CODE LENS PROVIDER (Module References)
   // ============================================================
   // Shows reference counts above module declarations and links to
-  // VS Code's reference peek UI.
+  // VS Code's reference peek UI. Counts the calls in this file only; Find
+  // References (Shift+F12) searches the workspace.
 
   const codeLensProvider = vscode.languages.registerCodeLensProvider(
     "otterscript",
@@ -429,8 +430,8 @@ function registerNavigation(settings, workspace) {
   // ============================================================
   // FOLDING RANGE PROVIDER
   // ============================================================
-  // Lets users collapse { } blocks, %(...), @(... ), <% %> template tags,
-  // /* */ block comments, and #region/#endregion.
+  // Lets users collapse { } blocks, %(...), @(...), <% %> template tags,
+  // /* */ block comments, swim strings, and #region/#endregion.
   // Reuses the same CodeScanState masking pass as diagnostics, so folding
   // never disagrees with what diagnostics/hover treat as real code.
 
