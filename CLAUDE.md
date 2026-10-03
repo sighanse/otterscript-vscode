@@ -43,6 +43,12 @@ type-checked from JSDoc, bundled by esbuild into `dist/extension.js`.
   block with `@param` and `@returns`. Match the surrounding code.
 - Add or update tests with every behavior change: unit tests in `test/unit/`
   (plain Node, a `vscode` stub), integration tests in `test/integration/`.
+  A module's unit tests go in the test file named after it
+  (`src/providers/hover.js` -> `test/unit/hover.test.js`).
+- **For a bug fix, write the test first**, run it, and see it fail for the
+  reason reported before changing the code. A test that can't fail, such as
+  one for a review finding that turns out to be wrong, is the sign to say so
+  instead of changing code.
 
 ## OtterScript facts the code relies on
 

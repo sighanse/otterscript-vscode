@@ -1,24 +1,10 @@
 // @ts-check
 /**
- * @fileoverview Unit tests for the helpers that build `vscode.*` value
- * objects: in src/helpers.js, and the diagnostic checks (diagnostics.js),
- * quick fixes (providers/code-actions.js) and folding (providers/navigation.js)
- * that used to live there.
+ * @fileoverview Unit tests for src/helpers.js: the hover and completion
+ * builders, product forms, settings, timers and the small lookups the
+ * providers share.
  *
- * These require the `vscode` module stub (test/vscode-stub.js) to be installed
- * before those modules load — hence the ordering of the requires below.
- *
- * Covered:
- *   - checkMissingDollar
- *   - findDuplicateMapKeyDiagnosticsFromMasked
- *   - computeFoldingRanges
- *   - buildHoverMarkdown / buildCompletionItem
- *   - nearestNamespace / createUnknownNamespaceFix
- *   - the other quick-fix factories, createUnbalancedDiagnostic, getDiagnosticCode
- *   - validateDocs (test/unit/validate-docs.js), signature-help's call regexes
- *   - getTypedIdentifier, isInStringOrCommentDoc, isValidCompletionPosition
- *   - loadConfig, scheduleTimerForUri / clearTimerForUri
- *   - mapWithConcurrency
+ * Requires the vscode stub before helpers.js (which pulls in vscode) loads.
  */
 
 require("../vscode-stub");
@@ -26,14 +12,9 @@ require("../vscode-stub");
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
-const {
-  Position,
-  DiagnosticSeverity,
-  FoldingRangeKind,
-} = require("../vscode-stub");
+const { Position } = require("../vscode-stub");
 const stub = require("../vscode-stub");
 const { makeDocument } = require("./fake-document");
-const { advanceScanState, createCodeScanState, isInStringOrComment } = require("../../src/scanner.js");
 const {
   buildCompletionItem,
   resolveCompletionDocumentation,
@@ -49,31 +30,6 @@ const {
   productSignatures,
   scheduleTimerForUri,
 } = require("../../src/helpers.js");
-const { validateDocs } = require("./validate-docs");
-const { FUNCTION_SIGNATURE_REGEX, OPERATION_SIGNATURE_REGEX, activeParameterIndex, activeSignatureIndex, findSignatureCall, parameterLabels } = require("../../src/providers/signature-help.js");
-const { getMaskedTextAfter, getMaskedTextBefore, isInStringOrCommentDoc } = require("../../src/document-index.js");
-const {
-  checkMissingDollar,
-  createUnbalancedDiagnostic,
-  findDuplicateMapKeyDiagnosticsFromMasked,
-  getDiagnosticCode,
-} = require("../../src/diagnostics.js");
-const {
-  createAssignmentInConditionFix,
-  createForToForeachFix,
-  createInvalidOperatorFix,
-  createMissingArgumentFix,
-  createMissingDollarFix,
-  createTemplateEndFix,
-  createUnknownArgumentFix,
-  createUnknownFunctionFix,
-  createUnknownNamespaceFix,
-  createUnknownOperationFix,
-  nearestNamespace,
-} = require("../../src/providers/code-actions.js");
-const { computeFoldingRanges } = require("../../src/providers/navigation.js");
-
-const LITERALS = new Set(["true", "false", "null"]);
 
 /**
  * A `vscode.Position`-shaped value typed as `any` for calls into helpers whose
@@ -94,194 +50,7 @@ const pos = (line, character) => new Position(line, character);
 const makeDoc = (text) => makeDocument(text);
 
 // ============================================================
-// checkMissingDollar
-// ============================================================
-
-describe("checkMissingDollar", () => {
-  it("flags a bare variable on the left of an if comparison", () => {
-    const diag = checkMissingDollar("if x == 5", 0, LITERALS);
-    assert.ok(diag, "expected a diagnostic");
-    assert.equal(diag.code, "missing-dollar");
-    assert.equal(diag.source, "OtterScript");
-    assert.equal(diag.severity, DiagnosticSeverity.Error);
-    assert.match(diag.message, /\$x/);
-    assert.equal(diag.range.start.line, 0);
-    assert.equal(diag.range.start.character, 3, "points at 'x'");
-    assert.equal(diag.range.end.character, 4);
-  });
-
-  it("returns null when the variable already has a '$'", () => {
-    assert.equal(checkMissingDollar("if $x == 5", 0, LITERALS), null);
-  });
-
-  it("returns null for boolean/null literals", () => {
-    assert.equal(checkMissingDollar("if true == 1", 0, LITERALS), null);
-    assert.equal(checkMissingDollar("if null != 1", 0, LITERALS), null);
-  });
-
-  it("returns null for non-if lines", () => {
-    assert.equal(checkMissingDollar("set $x = 5", 0, LITERALS), null);
-    assert.equal(checkMissingDollar("foreach $s in @servers", 0, LITERALS), null);
-  });
-
-  it("sees through leading parentheses", () => {
-    const diag = checkMissingDollar("if (count > 3", 0, LITERALS);
-    assert.ok(diag);
-    assert.equal(diag.range.start.character, 4, "points past '('");
-    assert.equal(diag.range.end.character, 9);
-  });
-
-  it("accounts for leading indentation and reports the given line index", () => {
-    const diag = checkMissingDollar("    if ready == false", 7, LITERALS);
-    assert.ok(diag);
-    assert.equal(diag.range.start.line, 7);
-    assert.equal(diag.range.start.character, 7);
-  });
-
-  it("handles the various comparison operators", () => {
-    for (const op of ["=", "==", "!=", "<", ">", "<=", ">="]) {
-      assert.ok(checkMissingDollar(`if x ${op} 1`, 0, LITERALS), `operator ${op}`);
-    }
-  });
-});
-
-// ============================================================
-// findDuplicateMapKeyDiagnosticsFromMasked
-// ============================================================
-
-describe("findDuplicateMapKeyDiagnosticsFromMasked", () => {
-  /** @param {string} src */
-  const run = (src) => findDuplicateMapKeyDiagnosticsFromMasked(makeDoc(src), src);
-
-  it("reports the second occurrence of a repeated top-level key", () => {
-    const src = "%( a: 1, b: 2, a: 3 )";
-    const diags = run(src);
-    assert.equal(diags.length, 1);
-    assert.equal(diags[0].code, "duplicate-map-key");
-    assert.equal(diags[0].source, "OtterScript");
-    assert.equal(diags[0].severity, DiagnosticSeverity.Warning);
-    assert.match(diags[0].message, /Duplicate key 'a'/);
-    // range points at the duplicate 'a', i.e. the second one
-    assert.equal(diags[0].range.start.character, src.lastIndexOf("a"));
-  });
-
-  it("does not report when every key is unique", () => {
-    assert.deepEqual(run("%( a: 1, b: 2, c: 3 )"), []);
-  });
-
-  it("ignores keys nested inside a child map", () => {
-    // inner 'a' is nested; only the outer 'a' repeats
-    const diags = run("%( a: 1, b: %( a: 9 ), a: 2 )");
-    assert.equal(diags.length, 1);
-    assert.match(diags[0].message, /Duplicate key 'a'/);
-  });
-
-  it("reports a duplicate inside a map nested in another map", () => {
-    const src = "%( x: %( a: 1, a: 2 ) )";
-    const diags = run(src);
-    assert.equal(diags.length, 1);
-    assert.equal(diags[0].range.start.character, src.lastIndexOf("a"));
-  });
-
-  it("reports duplicates independently per map expression", () => {
-    const diags = run("x = %( a: 1, a: 2 ); y = %( b: 1, b: 2 )");
-    assert.equal(diags.length, 2);
-    assert.deepEqual(diags.map((d) => d.message).sort(), [
-      "Duplicate key 'a' in map expression.",
-      "Duplicate key 'b' in map expression.",
-    ]);
-  });
-
-  it("accepts dashes in key names", () => {
-    assert.equal(run("%( my-key: 1, my-key: 2 )").length, 1);
-  });
-
-  it("reports a third occurrence too", () => {
-    assert.equal(run("%( a: 1, a: 2, a: 3 )").length, 2);
-  });
-
-  it("does not crash on an unclosed '%(' (no matching ')')", () => {
-    assert.deepEqual(run("$m = %( a: 1, a: 2"), []);
-  });
-});
-
-// ============================================================
-// computeFoldingRanges
-// ============================================================
-
-describe("computeFoldingRanges", () => {
-  /** @param {string} src */
-  const run = (src) => computeFoldingRanges(makeDoc(src));
-
-  it("folds a multi-line brace block", () => {
-    const ranges = run(["if $x {", "  Log-Info foo;", "}"].join("\n"));
-    assert.equal(ranges.length, 1);
-    assert.equal(ranges[0].start, 0);
-    assert.equal(ranges[0].end, 2);
-    assert.equal(ranges[0].kind, undefined, "not a Region: Fold All Regions is for #region");
-  });
-
-  it("does not fold a single-line brace block", () => {
-    assert.deepEqual(run("if $x { Log-Info foo; }"), []);
-  });
-
-  it("folds a #region / #endregion pair", () => {
-    const ranges = run(["#region setup", "$x = 1;", "$y = 2;", "#endregion"].join("\n"));
-    assert.equal(ranges.length, 1);
-    assert.equal(ranges[0].start, 0);
-    assert.equal(ranges[0].end, 3);
-    assert.equal(ranges[0].kind, FoldingRangeKind.Region);
-  });
-
-  it("folds a multi-line block comment as a Comment range", () => {
-    const ranges = run(["/* first", " * second", " */ code"].join("\n"));
-    assert.equal(ranges.length, 1);
-    assert.equal(ranges[0].start, 0);
-    assert.equal(ranges[0].end, 2);
-    assert.equal(ranges[0].kind, FoldingRangeKind.Comment);
-  });
-
-  it("folds a multi-line swim-string, with no kind", () => {
-    const ranges = run(["$s = >END>", "line one", "line two", ">END>;"].join("\n"));
-    assert.equal(ranges.length, 1);
-    assert.equal(ranges[0].start, 0);
-    assert.equal(ranges[0].end, 3);
-    assert.equal(ranges[0].kind, undefined);
-  });
-
-  it("ignores braces that live inside string literals", () => {
-    const ranges = run(['$open = "{";', "$mid = 1;", '$close = "}";'].join("\n"));
-    assert.deepEqual(ranges, []);
-  });
-
-  it("folds a multi-line map literal", () => {
-    const ranges = run(["$m = %(", "  a: 1,", "  b: 2", ")"].join("\n"));
-    assert.equal(ranges.length, 1);
-    assert.equal(ranges[0].start, 0);
-    assert.equal(ranges[0].end, 3);
-  });
-
-  it("folds a multi-line <% %> template tag", () => {
-    const ranges = run(["<%", "  Log-Information $x;", "%>"].join("\n"));
-    assert.equal(ranges.length, 1);
-    assert.equal(ranges[0].start, 0);
-    assert.equal(ranges[0].end, 2);
-    assert.equal(ranges[0].kind, undefined);
-  });
-
-  it("returns nested brace ranges, innermost first", () => {
-    const ranges = run(["a {", "  b {", "    c;", "  }", "}"].join("\n"));
-    assert.equal(ranges.length, 2);
-    // inner block closes first, so it is pushed first
-    assert.deepEqual(ranges.map((r) => [r.start, r.end]), [
-      [1, 3],
-      [0, 4],
-    ]);
-  });
-});
-
-// ============================================================
-// buildHoverMarkdown — namespace line
+// buildHoverMarkdown
 // ============================================================
 
 describe("buildHoverMarkdown (other products' forms)", () => {
@@ -358,160 +127,20 @@ describe("buildHoverMarkdown (namespace provenance)", () => {
 });
 
 // ============================================================
-// nearestNamespace
+// productSignatures
 // ============================================================
 
-describe("nearestNamespace", () => {
-  it("returns the canonical casing for a case-only mismatch", () => {
-    assert.equal(nearestNamespace("proget"), "ProGet");
-    assert.equal(nearestNamespace("WINDOWS"), "Windows");
-  });
-
-  it("corrects a small typo (insertion, substitution, transposition)", () => {
-    assert.equal(nearestNamespace("PowerShel"), "PowerShell");
-    assert.equal(nearestNamespace("Windoze"), "Windows");
-    assert.equal(nearestNamespace("Dokcer"), "Docker");
-    assert.equal(nearestNamespace("filez"), "Files");
-  });
-
-  it("returns null for a token that is not a plausible typo of any namespace", () => {
-    assert.equal(nearestNamespace("Frobnicate"), null);
-    assert.equal(nearestNamespace("Xyzzy"), null);
-  });
-});
-
-// ============================================================
-// createUnknownNamespaceFix
-// ============================================================
-
-describe("createUnknownNamespaceFix", () => {
-  /**
-   * @param {string} line
-   * @param {number} start
-   * @param {number} end
-   */
-  const fixFor = (line, start, end) => {
-    const doc = makeDoc(line);
-    const diagnostic = /** @type {any} */ ({
-      range: { start: new Position(0, start), end: new Position(0, end) },
-      code: "unknown-namespace",
-      source: "OtterScript",
-    });
-    return createUnknownNamespaceFix(doc, diagnostic);
-  };
-
-  it("replaces the token with the nearest known namespace", () => {
-    const fix = /** @type {any} */ (fixFor("Windoze::Sign-Exe (SubjectName: x);", 0, 7));
-    assert.ok(fix);
-    assert.equal(fix.title, "Change namespace to 'Windows'");
-    assert.equal(fix.isPreferred, false, "a guess: left to the lightbulb, not Fix All");
-    const [op, , range, newText] = fix.edit.edits[0];
-    assert.equal(op, "replace");
-    assert.equal(newText, "Windows");
-    assert.equal(range.start.character, 0);
-    assert.equal(range.end.character, 7);
-  });
-
-  it("fixes a case-only mismatch to canonical casing", () => {
-    const fix = fixFor("proget::Install-Package (Name: x);", 0, 6);
-    assert.ok(fix);
-    assert.equal(fix.title, "Change namespace to 'ProGet'");
-    assert.equal(fix.isPreferred, true, "only the casing: Fix All applies it");
-  });
-
-  it("returns null when nothing is close enough to suggest", () => {
-    assert.equal(fixFor("Frobnicate::Do-Thing x;", 0, 10), null);
-  });
-});
-
-// ============================================================
-// Name suggestions and missing arguments
-// ============================================================
-
-describe("name-suggestion and missing-argument fixes", () => {
-  /**
-   * The fix `factory` offers for a diagnostic over `[start, end)` of `text`'s
-   * line `line`.
-   *
-   * @param {(doc: any, diagnostic: any) => any} factory
-   * @param {string} text
-   * @param {number} start
-   * @param {number} end
-   * @param {number} [line]
-   * @returns {any}
-   */
-  const fixFor = (factory, text, start, end, line = 0) =>
-    factory(makeDoc(text), { range: new stub.Range(new Position(line, start), new Position(line, end)), source: "OtterScript" });
-  /**
-   * `text` with the fix's edits applied.
-   *
-   * @param {any} fix
-   * @param {string} text
-   * @returns {string}
-   */
-  const applied = (fix, text) => {
-    const doc = makeDoc(text);
-    const edits = fix.edit.edits.map((/** @type {any} */ [op, , where, newText]) => {
-      const start = doc.offsetAt(op === "insert" ? where : where.start);
-      return { start, end: op === "insert" ? start : doc.offsetAt(where.end), newText };
-    });
-    return edits.sort((/** @type {any} */ a, /** @type {any} */ b) => b.start - a.start)
-      .reduce((/** @type {string} */ out, /** @type {any} */ e) => out.slice(0, e.start) + e.newText + out.slice(e.end), text);
-  };
-  /**
-   * @param {any} doc
-   * @param {any} diagnostic
-   */
-  const anyProduct = (doc, diagnostic) => createUnknownFunctionFix(doc, diagnostic, "any");
-
-  it("changes an unknown function to the closest of its sigil, preferred only for a casing difference", () => {
-    const fix = fixFor(anyProduct, "set $s = $Substrng($x, 1);", 10, 18);
-    assert.equal(fix.title, "Change to '$Substring'");
-    assert.equal(fix.isPreferred, false);
-    assert.equal(applied(fix, "set $s = $Substrng($x, 1);"), "set $s = $Substring($x, 1);");
-    assert.equal(fixFor(anyProduct, "set $s = $substring($x, 1);", 10, 19).isPreferred, true);
-    assert.equal(fixFor(anyProduct, "set @l = @Splitt($x);", 10, 16).title, "Change to '@Split'");
-    assert.equal(fixFor(anyProduct, "set $s = $Frobnicate();", 10, 20), null);
-  });
-
-  it("changes an unknown operation to the closest one, in the namespace written", () => {
-    /**
-     * @param {any} doc
-     * @param {any} diagnostic
-     */
-    const factory = (doc, diagnostic) => createUnknownOperationFix(doc, diagnostic, "any");
-    assert.equal(fixFor(factory, "Copy-Fils(To: $x);", 0, 9).title, "Change to 'Copy-Files'");
-    assert.equal(fixFor(factory, "ProGet::Create-Directori(Path: x);", 8, 24).title, "Change to 'Create-Directory'");
-    assert.equal(fixFor(factory, "Frobnicate-Everything;", 0, 21), null);
-  });
-
-  it("changes a misspelt argument name to the documented one", () => {
-    const text = 'Copy-Files(Fomr: "a", To: "b");';
-    const fix = fixFor(createUnknownArgumentFix, text, 11, 15);
-    assert.equal(fix.title, "Change to 'From'");
-    assert.equal(applied(fix, text), 'Copy-Files(From: "a", To: "b");');
-  });
-
-  it("adds the missing required arguments after the last one, on lines of their own in a multi-line call", () => {
-    /**
-     * @param {string} text
-     * @param {number} start - Of the operation name, on line 0
-     * @param {number} end
-     */
-    const add = (text, start, end) => {
-      const fix = fixFor(createMissingArgumentFix, text, start, end);
-      assert.equal(fix.isPreferred, false, "the values are the user's to write");
-      return applied(fix, text);
+describe("productSignatures", () => {
+  it("productSignatures gives the selected product's form, or every form for any", () => {
+    const doc = {
+      signature: "$PackageProperty(name, [default])",
+      overloads: [{ product: "BuildMaster", signature: "$PackageProperty(packageName, packageProperty, [sourceName])" }],
     };
-    assert.equal(add('Copy-Files(From: "a, b");', 0, 10), 'Copy-Files(From: "a, b", To: );');
-    assert.equal(add("Copy-Files();", 0, 10), "Copy-Files(To: );");
-    assert.equal(add('Copy-Files(\n    From: "a" # (source)\n);', 0, 10), 'Copy-Files(\n    From: "a", # (source)\n    To: \n);');
-    assert.equal(add('Copy-Files(\n    Include: @("*"),\n);', 0, 10), 'Copy-Files(\n    Include: @("*"),\n    To: \n);');
-    assert.equal(add('Jira::Create-Issue(Title: "x");', 6, 18), 'Jira::Create-Issue(Title: "x", Type: );');
-    // A block comment that goes on past the line: on the same line, not in the comment.
-    assert.equal(add('Copy-Files(\n    From: "a" /* source\n    folder */\n);', 0, 10),
-      'Copy-Files(\n    From: "a", To:  /* source\n    folder */\n);');
-    assert.equal(fixFor(createMissingArgumentFix, 'Copy-Files(From: "a", To: "b");', 0, 10), null, "nothing missing any more");
+    assert.deepEqual(productSignatures(doc, "BuildMaster"), [doc.overloads[0].signature]);
+    assert.deepEqual(productSignatures(doc, "ProGet"), [doc.signature]);
+    assert.deepEqual(productSignatures(doc, "any"), [doc.signature, doc.overloads[0].signature]);
+    assert.deepEqual(productSignatures({ signature: "$X(a)" }, "Otter"), ["$X(a)"]);
+    assert.deepEqual(productSignatures({}, "any"), []);
   });
 });
 
@@ -576,141 +205,6 @@ describe("mapWithConcurrency", () => {
       }),
       /boom/
     );
-  });
-});
-
-// ============================================================
-// validateDocs
-// ============================================================
-
-describe("validateDocs", () => {
-  const good = { name: "X", description: "does X", namespace: null };
-
-  it("passes a well-formed table", () => {
-    const { errors, warnings } = validateDocs("t", { X: good });
-    assert.deepEqual(errors, []);
-    assert.deepEqual(warnings, []);
-  });
-
-  it("checks the shape of 'overloads'", () => {
-    const ok = validateDocs("t", { X: { ...good, overloads: [{ product: "BuildMaster", signature: "$X(a)" }] } });
-    assert.deepEqual(ok.warnings, []);
-    const bad = validateDocs("t", { X: { ...good, overloads: [{ product: "BuildMaster" }] } });
-    assert.equal(bad.warnings.length, 1);
-  });
-
-  it("errors on a missing name / description", () => {
-    const { errors } = validateDocs("t", {
-      A: { description: "d", namespace: null },
-      B: { name: "B", namespace: null },
-    });
-    assert.ok(errors.some((e) => /A .*missing required 'name'/.test(e)));
-    assert.ok(errors.some((e) => /B .*missing required 'description'/.test(e)));
-  });
-
-  it("errors when 'namespace' is absent", () => {
-    const { errors } = validateDocs("t", { X: { name: "X", description: "d" } });
-    assert.ok(errors.some((e) => /missing required 'namespace'/.test(e)));
-  });
-
-  it("errors on a namespace outside the allowlist, accepts null and a known one", () => {
-    assert.ok(validateDocs("t", { X: { ...good, namespace: "Bogus" } }).errors.length > 0);
-    assert.deepEqual(validateDocs("t", { X: { ...good, namespace: "ProGet" } }).errors, []);
-    assert.deepEqual(validateDocs("t", { X: { ...good, namespace: null } }).errors, []);
-  });
-
-  it("warns on any non-string optional field", () => {
-    const { warnings } = validateDocs("t", {
-      X: { ...good, snippet: 42, signature: 1, documentation: {} },
-    });
-    assert.ok(warnings.some((w) => /'snippet' must be a string/.test(w)));
-    assert.ok(warnings.some((w) => /'signature' must be a string/.test(w)));
-    assert.ok(warnings.some((w) => /'documentation' must be a string/.test(w)));
-  });
-
-  it("errors on a non-object entry", () => {
-    assert.ok(validateDocs("t", { X: "nope" }).errors.some((e) => /is not an object/.test(e)));
-  });
-
-  it("warns on an optional string field of another type, falsy ones too", () => {
-    for (const field of ["snippet", "signature", "documentation"]) {
-      for (const value of [false, 0, null, 42]) {
-        const { warnings } = validateDocs("t", { X: { name: "X", description: "d", namespace: null, [field]: value } });
-        assert.ok(warnings.some((w) => w.includes(`'${field}' must be a string`)), `${field}: ${value}`);
-      }
-      assert.deepEqual(validateDocs("t", { X: { name: "X", description: "d", namespace: null, [field]: "" } }).warnings, [], `${field}: ""`);
-    }
-  });
-});
-
-// ============================================================
-// signature help: the call the cursor is in
-// ============================================================
-
-describe("signature help call regexes", () => {
-  it("FUNCTION_SIGNATURE_REGEX captures sigil, name and partial args, but not a '%(' literal", () => {
-    const m = "set %m = %ListItem(@x, ".match(FUNCTION_SIGNATURE_REGEX);
-    assert.deepEqual(m?.slice(1), ["%", "ListItem", "@x, "]);
-    assert.deepEqual("set $r = $Substring(text, 1".match(FUNCTION_SIGNATURE_REGEX)?.slice(1), ["$", "Substring", "text, 1"]);
-    assert.equal("set %m = %(a: ".match(FUNCTION_SIGNATURE_REGEX), null);
-  });
-
-  it("OPERATION_SIGNATURE_REGEX captures a bare and a namespaced operation, not 'set $x = ('", () => {
-    assert.equal("Copy-Files(Include: a".match(OPERATION_SIGNATURE_REGEX)?.[2], "Copy-Files");
-    assert.deepEqual("ProGet::Create-Directory foo (Path: b".match(OPERATION_SIGNATURE_REGEX)?.slice(1, 3), ["ProGet", "Create-Directory"]);
-    assert.equal("set $x = (".match(OPERATION_SIGNATURE_REGEX), null);
-    assert.equal("Linux::SHEnsure2(Name: a".match(OPERATION_SIGNATURE_REGEX)?.[2], "SHEnsure2", "digits in the name");
-    assert.equal("Log-Information x;Copy-Files(To: a".match(OPERATION_SIGNATURE_REGEX)?.[2], "Copy-Files", "right after ';'");
-    assert.equal("if $x {Copy-Files(To: a".match(OPERATION_SIGNATURE_REGEX)?.[2], "Copy-Files", "right after '{'");
-  });
-
-  it("parameterLabels gives each parameter's own offsets in the label", () => {
-    const label = "$Pad(pad, padding, [p])";
-    const labels = parameterLabels(label, ["pad", "padding", "[p]"]);
-    assert.deepEqual(labels.map((l) => (typeof l === "string" ? l : label.slice(l[0], l[1]))), ["pad", "padding", "[p]"]);
-    assert.deepEqual(labels[0], [5, 8], "not the 'Pad' of the name, nor inside 'padding'");
-    assert.deepEqual(parameterLabels("F(a)", ["zz"]), ["zz"], "not found: a string label");
-  });
-
-  it("activeParameterIndex follows a typed Name:, else the argument position", () => {
-    const params = ["[Include: <@(text)>]", "[From: <text>]", "To: <text>"];
-    assert.equal(activeParameterIndex("From: a, To: ", params), 2, "named, out of order");
-    assert.equal(activeParameterIndex("a, ", params), 1, "positional");
-    assert.equal(activeParameterIndex("result: ", ["name", "[out result]"]), 1, "a module's out parameter");
-    assert.equal(activeParameterIndex("output-file: ", ["name", "[output-file]"]), 1, "a dashed name");
-    assert.equal(activeParameterIndex("Url: $u, ResponseBody => ", ["[Method]", "Url", "[ResponseBody]"]), 2, "an output capture");
-    assert.equal(activeParameterIndex("ResponseBody => ", ["Url: <text>", "[ResponseBody => <text>]"]), 1, "an output's => label");
-  });
-
-  it("productSignatures gives the selected product's form, or every form for any", () => {
-    const doc = {
-      signature: "$PackageProperty(name, [default])",
-      overloads: [{ product: "BuildMaster", signature: "$PackageProperty(packageName, packageProperty, [sourceName])" }],
-    };
-    assert.deepEqual(productSignatures(doc, "BuildMaster"), [doc.overloads[0].signature]);
-    assert.deepEqual(productSignatures(doc, "ProGet"), [doc.signature]);
-    assert.deepEqual(productSignatures(doc, "any"), [doc.signature, doc.overloads[0].signature]);
-    assert.deepEqual(productSignatures({ signature: "$X(a)" }, "Otter"), ["$X(a)"]);
-    assert.deepEqual(productSignatures({}, "any"), []);
-  });
-
-  it("activeSignatureIndex picks the first form the typed arguments fit", () => {
-    const forms = ["$PackageProperty(name, [default])", "$PackageProperty(packageName, packageProperty, [sourceName])"];
-    assert.equal(activeSignatureIndex("a", forms), 0);
-    assert.equal(activeSignatureIndex("a, b", forms), 0);
-    assert.equal(activeSignatureIndex("a, b, ", forms), 1, "a third argument only the second form takes");
-    assert.equal(activeSignatureIndex("a, b, c, d", forms), 0, "none fits: the first");
-    const ops = ["Ensure-Site(Name: <text>, [Binding: <text>])", "Ensure-Site(Name: <text>, [Bindings: <text>])"];
-    assert.equal(activeSignatureIndex("Name: a, Bindings: ", ops), 1, "the form that has the typed name");
-  });
-
-  it("findSignatureCall prefers the function the cursor is in, then the operation", () => {
-    assert.equal(findSignatureCall("Copy-Files(Include: $Trim(a")?.doc.name, "$Trim");
-    assert.equal(findSignatureCall("Copy-Files(Include: a")?.isOperation, true);
-    assert.equal(findSignatureCall("$Frobnicate(a"), null);
-    // A namespace picks between same-named operations.
-    assert.match(findSignatureCall("DotNet::Build(Project: a")?.doc.signature ?? "", /^Build\(Project:/);
-    assert.match(findSignatureCall("Build(ProjectFile: a")?.doc.signature ?? "", /^Build\(ProjectFile:/);
   });
 });
 
@@ -809,95 +303,7 @@ describe("buildCompletionItem", () => {
 });
 
 // ============================================================
-// quick-fix factories
-// ============================================================
-
-describe("quick-fix factories", () => {
-  /**
-   * @param {number} s
-   * @param {number} e
-   */
-  const diagAt = (s, e) => /** @type {any} */ ({
-    range: { start: new Position(0, s), end: new Position(0, e) },
-  });
-
-  it("createMissingDollarFix inserts '$' at the diagnostic start", () => {
-    const fix = /** @type {any} */ (createMissingDollarFix(makeDoc("if x == 5"), diagAt(3, 4)));
-    assert.equal(fix.title, "Insert missing '$'");
-    assert.equal(fix.isPreferred, true);
-    assert.equal(fix.diagnostics.length, 1);
-    const [op, , at, text] = fix.edit.edits[0];
-    assert.equal(op, "insert");
-    assert.equal(text, "$");
-    assert.equal(at.character, 3);
-  });
-
-  it("createInvalidOperatorFix: & -> &&, | -> ||, other -> null", () => {
-    const amp = /** @type {any} */ (createInvalidOperatorFix(makeDoc("if $a & $b"), diagAt(6, 7)));
-    assert.equal(amp.title, "Replace '&' with '&&'");
-    assert.equal(amp.edit.edits[0][3], "&&");
-    const pipe = /** @type {any} */ (createInvalidOperatorFix(makeDoc("if $a | $b"), diagAt(6, 7)));
-    assert.equal(pipe.edit.edits[0][3], "||");
-    assert.equal(createInvalidOperatorFix(makeDoc("if $a + $b"), diagAt(6, 7)), null);
-  });
-
-  it("createAssignmentInConditionFix: '=' -> '==', anything else -> null", () => {
-    const fix = /** @type {any} */ (createAssignmentInConditionFix(makeDoc("if $x = 5"), diagAt(6, 7)));
-    assert.equal(fix.title, "Replace '=' with '=='");
-    assert.equal(fix.edit.edits[0][3], "==");
-    assert.equal(createAssignmentInConditionFix(makeDoc("if $x == 5"), diagAt(6, 8)), null);
-  });
-
-  it("createForToForeachFix replaces 'for' with 'foreach'", () => {
-    const fix = /** @type {any} */ (createForToForeachFix(makeDoc("for $x in y"), diagAt(0, 3)));
-    assert.equal(fix.title, "Replace 'for' with 'foreach'");
-    assert.equal(fix.edit.edits[0][3], "foreach");
-  });
-
-  it("createForToForeachFix also works for a dashed loop variable", () => {
-    assert.ok(createForToForeachFix(makeDoc("for $item-name in @list {"), diagAt(0, 3)));
-  });
-
-  it("createForToForeachFix offers nothing for the counting form, which has no foreach equivalent", () => {
-    assert.equal(createForToForeachFix(makeDoc("for $i = 1 to 10 {"), diagAt(0, 3)), null);
-  });
-
-  it("createTemplateEndFix replaces the diagnostic range with '}'", () => {
-    const fix = /** @type {any} */ (createTemplateEndFix(makeDoc("<% end %>"), diagAt(3, 6)));
-    assert.equal(fix.title, "Replace with '}'");
-    assert.equal(fix.edit.edits[0][0], "replace");
-    assert.equal(fix.edit.edits[0][3], "}");
-  });
-});
-
-// ============================================================
-// createUnbalancedDiagnostic
-// ============================================================
-
-describe("createUnbalancedDiagnostic", () => {
-  const doc = makeDoc("line one\nline two three");
-
-  it("describes unclosed openers", () => {
-    const d = createUnbalancedDiagnostic(2, 0, "{", "}", "brace", doc);
-    assert.ok(d);
-    assert.match(d.message, /Unclosed brace\(s\): 2 '\{' not closed \(first at line 1, col 1\)/);
-    assert.equal(d.severity, DiagnosticSeverity.Error);
-    assert.equal(d.source, "OtterScript");
-  });
-
-  it("describes an unexpected closer (negative count)", () => {
-    const d = createUnbalancedDiagnostic(-1, 9, "(", ")", "parenthesis", doc);
-    assert.ok(d);
-    assert.match(d.message, /Unexpected closing parenthesis: Extra '\)' at line 2, col 1/);
-  });
-
-  it("returns null when balanced", () => {
-    assert.equal(createUnbalancedDiagnostic(0, 0, "{", "}", "brace", doc), null);
-  });
-});
-
-// ============================================================
-// getDiagnosticCode
+// lookupOwn
 // ============================================================
 
 describe("lookupOwn", () => {
@@ -907,16 +313,6 @@ describe("lookupOwn", () => {
     for (const inherited of ["constructor", "toString", "valueOf", "hasOwnProperty", "__proto__"]) {
       assert.equal(lookupOwn(table, inherited), undefined, inherited);
     }
-  });
-});
-
-describe("getDiagnosticCode", () => {
-  it("normalizes string / {value} / number / missing", () => {
-    assert.equal(getDiagnosticCode(/** @type {any} */ ({ code: "missing-dollar" })), "missing-dollar");
-    assert.equal(getDiagnosticCode(/** @type {any} */ ({ code: { value: "x", target: {} } })), "x");
-    assert.equal(getDiagnosticCode(/** @type {any} */ ({ code: 42 })), "42");
-    assert.equal(getDiagnosticCode(/** @type {any} */ ({ code: undefined })), "");
-    assert.equal(getDiagnosticCode(/** @type {any} */ ({})), "");
   });
 });
 
@@ -946,85 +342,8 @@ describe("getTypedIdentifier", () => {
 });
 
 // ============================================================
-// isInStringOrCommentDoc / isValidCompletionPosition
+// isValidCompletionPosition
 // ============================================================
-
-describe("isInStringOrCommentDoc", () => {
-  it("is true inside a string, false in code", () => {
-    assert.equal(isInStringOrCommentDoc(makeDoc('a = "bcd'), pos(0, 6)), true);
-    assert.equal(isInStringOrCommentDoc(makeDoc("if $x == 5"), pos(0, 5)), false);
-  });
-
-  it("matches a fresh scan at every position, whatever order lines are asked in (cached states)", () => {
-    const text = [
-      'set $a = "one /* not a comment";',
-      "/* block",
-      "   still comment */ Log-Information $a;",
-      "set $b = >>swim",
-      "text >> + 'q';",
-      "# line comment \"x\"",
-      "end",
-    ].join("\n");
-    const doc = makeDoc(text);
-    const lines = text.split("\n");
-    /**
-     * @param {number} line
-     * @param {number} character
-     */
-    const fresh = (line, character) => {
-      const state = createCodeScanState();
-      for (let i = 0; i < line; i++) advanceScanState(lines[i], state);
-      return isInStringOrComment(lines[line], character, state);
-    };
-    const positions = lines.flatMap((l, line) => [...Array(l.length + 1).keys()].map((c) => [line, c]));
-    for (const [line, character] of [...positions].reverse()) {
-      assert.equal(isInStringOrCommentDoc(doc, pos(line, character)), fresh(line, character), `${line}:${character}`);
-    }
-  });
-
-  it("rescans when the document version changes", () => {
-    let text = "/* open\nx";
-    const doc = makeDoc(text);
-    doc.getText = () => text;
-    doc.lineAt = (/** @type {number} */ i) => ({ text: text.split("\n")[i] });
-    assert.equal(isInStringOrCommentDoc(doc, pos(1, 0)), true);
-    text = "// closed\nx";
-    doc.version = 2;
-    assert.equal(isInStringOrCommentDoc(doc, pos(1, 0)), false);
-  });
-
-  it("carries a block comment opened on a previous line", () => {
-    const doc = makeDoc("/* c\nstill inside\n*/ code");
-    assert.equal(isInStringOrCommentDoc(doc, pos(1, 3)), true);
-    assert.equal(isInStringOrCommentDoc(doc, pos(2, 4)), false);
-  });
-});
-
-describe("text templates: the literal output around the tags isn't code", () => {
-  const template = [
-    "Deployed <% Log-Information x; %>",
-    "# Heading: $PackageName <% Copy-Files(To: x",
-    "",
-  ].join("\n");
-
-  it("isInStringOrCommentDoc: only the code in a tag, and a $ expression in the text", () => {
-    const doc = makeDoc(template);
-    assert.equal(isInStringOrCommentDoc(doc, pos(1, 3)), true, "'Heading' is literal text, not a # comment");
-    assert.equal(isInStringOrCommentDoc(doc, pos(1, 15)), false, "$PackageName is expanded");
-    assert.equal(isInStringOrCommentDoc(doc, pos(1, 38)), false, "after '<% Copy-Files('");
-    assert.equal(isInStringOrCommentDoc(doc, pos(0, 3)), true, "'Deployed'");
-    assert.equal(isInStringOrCommentDoc(doc, pos(0, 15)), false, "Log-Information");
-    assert.equal(isInStringOrCommentDoc(makeDoc("# not a template <% x %>\n"), pos(0, 3)), true, "a comment, outside a template");
-  });
-
-  it("getMaskedTextBefore / getMaskedTextAfter see only the tags' code", () => {
-    const doc = makeDoc(template);
-    const before = getMaskedTextBefore(doc, pos(1, 42));
-    assert.match(before, /Copy-Files\(To:\s*$/);
-    assert.doesNotMatch(before, /Heading|Deployed/);
-    assert.equal(getMaskedTextAfter(doc, pos(1, 42)).trim(), "x");
-  });
-});
 
 describe("isValidCompletionPosition", () => {
   it("is false when completion is disabled", () => {

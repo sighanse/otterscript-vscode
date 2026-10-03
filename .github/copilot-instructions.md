@@ -14,7 +14,7 @@ Flag a pull request that breaks any of these:
 - **`src/scanner.js` never requires `vscode`.**
 - **Providers:** completion returns `[]`, hover and signature help return `null`, and nothing throws. `activate()` stays light; disposables go in `context.subscriptions`.
 - **Language data:** names and parameters match Inedo's reference. Hand-written entries in `src/language-data.js` win over generated ones; operations are looked up with `lookupOperation(name, namespace)`.
-- **Tests:** pure logic in `test/unit/*.test.js`, provider behavior in `test/integration/*.test.js`.
+- **Tests:** pure logic in `test/unit/<module>.test.js`, named after the module it tests; provider behavior in `test/integration/*.test.js`. A bug fix comes with a test that fails without it.
 - **CHANGELOG:** only user-visible changes, under `[Unreleased]`; no dependency, tooling, test, CI or refactoring entries.
 - **README** covers new settings, diagnostics and features.
 - **Code:** JSDoc on every function, with `@param`/`@returns` matching; `const`/`let`, never `var`; LF line endings.

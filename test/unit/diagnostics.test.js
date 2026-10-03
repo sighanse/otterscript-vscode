@@ -1,8 +1,8 @@
 // @ts-check
 /**
- * @fileoverview Unit tests for src/diagnostics.js `updateDiagnostics` — every
+ * @fileoverview Unit tests for src/diagnostics.js: `updateDiagnostics` — every
  * check it emits, plus non-code masking, cross-line scan state, and the
- * languageId guard.
+ * languageId guard — and, at the end, the single checks it is built from.
  *
  * Requires the vscode stub before diagnostics.js (which pulls in vscode) loads.
  */
@@ -14,7 +14,13 @@ const assert = require("node:assert/strict");
 const { makeDocument } = require("./fake-document");
 
 const { DiagnosticSeverity } = require("../vscode-stub");
-const { updateDiagnostics } = require("../../src/diagnostics.js");
+const {
+  checkMissingDollar,
+  createUnbalancedDiagnostic,
+  findDuplicateMapKeyDiagnosticsFromMasked,
+  getDiagnosticCode,
+  updateDiagnostics,
+} = require("../../src/diagnostics.js");
 
 /** The diagnostics context: settings left at their defaults. */
 const ctx = {};
@@ -832,5 +838,160 @@ describe("updateDiagnostics - implicit-string juxtaposition (not a diagnostic)",
     ]) {
       assert.deepEqual(diagnose(src).map((d) => d.code), [], src);
     }
+  });
+});
+
+// ============================================================
+// checkMissingDollar
+// ============================================================
+
+/** The literal words an `if` condition may use bare. */
+const LITERALS = new Set(["true", "false", "null"]);
+
+describe("checkMissingDollar", () => {
+  it("flags a bare variable on the left of an if comparison", () => {
+    const diag = checkMissingDollar("if x == 5", 0, LITERALS);
+    assert.ok(diag, "expected a diagnostic");
+    assert.equal(diag.code, "missing-dollar");
+    assert.equal(diag.source, "OtterScript");
+    assert.equal(diag.severity, DiagnosticSeverity.Error);
+    assert.match(diag.message, /\$x/);
+    assert.equal(diag.range.start.line, 0);
+    assert.equal(diag.range.start.character, 3, "points at 'x'");
+    assert.equal(diag.range.end.character, 4);
+  });
+
+  it("returns null when the variable already has a '$'", () => {
+    assert.equal(checkMissingDollar("if $x == 5", 0, LITERALS), null);
+  });
+
+  it("returns null for boolean/null literals", () => {
+    assert.equal(checkMissingDollar("if true == 1", 0, LITERALS), null);
+    assert.equal(checkMissingDollar("if null != 1", 0, LITERALS), null);
+  });
+
+  it("returns null for non-if lines", () => {
+    assert.equal(checkMissingDollar("set $x = 5", 0, LITERALS), null);
+    assert.equal(checkMissingDollar("foreach $s in @servers", 0, LITERALS), null);
+  });
+
+  it("sees through leading parentheses", () => {
+    const diag = checkMissingDollar("if (count > 3", 0, LITERALS);
+    assert.ok(diag);
+    assert.equal(diag.range.start.character, 4, "points past '('");
+    assert.equal(diag.range.end.character, 9);
+  });
+
+  it("accounts for leading indentation and reports the given line index", () => {
+    const diag = checkMissingDollar("    if ready == false", 7, LITERALS);
+    assert.ok(diag);
+    assert.equal(diag.range.start.line, 7);
+    assert.equal(diag.range.start.character, 7);
+  });
+
+  it("handles the various comparison operators", () => {
+    for (const op of ["=", "==", "!=", "<", ">", "<=", ">="]) {
+      assert.ok(checkMissingDollar(`if x ${op} 1`, 0, LITERALS), `operator ${op}`);
+    }
+  });
+});
+
+// ============================================================
+// findDuplicateMapKeyDiagnosticsFromMasked
+// ============================================================
+
+describe("findDuplicateMapKeyDiagnosticsFromMasked", () => {
+  /** @param {string} src */
+  const run = (src) => findDuplicateMapKeyDiagnosticsFromMasked(makeDocument(src), src);
+
+  it("reports the second occurrence of a repeated top-level key", () => {
+    const src = "%( a: 1, b: 2, a: 3 )";
+    const diags = run(src);
+    assert.equal(diags.length, 1);
+    assert.equal(diags[0].code, "duplicate-map-key");
+    assert.equal(diags[0].source, "OtterScript");
+    assert.equal(diags[0].severity, DiagnosticSeverity.Warning);
+    assert.match(diags[0].message, /Duplicate key 'a'/);
+    // range points at the duplicate 'a', i.e. the second one
+    assert.equal(diags[0].range.start.character, src.lastIndexOf("a"));
+  });
+
+  it("does not report when every key is unique", () => {
+    assert.deepEqual(run("%( a: 1, b: 2, c: 3 )"), []);
+  });
+
+  it("ignores keys nested inside a child map", () => {
+    // inner 'a' is nested; only the outer 'a' repeats
+    const diags = run("%( a: 1, b: %( a: 9 ), a: 2 )");
+    assert.equal(diags.length, 1);
+    assert.match(diags[0].message, /Duplicate key 'a'/);
+  });
+
+  it("reports a duplicate inside a map nested in another map", () => {
+    const src = "%( x: %( a: 1, a: 2 ) )";
+    const diags = run(src);
+    assert.equal(diags.length, 1);
+    assert.equal(diags[0].range.start.character, src.lastIndexOf("a"));
+  });
+
+  it("reports duplicates independently per map expression", () => {
+    const diags = run("x = %( a: 1, a: 2 ); y = %( b: 1, b: 2 )");
+    assert.equal(diags.length, 2);
+    assert.deepEqual(diags.map((d) => d.message).sort(), [
+      "Duplicate key 'a' in map expression.",
+      "Duplicate key 'b' in map expression.",
+    ]);
+  });
+
+  it("accepts dashes in key names", () => {
+    assert.equal(run("%( my-key: 1, my-key: 2 )").length, 1);
+  });
+
+  it("reports a third occurrence too", () => {
+    assert.equal(run("%( a: 1, a: 2, a: 3 )").length, 2);
+  });
+
+  it("does not crash on an unclosed '%(' (no matching ')')", () => {
+    assert.deepEqual(run("$m = %( a: 1, a: 2"), []);
+  });
+});
+
+// ============================================================
+// createUnbalancedDiagnostic
+// ============================================================
+
+describe("createUnbalancedDiagnostic", () => {
+  const doc = makeDocument("line one\nline two three");
+
+  it("describes unclosed openers", () => {
+    const d = createUnbalancedDiagnostic(2, 0, "{", "}", "brace", doc);
+    assert.ok(d);
+    assert.match(d.message, /Unclosed brace\(s\): 2 '\{' not closed \(first at line 1, col 1\)/);
+    assert.equal(d.severity, DiagnosticSeverity.Error);
+    assert.equal(d.source, "OtterScript");
+  });
+
+  it("describes an unexpected closer (negative count)", () => {
+    const d = createUnbalancedDiagnostic(-1, 9, "(", ")", "parenthesis", doc);
+    assert.ok(d);
+    assert.match(d.message, /Unexpected closing parenthesis: Extra '\)' at line 2, col 1/);
+  });
+
+  it("returns null when balanced", () => {
+    assert.equal(createUnbalancedDiagnostic(0, 0, "{", "}", "brace", doc), null);
+  });
+});
+
+// ============================================================
+// getDiagnosticCode
+// ============================================================
+
+describe("getDiagnosticCode", () => {
+  it("normalizes string / {value} / number / missing", () => {
+    assert.equal(getDiagnosticCode(/** @type {any} */ ({ code: "missing-dollar" })), "missing-dollar");
+    assert.equal(getDiagnosticCode(/** @type {any} */ ({ code: { value: "x", target: {} } })), "x");
+    assert.equal(getDiagnosticCode(/** @type {any} */ ({ code: 42 })), "42");
+    assert.equal(getDiagnosticCode(/** @type {any} */ ({ code: undefined })), "");
+    assert.equal(getDiagnosticCode(/** @type {any} */ ({})), "");
   });
 });

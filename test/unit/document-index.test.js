@@ -1,10 +1,11 @@
 // @ts-check
 /**
- * @fileoverview Unit tests for the module-navigation surface of src/document-index.js
- * (`getModuleInfo` and friends): declaration discovery, `call` reference
- * discovery, raft-qualified calls, and the per-document-version cache --
- * plus the matching per-version cache of the variable index used by
- * highlight all occurrences.
+ * @fileoverview Unit tests for src/document-index.js: module navigation
+ * (`getModuleInfo` and friends: declaration discovery, `call` reference
+ * discovery, raft-qualified calls, and the per-document-version cache), the
+ * matching per-version cache of the variable index used by highlight all
+ * occurrences, and the string/comment and masked-context views -- in a text
+ * template too.
  *
  * Guards the behavior before/after `getModuleInfo` is refactored to reuse
  * `scanner.findModuleDeclarations`.
@@ -27,7 +28,11 @@ const {
   getDocumentVariables,
   getVariableAt,
   getVariableOccurrences,
+  getMaskedTextAfter,
+  getMaskedTextBefore,
+  isInStringOrCommentDoc,
 } = require("../../src/document-index.js");
+const { advanceScanState, createCodeScanState, isInStringOrComment } = require("../../src/scanner.js");
 const { Position } = require("../vscode-stub");
 /**
  * A stub Position, typed loosely so it can stand in for vscode's.
@@ -247,5 +252,86 @@ describe("matchesQuery", () => {
   it("rejects characters missing or out of order", () => {
     assert.ok(!matchesQuery("Deploy-Module", "mdp"));
     assert.ok(!matchesQuery("Deploy-Module", "deployx"));
+  });
+});
+
+// ============================================================
+// isInStringOrCommentDoc
+// ============================================================
+
+describe("isInStringOrCommentDoc", () => {
+  it("is true inside a string, false in code", () => {
+    assert.equal(isInStringOrCommentDoc(makeDoc('a = "bcd'), pos(0, 6)), true);
+    assert.equal(isInStringOrCommentDoc(makeDoc("if $x == 5"), pos(0, 5)), false);
+  });
+
+  it("matches a fresh scan at every position, whatever order lines are asked in (cached states)", () => {
+    const text = [
+      'set $a = "one /* not a comment";',
+      "/* block",
+      "   still comment */ Log-Information $a;",
+      "set $b = >>swim",
+      "text >> + 'q';",
+      "# line comment \"x\"",
+      "end",
+    ].join("\n");
+    const doc = makeDoc(text);
+    const lines = text.split("\n");
+    /**
+     * @param {number} line
+     * @param {number} character
+     */
+    const fresh = (line, character) => {
+      const state = createCodeScanState();
+      for (let i = 0; i < line; i++) advanceScanState(lines[i], state);
+      return isInStringOrComment(lines[line], character, state);
+    };
+    const positions = lines.flatMap((l, line) => [...Array(l.length + 1).keys()].map((c) => [line, c]));
+    for (const [line, character] of [...positions].reverse()) {
+      assert.equal(isInStringOrCommentDoc(doc, pos(line, character)), fresh(line, character), `${line}:${character}`);
+    }
+  });
+
+  it("rescans when the document version changes", () => {
+    let text = "/* open\nx";
+    const doc = makeDoc(text);
+    doc.getText = () => text;
+    doc.lineAt = (/** @type {number} */ i) => ({ text: text.split("\n")[i] });
+    assert.equal(isInStringOrCommentDoc(doc, pos(1, 0)), true);
+    text = "// closed\nx";
+    doc.version = 2;
+    assert.equal(isInStringOrCommentDoc(doc, pos(1, 0)), false);
+  });
+
+  it("carries a block comment opened on a previous line", () => {
+    const doc = makeDoc("/* c\nstill inside\n*/ code");
+    assert.equal(isInStringOrCommentDoc(doc, pos(1, 3)), true);
+    assert.equal(isInStringOrCommentDoc(doc, pos(2, 4)), false);
+  });
+});
+
+describe("text templates: the literal output around the tags isn't code", () => {
+  const template = [
+    "Deployed <% Log-Information x; %>",
+    "# Heading: $PackageName <% Copy-Files(To: x",
+    "",
+  ].join("\n");
+
+  it("isInStringOrCommentDoc: only the code in a tag, and a $ expression in the text", () => {
+    const doc = makeDoc(template);
+    assert.equal(isInStringOrCommentDoc(doc, pos(1, 3)), true, "'Heading' is literal text, not a # comment");
+    assert.equal(isInStringOrCommentDoc(doc, pos(1, 15)), false, "$PackageName is expanded");
+    assert.equal(isInStringOrCommentDoc(doc, pos(1, 38)), false, "after '<% Copy-Files('");
+    assert.equal(isInStringOrCommentDoc(doc, pos(0, 3)), true, "'Deployed'");
+    assert.equal(isInStringOrCommentDoc(doc, pos(0, 15)), false, "Log-Information");
+    assert.equal(isInStringOrCommentDoc(makeDoc("# not a template <% x %>\n"), pos(0, 3)), true, "a comment, outside a template");
+  });
+
+  it("getMaskedTextBefore / getMaskedTextAfter see only the tags' code", () => {
+    const doc = makeDoc(template);
+    const before = getMaskedTextBefore(doc, pos(1, 42));
+    assert.match(before, /Copy-Files\(To:\s*$/);
+    assert.doesNotMatch(before, /Heading|Deployed/);
+    assert.equal(getMaskedTextAfter(doc, pos(1, 42)).trim(), "x");
   });
 });

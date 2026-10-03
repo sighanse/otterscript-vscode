@@ -1,7 +1,7 @@
 // @ts-check
 /**
  * @fileoverview validateDocs: the shape check every docs table in
- * src/language-data.js must pass (see reference.test.js and helpers.test.js).
+ * src/language-data.js must pass (see reference.test.js and validate-docs.test.js).
  * Test-only -- the tables are static, so checking them once in CI is enough.
  */
 
