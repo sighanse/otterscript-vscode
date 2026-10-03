@@ -242,7 +242,7 @@ Download-Http(
     Url: <text>,
     [LogResponseBody: <true/false>],
     [ErrorStatusCodes: <text>],
-    [ResponseBody: <text>],
+    [ResponseBody => <text>],
     [RequestHeaders: <%(key1: value1, ...)>],
     [MaxResponseLength: <integer>],
     [ProxyRequest: <true/false>],
@@ -291,7 +291,7 @@ Upload-Http(
     Url: <text>,
     [LogResponseBody: <true/false>],
     [ErrorStatusCodes: <text>],
-    [ResponseBody: <text>],
+    [ResponseBody => <text>],
     [RequestHeaders: <%(key1: value1, ...)>],
     [MaxResponseLength: <integer>],
     [ProxyRequest: <true/false>],
@@ -579,7 +579,7 @@ Ensure-HostsEntry(
 \`\`\`otterscript
 Acquire-Server(
     [Role: <text>],
-    [ServerName: <text>],
+    [ServerName => <text>],
     [Verbose: <true/false>]
 );
 \`\`\`
@@ -601,7 +601,7 @@ Get-Http(
     Url: <text>,
     [LogResponseBody: <true/false>],
     [ErrorStatusCodes: <text>],
-    [ResponseBody: <text>],
+    [ResponseBody => <text>],
     [RequestHeaders: <%(key1: value1, ...)>],
     [MaxResponseLength: <integer>],
     [ProxyRequest: <true/false>],
@@ -758,8 +758,8 @@ Query-Package(
     [UserName: <text>],
     [Password: <text>],
     [ApiKey: <text>],
-    [Exists: <true/false>],
-    [Metadata: <%(key1: value1, ...)>],
+    [Exists => <true/false>],
+    [Metadata => <%(key1: value1, ...)>],
     [FeedUrl: <text>]
 );
 \`\`\`
@@ -1095,7 +1095,7 @@ Applies full template transformation on a literal, a file, or a template asset.
 \`\`\`otterscript
 Apply-Template(
   [Asset: <text>],
-  [OutputVariable: <text>],
+  [OutputVariable => <text>],
   [OutputFile: <text>],
   [Literal: <text>],
   [InputFile: <text>],
@@ -4036,6 +4036,26 @@ function forProducts(table, products) {
   return Object.fromEntries(Object.entries(table).map(([key, doc]) => [key, doc.products ? doc : { ...doc, products }]));
 }
 
+/**
+ * An operation entry whose signature writes each output argument as it is
+ * called, `Name => <format>`, rather than `Name: <format>` as Inedo's
+ * reference prints it (`Get-Http(..., [ResponseBody => <text>], ...)`):
+ * hover and signature help then show the syntax to write.
+ *
+ * @param {DocEntry} doc
+ * @returns {DocEntry}
+ */
+function withOutputSyntax(doc) {
+  const outputs = doc.params?.filter((p) => p.output) ?? [];
+  if (!outputs.length || !doc.signature) return doc;
+  let signature = doc.signature;
+  for (const { name } of outputs) {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    signature = signature.replace(new RegExp(`([(,[]\\s*)${escaped}\\s*:(?!:)`), `$1${name} =>`);
+  }
+  return { ...doc, signature };
+}
+
 const mergedOperationDocs = withReference(operationDocs, reference.operationDocs);
 
 /**
@@ -4070,6 +4090,7 @@ for (const [name, by] of Object.entries(SUPERSEDED_OPERATIONS)) {
     };
   }
 }
+for (const [key, doc] of Object.entries(mergedOperationDocs)) mergedOperationDocs[key] = withOutputSyntax(doc);
 
 /**
  * Same-named operations of other namespaces than the operationDocs entry
@@ -4078,7 +4099,9 @@ for (const [name, by] of Object.entries(SUPERSEDED_OPERATIONS)) {
  *
  * @type {Readonly<Record<string, DocEntry[]>>}
  */
-const operationVariants = Object.freeze(reference.operationVariants);
+const operationVariants = Object.freeze(Object.fromEntries(
+  Object.entries(reference.operationVariants).map(([name, forms]) => [name, forms.map(withOutputSyntax)])
+));
 
 /**
  * Every operation documented as `name`: the operationDocs entry, then its

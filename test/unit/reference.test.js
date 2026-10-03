@@ -123,6 +123,16 @@ describe("generated Inedo reference, merged into language-data", () => {
     assert.equal(data.operationDocs["Get-Http"].params?.find((p) => p.name === "Url")?.output, undefined);
   });
 
+  it("writes output arguments with => in signatures, as they are called", () => {
+    assert.match(data.operationDocs["Get-Http"].signature ?? "", /\[ResponseBody => <text>\]/);
+    assert.match(data.operationDocs["Get-Http"].signature ?? "", /Url: <text>/, "inputs keep ':'");
+    for (const doc of [...Object.values(data.operationDocs), ...Object.values(data.operationVariants).flat()]) {
+      for (const p of doc.params ?? []) {
+        if (p.output) assert.ok(!new RegExp(`[(,[]\\s*${p.name}\\s*:`).test(doc.signature ?? ""), `${doc.name}: ${p.name}`);
+      }
+    }
+  });
+
   it("marks the PowerShell names Inedo recommends against, pointing at the alias to write", () => {
     assert.equal(data.operationDocs["PSCall1"].superseded?.by, "PSCall", "the older operation");
     assert.equal(data.operationDocs["PSEnsure2"].superseded?.by, "PSEnsure", "the alias's own name");

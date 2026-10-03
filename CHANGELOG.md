@@ -45,6 +45,7 @@
 
 ### Fixed
 
+- Hover and signature help showed an operation's output arguments as inputs, such as `[ResponseBody: <text>]` for `Get-Http`; they now show how they're written, `[ResponseBody => <text>]` (`ResponseBody => $body`)
 - **Fold All Regions** (`Ctrl+K Ctrl+8`) folded every `{ }` block, map, template tag and swim string; it now folds only `#region` blocks
 - Signature help could mistake text in a block comment or swim string for code when the comment or string opened more than 10 lines above the cursor
 - Turning `otterscript.codeLens.enable` on or off changed the reference counts only after the next edit

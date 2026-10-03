@@ -668,6 +668,7 @@ describe("signature help call regexes", () => {
     assert.equal(activeParameterIndex("result: ", ["name", "[out result]"]), 1, "a module's out parameter");
     assert.equal(activeParameterIndex("output-file: ", ["name", "[output-file]"]), 1, "a dashed name");
     assert.equal(activeParameterIndex("Url: $u, ResponseBody => ", ["[Method]", "Url", "[ResponseBody]"]), 2, "an output capture");
+    assert.equal(activeParameterIndex("ResponseBody => ", ["Url: <text>", "[ResponseBody => <text>]"]), 1, "an output's => label");
   });
 
   it("findSignatureCall prefers the function the cursor is in, then the operation", () => {

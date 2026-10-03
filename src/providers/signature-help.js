@@ -79,18 +79,19 @@ async function findModuleSignatureCall(document, textBeforeCursor, listWorkspace
 }
 
 /**
- * The parameter the cursor is on: the one named by a `Name:` the current
- * argument starts with (named arguments come in any order), else the one at
- * the cursor's position in the list.
+ * The parameter the cursor is on: the one named by a `Name:` (or an output's
+ * `Name =>`) the current argument starts with (named arguments come in any
+ * order), else the one at the cursor's position in the list.
  *
  * @param {string} args - The arguments typed so far
  * @param {string[]} parameters - The signature's parameter labels
+ *   (`To: <text>`, `[ResponseBody => <text>]`, `[out result]`)
  * @returns {number}
  */
 function activeParameterIndex(args, parameters) {
   const named = ARGUMENT_NAME_REGEX.exec(args.slice(args.lastIndexOf(",") + 1))?.[2]?.toLowerCase();
   const byName = named === undefined ? -1 : parameters.findIndex((label) =>
-    label.replace(/^\[|\]$/g, "").replace(/^(?:in|out|ref)\s+/i, "").split(":")[0].trim().toLowerCase() === named);
+    label.replace(/^\[|\]$/g, "").replace(/^(?:in|out|ref)\s+/i, "").split(/:|=>/)[0].trim().toLowerCase() === named);
   return byName !== -1 ? byName : getActiveParameterIndex(args);
 }
 
