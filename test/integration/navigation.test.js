@@ -41,6 +41,16 @@ describe("navigation and highlighting (main.otter)", () => {
     assert.ok(uris.some((p) => p.endsWith("main.otter")), uris.join(", "));
   });
 
+  it("refuses to rename a call no module declaration answers", async () => {
+    const source = await openContent("call Nowhere;\n");
+    await assert.rejects(
+      Promise.resolve(vscode.commands.executeCommand(
+        "vscode.executeDocumentRenameProvider", source.uri, positionOf(source, "Nowhere", 2), "Somewhere"
+      )),
+      /no one module declaration was found/
+    );
+  });
+
   it("refuses to rename a module the file declares twice", async () => {
     const source = await openContent("module Twice {\n}\nmodule Twice {\n}\ncall Twice;\n");
     await assert.rejects(

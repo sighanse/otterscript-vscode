@@ -18,13 +18,15 @@ const { ARGUMENT_NAME_REGEX, getActiveParameterIndex, maskClosedGroups, splitSig
 const FUNCTION_SIGNATURE_REGEX = /([$@%])([A-Za-z][A-Za-z0-9_]*)\s*\(([^()]*)$/;
 
 /**
- * The operation call the cursor is in: name (group 1), arguments typed so far
- * (group 2). The optional segment after the name allows one default/positional
+ * The operation call the cursor is in: namespace (group 1), name (group 2),
+ * arguments typed so far (group 3). The name starts the text, or follows
+ * whitespace or a statement delimiter (`Log;Copy-Files(`, `{Copy-Files(`).
+ * The optional segment after the name allows one default/positional
  * argument before the `(` -- a quoted string or a single bare token, as in
  * `ProGet::Create-Directory my/folder/path\n(` -- but no whitespace or `=`,
  * so it can't swallow an assignment like `set $x = (`.
  */
-const OPERATION_SIGNATURE_REGEX = /(?:^|\s)(?:([A-Za-z][\w-]*)::)?([A-Za-z][A-Za-z0-9-]*)(?:[ \t]+(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s(){};=]+))?\s*\(([^()]*)$/;
+const OPERATION_SIGNATURE_REGEX = /(?:^|[\s;{}])(?:([A-Za-z][\w-]*)::)?([A-Za-z][A-Za-z0-9-]*)(?:[ \t]+(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s(){};=]+))?\s*\(([^()]*)$/;
 
 /** The function table for each call sigil. */
 const FUNCTION_TABLES = Object.freeze({ "$": scalarFunctionDocs, "@": vectorFunctionDocs, "%": mapFunctionDocs });

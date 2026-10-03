@@ -102,6 +102,11 @@ describe("hover", () => {
     assert.match(bare, /Also `DotNet::Build` \(BuildMaster\): write the namespace to pick one/);
   });
 
+  it("documents an operation right after a block's '{'", async () => {
+    const source = await openContent('if $x {Copy-Files(To: "b");}\n');
+    assert.match(await hoverText(source, positionOf(source, "Copy-Files", 2)), /### Copy-Files/);
+  });
+
   it("shows no operation for a module named like one, declared or not", async () => {
     const call = await openContent("call Build;\n");
     assert.equal(await hoverText(call, positionOf(call, "Build;", 1)), "", "a module no file declares");

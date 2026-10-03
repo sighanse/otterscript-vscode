@@ -401,6 +401,7 @@ describe("createUnknownNamespaceFix", () => {
     const fix = /** @type {any} */ (fixFor("Windoze::Sign-Exe (SubjectName: x);", 0, 7));
     assert.ok(fix);
     assert.equal(fix.title, "Change namespace to 'Windows'");
+    assert.equal(fix.isPreferred, false, "a guess: left to the lightbulb, not Fix All");
     const [op, , range, newText] = fix.edit.edits[0];
     assert.equal(op, "replace");
     assert.equal(newText, "Windows");
@@ -412,6 +413,7 @@ describe("createUnknownNamespaceFix", () => {
     const fix = fixFor("proget::Install-Package (Name: x);", 0, 6);
     assert.ok(fix);
     assert.equal(fix.title, "Change namespace to 'ProGet'");
+    assert.equal(fix.isPreferred, true, "only the casing: Fix All applies it");
   });
 
   it("returns null when nothing is close enough to suggest", () => {
@@ -645,6 +647,8 @@ describe("signature help call regexes", () => {
     assert.deepEqual("ProGet::Create-Directory foo (Path: b".match(OPERATION_SIGNATURE_REGEX)?.slice(1, 3), ["ProGet", "Create-Directory"]);
     assert.equal("set $x = (".match(OPERATION_SIGNATURE_REGEX), null);
     assert.equal("Linux::SHEnsure2(Name: a".match(OPERATION_SIGNATURE_REGEX)?.[2], "SHEnsure2", "digits in the name");
+    assert.equal("Log-Information x;Copy-Files(To: a".match(OPERATION_SIGNATURE_REGEX)?.[2], "Copy-Files", "right after ';'");
+    assert.equal("if $x {Copy-Files(To: a".match(OPERATION_SIGNATURE_REGEX)?.[2], "Copy-Files", "right after '{'");
   });
 
   it("activeParameterIndex follows a typed Name:, else the argument position", () => {

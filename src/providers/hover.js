@@ -212,7 +212,7 @@ function registerHover(settings, listWorkspaceModules) {
         // (`DotNet::Build`); without one, the others are listed.
         const operationRange = document.getWordRangeAtPosition(position, /[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*/);
         const lineBefore = operationRange && document.lineAt(position.line).text.slice(0, operationRange.start.character);
-        if (operationRange && !/[$@%{]$/.test(lineBefore ?? "")) {
+        if (operationRange && !/[$@%]\{?$/.test(lineBefore ?? "")) {
           const name = document.getText(operationRange);
           const namespace = /([A-Za-z][A-Za-z0-9]*)::$/.exec(lineBefore ?? "")?.[1];
           const doc = lookupOperation(name, namespace);

@@ -8,6 +8,7 @@
  */
 
 const vscode = require("vscode");
+const { mapWithConcurrency } = require("../helpers");
 const {
   findModuleDeclarationRange,
   findModuleReferences,
@@ -19,6 +20,9 @@ const {
   moduleKey,
 } = require("../document-index");
 const { createCodeScanState, findTemplateTagDelimiters, maskNonCodeSpans, NAME_PATTERN } = require("../scanner");
+
+/** How many workspace files a cross-file search reads at once. */
+const CROSS_FILE_READ_CONCURRENCY = 20;
 
 /** A plain name, per Inedo's formal grammar (see NAME_PATTERN). */
 const PLAIN_NAME_REGEX = new RegExp(`^${NAME_PATTERN}$`);
@@ -146,12 +150,17 @@ function registerNavigation(settings, workspace) {
     const homeDeclaration = findModuleDeclarationRange(home, name);
     const declaration = homeDeclaration ? new vscode.Location(home.uri, homeDeclaration) : undefined;
     const locations = findModuleReferences(home, name, true);
-    for (const uri of await workspace.listFiles()) {
-      const key = uri.toString();
-      if (key === home.uri.toString() || declaredIn.has(key)) continue;
+    // The other files' calls, read a bounded number at a time (a workspace
+    // may have thousands, maybe remote), in the files' order.
+    const others = (await workspace.listFiles())
+      .filter((uri) => uri.toString() !== home?.uri.toString() && !declaredIn.has(uri.toString()));
+    /** @type {vscode.Location[][]} */
+    const found = new Array(others.length);
+    await mapWithConcurrency(others.map((uri, i) => ({ uri, i })), CROSS_FILE_READ_CONCURRENCY, async ({ uri, i }) => {
       const other = await documentMentioning(uri, name);
-      if (other && !findModuleDeclarationRange(other, name)) locations.push(...findModuleReferences(other, name, false));
-    }
+      found[i] = other && !findModuleDeclarationRange(other, name) ? findModuleReferences(other, name, false) : [];
+    });
+    locations.push(...found.flat());
     return { locations, declaration, crossFile: true, home };
   }
 
@@ -259,7 +268,12 @@ function registerNavigation(settings, workspace) {
         if (!sameName && findModuleDeclarationRange(document, target)) {
           throw new Error(`A module named '${target}' is already declared in this file.`);
         }
-        const { locations, crossFile, home } = await findModuleUses(document, moduleAt.name);
+        const { locations, crossFile, home, declaration } = await findModuleUses(document, moduleAt.name);
+        // A call no single declaration answers (none, or several other files)
+        // has no module to rename -- only itself, which would just break it.
+        if (!declaration) {
+          throw new Error(`Can't rename '${moduleAt.name}': no one module declaration was found for it (none, or in several files).`);
+        }
         // Started from a call: the declaring file mustn't declare it twice either.
         if (home !== document) assertSingleDeclaration(home, moduleAt.name);
         if (crossFile && !sameName) {

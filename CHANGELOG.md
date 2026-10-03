@@ -37,7 +37,7 @@
 
 - The extension package is about 30% smaller (from about 178 KB to 125 KB): it now ships as a single bundled file, with Inedo's reference data stored compactly
 - Function parameter names in hover, signature help and completion are now the ones in Inedo's reference, such as `$Substring(Text, Offset, [Length])` (was `text, startIndex, [length]`) or `$RegexReplace(Text, MatchExpression, ReplaceWith)`
-- **Fix All Issues** no longer changes an Adaptive Card value to the closest allowed one (`"weight": "bold"` to `"bolder"`): that is a guess, so it stays in the lightbulb, like the other "Change to" fixes
+- **Fix All Issues** no longer applies fixes that guess the intended name: an Adaptive Card value changed to the closest allowed one (`"weight": "bold"` to `"bolder"`), or an unknown namespace changed to the closest known one (`Frobnicate::` to `Firewall::`). They stay in the lightbulb, like the other "Change to" fixes; a namespace that only differs in casing (`proget::`) is still fixed
 
 ### Fixed
 
@@ -46,6 +46,7 @@
 - Module names are matched case-insensitively, as variable names already were: `call greet` goes to, highlights and counts as a reference of `module Greet`
 - Completion stopped while typing a name with a digit, `_` or `-` in it, such as `$item2` or `$my-var`; signature help was missing for operations with a digit in their name, such as `SHEnsure2`
 - Hovering a module name in `call Name` or `module Name` could show the documentation of an operation with the same name
+- An operation written right after `{`, `;` or `}` with no space, such as `if $x {Copy-Files(...)`, got no hover (after `{`) or signature help
 - `$Trim` accepts the characters to trim (`$Trim($x, "-")`), as `$TrimStart` and `$TrimEnd` already did; it was flagged as too many arguments
 - `$PackageHash` and `$PackageProperty` mixed ProGet's and BuildMaster's forms. Hover now shows ProGet's (`$PackageHash([format], [algorithm])`, `$PackageProperty(name, [default])`) with BuildMaster's below it, and a three-argument BuildMaster `$PackageProperty(...)` is no longer flagged as too many arguments
 - `unknown-namespace` flagged real namespaces of Inedo's extensions, such as `GitHub::`, `Jira::`, `NuGet::`, `MSBuild::`, `Kubernetes::` or `AzureDevOps::`. Every namespace declared in Inedo's public extensions is now known, and an operation behind a namespace whose operations the extension doesn't document yet (`GitHub::Ensure-Release`) is no longer flagged as unknown either

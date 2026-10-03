@@ -177,6 +177,7 @@ function nearestNamespace(token) {
 /**
  * Creates a quick-fix that replaces an unknown namespace token with the closest
  * known one (`Frobnicate::Op` -> `Firewall::Op`, `proget::Op` -> `ProGet::Op`).
+ * Preferred -- so Fix All applies it -- only for a casing difference.
  *
  * @param {vscode.TextDocument} document - The document containing the diagnostic
  * @param {vscode.Diagnostic} diagnostic - The unknown-namespace diagnostic; its
@@ -188,9 +189,11 @@ function createUnknownNamespaceFix(document, diagnostic) {
   const suggestion = nearestNamespace(token);
   if (!suggestion || suggestion === token) return null;
 
-  return createCodeAction(`Change namespace to '${suggestion}'`, diagnostic, (edit) => {
+  const action = createCodeAction(`Change namespace to '${suggestion}'`, diagnostic, (edit) => {
     edit.replace(document.uri, diagnostic.range, suggestion);
   });
+  action.isPreferred = suggestion.toLowerCase() === token.toLowerCase();
+  return action;
 }
 
 /**
