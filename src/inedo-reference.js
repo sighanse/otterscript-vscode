@@ -36,7 +36,8 @@
  * One generated entry, compact: `p` products (letters, see
  * {@link PRODUCT_LETTERS}), `d` description, `r` arguments as
  * `[name, required (1/0), format, description]` (trailing empties left out),
- * `n` an operation's namespace, `o` other products' forms as
+ * `n` an operation's namespace (a variant's is in its `Namespace::Name` key,
+ * `Core` for none), `o` other products' forms as
  * `[product, signature]` (a function's without its sigil), `s` the signature
  * when the arguments don't give it (a function's without its sigil).
  *
@@ -48,6 +49,16 @@
  *   o?: [string, string][],
  *   s?: string
  * }} CompactEntry
+ */
+
+/**
+ * The expanded reference: the four docs tables, keyed like language-data.js's
+ * (functions by bare name, operations by name), and `operationVariants`, the
+ * same-named operations of other namespaces (`DotNet::Build` beside
+ * `DevEnv::Build`), by name.
+ *
+ * @typedef {Record<"scalarFunctionDocs" | "vectorFunctionDocs" | "mapFunctionDocs" | "operationDocs", Record<string, ReferenceDoc>>
+ *   & { operationVariants: Record<string, ReferenceDoc[]> }} ReferenceTables
  */
 
 /** The products a compact entry's `p` letters stand for, in order. */
@@ -146,14 +157,14 @@ function expandProducts(letters) {
 }
 
 /**
- * The four docs tables from the compact generated reference.
+ * The docs tables from the compact generated reference.
  *
  * @param {{ functions: Record<string, CompactEntry>, operations: Record<string, CompactEntry> }} compact
- * @returns {Record<"scalarFunctionDocs" | "vectorFunctionDocs" | "mapFunctionDocs" | "operationDocs", Record<string, ReferenceDoc>>}
+ * @returns {ReferenceTables}
  */
 function expandReference({ functions, operations }) {
-  /** @type {Record<"scalarFunctionDocs" | "vectorFunctionDocs" | "mapFunctionDocs" | "operationDocs", Record<string, ReferenceDoc>>} */
-  const tables = { scalarFunctionDocs: {}, vectorFunctionDocs: {}, mapFunctionDocs: {}, operationDocs: {} };
+  /** @type {ReferenceTables} */
+  const tables = { scalarFunctionDocs: {}, vectorFunctionDocs: {}, mapFunctionDocs: {}, operationDocs: {}, operationVariants: {} };
 
   for (const [key, entry] of Object.entries(functions)) {
     // A key without a sigil is a function that works with every sigil.
@@ -178,12 +189,15 @@ function expandReference({ functions, operations }) {
     }
   }
 
-  for (const [name, entry] of Object.entries(operations)) {
+  for (const [key, entry] of Object.entries(operations)) {
+    // `Namespace::Name` is a variant: a same-named operation of another namespace.
+    const [variantNamespace, name] = key.includes("::") ? key.split("::") : [undefined, key];
     const params = expandParams(entry.r);
     const products = expandProducts(entry.p);
     const signature = entry.s ?? operationSignature(name, params);
-    tables.operationDocs[name] = {
-      namespace: entry.n ?? null,
+    /** @type {ReferenceDoc} */
+    const doc = {
+      namespace: variantNamespace === undefined ? entry.n ?? null : variantNamespace === "Core" ? null : variantNamespace,
       name,
       signature,
       ...(entry.o ? { overloads: entry.o.map(([product, form]) => ({ product, signature: form })) } : {}),
@@ -193,6 +207,8 @@ function expandReference({ functions, operations }) {
       products,
       params,
     };
+    if (variantNamespace === undefined) tables.operationDocs[name] = doc;
+    else (tables.operationVariants[name] ??= []).push(doc);
   }
   return tables;
 }

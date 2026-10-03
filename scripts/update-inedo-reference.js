@@ -42,6 +42,7 @@ const {
 /** @typedef {import("../src/inedo-reference").ReferenceDoc} ReferenceDoc */
 /** @typedef {import("../src/inedo-reference").ReferenceParam} ReferenceParam */
 /** @typedef {import("../src/inedo-reference").CompactEntry} CompactEntry */
+/** @typedef {import("../src/inedo-reference").ReferenceTables} ReferenceTables */
 
 // -----------------------------------------------------------------------------
 // NAMESPACE CORRECTIONS -- hand-maintained
@@ -76,7 +77,6 @@ const NAMESPACE_OVERRIDES = {
   "Set-FileAttributes": "Files",
   "Transfer-Files": "Files",
   "Sign-Exe": "Windows",
-  "Ensure-Release": "GitHub",
 };
 
 // -----------------------------------------------------------------------------
@@ -255,9 +255,8 @@ const cleanParam = ({ name, required, description, format }) => ({
 /**
  * An operation's arguments, for argument completion and hover: the first
  * product's, then any another product adds. An argument is required only
- * when every page requires it: two products' same-named operations can be
- * different ones (`DevEnv::Build` / `DotNet::Build`), and a call can't be
- * told apart, so one's required argument mustn't be demanded of the other.
+ * when every product's page requires it (Otter's `ProGet::Promote` doesn't
+ * need the `ToFeed` BuildMaster's does).
  *
  * @param {RefEntry[]} variants - The operation's pages, one per product
  * @returns {ReferenceParam[]}
@@ -305,7 +304,7 @@ function compactParams(params) {
  * @param {{ source: string, entries: RefEntry[] }} snapshot
  * @param {ReadonlySet<string>} declared - NAMESPACES, lower-cased
  * @returns {{
- *   tables: Record<"scalarFunctionDocs" | "vectorFunctionDocs" | "mapFunctionDocs" | "operationDocs", Record<string, ReferenceDoc>>,
+ *   tables: ReferenceTables,
  *   compact: { functions: Record<string, CompactEntry>, operations: Record<string, CompactEntry> }
  * }}
  */
@@ -317,8 +316,8 @@ function buildReference(snapshot, declared) {
     byName.set(key, [...(byName.get(key) ?? []), entry]);
   }
 
-  /** @type {Record<"scalarFunctionDocs" | "vectorFunctionDocs" | "mapFunctionDocs" | "operationDocs", Record<string, ReferenceDoc>>} */
-  const tables = { scalarFunctionDocs: {}, vectorFunctionDocs: {}, mapFunctionDocs: {}, operationDocs: {} };
+  /** @type {ReferenceTables} */
+  const tables = { scalarFunctionDocs: {}, vectorFunctionDocs: {}, mapFunctionDocs: {}, operationDocs: {}, operationVariants: {} };
   /** @type {{ functions: Record<string, CompactEntry>, operations: Record<string, CompactEntry> }} */
   const compact = { functions: {}, operations: {} };
   const letters = Object.entries(PRODUCT_LETTERS);
@@ -338,28 +337,53 @@ function buildReference(snapshot, declared) {
       .filter(([, f]) => f !== form(primary));
 
     if (primary.kind === "operation") {
-      const params = operationParams(variants);
-      const namespace = operationNamespace(primary.name, primary.usage, declared);
-      const signature = form(primary);
-      tables.operationDocs[primary.name] = {
-        namespace,
-        name: primary.name,
-        signature,
-        ...(overloads.length ? { overloads: overloads.map(([product, s]) => ({ product, signature: s })) } : {}),
-        snippet: operationSnippet(primary.name, signature, params),
-        description: primary.description,
-        documentation: referenceDocumentation(null, products),
-        products,
-        params,
-      };
-      compact.operations[primary.name] = {
-        ...(namespace ? { n: namespace } : {}),
-        p,
-        d: primary.description,
-        ...compactParams(params),
-        ...(signature !== operationSignature(primary.name, params) ? { s: signature } : {}),
-        ...(overloads.length ? { o: overloads } : {}),
-      };
+      // Same-named operations in different namespaces are different ones
+      // (`DevEnv::Build` / `DotNet::Build`): the first namespace's is the
+      // entry, the others' are its variants, stored as `Namespace::Name`.
+      /** @type {Map<string | null, RefEntry[]>} */
+      const byNamespace = new Map();
+      for (const v of variants) {
+        const namespace = operationNamespace(v.name, v.usage, declared);
+        byNamespace.set(namespace, [...(byNamespace.get(namespace) ?? []), v]);
+      }
+      [...byNamespace].forEach(([namespace, pages], i) => {
+        const [first, ...rest] = pages;
+        const pageProducts = PRODUCTS.filter((product) => pages.some((v) => v.products.includes(product)));
+        const params = operationParams(pages);
+        const signature = form(first);
+        /** @type {[string, string][]} */
+        const pageOverloads = rest
+          .map((v) => /** @type {[string, string]} */ ([v.products.join(" and "), form(v)]))
+          .filter(([, f]) => f !== signature);
+        /** @type {ReferenceDoc} */
+        const doc = {
+          namespace,
+          name: first.name,
+          signature,
+          ...(pageOverloads.length ? { overloads: pageOverloads.map(([product, s]) => ({ product, signature: s })) } : {}),
+          snippet: operationSnippet(first.name, signature, params),
+          description: first.description,
+          documentation: referenceDocumentation(null, pageProducts),
+          products: pageProducts,
+          params,
+        };
+        /** @type {CompactEntry} */
+        const entry = {
+          ...(namespace && i === 0 ? { n: namespace } : {}),
+          p: letters.filter(([, product]) => pageProducts.includes(product)).map(([letter]) => letter).join(""),
+          d: first.description,
+          ...compactParams(params),
+          ...(signature !== operationSignature(first.name, params) ? { s: signature } : {}),
+          ...(pageOverloads.length ? { o: pageOverloads } : {}),
+        };
+        if (i === 0) {
+          tables.operationDocs[first.name] = doc;
+          compact.operations[first.name] = entry;
+        } else {
+          (tables.operationVariants[first.name] ??= []).push(doc);
+          compact.operations[`${namespace ?? "Core"}::${first.name}`] = entry;
+        }
+      });
       continue;
     }
 

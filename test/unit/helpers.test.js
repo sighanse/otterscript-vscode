@@ -60,9 +60,13 @@ const {
   createAssignmentInConditionFix,
   createForToForeachFix,
   createInvalidOperatorFix,
+  createMissingArgumentFix,
   createMissingDollarFix,
   createTemplateEndFix,
+  createUnknownArgumentFix,
+  createUnknownFunctionFix,
   createUnknownNamespaceFix,
+  createUnknownOperationFix,
   nearestNamespace,
 } = require("../../src/providers/code-actions.js");
 const { computeFoldingRanges } = require("../../src/providers/navigation.js");
@@ -416,6 +420,94 @@ describe("createUnknownNamespaceFix", () => {
 });
 
 // ============================================================
+// Name suggestions and missing arguments
+// ============================================================
+
+describe("name-suggestion and missing-argument fixes", () => {
+  /**
+   * The fix `factory` offers for a diagnostic over `[start, end)` of `text`'s
+   * line `line`.
+   *
+   * @param {(doc: any, diagnostic: any) => any} factory
+   * @param {string} text
+   * @param {number} start
+   * @param {number} end
+   * @param {number} [line]
+   * @returns {any}
+   */
+  const fixFor = (factory, text, start, end, line = 0) =>
+    factory(makeDoc(text), { range: new stub.Range(new Position(line, start), new Position(line, end)), source: "OtterScript" });
+  /**
+   * `text` with the fix's edits applied.
+   *
+   * @param {any} fix
+   * @param {string} text
+   * @returns {string}
+   */
+  const applied = (fix, text) => {
+    const doc = makeDoc(text);
+    const edits = fix.edit.edits.map((/** @type {any} */ [op, , where, newText]) => {
+      const start = doc.offsetAt(op === "insert" ? where : where.start);
+      return { start, end: op === "insert" ? start : doc.offsetAt(where.end), newText };
+    });
+    return edits.sort((/** @type {any} */ a, /** @type {any} */ b) => b.start - a.start)
+      .reduce((/** @type {string} */ out, /** @type {any} */ e) => out.slice(0, e.start) + e.newText + out.slice(e.end), text);
+  };
+  /**
+   * @param {any} doc
+   * @param {any} diagnostic
+   */
+  const anyProduct = (doc, diagnostic) => createUnknownFunctionFix(doc, diagnostic, "any");
+
+  it("changes an unknown function to the closest of its sigil, preferred only for a casing difference", () => {
+    const fix = fixFor(anyProduct, "set $s = $Substrng($x, 1);", 10, 18);
+    assert.equal(fix.title, "Change to '$Substring'");
+    assert.equal(fix.isPreferred, false);
+    assert.equal(applied(fix, "set $s = $Substrng($x, 1);"), "set $s = $Substring($x, 1);");
+    assert.equal(fixFor(anyProduct, "set $s = $substring($x, 1);", 10, 19).isPreferred, true);
+    assert.equal(fixFor(anyProduct, "set @l = @Splitt($x);", 10, 16).title, "Change to '@Split'");
+    assert.equal(fixFor(anyProduct, "set $s = $Frobnicate();", 10, 20), null);
+  });
+
+  it("changes an unknown operation to the closest one, in the namespace written", () => {
+    /**
+     * @param {any} doc
+     * @param {any} diagnostic
+     */
+    const factory = (doc, diagnostic) => createUnknownOperationFix(doc, diagnostic, "any");
+    assert.equal(fixFor(factory, "Copy-Fils(To: $x);", 0, 9).title, "Change to 'Copy-Files'");
+    assert.equal(fixFor(factory, "ProGet::Create-Directori(Path: x);", 8, 24).title, "Change to 'Create-Directory'");
+    assert.equal(fixFor(factory, "Frobnicate-Everything;", 0, 21), null);
+  });
+
+  it("changes a misspelt argument name to the documented one", () => {
+    const text = 'Copy-Files(Fomr: "a", To: "b");';
+    const fix = fixFor(createUnknownArgumentFix, text, 11, 15);
+    assert.equal(fix.title, "Change to 'From'");
+    assert.equal(applied(fix, text), 'Copy-Files(From: "a", To: "b");');
+  });
+
+  it("adds the missing required arguments after the last one, on lines of their own in a multi-line call", () => {
+    /**
+     * @param {string} text
+     * @param {number} start - Of the operation name, on line 0
+     * @param {number} end
+     */
+    const add = (text, start, end) => {
+      const fix = fixFor(createMissingArgumentFix, text, start, end);
+      assert.equal(fix.isPreferred, false, "the values are the user's to write");
+      return applied(fix, text);
+    };
+    assert.equal(add('Copy-Files(From: "a, b");', 0, 10), 'Copy-Files(From: "a, b", To: );');
+    assert.equal(add("Copy-Files();", 0, 10), "Copy-Files(To: );");
+    assert.equal(add('Copy-Files(\n    From: "a" # (source)\n);', 0, 10), 'Copy-Files(\n    From: "a", # (source)\n    To: \n);');
+    assert.equal(add('Copy-Files(\n    Include: @("*"),\n);', 0, 10), 'Copy-Files(\n    Include: @("*"),\n    To: \n);');
+    assert.equal(add('Jira::Create-Issue(Title: "x");', 6, 18), 'Jira::Create-Issue(Title: "x", Type: );');
+    assert.equal(fixFor(createMissingArgumentFix, 'Copy-Files(From: "a", To: "b");', 0, 10), null, "nothing missing any more");
+  });
+});
+
+// ============================================================
 // mapWithConcurrency
 // ============================================================
 
@@ -546,8 +638,8 @@ describe("signature help call regexes", () => {
   });
 
   it("OPERATION_SIGNATURE_REGEX captures a bare and a namespaced operation, not 'set $x = ('", () => {
-    assert.equal("Copy-Files(Include: a".match(OPERATION_SIGNATURE_REGEX)?.[1], "Copy-Files");
-    assert.equal("ProGet::Create-Directory foo (Path: b".match(OPERATION_SIGNATURE_REGEX)?.[1], "Create-Directory");
+    assert.equal("Copy-Files(Include: a".match(OPERATION_SIGNATURE_REGEX)?.[2], "Copy-Files");
+    assert.deepEqual("ProGet::Create-Directory foo (Path: b".match(OPERATION_SIGNATURE_REGEX)?.slice(1, 3), ["ProGet", "Create-Directory"]);
     assert.equal("set $x = (".match(OPERATION_SIGNATURE_REGEX), null);
   });
 
@@ -562,6 +654,9 @@ describe("signature help call regexes", () => {
     assert.equal(findSignatureCall("Copy-Files(Include: $Trim(a")?.doc.name, "$Trim");
     assert.equal(findSignatureCall("Copy-Files(Include: a")?.isOperation, true);
     assert.equal(findSignatureCall("$Frobnicate(a"), null);
+    // A namespace picks between same-named operations.
+    assert.match(findSignatureCall("DotNet::Build(Project: a")?.doc.signature ?? "", /^Build\(Project:/);
+    assert.match(findSignatureCall("Build(ProjectFile: a")?.doc.signature ?? "", /^Build\(ProjectFile:/);
   });
 });
 

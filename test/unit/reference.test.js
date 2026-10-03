@@ -92,6 +92,24 @@ describe("generated Inedo reference, merged into language-data", () => {
     assert.equal(reference.operationDocs["Sleep"].namespace, null, "InedoCore::Sleep");
     assert.equal(reference.operationDocs["Backup-Database"].namespace, null, "DB::Backup-Database");
     assert.equal(reference.operationDocs["SHExec"].namespace, "Linux", "corrected from source");
+    assert.equal(reference.operationDocs["Ensure-Release"].namespace, null, "BuildMaster's own; GitHub's is a variant");
+  });
+
+  it("keeps same-named operations of different namespaces apart, looked up by namespace", () => {
+    assert.deepEqual(Object.keys(data.operationVariants).sort(), ["Build", "Create-Issue", "Create-Package", "Ensure-Release"]);
+    assert.equal(data.lookupOperation("Build")?.namespace, "DevEnv");
+    assert.equal(data.lookupOperation("Build", "dotnet")?.namespace, "DotNet", "namespaces ignore case");
+    assert.equal(data.lookupOperation("Ensure-Release", "Core")?.namespace, null, "Core:: names the built-in");
+    assert.equal(data.lookupOperation("Copy-Files", "Files"), data.operationDocs["Copy-Files"]);
+    assert.equal(data.lookupOperation("Frobnicate"), undefined);
+    // Each its own arguments and overloads: NuGet's isn't an overload of ProGet's.
+    assert.ok(data.operationDocs["Create-Package"].overloads?.every((o) => o.signature.startsWith("Create-Package(Name:")));
+    /** @param {import("../../src/language-data.js").DocParam[] | undefined} params */
+    const required = (params) => params?.filter((p) => p.required).map((p) => p.name);
+    assert.deepEqual(required(data.operationArguments("Create-Issue", "Jira")), ["Title", "Type"]);
+    // Unqualified: every form's arguments, required only where all require it.
+    assert.deepEqual(required(data.operationArguments("Create-Issue")), ["Title"]);
+    assert.ok(data.operationArguments("Create-Issue")?.some((p) => p.name === "Type"));
   });
 
   it("hand-written entries use the parameter names of Inedo's reference", () => {

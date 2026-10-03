@@ -295,6 +295,17 @@
               ],
               "markdownDescription": "An operation call without one of its required arguments, such as `Copy-Files` without `To`. A hint by default: an operation may accept argument names Inedo's reference doesn't list."
             },
+            "unknown-argument": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "An operation argument name that looks like a typo of a documented one, such as `Fomr:` in `Copy-Files`. A hint by default: an operation may accept argument names Inedo's reference doesn't list."
+            },
             "too-few-arguments": {
               "type": "string",
               "enum": [

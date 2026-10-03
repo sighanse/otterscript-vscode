@@ -92,6 +92,16 @@ describe("hover", () => {
     assert.match(text, /From Inedo's/);
   });
 
+  it("documents the namespace's operation of a shared name, and lists the others without a namespace", async () => {
+    const source = await openContent('DotNet::Build(Project: "a.csproj");\nBuild(ProjectFile: "a.sln", Configuration: "Release");\n');
+    const qualified = await hoverText(source, positionOf(source, "Build(Project", 1));
+    assert.match(qualified, /dotnet build/);
+    assert.doesNotMatch(qualified, /Also/);
+    const bare = await hoverText(source, positionOf(source, "Build(ProjectFile", 1));
+    assert.match(bare, /devenv\.exe/);
+    assert.match(bare, /Also `DotNet::Build` \(BuildMaster\): write the namespace to pick one/);
+  });
+
   it("documents an operation's argument name, and lists the arguments on the operation", async () => {
     const source = await openContent('Copy-Files(\n    From: "a",\n    To: "b"\n);\n');
     assert.match(await hoverText(source, positionOf(source, "To:", 1)), /Argument of `Copy-Files`: `To` \(required, text\) - Target directory/);
@@ -195,6 +205,14 @@ describe("completion", () => {
     assert.ok(!(await completionLabels(proget, positionOf(proget, "Log-Inf", 7))).includes("Log-Information"));
   });
 
+  it("offers each same-named operation: by its namespace, or qualified without one", async () => {
+    const dotnet = await openContent("DotNet::Bui\n");
+    assert.ok((await completionLabels(dotnet, positionOf(dotnet, "Bui", 3))).includes("Build"));
+    const bare = await openContent("Bui\n");
+    const labels = await completionLabels(bare, positionOf(bare, "Bui", 3));
+    assert.ok(labels.includes("Build") && labels.includes("DotNet::Build"), labels.join(" "));
+  });
+
   it("offers the file's own variables after $, @ and %, but not the one being typed", async () => {
     const document = await openContent("set $myCount = 1;\nset @myList = @(1);\nforeach %myItem in @maps {\n}\nLog-Information $my");
     const scalars = await completionLabels(document, positionOf(document, "Information $my", 15), "$");
@@ -235,6 +253,12 @@ describe("completion", () => {
     assert.ok(labels.includes("To") && labels.includes("Include"), labels.join(" "));
     assert.ok(!labels.includes("From"), "already given");
     assert.ok(!labels.includes("Log-Information"), "no operations in an argument list");
+
+    const later = await openContent('Copy-Files(\n    \n    To: "b"\n);\n');
+    const laterLabels = await completionLabels(later, new vscode.Position(1, 4));
+    assert.ok(laterLabels.includes("From") && !laterLabels.includes("To"), `given after the cursor: ${laterLabels.join(" ")}`);
+    const jira = await openContent("Jira::Create-Issue(");
+    assert.ok((await completionLabels(jira, positionOf(jira, "(", 1), "(")).includes("Type"), "the namespace's operation");
 
     const opened = await openContent("Copy-Files(");
     assert.ok((await completionLabels(opened, positionOf(opened, "(", 1), "(")).includes("To"), "on '('");

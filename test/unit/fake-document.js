@@ -49,6 +49,7 @@ function makeDocument(text, options = {}) {
     languageId,
     version,
     lineCount: lines.length,
+    eol: 1, // EndOfLine.LF
     offsetAt,
     positionAt,
     /** @param {{ start: { line: number, character: number }, end: { line: number, character: number } }} [range] */

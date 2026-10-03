@@ -8,6 +8,7 @@
 
 const vscode = require("vscode");
 const {
+  closestMatch,
   isReadOnlyView,
   log,
   lookupOwn,
@@ -17,7 +18,9 @@ const {
   NAMESPACES,
   keywordDocs,
   mapFunctionDocs,
+  operationArguments,
   operationDocs,
+  operationVariants,
   scalarFunctionDocs,
   vectorFunctionDocs,
 } = require("./language-data");
@@ -53,7 +56,8 @@ const KNOWN_NAMESPACES = new Set([...NAMESPACES].map((n) => n.toLowerCase()));
  * (`Kubernetes::Ensure-Thing`) isn't flagged as an unknown operation: its
  * extension's operations simply aren't documented.
  */
-const DOCUMENTED_OPERATION_NAMESPACES = new Set(Object.values(operationDocs).map((doc) => (doc.namespace ?? "Core").toLowerCase()));
+const DOCUMENTED_OPERATION_NAMESPACES = new Set([...Object.values(operationDocs), ...Object.values(operationVariants).flat()]
+  .map((doc) => (doc.namespace ?? "Core").toLowerCase()));
 
 // ============================================================
 // DIAGNOSTIC CHECKS
@@ -403,61 +407,121 @@ function findDuplicateModuleDiagnostics(document, maskedLines) {
 const OPERATION_CALL_REGEX = /(?<![$@%\w:-])(?:([A-Za-z][A-Za-z0-9]*)::)?([A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*)\s*\(/g;
 
 /**
- * Flags operation calls that leave out a required argument
- * (`Copy-Files(From: $x)` without `To:`), as hints: an operation may accept
- * names the reference doesn't list (aliases), so this is a nudge, not an
- * error. Calls with a positional argument are skipped -- which argument it
- * fills isn't documented -- and so are operations without parentheses.
+ * The top-level arguments of the call whose `(` is at `open`: the named
+ * ones (`Name:`), with where each name starts, and whether any is
+ * positional. Null when the `)` is missing.
+ *
+ * @param {string} maskedText - Masked by {@link maskNonCodeSpans}
+ * @param {string} text - The same text unmasked
+ * @param {number} open - Index of the `(`
+ * @returns {{ close: number, named: { name: string, start: number }[], positional: boolean } | null}
+ */
+function parseCallArguments(maskedText, text, open) {
+  const close = findMatchingParen(maskedText, open);
+  if (close === -1) return null;
+  /** @type {{ name: string, start: number }[]} */
+  const named = [];
+  let positional = false;
+  let depth = 0;
+  let segmentStart = open + 1;
+  for (let i = open + 1; i <= close; i++) {
+    const ch = maskedText[i];
+    if (ch === "(" || ch === "[") depth++;
+    else if ((ch === ")" || ch === "]") && i < close) depth--;
+    if (i === close || (ch === "," && depth === 0)) {
+      const segment = maskedText.slice(segmentStart, i);
+      const argument = /^(\s*)([A-Za-z]\w*)\s*:(?!:)/.exec(segment);
+      if (argument) named.push({ name: argument[2], start: segmentStart + argument[1].length });
+      else if (hasArgumentText(text, segmentStart, i)) positional = true;
+      segmentStart = i + 1;
+    }
+  }
+  return { close, named, positional };
+}
+
+/**
+ * What's wrong with an operation call's argument names, by its documented
+ * arguments (see `operationArguments`): the named arguments that look like a
+ * typo of a documented one (`Fomr:` for `From:`) -- only those, as an
+ * operation may accept aliases the reference doesn't list -- and the
+ * required arguments left out. A misspelt argument counts as its suggestion,
+ * so it isn't reported missing as well; with a positional argument nothing is
+ * missing, since which argument it fills isn't documented. Null for an
+ * operation without documented arguments.
+ *
+ * @param {string} name
+ * @param {string | null} namespace
+ * @param {{ named: { name: string, start: number }[], positional: boolean }} call - From {@link parseCallArguments}
+ * @returns {{ typos: { name: string, start: number, suggestion: string }[], missing: string[] } | null}
+ */
+function findArgumentProblems(name, namespace, call) {
+  const params = operationArguments(name, namespace);
+  if (!params) return null;
+  const known = params.map((p) => p.name);
+  const lowerKnown = new Set(known.map((n) => n.toLowerCase()));
+  const given = new Set(call.named.map((a) => a.name.toLowerCase()));
+  /** @type {{ name: string, start: number, suggestion: string }[]} */
+  const typos = [];
+  for (const argument of call.named) {
+    if (lowerKnown.has(argument.name.toLowerCase())) continue;
+    const suggestion = closestMatch(argument.name, known);
+    if (!suggestion) continue;
+    typos.push({ ...argument, suggestion });
+    given.add(suggestion.toLowerCase());
+  }
+  const missing = call.positional ? [] : params.filter((p) => p.required && !given.has(p.name.toLowerCase())).map((p) => p.name);
+  return { typos, missing };
+}
+
+/**
+ * Flags, as hints, operation calls that leave out a required argument
+ * (`Copy-Files(From: $x)` without `To:`) or give one that looks misspelt
+ * (`Fomr:`): an operation may accept names the reference doesn't list
+ * (aliases), so these are nudges, not errors. See {@link findArgumentProblems}.
+ * Operations without parentheses aren't checked.
  *
  * @param {vscode.TextDocument} document - Used only for `positionAt()`.
  * @param {string} maskedText - Full document text, already masked.
  * @param {string} [text] - The same text unmasked (default: the document's)
  * @returns {vscode.Diagnostic[]}
  */
-function findMissingArgumentDiagnosticsFromMasked(document, maskedText, text = document.getText()) {
+function findOperationArgumentDiagnosticsFromMasked(document, maskedText, text = document.getText()) {
   /** @type {vscode.Diagnostic[]} */
   const issues = [];
-  for (const match of maskedText.matchAll(OPERATION_CALL_REGEX)) {
-    const name = match[2];
-    const required = lookupOwn(operationDocs, name)?.params?.filter((p) => p.required);
-    if (!required?.length) continue;
-    const start = /** @type {number} */ (match.index) + (match[1] ? match[1].length + 2 : 0);
-    if (/\bcall\s+$/i.test(maskedText.slice(Math.max(0, start - 20), start))) continue;
-
-    const open = /** @type {number} */ (match.index) + match[0].length - 1;
-    const close = findMatchingParen(maskedText, open);
-    if (close === -1) continue;
-
-    // The top-level arguments' names; a segment without `Name:` is positional.
-    /** @type {Set<string>} */
-    const given = new Set();
-    let positional = false;
-    let depth = 0;
-    let segmentStart = open + 1;
-    for (let i = open + 1; i <= close; i++) {
-      const ch = maskedText[i];
-      if (ch === "(" || ch === "[") depth++;
-      else if ((ch === ")" || ch === "]") && i < close) depth--;
-      if (i === close || (ch === "," && depth === 0)) {
-        const segment = maskedText.slice(segmentStart, i);
-        const argName = /^\s*([A-Za-z]\w*)\s*:(?!:)/.exec(segment)?.[1];
-        if (argName) given.add(argName.toLowerCase());
-        else if (hasArgumentText(text, segmentStart, i)) positional = true;
-        segmentStart = i + 1;
-      }
-    }
-    if (positional) continue;
-
-    const missing = required.filter((p) => !given.has(p.name.toLowerCase())).map((p) => p.name);
-    if (!missing.length) continue;
+  /**
+   * @param {number} start
+   * @param {number} length
+   * @param {string} message
+   * @param {string} code
+   */
+  const hint = (start, length, message, code) => {
     const diagnostic = new vscode.Diagnostic(
-      new vscode.Range(document.positionAt(start), document.positionAt(start + name.length)),
-      `'${name}' is missing its required argument${missing.length === 1 ? "" : "s"} ${missing.map((m) => `'${m}'`).join(", ")}.`,
-      vscode.DiagnosticSeverity.Hint
+      new vscode.Range(document.positionAt(start), document.positionAt(start + length)), message, vscode.DiagnosticSeverity.Hint
     );
-    diagnostic.code = "missing-required-argument";
+    diagnostic.code = code;
     diagnostic.source = "OtterScript";
     issues.push(diagnostic);
+  };
+
+  for (const match of maskedText.matchAll(OPERATION_CALL_REGEX)) {
+    const [, namespace, name] = match;
+    if (!lookupOwn(operationDocs, name)) continue;
+    const start = /** @type {number} */ (match.index) + (namespace ? namespace.length + 2 : 0);
+    if (/\bcall\s+$/i.test(maskedText.slice(Math.max(0, start - 20), start))) continue;
+
+    const call = parseCallArguments(maskedText, text, /** @type {number} */ (match.index) + match[0].length - 1);
+    const problems = call && findArgumentProblems(name, namespace ?? null, call);
+    if (!problems) continue;
+    for (const typo of problems.typos) {
+      hint(typo.start, typo.name.length,
+        `'${typo.name}' isn't a documented argument of '${name}'. Did you mean '${typo.suggestion}'?`, "unknown-argument");
+    }
+    const { missing } = problems;
+    if (missing.length) {
+      hint(start, name.length,
+        `'${name}' is missing its required argument${missing.length === 1 ? "" : "s"} ${missing.map((m) => `'${m}'`).join(", ")}.`,
+        "missing-required-argument");
+    }
   }
   return issues;
 }
@@ -547,6 +611,7 @@ const DIAGNOSTIC_CODES = Object.freeze([
   "too-many-arguments",
   "too-few-arguments",
   "missing-required-argument",
+  "unknown-argument",
   // -- Text templates (`<% %>`)
   "template-unexpected-close",
   "template-unclosed",
@@ -1096,7 +1161,7 @@ function updateDiagnostics(document, collection, ctx) {
   try {
     issues.push(...findDuplicateMapKeyDiagnosticsFromMasked(document, joinedMasked));
     issues.push(...findArgumentCountDiagnosticsFromMasked(document, joinedMasked));
-    issues.push(...findMissingArgumentDiagnosticsFromMasked(document, joinedMasked));
+    issues.push(...findOperationArgumentDiagnosticsFromMasked(document, joinedMasked));
     issues.push(...findDuplicateModuleDiagnostics(document, maskedLines));
     if (templateAware) {
       // Triggered by a literal "type": "AdaptiveCard" in the literal output.
@@ -1115,6 +1180,8 @@ module.exports = {
   checkMissingDollar,
   createUnbalancedDiagnostic,
   findDuplicateMapKeyDiagnosticsFromMasked,
+  findArgumentProblems,
   getDiagnosticCode,
+  parseCallArguments,
   updateDiagnostics,
 };

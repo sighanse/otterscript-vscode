@@ -32,6 +32,15 @@ class Position {
     this.line = line;
     this.character = character;
   }
+
+  /**
+   * @param {number} [lineDelta]
+   * @param {number} [characterDelta]
+   * @returns {Position}
+   */
+  translate(lineDelta = 0, characterDelta = 0) {
+    return new Position(this.line + lineDelta, this.character + characterDelta);
+  }
 }
 
 class Range {
@@ -249,6 +258,7 @@ const vscode = {
   CodeAction,
   CodeActionKind,
   WorkspaceEdit,
+  EndOfLine: Object.freeze({ LF: 1, CRLF: 2 }),
   window: {
     createOutputChannel: () => outputChannel,
   },

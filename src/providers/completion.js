@@ -7,7 +7,7 @@
  */
 
 const vscode = require("vscode");
-const { keywordDocs, mapFunctionDocs, operationDocs, scalarFunctionDocs, syntaxDocs, variableDocs, vectorFunctionDocs } = require("../language-data");
+const { keywordDocs, mapFunctionDocs, operationDocs, operationForms, scalarFunctionDocs, syntaxDocs, variableDocs, vectorFunctionDocs } = require("../language-data");
 const {
   buildCompletionItem,
   buildSigilCompletionItems,
@@ -15,7 +15,7 @@ const {
   isAvailableIn,
   isValidCompletionPosition,
 } = require("../helpers");
-const { findCallArguments, getDocumentVariables, getMaskedTextBefore, getModuleDeclarations } = require("../document-index");
+const { findCallArguments, getDocumentVariables, getMaskedTextAfter, getMaskedTextBefore, getModuleDeclarations } = require("../document-index");
 const { findOperationArgumentContext } = require("../scanner");
 const { findCardCompletions } = require("../adaptivecard");
 
@@ -136,7 +136,7 @@ function registerCompletion(settings, listWorkspaceModules) {
           if (!isValidCompletionPosition(document, position, settings.completionEnabled)) return [];
 
           // -- At an argument name inside an operation call: its arguments.
-          const argumentContext = findOperationArgumentContext(getMaskedTextBefore(document, position));
+          const argumentContext = findOperationArgumentContext(getMaskedTextBefore(document, position), getMaskedTextAfter(document, position));
           const called = argumentContext && await findCallArguments(document, argumentContext, listWorkspaceModules);
           if (argumentContext && called) return argumentItems(called, argumentContext, position);
           // `(` and `,` trigger only argument names.
@@ -192,25 +192,29 @@ function registerCompletion(settings, listWorkspaceModules) {
 
           const items = [];
 
-          // -- Operations (priority 0_)
-          for (const [name, doc] of Object.entries(operationDocs)) {
+          // -- Operations (priority 0_), each same-named operation of another
+          // namespace too (`DotNet::Build` beside `DevEnv::Build`).
+          for (const name of Object.keys(operationDocs)) {
+            if (typed && !name.toLowerCase().startsWith(lowerTyped)) continue;
+            operationForms(name).forEach((doc, i) => {
               // -- Not in the product the `otterscript.product` setting names.
-              if (!isAvailableIn(doc, settings.product)) continue;
+              if (!isAvailableIn(doc, settings.product)) return;
               // -- When a "Namespace::" prefix is typed, only offer operations that
               // belong to that namespace -- inserting a core/other-namespace operation
               // after the prefix would produce invalid code ("ProGet::Log-Information").
               // An operation with no namespace (`null`) is a built-in, which the
               // optional `Core::` prefix names.
-              if (namespaceTyped && (doc.namespace ?? "Core").toLowerCase() !== lowerNamespaceTyped) {
-                  continue;
-              }
-              if (!typed || name.toLowerCase().startsWith(lowerTyped)) {
-                  const snippetText = doc.snippet ?? `${name} "\${0}";`;
-                  const snippet = new vscode.SnippetString(stripTypedNamespace(snippetText));
-                  const item = buildCompletionItem(doc, vscode.CompletionItemKind.Function, '0_', snippet, true);
-                  item.range = replaceRange;
-                  items.push(item);
-              }
+              if (namespaceTyped && (doc.namespace ?? "Core").toLowerCase() !== lowerNamespaceTyped) return;
+              // -- A variant is offered with its namespace, which tells it apart.
+              const qualifier = i > 0 && !namespaceTyped ? `${doc.namespace ?? "Core"}::` : "";
+              const snippetText = `${qualifier}${doc.snippet ?? `${name} "\${0}";`}`;
+              const snippet = new vscode.SnippetString(stripTypedNamespace(snippetText));
+              const shown = qualifier ? { ...doc, name: `${qualifier}${doc.name}` } : doc;
+              const item = buildCompletionItem(shown, vscode.CompletionItemKind.Function, '0_', snippet, true);
+              item.filterText = name;
+              item.range = replaceRange;
+              items.push(item);
+            });
           }
 
           // -- Keywords (priority 1_). Skipped once a "Namespace::" prefix is typed --

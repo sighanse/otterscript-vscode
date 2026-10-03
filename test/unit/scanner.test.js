@@ -30,6 +30,7 @@ const {
   getActiveParameterIndex,
   splitSignatureParameters,
   maskCommentSpans,
+  maskComments,
   findOperationArgumentContext,
   parseModuleParameters,
   indexVariableOccurrences,
@@ -759,6 +760,15 @@ describe("findTemplateTagDelimiters", () => {
 // maskCommentSpans / findVariableOccurrences
 // ============================================================
 
+describe("maskComments", () => {
+  it("blanks comments only, keeping strings whole with their quotes", () => {
+    const state = createCodeScanState();
+    assert.equal(maskComments('From: "a # b" # c', state), 'From: "a # b"    ');
+    assert.equal(maskComments("x /* a", state), "x     ");
+    assert.equal(maskComments("b */ 'y'", state), "     'y'");
+  });
+});
+
 describe("maskCommentSpans", () => {
   it("keeps quoted-string contents (blanking the quotes) and blanks comments", () => {
     const line = `Log "a $x" 'b $y' # $z`;
@@ -884,13 +894,17 @@ describe("maskClosedGroups", () => {
 
 describe("findOperationArgumentContext", () => {
   /**
-   * The context at the end of `text`, masked as the providers mask it.
+   * The context at the end of `text`, masked as the providers mask it,
+   * with `after` the text after the cursor.
    *
    * @param {string} text
+   * @param {string} [after]
    */
-  const at = (text) => {
+  const at = (text, after = "") => {
     const state = createCodeScanState();
-    return findOperationArgumentContext(text.split("\n").map((line) => maskNonCodeSpans(line, state)).join("\n"));
+    const mask = (/** @type {string} */ part) => part.split("\n").map((line) => maskNonCodeSpans(line, state)).join("\n");
+    const before = mask(text);
+    return findOperationArgumentContext(before, mask(after));
   };
 
   it("finds the call and the typed name, after '(' or a top-level ','", () => {
@@ -903,6 +917,13 @@ describe("findOperationArgumentContext", () => {
 
   it("lists the arguments given before, skipping commas in nested calls and strings", () => {
     assert.deepEqual(at('Copy-Files(From: "a,b", To: $PathCombine($a, $b), Inc')?.used, ["From", "To"]);
+  });
+
+  it("lists the arguments given after the cursor, past the one being typed, up to the call's end", () => {
+    assert.deepEqual(at("Copy-Files(From: $a, ", '\n\tTo: $PathCombine($b, "c, d"),\n\tInclude: @("*")\n);\nLog-Information "Overwrite: x";')?.used,
+      ["From", "To", "Include"]);
+    assert.deepEqual(at("Copy-Files(Fr", "om: $a, To: $b)")?.used, ["To"], "the rest of the name being typed isn't given");
+    assert.deepEqual(at("Copy-Files(", "\nSet-Variable(Name: x, Value: y);")?.used, [], "an unclosed call ends at the next statement");
   });
 
   it("is null in a value, outside a call, or in a function or literal", () => {

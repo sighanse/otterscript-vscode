@@ -72,7 +72,7 @@
  *   `signature`) vs BuildMaster's `$PackageHash(packageName, [sourceName])`.
  *   Shown in hover; the too-many-arguments check allows the largest count of
  *   any form.
- * @property {{ name: string, required: boolean, description?: string, format?: string }[]=} params
+ * @property {DocParam[]=} params
  *   An operation's named arguments (`Copy-Files(To: ...)`), from Inedo's
  *   reference: for argument completion and hover, which lists them unless
  *   `documentation` has its own **Arguments:** section.
@@ -86,6 +86,7 @@
  */
 
 /** @typedef {Record<string, DocEntry>} DocsTable */
+/** @typedef {{ name: string, required: boolean, description?: string, format?: string }} DocParam */
 
 const { NAMESPACES } = require("./namespaces");
 
@@ -4025,9 +4026,77 @@ function forProducts(table, products) {
   return Object.fromEntries(Object.entries(table).map(([key, doc]) => [key, doc.products ? doc : { ...doc, products }]));
 }
 
+const mergedOperationDocs = withReference(operationDocs, reference.operationDocs);
+
+/**
+ * Same-named operations of other namespaces than the operationDocs entry
+ * (`DotNet::Build` beside `DevEnv::Build`, `Jira::Create-Issue` beside
+ * `GitHub::Create-Issue`), by name. All from Inedo's reference.
+ *
+ * @type {Readonly<Record<string, DocEntry[]>>}
+ */
+const operationVariants = Object.freeze(reference.operationVariants);
+
+/**
+ * Every operation documented as `name`: the operationDocs entry, then its
+ * variants. Empty for an unknown name.
+ *
+ * @param {string} name
+ * @returns {DocEntry[]}
+ */
+function operationForms(name) {
+  if (!Object.hasOwn(mergedOperationDocs, name)) return [];
+  return [mergedOperationDocs[name], ...(Object.hasOwn(operationVariants, name) ? operationVariants[name] : [])];
+}
+
+/**
+ * The docs entry for operation `name` as it's called: with a namespace,
+ * that namespace's form (`DotNet::Build`; `Core` names a built-in, whose
+ * namespace is null), else -- or when no form has that namespace -- the
+ * operationDocs entry.
+ *
+ * @param {string} name
+ * @param {string | null} [namespace]
+ * @returns {DocEntry | undefined}
+ */
+function lookupOperation(name, namespace) {
+  const forms = operationForms(name);
+  if (!namespace) return forms[0];
+  const wanted = namespace.toLowerCase();
+  return forms.find((doc) => (doc.namespace ?? "Core").toLowerCase() === wanted) ?? forms[0];
+}
+
+/**
+ * The documented arguments of operation \`name\` as it's called. With a
+ * namespace, that form's (see {@link lookupOperation}); without one, every
+ * form's -- the call could mean any of them -- an argument required only
+ * when every form requires it. Undefined when nothing documents them.
+ *
+ * @param {string} name
+ * @param {string | null} [namespace]
+ * @returns {DocParam[] | undefined}
+ */
+function operationArguments(name, namespace) {
+  const forms = namespace ? [lookupOperation(name, namespace)].filter((doc) => doc !== undefined) : operationForms(name);
+  if (forms.length <= 1) return forms[0]?.params;
+  /** @type {Map<string, DocParam>} */
+  const merged = new Map();
+  for (const param of forms.flatMap((doc) => doc.params ?? [])) {
+    const key = param.name.toLowerCase();
+    if (merged.has(key)) continue;
+    const required = forms.every((doc) => doc.params?.some((p) => p.name.toLowerCase() === key && p.required));
+    merged.set(key, { ...param, required });
+  }
+  return merged.size ? [...merged.values()] : undefined;
+}
+
 module.exports = {
   NAMESPACES,
-  operationDocs: withReference(operationDocs, reference.operationDocs),
+  operationDocs: mergedOperationDocs,
+  operationVariants,
+  operationForms,
+  lookupOperation,
+  operationArguments,
   syntaxDocs,
   keywordDocs,
   variableDocs: forProducts(variableDocs, ["ProGet"]),

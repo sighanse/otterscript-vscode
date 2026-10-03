@@ -489,8 +489,22 @@ describe("updateDiagnostics — unknown namespace", () => {
     assert.deepEqual(only('Copy-Files(From: "a", to: "b");', "missing-required-argument"), [], "names ignore case");
     assert.deepEqual(only('Copy-Files("a");', "missing-required-argument"), [], "a positional argument: unknown which");
     assert.deepEqual(only('Log-Information "x";\ncall Copy-Files(From: "a");', "missing-required-argument"), [], "a module call");
-    // Same-named operations of different products: only what every one requires.
-    assert.deepEqual(only('GitHub::Create-Issue(Title: "x");\nDotNet::Build(Project: "a.csproj");', "missing-required-argument"), []);
+    // Same-named operations of different namespaces: the namespace picks
+    // one; without it, only what every one requires is.
+    assert.deepEqual(only('GitHub::Create-Issue(Title: "x");\nDotNet::Build(Project: "a.csproj");\nBuild(Configuration: "Release");', "missing-required-argument"), []);
+    assert.equal(only('Jira::Create-Issue(Title: "x");', "missing-required-argument")[0]?.message, "'Create-Issue' is missing its required argument 'Type'.");
+    assert.equal(only('DevEnv::Build(Configuration: "Release");', "missing-required-argument")[0]?.message, "'Build' is missing its required argument 'ProjectFile'.");
+  });
+
+  it("hints at an argument name that looks misspelt, and doesn't call its intended one missing", () => {
+    const [d] = only('Copy-Files(Fomr: "a", To: "b", Frobnicate: 1);', "unknown-argument");
+    assert.equal(d.message, "'Fomr' isn't a documented argument of 'Copy-Files'. Did you mean 'From'?");
+    assert.equal(d.severity, DiagnosticSeverity.Hint);
+    assert.deepEqual([d.range.start.character, d.range.end.character], [11, 15]);
+    assert.deepEqual(only('Copy-Files(From: "a", Too: "b");', "missing-required-argument"), [], "'Too' stands for 'To'");
+    assert.deepEqual(only('Copy-Files(From: "a", to: "b");', "unknown-argument"), [], "names ignore case");
+    // A namespace's own arguments: DotNet::Build's `Project` is no typo of DevEnv's `ProjectFile`.
+    assert.deepEqual(only('DotNet::Build(Project: "a.csproj");\nBuild(Project: "a.csproj");', "unknown-argument"), []);
   });
 
   it("flags a module declared twice in one file, pointing at the first", () => {

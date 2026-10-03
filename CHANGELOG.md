@@ -20,7 +20,11 @@
 - Hover says when a function works with every sigil (`$FromJson`, `@FromJson`, `%FromJson`), where the sigil picks what it returns. The `@` and `%` forms of `$Eval` and `$GetVariableValue` now have the same full documentation as their `$` form
 
 - `unknown-map-function` diagnostic: an unknown `%Name(...)` function, as `$Name(...)` and `@Name(...)` calls already are
-- `missing-required-argument` diagnostic, a hint by default: an operation call that leaves out a required argument, such as `Copy-Files(From: ...)` without `To`. Calls with a positional argument aren't checked
+- `missing-required-argument` diagnostic, a hint by default: an operation call that leaves out a required argument, such as `Copy-Files(From: ...)` without `To`. Calls with a positional argument aren't checked. A quick fix adds the missing arguments, ready to fill in
+- `unknown-argument` diagnostic, a hint by default: an operation argument name that looks like a typo of a documented one, such as `Copy-Files(Fomr: ...)`, with a quick fix to the documented name (`From`)
+- "Change to" quick fixes for unknown functions and operations, to the closest known name: `$Substrng(...)` becomes `$Substring(...)`, `Copy-Fils` becomes `Copy-Files`. Only names the selected `otterscript.product` has are suggested (behind `Namespace::`, only that namespace's). Fix All applies one only when just the casing differs
+- Same-named operations of different namespaces are told apart: `DotNet::Build` and `DevEnv::Build`, `GitHub::Create-Issue` and `Jira::Create-Issue`, `ProGet::Create-Package` and `NuGet::Create-Package`, BuildMaster's `Ensure-Release` and `GitHub::Ensure-Release`. With the namespace written, hover, signature help, argument completion and the argument checks use that operation; completion offers each one; hovering the name without a namespace lists the others
+- Argument completion also leaves out the arguments given after the cursor
 - `duplicate-module` diagnostic: a second `module` with a name the file already declares
 - Module arguments: inside `call MyModule(`, completion offers the module's parameters not given yet (required ones first), signature help shows them, and hovering an argument name shows how the module declares it — for a module in this file or in another workspace file
 - `otterscript.inlayHints.parameterNames` setting (off by default): parameter-name hints before the positional arguments of a function call, such as `$Substring($x, Offset: 2, Length: 3)`. Functions with one parameter, and arguments that are already a variable of that name, get none

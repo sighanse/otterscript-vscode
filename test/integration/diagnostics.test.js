@@ -175,6 +175,33 @@ describe("quick fixes", () => {
     assert.equal((await refreshDiagnostics(document)).length, 0);
   });
 
+  it("'Change to' fixes a misspelt function, operation and argument name", async () => {
+    const document = await openContent('set $s = $Substrng($x, 1);\nCopy-Fils(To: "b");\nCopy-Files(Fomr: "a", To: "b");\n');
+    for (const [code, title] of [
+      ["unknown-scalar-function", "Change to '$Substring'"],
+      ["unknown-operation", "Change to 'Copy-Files'"],
+      ["unknown-argument", "Change to 'From'"],
+    ]) {
+      const diagnostic = (await refreshDiagnostics(document)).find((d) => codeOf(d) === code);
+      assert.ok(diagnostic, code);
+      const fix = (await quickFixes(document, diagnostic)).find((a) => a.title === title);
+      assert.ok(fix?.edit, `${title} is offered`);
+      await vscode.workspace.applyEdit(fix.edit);
+    }
+    assert.equal(document.getText(), 'set $s = $Substring($x, 1);\nCopy-Files(To: "b");\nCopy-Files(From: "a", To: "b");\n');
+    assert.equal((await refreshDiagnostics(document)).length, 0);
+  });
+
+  it("'Add missing argument' adds a required argument to fill in, on its own line in a multi-line call", async () => {
+    const document = await openContent('Jira::Create-Issue(\n    Title: "Broken build"\n);\n');
+    const [diagnostic] = await refreshDiagnostics(document);
+    assert.equal(codeOf(diagnostic), "missing-required-argument");
+    const fix = (await quickFixes(document, diagnostic)).find((a) => a.title === "Add missing argument 'Type'");
+    assert.ok(fix?.edit, "the fix is offered");
+    await vscode.workspace.applyEdit(fix.edit);
+    assert.equal(document.getText(), 'Jira::Create-Issue(\n    Title: "Broken build",\n    Type: \n);\n');
+  });
+
   it("'Change card version' raises the card version to what the card needs", async () => {
     const document = await openFile(path.join(SAMPLES_DIR, "sample-card-version.otter"));
     const diagnostics = await refreshDiagnostics(document);

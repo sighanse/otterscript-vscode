@@ -43,7 +43,11 @@ Some files are generated; `npm run check` fails when one is out of date:
   the saved reference in `scripts/inedo-reference.json` (Inedo's Otter and
   BuildMaster function/operation reference). The script also holds the
   namespace corrections. The file is compact (no derivable fields);
-  `src/inedo-reference.js` expands it into docs entries. Hand-written entries
+  `src/inedo-reference.js` expands it into docs entries. An operation whose
+  name another namespace also uses (`DevEnv::Build`, `DotNet::Build`) has one
+  entry per namespace: the first in `operationDocs`, the others in
+  `operationVariants`; look operations up with `lookupOperation(name,
+  namespace)` and their arguments with `operationArguments`. Hand-written entries
   in `src/language-data.js` win over generated ones, so better docs or
   ProGet's meaning go there.
 - The function and operation name lists in

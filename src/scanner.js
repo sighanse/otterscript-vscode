@@ -336,6 +336,27 @@ function maskNonCodeSpans(lineText, state) {
 }
 
 /**
+ * A length-preserving mask of comments only: strings stay whole, delimiters
+ * included -- for where code, strings and all, ends.
+ *
+ * @param {string} lineText
+ * @param {CodeScanState} state - Mutated in place.
+ * @returns {string}
+ */
+function maskComments(lineText, state) {
+  const chars = lineText.split("");
+  let i = 0;
+  while (i < lineText.length) {
+    const { kind, next } = stepCodeScan(lineText, i, state);
+    if (kind === "lineComment" || kind === "blockComment") {
+      for (let j = i; j < next && j < chars.length; j++) chars[j] = " ";
+    }
+    i = next;
+  }
+  return chars.join("");
+}
+
+/**
  * Advances a {@link CodeScanState} by processing one line of text without
  * producing any output string.
  *
@@ -1030,7 +1051,7 @@ function indexVariableOccurrences(text) {
  *   `operation` / `namespace` name the call (`ProGet::Create-Directory`);
  *   for a `call` (`module` true) they are the module and its raft, if any.
  *   `typed` is the part of the argument name before the cursor; `used` the
- *   names of the arguments already given before it.
+ *   names of the arguments the call already gives, before it and after it.
  */
 
 /**
@@ -1041,9 +1062,11 @@ function indexVariableOccurrences(text) {
  * @param {string} maskedPrefix - The code before the cursor, masked by
  *   {@link maskNonCodeSpans} (so brackets in strings and comments are gone);
  *   from at least the start of the statement
+ * @param {string} [maskedSuffix] - The code after the cursor, masked the same
+ *   way, for the arguments given after it (none when left out)
  * @returns {OperationArgumentContext | null}
  */
-function findOperationArgumentContext(maskedPrefix) {
+function findOperationArgumentContext(maskedPrefix, maskedSuffix = "") {
   // A braced variable's `}` (`${my dir}`) isn't a block's.
   const text = maskedPrefix.replace(/[$@%]\{[^{}\n]*\}/g, (m) => "_".repeat(m.length));
 
@@ -1089,7 +1112,36 @@ function findOperationArgumentContext(maskedPrefix) {
     }
   }
 
+  // Arguments given after the cursor: each top-level `Name:` segment up to
+  // the call's `)` -- or, while it has none, the end of the statement --
+  // past the rest of the name being typed, when the cursor is inside one.
+  const after = maskedSuffix.replace(/[$@%]\{[^{}\n]*\}/g, (m) => "_".repeat(m.length));
+  let inCurrent = /^\w/.test(after);
+  segmentStart = 0;
+  depth = 0;
+  let end = 0;
+  for (; end < after.length; end++) {
+    const ch = after[end];
+    if (ch === "(" || ch === "[") depth++;
+    else if (ch === ")" || ch === "]") {
+      if (depth === 0) break;
+      depth--;
+    } else if (depth === 0 && (ch === ";" || ch === "{" || ch === "}")) break;
+    else if (depth === 0 && ch === ",") {
+      if (!inCurrent) addUsed(after.slice(segmentStart, end));
+      inCurrent = false;
+      segmentStart = end + 1;
+    }
+  }
+  if (!inCurrent) addUsed(after.slice(segmentStart, end));
+
   return { operation: callee[2], namespace: callee[1] ?? null, module, typed: typedMatch[1] ?? "", used };
+
+  /** @param {string} segment - One argument, masked */
+  function addUsed(segment) {
+    const name = /^\s*([A-Za-z]\w*)\s*:(?!:)/.exec(segment)?.[1];
+    if (name) used.push(name);
+  }
 }
 
 /**
@@ -1138,6 +1190,7 @@ module.exports = {
   isUnescapedQuoteAt,
   scanLineState,
   maskNonCodeSpans,
+  maskComments,
   advanceScanState,
 
   // -- Text-template tags

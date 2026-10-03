@@ -27,7 +27,7 @@ const {
   parseModuleParameters,
   variableKey,
 } = require("./scanner");
-const { operationDocs } = require("./language-data");
+const { lookupOperation, operationArguments, operationForms } = require("./language-data");
 
 // ============================================================
 // MODULE NAVIGATION
@@ -415,6 +415,27 @@ function getMaskedTextBefore(document, position) {
 }
 
 /**
+ * The code from `position` on, to up to {@link MASKED_PREFIX_MAX_LINES}
+ * lines further, masked like {@link getMaskedTextBefore} -- for the rest of
+ * the call the cursor is in.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Position} position
+ * @returns {string}
+ */
+function getMaskedTextAfter(document, position) {
+  const state = getLineStartScanState(document, position.line);
+  const first = document.lineAt(position.line).text;
+  maskNonCodeSpans(first.slice(0, position.character), state);
+  const lines = [maskNonCodeSpans(first.slice(position.character), state)];
+  const last = Math.min(document.lineCount - 1, position.line + MASKED_PREFIX_MAX_LINES);
+  for (let line = position.line + 1; line <= last; line++) {
+    lines.push(maskNonCodeSpans(document.lineAt(line).text, state));
+  }
+  return lines.join("\n");
+}
+
+/**
  * Where the module a `call` in `document` names is declared: in `document`
  * itself, or else in the one workspace file that declares it (as Go to
  * Definition resolves it). Null when no file or several other files do.
@@ -456,7 +477,8 @@ function getModuleParameters(document, range) {
 
 /**
  * The arguments the call in `context` takes: an operation's from its docs
- * entry, a module's from its declaration (see {@link resolveModule}), in the
+ * (see `operationArguments`; a same-named operation's callee is shown with
+ * its namespace, `DotNet::Build`), a module's from its declaration (see {@link resolveModule}), in the
  * shape of an operation's `params` -- a module parameter's `format` is how
  * it's declared (`$path`, `out $result`). Null when the callee is unknown or
  * is a module in another raft (`call Raft::Name`).
@@ -468,8 +490,11 @@ function getModuleParameters(document, range) {
  */
 async function findCallArguments(document, context, listWorkspaceModules) {
   if (!context.module) {
-    const doc = Object.hasOwn(operationDocs, context.operation) ? operationDocs[context.operation] : undefined;
-    return doc?.params ? { callee: doc.name, params: doc.params } : null;
+    const doc = lookupOperation(context.operation, context.namespace);
+    const params = operationArguments(context.operation, context.namespace);
+    if (!doc || !params) return null;
+    const qualified = context.namespace && operationForms(context.operation).length > 1;
+    return { callee: qualified ? `${doc.namespace ?? "Core"}::${doc.name}` : doc.name, params };
   }
   if (context.namespace) return null;
   const resolved = await resolveModule(document, context.operation, listWorkspaceModules);
@@ -490,6 +515,7 @@ module.exports = {
   findModuleDeclarationRange,
   findModuleReferences,
   getDocumentVariables,
+  getMaskedTextAfter,
   getMaskedTextBefore,
   getModuleCallReferencesByName,
   getModuleDeclarations,

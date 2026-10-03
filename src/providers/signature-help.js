@@ -5,7 +5,7 @@
  */
 
 const vscode = require("vscode");
-const { operationDocs, scalarFunctionDocs, vectorFunctionDocs, mapFunctionDocs } = require("../language-data");
+const { lookupOperation, scalarFunctionDocs, vectorFunctionDocs, mapFunctionDocs } = require("../language-data");
 const { lookupOwn } = require("../helpers");
 const { getModuleParameters, resolveModule } = require("../document-index");
 const { getActiveParameterIndex, maskClosedGroups, splitSignatureParameters } = require("../scanner");
@@ -24,7 +24,7 @@ const FUNCTION_SIGNATURE_REGEX = /([$@%])([A-Za-z][A-Za-z0-9_]*)\s*\(([^()]*)$/;
  * `ProGet::Create-Directory my/folder/path\n(` -- but no whitespace or `=`,
  * so it can't swallow an assignment like `set $x = (`.
  */
-const OPERATION_SIGNATURE_REGEX = /(?:^|\s)(?:[A-Za-z][\w-]*::)?([A-Za-z][A-Za-z-]*)(?:[ \t]+(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s(){};=]+))?\s*\(([^()]*)$/;
+const OPERATION_SIGNATURE_REGEX = /(?:^|\s)(?:([A-Za-z][\w-]*)::)?([A-Za-z][A-Za-z-]*)(?:[ \t]+(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s(){};=]+))?\s*\(([^()]*)$/;
 
 /** The function table for each call sigil. */
 const FUNCTION_TABLES = Object.freeze({ "$": scalarFunctionDocs, "@": vectorFunctionDocs, "%": mapFunctionDocs });
@@ -40,8 +40,8 @@ function findSignatureCall(textBeforeCursor) {
   const fnDoc = fn && lookupOwn(FUNCTION_TABLES[/** @type {"$" | "@" | "%"} */ (fn[1])], fn[2]);
   if (fn && fnDoc) return { doc: fnDoc, args: fn[3], isOperation: false };
   const op = OPERATION_SIGNATURE_REGEX.exec(textBeforeCursor);
-  const opDoc = op && lookupOwn(operationDocs, op[1]);
-  return op && opDoc ? { doc: opDoc, args: op[2], isOperation: true } : null;
+  const opDoc = op && lookupOperation(op[2], op[1]);
+  return op && opDoc ? { doc: opDoc, args: op[3], isOperation: true } : null;
 }
 
 /**

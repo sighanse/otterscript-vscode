@@ -6,7 +6,7 @@
  */
 
 const vscode = require("vscode");
-const { keywordDocs, mapFunctionDocs, operationDocs, scalarFunctionDocs, syntaxDocs, variableDocs, vectorFunctionDocs } = require("../language-data");
+const { keywordDocs, lookupOperation, mapFunctionDocs, operationForms, scalarFunctionDocs, syntaxDocs, variableDocs, vectorFunctionDocs } = require("../language-data");
 const { buildArgumentHoverMarkdown, buildHoverMarkdown, lookupOwn } = require("../helpers");
 const { findCallArguments, getMaskedTextBefore, getModuleNameAt, getModuleParameters, isInStringOrCommentDoc, resolveModule } = require("../document-index");
 const { findOperationArgumentContext } = require("../scanner");
@@ -205,11 +205,25 @@ function registerHover(settings, listWorkspaceModules) {
         }
 
         // -- Operations (Log-Information, Copy-Files, PSCall, ...): a documented
-        // name that isn't the name part of a `$`/`@`/`%` token.
+        // name that isn't the name part of a `$`/`@`/`%` token. A
+        // `Namespace::` before it picks between same-named operations
+        // (`DotNet::Build`); without one, the others are listed.
         const operationRange = document.getWordRangeAtPosition(position, /[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*/);
-        if (operationRange && !/[$@%{]$/.test(document.lineAt(position.line).text.slice(0, operationRange.start.character))) {
-          const doc = lookupOwn(operationDocs, document.getText(operationRange));
-          if (doc) return new vscode.Hover(buildHoverMarkdown(doc, settings.product), operationRange);
+        const lineBefore = operationRange && document.lineAt(position.line).text.slice(0, operationRange.start.character);
+        if (operationRange && !/[$@%{]$/.test(lineBefore ?? "")) {
+          const name = document.getText(operationRange);
+          const namespace = /([A-Za-z][A-Za-z0-9]*)::$/.exec(lineBefore ?? "")?.[1];
+          const doc = lookupOperation(name, namespace);
+          if (doc) {
+            const markdown = buildHoverMarkdown(doc, settings.product);
+            const others = namespace ? [] : operationForms(name).filter((form) => form !== doc);
+            if (others.length) {
+              markdown.appendMarkdown(`\n\n---\n\nAlso ${others
+                .map((form) => `\`${form.namespace ?? "Core"}::${form.name}\`${form.products ? ` (${form.products.join(", ")})` : ""}`)
+                .join(", ")}: write the namespace to pick one.`);
+            }
+            return new vscode.Hover(markdown, operationRange);
+          }
         }
 
         // -- Symbols ($function, @vector, %map function, $variable)

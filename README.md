@@ -96,6 +96,7 @@ when no folder is open).
 | `too-many-arguments` | More arguments than the function accepts |
 | `too-few-arguments` | Fewer arguments than the function requires |
 | `missing-required-argument` | Operation call without a required argument, e.g. `Copy-Files` without `To` (a hint) |
+| `unknown-argument` | Operation argument name that looks like a typo of a documented one, e.g. `Fomr:` in `Copy-Files` (a hint) |
 | `template-unexpected-close` | `%>` with no matching `<%` |
 | `template-unclosed` | `<%` that is never closed |
 | `template-end-keyword` | `<% end %>` where `<% } %>` is required |

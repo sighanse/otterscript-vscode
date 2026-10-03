@@ -6,8 +6,18 @@
  */
 
 const vscode = require("vscode");
-const { DIAGNOSTIC_CODES, getDiagnosticCode } = require("../diagnostics");
-const { NAMESPACES } = require("../language-data");
+const { DIAGNOSTIC_CODES, findArgumentProblems, getDiagnosticCode, parseCallArguments } = require("../diagnostics");
+const {
+  NAMESPACES,
+  mapFunctionDocs,
+  operationArguments,
+  operationDocs,
+  operationForms,
+  scalarFunctionDocs,
+  vectorFunctionDocs,
+} = require("../language-data");
+const { createCodeScanState, findOperationArgumentContext, maskComments, maskNonCodeSpans } = require("../scanner");
+const { getMaskedTextBefore } = require("../document-index");
 const {
   createCardVersionFix,
   createContentTypeFix,
@@ -17,6 +27,7 @@ const {
 } = require("../adaptivecard");
 const {
   closestMatch,
+  isAvailableIn,
   log,
   lookupOwn,
 } = require("../helpers");
@@ -182,6 +193,148 @@ function createUnknownNamespaceFix(document, diagnostic) {
   });
 }
 
+/**
+ * A "Change to '<suggestion>'" fix that replaces the diagnostic's range.
+ * Preferred -- so Fix All applies it -- only when just the casing differs;
+ * a name that's merely close is a guess for the user to confirm.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Diagnostic} diagnostic - Its range covers the name to replace
+ * @param {string} suggestion
+ * @param {string} [label] - How the title shows it (default: `suggestion`)
+ * @returns {vscode.CodeAction}
+ */
+function createRenameFix(document, diagnostic, suggestion, label = suggestion) {
+  const action = createCodeAction(`Change to '${label}'`, diagnostic, (edit) => {
+    edit.replace(document.uri, diagnostic.range, suggestion);
+  });
+  action.isPreferred = suggestion.toLowerCase() === document.getText(diagnostic.range).toLowerCase();
+  return action;
+}
+
+/** The docs table for each function sigil. */
+const FUNCTION_TABLES = Object.freeze({ "$": scalarFunctionDocs, "@": vectorFunctionDocs, "%": mapFunctionDocs });
+
+/**
+ * Replaces an unknown function's name with the closest one of its sigil that
+ * the selected product has (`$Substrng` -> `$Substring`).
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Diagnostic} diagnostic - An unknown-*-function diagnostic; its
+ *   range covers the name, right after the sigil
+ * @param {string} product - The `otterscript.product` setting
+ * @returns {vscode.CodeAction | null} Code action, or null when nothing is close
+ */
+function createUnknownFunctionFix(document, diagnostic, product) {
+  const { start } = diagnostic.range;
+  if (start.character === 0) return null;
+  const sigil = document.getText(new vscode.Range(start.translate(0, -1), start));
+  const table = lookupOwn(FUNCTION_TABLES, sigil);
+  if (!table) return null;
+  const name = document.getText(diagnostic.range);
+  const suggestion = closestMatch(name, Object.keys(table).filter((key) => isAvailableIn(table[key], product)));
+  return suggestion && suggestion !== name ? createRenameFix(document, diagnostic, suggestion, `${sigil}${suggestion}`) : null;
+}
+
+/**
+ * Replaces an unknown operation's name with the closest one the selected
+ * product has -- behind `Namespace::`, the closest in that namespace
+ * (`Copy-Fils` -> `Copy-Files`).
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Diagnostic} diagnostic - An unknown-operation diagnostic; its
+ *   range covers the name
+ * @param {string} product - The `otterscript.product` setting
+ * @returns {vscode.CodeAction | null} Code action, or null when nothing is close
+ */
+function createUnknownOperationFix(document, diagnostic, product) {
+  const name = document.getText(diagnostic.range);
+  const before = document.lineAt(diagnostic.range.start.line).text.slice(0, diagnostic.range.start.character);
+  const namespace = /([A-Za-z][A-Za-z0-9]*)::$/.exec(before)?.[1]?.toLowerCase();
+  const candidates = Object.keys(operationDocs).filter((key) => operationForms(key).some((doc) =>
+    isAvailableIn(doc, product) && (!namespace || (doc.namespace ?? "Core").toLowerCase() === namespace)));
+  const suggestion = closestMatch(name, candidates);
+  return suggestion && suggestion !== name ? createRenameFix(document, diagnostic, suggestion) : null;
+}
+
+/**
+ * Replaces a misspelt argument name with the documented argument it's
+ * closest to (`Copy-Files(Fomr: ...)` -> `From:`).
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Diagnostic} diagnostic - An unknown-argument diagnostic; its
+ *   range covers the argument name
+ * @returns {vscode.CodeAction | null} Code action, or null when nothing is close
+ */
+function createUnknownArgumentFix(document, diagnostic) {
+  const context = findOperationArgumentContext(getMaskedTextBefore(document, diagnostic.range.start));
+  if (!context || context.module) return null;
+  const params = operationArguments(context.operation, context.namespace);
+  const name = document.getText(diagnostic.range);
+  const suggestion = params && closestMatch(name, params.map((p) => p.name));
+  return suggestion && suggestion !== name ? createRenameFix(document, diagnostic, suggestion) : null;
+}
+
+/**
+ * Adds the required arguments an operation call leaves out, each as an
+ * empty `Name: ` to fill in: after the last argument, on lines of their own
+ * when the call puts its `)` on a line of its own. Not preferred, so Fix
+ * All leaves it out: the values are the user's to write.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Diagnostic} diagnostic - A missing-required-argument
+ *   diagnostic; its range covers the operation name
+ * @returns {vscode.CodeAction | null} Code action, or null when the call
+ *   can't be read (no `)` yet) or no longer misses anything
+ */
+function createMissingArgumentFix(document, diagnostic) {
+  // The document masked twice: for brackets and argument names (strings and
+  // comments blanked), and for where the last argument ends (comments only).
+  const text = document.getText();
+  const lines = text.split("\n");
+  const codeState = createCodeScanState();
+  const commentState = createCodeScanState();
+  const masked = lines.map((line) => maskNonCodeSpans(line, codeState)).join("\n");
+  const withStrings = lines.map((line) => maskComments(line, commentState)).join("\n");
+
+  const nameStart = document.offsetAt(diagnostic.range.start);
+  const nameEnd = document.offsetAt(diagnostic.range.end);
+  const open = /^\s*\(/.exec(masked.slice(nameEnd))?.[0].length;
+  if (!open) return null;
+  const namespace = /([A-Za-z][A-Za-z0-9]*)::$/.exec(masked.slice(Math.max(0, nameStart - 40), nameStart))?.[1] ?? null;
+  const call = parseCallArguments(masked, text, nameEnd + open - 1);
+  const missing = call && findArgumentProblems(text.slice(nameStart, nameEnd), namespace, call)?.missing;
+  if (!call || !missing?.length) return null;
+
+  // Insert after the last argument: when the `)` is on a later line, on new
+  // lines indented like it (after any comment ending its line, with the `,`
+  // before that comment); else on the same line.
+  const inside = withStrings.slice(nameEnd + open, call.close).trimEnd();
+  const lastEnd = nameEnd + open + inside.length;
+  const comma = inside.endsWith(",");
+  const added = missing.map((name) => `${name}: `);
+  /** @type {[number, string][]} */
+  const inserts = [];
+  if (!inside.trim()) {
+    inserts.push([lastEnd, added.join(", ")]);
+  } else if (text.slice(lastEnd, call.close).includes("\n")) {
+    const eol = document.eol === vscode.EndOfLine.CRLF ? "\r\n" : "\n";
+    const lastLine = document.positionAt(lastEnd).line;
+    const indent = /^[ \t]*/.exec(document.lineAt(lastLine).text)?.[0] ?? "";
+    if (!comma) inserts.push([lastEnd, ","]);
+    inserts.push([document.offsetAt(document.lineAt(lastLine).range.end), `${eol}${indent}${added.join(`,${eol}${indent}`)}`]);
+  } else {
+    inserts.push([lastEnd, `${comma ? " " : ", "}${added.join(", ")}`]);
+  }
+
+  const title = `Add missing argument${missing.length === 1 ? "" : "s"} ${missing.map((m) => `'${m}'`).join(", ")}`;
+  const action = createCodeAction(title, diagnostic, (edit) => {
+    for (const [offset, insertText] of inserts) edit.insert(document.uri, document.positionAt(offset), insertText);
+  });
+  action.isPreferred = false;
+  return action;
+}
+
 const REFRESH_DIAGNOSTICS_COMMAND = "otterscript.refreshDiagnostics";
 /** Internal command behind the "Turn off '<code>'" quick fix; not in the palette. */
 const DISABLE_DIAGNOSTIC_RULE_COMMAND = "otterscript.disableDiagnosticRule";
@@ -211,6 +364,12 @@ function registerCodeActions(settings, diagnostics, runDiagnostics) {
     "assignment-in-condition": createAssignmentInConditionFix,
     "incorrect-for-usage":     createForToForeachFix,
     "unknown-namespace":       createUnknownNamespaceFix,
+    "unknown-scalar-function": (document, diagnostic) => createUnknownFunctionFix(document, diagnostic, settings.product),
+    "unknown-vector-function": (document, diagnostic) => createUnknownFunctionFix(document, diagnostic, settings.product),
+    "unknown-map-function":    (document, diagnostic) => createUnknownFunctionFix(document, diagnostic, settings.product),
+    "unknown-operation":       (document, diagnostic) => createUnknownOperationFix(document, diagnostic, settings.product),
+    "unknown-argument":        createUnknownArgumentFix,
+    "missing-required-argument": createMissingArgumentFix,
     "template-end-keyword":    createTemplateEndFix,
     "adaptivecard-version-too-low": (document, diagnostic) =>
       createCardVersionFix(document, diagnostic, { maxVersion: settings.adaptiveCardMaxVersion }),
@@ -402,9 +561,13 @@ module.exports = {
   createAssignmentInConditionFix,
   createForToForeachFix,
   createInvalidOperatorFix,
+  createMissingArgumentFix,
   createMissingDollarFix,
   createTemplateEndFix,
+  createUnknownArgumentFix,
+  createUnknownFunctionFix,
   createUnknownNamespaceFix,
+  createUnknownOperationFix,
   nearestNamespace,
   registerCodeActions,
 };
