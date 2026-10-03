@@ -14,7 +14,8 @@ Contributions are welcome and appreciated.
 ## Development
 
 Requires Node.js 22.22 or newer (or 24.15+ on the 24 line): the packaging
-tool (`@vscode/vsce`) and the JSDoc lint plugin need it. CI uses Node 24.
+tool (`@vscode/vsce`) and the JSDoc lint plugin need it. CI uses the version
+in `.nvmrc` (24).
 
 ```sh
 npm install       # dev dependencies
@@ -23,8 +24,9 @@ npm run check     # ESLint + JSDoc type-check + grammar/language-data sync
 npm test          # unit tests only (node:test)
 npm run lint      # ESLint only
 npm run build              # bundle src/ into dist/extension.js, which the
-                           # extension runs from (F5, the integration tests and
-                           # packaging build it first)
+                           # extension runs from, with a source map (F5 and the
+                           # integration tests build it first; packaging builds
+                           # it without one, `npm run bundle`)
 npm run test:integration   # integration tests in real VS Code (see below)
 npm run update:cards       # re-download the Adaptive Card schema and regenerate
                            # src/adaptivecard-data.js
@@ -79,6 +81,25 @@ npm run test:integration -- --label minimum   # or: --label stable
 To debug them, pick **Extension Tests** in the Run and Debug view. With the
 [Extension Test Runner](https://marketplace.visualstudio.com/items?itemName=ms-vscode.extension-test-runner)
 extension installed, they also appear in the Testing view.
+
+## Changelog
+
+Add each user-visible change under `## [Unreleased]` in `CHANGELOG.md` (Added,
+Changed, Fixed or Removed), written for people who use the extension. Leave
+out what they can't notice: dependency updates, tooling, tests, CI and
+refactoring.
+
+## Releasing
+
+1. Bump `version` in `package.json` (`npm version <patch|minor|major> --no-git-tag-version`)
+   and turn `[Unreleased]` in `CHANGELOG.md` into the version and date.
+2. Merge to `main` through a pull request.
+3. Run the **Publish Extension** workflow on `main`. After approval in the
+   `release` environment it checks and packages the extension once, publishes
+   that package to the Visual Studio Marketplace and Open VSX, then tags the
+   commit `v<version>` and creates a GitHub release with the package attached.
+   A run that failed half-way can be run again: versions already published
+   are skipped.
 
 ## Questions
 

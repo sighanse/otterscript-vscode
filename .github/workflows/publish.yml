@@ -16,20 +16,22 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      VSCE_PAT: ${{ secrets.VSCE_PAT }}
-      OVSX_PAT: ${{ secrets.OVSX_PAT }}
+    # The publish tokens are secrets of this environment, so only this job can
+    # read them; give the environment a required reviewer to approve each run.
+    environment: release
+    permissions:
+      contents: write # the version tag and GitHub release
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
           persist-credentials: false
 
       - name: Use Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: 'npm'
 
       - name: Install dependencies
@@ -38,13 +40,47 @@ jobs:
       - name: Lint, type-check, grammar sync, unit tests
         run: npm run check
 
-      - name: Package extension (validation only)
-        run: npm run package
+      # One package, built once: the file checked here is the file both
+      # stores get (`vsce publish` and `ovsx publish` would each rebuild it).
+      - name: Package extension
+        id: package
+        run: |
+          npm run package
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "vsix=otterscript-vscode-$version.vsix" >> "$GITHUB_OUTPUT"
 
+      # The tokens are set on the steps that use them only, never for the
+      # whole job (where `npm ci`'s install scripts could read them). A missing
+      # token fails the run rather than skipping a store silently.
+      # --skip-duplicate lets a run that failed half-way be run again.
       - name: Publish to Marketplace
-        if: env.VSCE_PAT != ''
-        run: npm run publish:vsce
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          VSIX: ${{ steps.package.outputs.vsix }}
+        run: |
+          if [ -z "$VSCE_PAT" ]; then echo "::error::VSCE_PAT is not set"; exit 1; fi
+          npx vsce publish --packagePath "$VSIX" --skip-duplicate
 
       - name: Publish to Open VSX
-        if: env.OVSX_PAT != ''
-        run: npm run publish:ovsx
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+          VSIX: ${{ steps.package.outputs.vsix }}
+        run: |
+          if [ -z "$OVSX_PAT" ]; then echo "::error::OVSX_PAT is not set"; exit 1; fi
+          npx ovsx publish "$VSIX" --skip-duplicate
+
+      # Tags the published commit v<version> and attaches the package; the
+      # notes come from .github/release.yml. Skipped when the release exists.
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ steps.package.outputs.version }}
+          VSIX: ${{ steps.package.outputs.vsix }}
+        run: |
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            echo "Release v$VERSION already exists"
+          else
+            gh release create "v$VERSION" "$VSIX" --target "$GITHUB_SHA" --title "v$VERSION" --generate-notes
+          fi

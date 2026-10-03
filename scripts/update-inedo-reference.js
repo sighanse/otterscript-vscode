@@ -27,7 +27,18 @@ const fs = require("fs");
 const path = require("path");
 const zlib = require("zlib");
 
-const REFERENCE_URL = "https://raw.githubusercontent.com/Inedo/inedo-docs/master/Content";
+/** The docs repository and branch the reference archives are read from. */
+const REFERENCE_REPO = "Inedo/inedo-docs";
+const REFERENCE_BRANCH = "master";
+/** How long one download may take before --fetch gives up. */
+const FETCH_TIMEOUT_MS = 60_000;
+/**
+ * The fewest pages one archive may yield: each has dozens (Otter's 78
+ * functions are the fewest), so fewer means the page format has changed and
+ * the parser needs updating -- rather than a snapshot that silently loses
+ * entries.
+ */
+const MIN_PAGES_PER_ARCHIVE = 40;
 const PRODUCTS = ["Otter", "BuildMaster"];
 const SNAPSHOT_PATH = path.join(__dirname, "inedo-reference.json");
 const OUTPUT_PATH = path.join(__dirname, "..", "src", "inedo-reference-data.js");
@@ -183,34 +194,57 @@ function parsePage(kind, product, filePath, html) {
 }
 
 /**
+ * A GET that fails on an error status or after {@link FETCH_TIMEOUT_MS}.
+ *
+ * @param {string} url
+ * @returns {Promise<Response>}
+ */
+async function get(url) {
+  const response = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  if (!response.ok) throw new Error(`GET ${url}: ${response.status} ${response.statusText}`);
+  return response;
+}
+
+/**
  * Downloads the reference archives and writes the snapshot. Pages that are the
  * same in both products become one entry listing both.
  *
  * @returns {Promise<void>}
  */
 async function fetchSnapshot() {
+  // Read every archive from the branch's current commit, which the snapshot
+  // then names: an update is reproducible, and a diff says what it came from.
+  const commit = /** @type {{ sha: string }} */ (await (await get(
+    `https://api.github.com/repos/${REFERENCE_REPO}/commits/${REFERENCE_BRANCH}`
+  )).json()).sha;
+  const referenceUrl = `https://raw.githubusercontent.com/${REFERENCE_REPO}/${commit}/Content`;
+
   /** @type {Map<string, RefEntry>} */
   const entries = new Map();
   for (const product of PRODUCTS) {
     for (const kind of /** @type {const} */ (["function", "operation"])) {
-      const url = `${REFERENCE_URL}/${product}/Reference/${kind}s.zip`;
-      const response = await fetch(url);
-      if (!response.ok) throw new Error(`GET ${url}: ${response.status} ${response.statusText}`);
+      const url = `${referenceUrl}/${product}/Reference/${kind}s.zip`;
+      const response = await get(url);
+      let pages = 0;
       for (const [filePath, data] of unzip(Buffer.from(await response.arrayBuffer()))) {
         if (!filePath.endsWith(".html") || /\/(functions|operations)\.html$/.test(filePath)) continue;
         const entry = parsePage(kind, product, filePath, data.toString("utf8"));
         if (!entry) continue;
+        pages++;
         const key = JSON.stringify([entry.kind, entry.name, entry.usage, entry.description]);
         const existing = entries.get(key);
         if (existing) existing.products.push(product);
         else entries.set(key, entry);
       }
-      console.log(`Read ${url}`);
+      if (pages < MIN_PAGES_PER_ARCHIVE) {
+        throw new Error(`${url}: only ${pages} pages could be read -- has the page format changed?`);
+      }
+      console.log(`Read ${pages} pages from ${url}`);
     }
   }
   const sorted = [...entries.values()].sort((a, b) =>
     a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name) || a.products[0].localeCompare(b.products[0]));
-  const snapshot = { source: `${REFERENCE_URL}/{${PRODUCTS.join(",")}}/Reference/{functions,operations}.zip`, entries: sorted };
+  const snapshot = { source: `${referenceUrl}/{${PRODUCTS.join(",")}}/Reference/{functions,operations}.zip`, entries: sorted };
   fs.writeFileSync(SNAPSHOT_PATH, JSON.stringify(snapshot, null, 1) + "\n");
 }
 

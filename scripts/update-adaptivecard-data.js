@@ -324,7 +324,7 @@ module.exports = {
  * @returns {Promise<void>}
  */
 async function fetchSchema() {
-  const response = await fetch(SCHEMA_URL);
+  const response = await fetch(SCHEMA_URL, { signal: AbortSignal.timeout(60_000) });
   if (!response.ok) throw new Error(`GET ${SCHEMA_URL}: ${response.status} ${response.statusText}`);
   const text = await response.text();
   JSON.parse(text); // fail before overwriting the snapshot with something broken

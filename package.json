@@ -17,12 +17,19 @@
     "url": "https://github.com/sighanse/otterscript-vscode/issues"
   },
   "homepage": "https://github.com/sighanse/otterscript-vscode#readme",
+  "qna": "https://github.com/sighanse/otterscript-vscode/discussions",
   "markdown": "github",
   "license": "MIT",
   "version": "0.5.0",
   "icon": "images/logo.png",
   "engines": {
     "vscode": "^1.85.0"
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    },
+    "virtualWorkspaces": true
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -37,7 +44,8 @@
     "eslint-plugin-jsdoc": "^65.0.1",
     "globals": "^17.13.0",
     "jsonc-parser": "^3.3.1",
-    "ovsx": "^1.2.0"
+    "ovsx": "^1.2.0",
+    "typescript": "6.0.3"
   },
   "categories": [
     "Programming Languages",
@@ -530,7 +538,7 @@
     "lint": "eslint . --cache",
     "lint:fix": "eslint . --fix --cache",
     "lint:ci": "eslint . --max-warnings=0 --cache",
-    "check:js": "npx -y -p typescript@6.0.3 tsc --noEmit -p jsconfig.json && npx -y -p typescript@6.0.3 tsc --noEmit -p test/jsconfig.json && npx -y -p typescript@6.0.3 tsc --noEmit -p scripts/jsconfig.json",
+    "check:js": "tsc --noEmit -p jsconfig.json && tsc --noEmit -p test/jsconfig.json && tsc --noEmit -p scripts/jsconfig.json",
     "check:lang": "node scripts/check-language-sync.js",
     "check:cards": "node scripts/update-adaptivecard-data.js --check",
     "update:cards": "node scripts/update-adaptivecard-data.js --fetch",
@@ -538,13 +546,14 @@
     "update:reference": "node scripts/update-inedo-reference.js --fetch && node scripts/check-language-sync.js --write",
     "update:grammar": "node scripts/check-language-sync.js --write",
     "test": "node --test \"test/unit/*.test.js\"",
-    "build": "esbuild src/extension.js --bundle --platform=node --format=cjs --target=node18 --external:vscode --minify --keep-names --sourcemap=linked --outfile=dist/extension.js",
+    "bundle": "esbuild src/extension.js --bundle --platform=node --format=cjs --target=node18 --external:vscode --minify --keep-names --outfile=dist/extension.js",
+    "build": "npm run bundle -- --sourcemap=linked",
     "pretest:integration": "npm run build",
     "test:integration": "vscode-test",
     "test:cov": "node --test --experimental-test-coverage \"test/unit/*.test.js\"",
     "check": "npm run lint:ci && npm run check:js && npm run check:lang && npm run check:cards && npm run check:reference && npm test",
     "package": "vsce package --no-yarn",
-    "vscode:prepublish": "npm run lint:ci && npm run build",
+    "vscode:prepublish": "npm run lint:ci && npm run bundle",
     "publish:vsce": "vsce publish",
     "publish:ovsx": "ovsx publish --no-dependencies"
   },

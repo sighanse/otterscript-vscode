@@ -24,6 +24,8 @@ repos:
     rev: v6.0.0
     hooks:
       - id: trailing-whitespace
+        # Keep Markdown's two-space hard line breaks.
+        args: [--markdown-linebreak-ext=md]
         stages: [pre-commit]
       - id: end-of-file-fixer
         stages: [pre-commit]

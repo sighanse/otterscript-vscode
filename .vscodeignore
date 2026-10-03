@@ -13,6 +13,7 @@ docs/
 .gitignore
 .DS_Store
 .markdownlint.jsonc
+.nvmrc
 .pre-commit-config.yaml
 scripts/
 *.vsix

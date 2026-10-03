@@ -214,7 +214,7 @@ for (const check of checks) {
 // ------------------------------------------------------------------
 // Every docs-table entry must carry a `namespace` that is either null or one of
 // the known OtterScript namespace tokens. Catches typos and any future value
-// added without updating the allowlist in language-data.js.
+// added without updating the allowlist in src/namespaces.js.
 
 /** @type {ReadonlySet<string>} */
 const namespaces = data.NAMESPACES;
@@ -226,6 +226,10 @@ const nsTables = /** @type {Record<string, DocsTable>} */ ({
   variableDocs: data.variableDocs,
   keywordDocs: data.keywordDocs,
   syntaxDocs: data.syntaxDocs,
+  // Same-named operations of other namespaces (`DotNet::Build`), keyed
+  // `<namespace>::<name>` so a bad one is reported by both.
+  operationVariants: Object.fromEntries(Object.entries(/** @type {Record<string, DocsTable[string][]>} */ (data.operationVariants))
+    .flatMap(([name, forms]) => forms.map((form) => [`${form.namespace}::${name}`, form]))),
 });
 
 /** @type {string[]} */
@@ -253,7 +257,8 @@ if (drift) {
     "\nlanguage-data.js and syntaxes/otterscript.tmLanguage.json are out of sync."
   );
   console.log(
-    "Update the regex alternation(s) and/or namespace values above to match."
+    "Regenerate the grammar's name lists with `npm run update:grammar`, and/or fix\n" +
+    "the namespace values above (or add the namespace to src/namespaces.js)."
   );
   process.exitCode = 1;
 } else {

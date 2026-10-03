@@ -175,7 +175,7 @@ module.exports = [
     rules: {
       "no-restricted-syntax": ["error", {
         selector: "CallExpression[callee.name='require'][arguments.0.value='vscode']",
-        message: "scanner.js must stay vscode-free; put vscode-dependent code in helpers.js.",
+        message: "scanner.js must stay vscode-free; put vscode-dependent code in document-index.js, helpers.js or providers/.",
       }],
     }
   }
