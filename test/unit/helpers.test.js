@@ -630,6 +630,16 @@ describe("validateDocs", () => {
   it("errors on a non-object entry", () => {
     assert.ok(validateDocs("t", { X: "nope" }).errors.some((e) => /is not an object/.test(e)));
   });
+
+  it("warns on an optional string field of another type, falsy ones too", () => {
+    for (const field of ["snippet", "signature", "documentation"]) {
+      for (const value of [false, 0, null, 42]) {
+        const { warnings } = validateDocs("t", { X: { name: "X", description: "d", namespace: null, [field]: value } });
+        assert.ok(warnings.some((w) => w.includes(`'${field}' must be a string`)), `${field}: ${value}`);
+      }
+      assert.deepEqual(validateDocs("t", { X: { name: "X", description: "d", namespace: null, [field]: "" } }).warnings, [], `${field}: ""`);
+    }
+  });
 });
 
 // ============================================================

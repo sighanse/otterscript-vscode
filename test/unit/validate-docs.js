@@ -54,17 +54,17 @@ function validateDocs(label, docsTable) {
     }
 
     // Optional Field: 'snippet'
-    if (doc.snippet && typeof doc.snippet !== "string") {
+    if (doc.snippet !== undefined && typeof doc.snippet !== "string") {
       warnings.push(`${label}.${key} 'snippet' must be a string`);
     }
 
     // Optional Field: 'signature'
-    if (doc.signature && typeof doc.signature !== "string") {
+    if (doc.signature !== undefined && typeof doc.signature !== "string") {
       warnings.push(`${label}.${key} 'signature' must be a string`);
     }
 
     // Optional Field: 'documentation'
-    if (doc.documentation && typeof doc.documentation !== "string") {
+    if (doc.documentation !== undefined && typeof doc.documentation !== "string") {
       warnings.push(`${label}.${key} 'documentation' must be a string`);
     }
 
