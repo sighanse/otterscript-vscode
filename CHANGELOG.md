@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.6.0] - 2026-10-03
 
 ### Added
 
@@ -16,15 +16,13 @@
 - `adaptivecard-unknown-target` diagnostic: an `Action.ToggleVisibility` target that no element in the card has as its `"id"` — the button would silently do nothing — with a quick fix to the closest id (`"detials"` → `"details"`)
 - `adaptivecard-duplicate-id` diagnostic: an `"id"` that another element in the same card already has, so a toggle reaches only one of them. Ids in alternative `<% if %>` / `<% else %>` branches aren't flagged
 - `otterscript.product` setting (`any`, `ProGet`, `Otter` or `BuildMaster`): completion leaves out the functions, variables and operations the chosen product doesn't have, based on Inedo's Otter and BuildMaster reference (what both have counts as the core engine, which ProGet runs too). Hover notes it when a function, variable or operation isn't in the chosen product
-- Argument names in operation calls: inside `Copy-Files(` (after the `(` or a `,`), completion lists the operation's arguments that aren't given yet, required ones first, with their format and description; hovering an argument name (`To:`) shows what it is. An operation's hover now lists its arguments too
+- Argument names in operation calls: inside `Copy-Files(` (after the `(` or a `,`), completion lists the operation's arguments that aren't given yet, required ones first, with their format and description, and leaves out those already given before or after the cursor; hovering an argument name (`To:`) shows what it is. An operation's hover now lists its arguments too
 - Hover says when a function works with every sigil (`$FromJson`, `@FromJson`, `%FromJson`), where the sigil picks what it returns. The `@` and `%` forms of `$Eval` and `$GetVariableValue` now have the same full documentation as their `$` form
-
 - `unknown-map-function` diagnostic: an unknown `%Name(...)` function, as `$Name(...)` and `@Name(...)` calls already are
 - `missing-required-argument` diagnostic, a hint by default: an operation call that leaves out a required argument, such as `Copy-Files(From: ...)` without `To`. Calls with a positional argument aren't checked. A quick fix adds the missing arguments, ready to fill in
 - `unknown-argument` diagnostic, a hint by default: an operation argument name that looks like a typo of a documented one, such as `Copy-Files(Fomr: ...)`, with a quick fix to the documented name (`From`)
 - "Change to" quick fixes for unknown functions and operations, to the closest known name: `$Substrng(...)` becomes `$Substring(...)`, `Copy-Fils` becomes `Copy-Files`. Only names the selected `otterscript.product` has are suggested (behind `Namespace::`, only that namespace's). Fix All applies one only when just the casing differs
 - Same-named operations of different namespaces are told apart: `DotNet::Build` and `DevEnv::Build`, `GitHub::Create-Issue` and `Jira::Create-Issue`, `ProGet::Create-Package` and `NuGet::Create-Package`, BuildMaster's `Ensure-Release` and `GitHub::Ensure-Release`. With the namespace written, hover, signature help, argument completion and the argument checks use that operation; completion offers each one; hovering the name without a namespace lists the others
-- Argument completion also leaves out the arguments given after the cursor
 - The extension now works in Restricted Mode (a folder you haven't marked as trusted) and in virtual workspaces, such as a GitHub repository opened remotely; it never runs your scripts, so it needs no trust
 - `duplicate-module` diagnostic: a second `module` with a name the file already declares
 - Module arguments: inside `call MyModule(`, completion offers the module's parameters not given yet (required ones first), signature help shows them, and hovering an argument name shows how the module declares it — for a module in this file or in another workspace file
