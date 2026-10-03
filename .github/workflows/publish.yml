@@ -5,6 +5,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: ${{ github.workflow }}
@@ -64,11 +65,9 @@ jobs:
 
       - name: Publish to Open VSX
         env:
-          OVSX_PAT: ${{ secrets.OVSX_PAT }}
           VSIX: ${{ steps.package.outputs.vsix }}
         run: |
-          if [ -z "$OVSX_PAT" ]; then echo "::error::OVSX_PAT is not set"; exit 1; fi
-          npx ovsx publish "$VSIX" --skip-duplicate
+          npx ovsx publish "$VSIX" --skip-duplicate --trusted-publishing
 
       # Tags the published commit v<version> and attaches the package; the
       # notes come from .github/release.yml. Skipped when the release exists.
