@@ -462,7 +462,13 @@ async function resolveModule(document, name, listWorkspaceModules) {
   if (local) return { document, range: local };
   const elsewhere = (await listWorkspaceModules()).filter((m) => moduleKey(m.name) === moduleKey(name));
   if (elsewhere.length !== 1) return null;
-  const home = await vscode.workspace.openTextDocument(elsewhere[0].uri);
+  /** @type {vscode.TextDocument} */
+  let home;
+  try {
+    home = await vscode.workspace.openTextDocument(elsewhere[0].uri);
+  } catch {
+    return null; // deleted or unreadable since it was indexed
+  }
   const range = findModuleDeclarationRange(home, name);
   return range ? { document: home, range } : null;
 }

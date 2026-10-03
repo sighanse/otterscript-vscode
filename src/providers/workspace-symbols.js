@@ -45,10 +45,19 @@ function registerWorkspaceSymbols(settings) {
   // the cross-file module features keep the index.
 
   const OTTER_FILE_GLOB = "**/*.{otter,oscript}";
-  // Documents that belong in the index: files on disk, plus untitled ones
-  // while they're open. Other schemes (a Git diff's old side, a PR review,
-  // ...) are extra views of a file and would show up as duplicates.
-  const INDEXED_SCHEMES = new Set(["file", "untitled"]);
+  /**
+   * Whether a document belongs in the index: a file on disk, an untitled
+   * document while it's open, or a file of a workspace folder whatever its
+   * scheme (a virtual workspace's `vscode-vfs:`). Other schemes (a Git
+   * diff's old side, a PR review, ...) are extra views of a file and would
+   * show up as duplicates.
+   *
+   * @param {vscode.Uri} uri
+   * @returns {boolean}
+   */
+  function isIndexed(uri) {
+    return uri.scheme === "file" || uri.scheme === "untitled" || vscode.workspace.getWorkspaceFolder(uri) !== undefined;
+  }
   // Cap on the workspace scan: files matched, and concurrent reads in flight.
   const WORKSPACE_SCAN_FILE_LIMIT = 5000;
   const WORKSPACE_SCAN_CONCURRENCY = 20;
@@ -70,7 +79,7 @@ function registerWorkspaceSymbols(settings) {
    * @returns {void}
    */
   function setModuleIndexEntry(uri, text) {
-    if (!INDEXED_SCHEMES.has(uri.scheme)) return;
+    if (!isIndexed(uri)) return;
     const symbols = findModuleDeclarations(text).map(hit => ({
       name: hit.name,
       range: new vscode.Range(
@@ -92,6 +101,7 @@ function registerWorkspaceSymbols(settings) {
    * @returns {Promise<void>}
    */
   async function indexModuleFile(uri) {
+    if (!isIndexed(uri)) return;
     try {
       const bytes = await vscode.workspace.fs.readFile(uri);
       setModuleIndexEntry(uri, new TextDecoder("utf-8").decode(bytes));
@@ -235,7 +245,7 @@ function registerWorkspaceSymbols(settings) {
       files.set(uri.toString(), uri);
     }
     for (const doc of vscode.workspace.textDocuments) {
-      if (doc.languageId === "otterscript" && INDEXED_SCHEMES.has(doc.uri.scheme)) files.set(doc.uri.toString(), doc.uri);
+      if (doc.languageId === "otterscript" && isIndexed(doc.uri)) files.set(doc.uri.toString(), doc.uri);
     }
     return [...files.values()];
   }

@@ -812,6 +812,10 @@ describe("findVariableOccurrences", () => {
     ]);
   });
 
+  it("counts an operation's output capture as a write", () => {
+    assert.deepEqual(find(["Get-Http(Url: $u, ResponseBody => $body);", "Log $body;"], "$", "body"), ["0:34:w", "1:4:r"]);
+  });
+
   it("treats the sigil as part of the variable's identity", () => {
     assert.deepEqual(find(["set $x = 1;", "set @x = @(1);", "set %x = %(a: 1);"], "@", "x"), ["1:4:w"]);
   });

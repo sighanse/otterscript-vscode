@@ -578,6 +578,13 @@ describe("findAdaptiveCardDiagnostics — ToggleVisibility targets and ids", () 
     assert.equal(only(src, "adaptivecard-unknown-target").length, 1);
   });
 
+  it("flags a target that is an action's id: a toggle can't hide an action", () => {
+    const src = `{ "type": "AdaptiveCard", "version": "1.2", "body": [ ${details} ], "actions": [ ` +
+      '{ "type": "Action.OpenUrl", "id": "open", "title": "Open", "url": "https://example.com" }, ' +
+      '{ "type": "Action.ToggleVisibility", "title": "More", "targetElements": [ "open" ] } ] }';
+    assert.equal(only(src, "adaptivecard-unknown-target").length, 1);
+  });
+
   it("offers no fix when no id is close", () => {
     const src = card(details, '"somethingElse"');
     const [d] = only(src, "adaptivecard-unknown-target");
@@ -657,6 +664,9 @@ describe("findCardCompletions", () => {
     assert.deepEqual(labelsAt(`${body}"actions": [ { "type": "Action.ToggleVisibility", "targetElements": [ "|" ] } ] }`), ["details"]);
     assert.deepEqual(labelsAt(`${body}"actions": [ { "type": "Action.ToggleVisibility", "targetElements": [ "a", { "elementId": "|" } ] } ] }`), ["details"]);
     assert.equal(labelsAt(`${body}"actions": [ { "type": "Action.Submit", "targetElements": [ "|" ] } ] }`), null);
+    // Not an action's own id.
+    assert.deepEqual(labelsAt(`${body}"actions": [ { "type": "Action.Submit", "id": "go", "title": "Go" }, ` +
+      '{ "type": "Action.ToggleVisibility", "targetElements": [ "|" ] } ] }'), ["details"]);
   });
 
   it("offers nothing outside a card, in a key, in a free-form payload or in a <% %> tag", () => {

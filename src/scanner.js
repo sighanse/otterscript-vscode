@@ -950,6 +950,8 @@ const MODULE_PARAMETER_LIST_OPEN_REGEX = /^\s*module\s+[A-Za-z][\w-]*\s*</i;
 const MODULE_PARAMETER_PREFIX_REGEX = /(?:^|,|\b(?:in|out|ref))\s*$/i;
 /** Text before a token at statement start (optionally after `set` / `global`). */
 const ASSIGNMENT_PREFIX_REGEX = /(?:^|[;{}]|\bset|\bglobal)\s*$/i;
+/** Text before a token that receives an operation's output (`ResponseBody => $body`). */
+const OUTPUT_CAPTURE_PREFIX_REGEX = /=>\s*$/;
 /** Text after a token that makes it an assignment target (`=` but not `==`). */
 const ASSIGNMENT_SUFFIX_REGEX = /^\s*=(?!=)/;
 
@@ -958,8 +960,8 @@ const ASSIGNMENT_SUFFIX_REGEX = /^\s*=(?!=)/;
  *   `line`/`character` are 0-based and point at the sigil; `length` covers
  *   the whole token (`$name` or `${name}`). `write` is true for a declaration
  *   or assignment target (`set $x = ...`, `$x = ...`, `global $x = ...`,
- *   `foreach %p in ...`, or a module parameter, whose list may span several
- *   lines).
+ *   `foreach %p in ...`, an operation's output capture `Name => $x`, or a
+ *   module parameter, whose list may span several lines).
  */
 
 /**
@@ -1019,6 +1021,7 @@ function indexVariableOccurrences(text) {
       const write = !inString && (
         isParameter ||
         FOREACH_VARIABLE_PREFIX_REGEX.test(before) ||
+        OUTPUT_CAPTURE_PREFIX_REGEX.test(before) ||
         (ASSIGNMENT_PREFIX_REGEX.test(before) && ASSIGNMENT_SUFFIX_REGEX.test(after))
       );
 

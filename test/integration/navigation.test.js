@@ -41,6 +41,25 @@ describe("navigation and highlighting (main.otter)", () => {
     assert.ok(uris.some((p) => p.endsWith("main.otter")), uris.join(", "));
   });
 
+  it("refuses to rename a module the file declares twice", async () => {
+    const source = await openContent("module Twice {\n}\nmodule Twice {\n}\ncall Twice;\n");
+    await assert.rejects(
+      Promise.resolve(vscode.commands.executeCommand(
+        "vscode.executeDocumentRenameProvider", source.uri, positionOf(source, "call Twice", 6), "Once"
+      )),
+      /declares 'Twice' 2 times/
+    );
+  });
+
+  it("goes to where an operation's output capture assigns a variable", async () => {
+    const source = await openContent('Get-Http(Url: "u", ResponseBody => $body);\nLog-Information $body;\n');
+    /** @type {vscode.Location[]} */
+    const results = await vscode.commands.executeCommand(
+      "vscode.executeDefinitionProvider", source.uri, positionOf(source, "Information $body", 13)
+    );
+    assert.deepEqual(results.map((l) => l.range.start.line), [0]);
+  });
+
   it("matches module names case-insensitively, also with Go to Symbol in Workspace turned off", async () => {
     const config = vscode.workspace.getConfiguration("otterscript");
     await config.update("workspaceSymbols.enable", false, vscode.ConfigurationTarget.Workspace);

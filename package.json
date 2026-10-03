@@ -29,7 +29,9 @@
     "untrustedWorkspaces": {
       "supported": true
     },
-    "virtualWorkspaces": true
+    "virtualWorkspaces": {
+      "supported": true
+    }
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

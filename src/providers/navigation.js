@@ -90,6 +90,20 @@ function registerNavigation(settings, workspace) {
   }
 
   /**
+   * Refuses to rename a module the file declares more than once (flagged by
+   * `duplicate-module`): which declaration its calls mean is ambiguous, and
+   * a rename from the second would edit the first.
+   *
+   * @param {vscode.TextDocument} document
+   * @param {string} name
+   * @returns {void}
+   */
+  function assertSingleDeclaration(document, name) {
+    const count = getModuleDeclarations(document).filter((d) => moduleKey(d.name) === moduleKey(name)).length;
+    if (count > 1) throw new Error(`This file declares '${name}' ${count} times; remove the duplicates before renaming.`);
+  }
+
+  /**
    * Every place a module is declared or called, as `document` sees it. A
    * `call` means the module its own file declares, or else the one workspace
    * file that declares it (as Go to Definition resolves it). So the module's
@@ -195,7 +209,10 @@ function registerNavigation(settings, workspace) {
           return { range: variableNameRange(variableAt.range, document.getText(variableAt.range)[1] === "{"), placeholder: variableAt.name };
         }
         const moduleAt = getModuleNameAt(document, position);
-        if (moduleAt) return { range: moduleAt.range, placeholder: moduleAt.name };
+        if (moduleAt) {
+          assertSingleDeclaration(document, moduleAt.name);
+          return { range: moduleAt.range, placeholder: moduleAt.name };
+        }
         throw new Error("Only a variable or a module can be renamed.");
       },
 
@@ -229,6 +246,7 @@ function registerNavigation(settings, workspace) {
 
         const moduleAt = getModuleNameAt(document, position);
         if (!moduleAt) throw new Error("Only a variable or a module can be renamed.");
+        assertSingleDeclaration(document, moduleAt.name);
         const target = newName.trim();
         if (target.length > MAX_NAME_LENGTH || !PLAIN_NAME_REGEX.test(target)) {
           throw new Error(`'${target}' isn't a valid module name: letters, digits, '-' and '_', starting with a letter and ending with a letter or digit.`);

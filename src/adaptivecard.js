@@ -391,12 +391,17 @@ function findTemplatingKeywords(card) {
  * free-form payloads such as a Teams mention's `msteams` entity.
  *
  * @param {JsonView} card
+ * @param {{ elementsOnly?: boolean }} [options] - `elementsOnly` leaves out
+ *   actions' ids: a toggle can't show or hide an action (actions have no
+ *   `isVisible`), so only elements are toggle targets
  * @returns {CardString[]}
  */
-function findElementIds(card) {
+function findElementIds(card, { elementsOnly = false } = {}) {
   const freeFormSpans = findFreeFormSpans(card);
+  const types = elementsOnly ? findObjectTypes(card) : undefined;
   return findStringProperties(card, "id")
     .filter(({ valueStart, objectStart }) => objectStart !== -1 && !isInsideAny(freeFormSpans, valueStart))
+    .filter(({ objectStart }) => !types?.get(objectStart)?.startsWith("Action."))
     .map(({ value, valueStart, valueEnd }) => ({ value, start: valueStart, end: valueEnd }));
 }
 
@@ -450,7 +455,7 @@ function findToggleTargets(card) {
  * @returns {UnknownTarget[]}
  */
 function findUnknownToggleTargets(card) {
-  const ids = findElementIds(card).map((id) => id.value);
+  const ids = findElementIds(card, { elementsOnly: true }).map((id) => id.value);
   if (ids.some(isTemplatedValue)) return [];
   const known = new Set(ids);
   return findToggleTargets(card)
@@ -653,7 +658,7 @@ function findCardCompletions(text, offset) {
  * @returns {CardCompletionItem[]}
  */
 function cardIdItems(views) {
-  const ids = new Set(views.flatMap((view) => findElementIds(view).map((id) => id.value)));
+  const ids = new Set(views.flatMap((view) => findElementIds(view, { elementsOnly: true }).map((id) => id.value)));
   return [...ids]
     .filter((id) => id !== "" && !isTemplatedValue(id))
     .map((id) => ({ label: id, detail: "Element id", kind: /** @type {const} */ ("id") }));
