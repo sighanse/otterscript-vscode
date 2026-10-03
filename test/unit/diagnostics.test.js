@@ -518,6 +518,10 @@ describe("updateDiagnostics — unknown namespace", () => {
     assert.deepEqual(only('Copy-Files(From: "a", to: "b");', "missing-required-argument"), [], "names ignore case");
     assert.deepEqual(only('Copy-Files("a");', "missing-required-argument"), [], "a positional argument: unknown which");
     assert.deepEqual(only('Log-Information "x";\ncall Copy-Files(From: "a");', "missing-required-argument"), [], "a module call");
+    // A raft-qualified module call whose raft is named like a namespace.
+    for (const code of ["missing-required-argument", "unknown-argument"]) {
+      assert.deepEqual(only('Log-Information "x";\ncall Jira::Create-Issue(Titel: "x");', code), [], `a raft's module call: ${code}`);
+    }
     // Same-named operations of different namespaces: the namespace picks
     // one; without it, only what every one requires is.
     assert.deepEqual(only('GitHub::Create-Issue(Title: "x");\nDotNet::Build(Project: "a.csproj");\nBuild(Configuration: "Release");', "missing-required-argument"), []);

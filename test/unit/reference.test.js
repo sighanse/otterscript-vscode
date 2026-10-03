@@ -186,7 +186,7 @@ describe("generated Inedo reference, merged into language-data", () => {
 
   describe("every merged table passes validateDocs", () => {
 
-    for (const table of ["scalarFunctionDocs", "vectorFunctionDocs", "mapFunctionDocs", "operationDocs", "variableDocs"]) {
+    for (const table of ["scalarFunctionDocs", "vectorFunctionDocs", "mapFunctionDocs", "operationDocs", "variableDocs", "syntaxDocs", "keywordDocs"]) {
       it(table, () => {
         const { errors, warnings } = validateDocs(table, /** @type {any} */ (data)[table]);
         assert.deepEqual([...errors, ...warnings], []);

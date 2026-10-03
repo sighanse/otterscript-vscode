@@ -505,10 +505,14 @@ function findOperationArgumentDiagnosticsFromMasked(document, maskedText, text =
   for (const match of maskedText.matchAll(OPERATION_CALL_REGEX)) {
     const [, namespace, name] = match;
     if (!lookupOwn(operationDocs, name)) continue;
-    const start = /** @type {number} */ (match.index) + (namespace ? namespace.length + 2 : 0);
-    if (/\bcall\s+$/i.test(maskedText.slice(Math.max(0, start - 20), start))) continue;
+    // A module call, also one in another raft (`call Jira::Create-Issue`,
+    // where `Jira::` names the raft): `call` comes before the whole match.
+    const callStart = /** @type {number} */ (match.index);
+    if (/\bcall\s+$/i.test(maskedText.slice(Math.max(0, callStart - 20), callStart))) continue;
+    // The name, past any `Namespace::`: where the missing-argument hint goes.
+    const start = callStart + (namespace ? namespace.length + 2 : 0);
 
-    const call = parseCallArguments(maskedText, text, /** @type {number} */ (match.index) + match[0].length - 1);
+    const call = parseCallArguments(maskedText, text, callStart + match[0].length - 1);
     const problems = call && findArgumentProblems(name, namespace ?? null, call);
     if (!problems) continue;
     for (const typo of problems.typos) {
