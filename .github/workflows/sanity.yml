@@ -11,6 +11,7 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read   # list the pull request's commits (attribution check)
 
 jobs:
   sanity:
@@ -105,6 +106,29 @@ jobs:
             console.log('snippets/otterscript.json is valid');
           "
           echo "✅ JSONC validation passed"
+
+      # No AI attribution in this repository's history (CLAUDE.md): fails on a
+      # Co-authored-by trailer or a "Generated with Claude Code" line in any of
+      # the pull request's commits -- e.g. one the @claude workflow added.
+      - name: No attribution trailers in commit messages
+        id: trailers
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -z "$PR" ]; then
+            echo "Not a pull request; nothing to check."
+            exit 0
+          fi
+          found=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/commits" \
+            --jq '.[] | select(.commit.message | test("(^|\n)co-authored-by:|generated with [[]claude code[]]"; "i")) | "\(.sha[0:7]) \(.commit.message | split("\n")[0])"')
+          if [ -n "$found" ]; then
+            echo "::error::Commit messages with an attribution trailer (reword them):"
+            echo "$found"
+            exit 1
+          fi
+          echo "✅ No attribution trailers"
 
       - name: Verify LF line endings
         id: lineEndings
@@ -226,6 +250,13 @@ jobs:
             echo "❌ Line endings: CRLF detected" >> "$GITHUB_STEP_SUMMARY"
           fi
 
+          # Attribution trailers
+          if [ "${{ steps.trailers.outcome }}" == "success" ]; then
+            echo "✅ Commit messages: no attribution trailers" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ Commit messages: attribution trailer found" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
           # Packaging
           if [ "${{ steps.package.outcome }}" == "success" ]; then
             echo "✅ Package: passed" >> "$GITHUB_STEP_SUMMARY"
@@ -264,6 +295,7 @@ jobs:
             JSON=${{ steps.json.outcome }}
             JSONC=${{ steps.jsonc.outcome }}
             Line-endings=${{ steps.lineEndings.outcome }}
+            Commit-messages=${{ steps.trailers.outcome }}
             Package=${{ steps.package.outcome }}
             Integration-tests=${{ steps.integration.outcome }}
         run: |

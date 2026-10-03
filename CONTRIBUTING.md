@@ -89,6 +89,17 @@ Changed, Fixed or Removed), written for people who use the extension. Leave
 out what they can't notice: dependency updates, tooling, tests, CI and
 refactoring.
 
+## Asking Claude on a pull request
+
+The repository owner and collaborators can mention `@claude` in a pull
+request or issue comment, a review comment or a review, such as
+`@claude address Copilot's latest review`. The **Claude** workflow
+(`.github/workflows/claude.yml`) then runs Claude Code, which follows
+[CLAUDE.md](CLAUDE.md): it checks each finding, pushes its fixes to the pull
+request's branch (unless the comment says otherwise), and replies with what it
+did. Nothing runs without a mention. The workflow needs the Claude GitHub App
+and a `CLAUDE_CODE_OAUTH_TOKEN` repository secret (`claude setup-token`).
+
 ## Releasing
 
 1. Bump `version` in `package.json` (`npm version <patch|minor|major> --no-git-tag-version`)

@@ -1,0 +1,88 @@
+name: Claude
+
+# Runs Claude Code when the repository owner or a collaborator mentions
+# @claude in a pull request or issue comment, a review comment or a review --
+# e.g. "@claude address Copilot's latest review". Claude reads CLAUDE.md for
+# the project's rules, pushes its commits to the pull request's branch and
+# replies in the thread. There is no automatic review on every pull request.
+#
+# Needs the Claude GitHub App on the repository and a CLAUDE_CODE_OAUTH_TOKEN
+# secret (from `claude setup-token`, billed to the Claude subscription).
+
+on:
+  issue_comment:
+    types: [ created ]
+  pull_request_review_comment:
+    types: [ created ]
+  pull_request_review:
+    types: [ submitted ]
+  issues:
+    types: [ opened ]
+
+# One run at a time per pull request or issue; a second request waits rather
+# than racing the first on the same branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  claude:
+    # Only a mention by someone with access to the repository starts a run
+    # (the action checks write access too; this skips the runner for others).
+    if: >-
+      (github.event_name == 'issue_comment' &&
+        contains(github.event.comment.body, '@claude') &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)) ||
+      (github.event_name == 'pull_request_review_comment' &&
+        contains(github.event.comment.body, '@claude') &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)) ||
+      (github.event_name == 'pull_request_review' &&
+        contains(github.event.review.body, '@claude') &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.review.author_association)) ||
+      (github.event_name == 'issues' &&
+        contains(github.event.issue.body, '@claude') &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.issue.author_association))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write        # push commits to the pull request's branch
+      pull-requests: write   # reply on pull requests
+      issues: write          # reply on issues
+      id-token: write        # the action exchanges it for the Claude GitHub App's token
+      actions: read          # read CI results of the pull request
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      # So Claude can run `npm run check` before committing (CLAUDE.md).
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - uses: anthropics/claude-code-action@ed670b4cf9de2a5a570d130d2f6197b9e543cd64 # v1.0.240
+        env:
+          # For `gh` reads of the pull request's reviews (allowed below).
+          GH_TOKEN: ${{ github.token }}
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          additional_permissions: |
+            actions: read
+          # No co-author trailer from Claude Code itself (CLAUDE.md: no AI
+          # attribution; the Sanity workflow checks the commits too).
+          settings: |
+            { "includeCoAuthoredBy": false }
+          # The commands Claude may run besides its file and git tools: the
+          # checks, the generators, and reading the pull request.
+          claude_args: >-
+            --max-turns 60
+            --allowedTools "Bash(npm run check),Bash(npm test),Bash(npm run lint:fix),Bash(npm run update:grammar),Bash(node scripts/update-inedo-reference.js),Bash(node scripts/update-adaptivecard-data.js),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr checks:*),Bash(gh api repos/sighanse/otterscript-vscode/pulls:*)"

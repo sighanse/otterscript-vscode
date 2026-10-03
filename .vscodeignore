@@ -22,6 +22,7 @@ scripts/
 **/*.tmp
 **/*.map
 CONTRIBUTING.md
+CLAUDE.md
 CODE_OF_CONDUCT.md
 eslint.config.cjs
 package-lock.json
