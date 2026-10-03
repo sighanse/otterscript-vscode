@@ -503,6 +503,9 @@ describe("name-suggestion and missing-argument fixes", () => {
     assert.equal(add('Copy-Files(\n    From: "a" # (source)\n);', 0, 10), 'Copy-Files(\n    From: "a", # (source)\n    To: \n);');
     assert.equal(add('Copy-Files(\n    Include: @("*"),\n);', 0, 10), 'Copy-Files(\n    Include: @("*"),\n    To: \n);');
     assert.equal(add('Jira::Create-Issue(Title: "x");', 6, 18), 'Jira::Create-Issue(Title: "x", Type: );');
+    // A block comment that goes on past the line: on the same line, not in the comment.
+    assert.equal(add('Copy-Files(\n    From: "a" /* source\n    folder */\n);', 0, 10),
+      'Copy-Files(\n    From: "a", To:  /* source\n    folder */\n);');
     assert.equal(fixFor(createMissingArgumentFix, 'Copy-Files(From: "a", To: "b");', 0, 10), null, "nothing missing any more");
   });
 });
@@ -650,6 +653,7 @@ describe("signature help call regexes", () => {
     assert.equal(activeParameterIndex("a, ", params), 1, "positional");
     assert.equal(activeParameterIndex("result: ", ["name", "[out result]"]), 1, "a module's out parameter");
     assert.equal(activeParameterIndex("output-file: ", ["name", "[output-file]"]), 1, "a dashed name");
+    assert.equal(activeParameterIndex("Url: $u, ResponseBody => ", ["[Method]", "Url", "[ResponseBody]"]), 2, "an output capture");
   });
 
   it("findSignatureCall prefers the function the cursor is in, then the operation", () => {

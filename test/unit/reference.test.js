@@ -112,6 +112,12 @@ describe("generated Inedo reference, merged into language-data", () => {
     assert.ok(data.operationArguments("Create-Issue")?.some((p) => p.name === "Type"));
   });
 
+  it("marks output arguments (the reference's ⇒), without the marker in their description", () => {
+    const body = data.operationDocs["Get-Http"].params?.find((p) => p.name === "ResponseBody");
+    assert.deepEqual(body, { name: "ResponseBody", required: false, format: "text", description: "Store response as", output: true });
+    assert.equal(data.operationDocs["Get-Http"].params?.find((p) => p.name === "Url")?.output, undefined);
+  });
+
   it("marks the PowerShell names Inedo recommends against, pointing at the alias to write", () => {
     assert.equal(data.operationDocs["PSCall1"].superseded?.by, "PSCall", "the older operation");
     assert.equal(data.operationDocs["PSEnsure2"].superseded?.by, "PSEnsure", "the alias's own name");

@@ -1054,8 +1054,16 @@ function indexVariableOccurrences(text) {
  *   `operation` / `namespace` name the call (`ProGet::Create-Directory`);
  *   for a `call` (`module` true) they are the module and its raft, if any.
  *   `typed` is the part of the argument name before the cursor; `used` the
- *   names of the arguments the call already gives, before it and after it.
+ *   names of the arguments the call already gives (`Name:` or `Name =>`),
+ *   before it and after it.
  */
+
+/**
+ * An argument's name at the start of an argument (group 2, after the
+ * whitespace in group 1): `Name:` (not `::`) or an output capture
+ * `Name => $variable`.
+ */
+const ARGUMENT_NAME_REGEX = /^(\s*)([A-Za-z][\w-]*)\s*(?::(?!:)|=>)/;
 
 /**
  * The argument context at the end of `maskedPrefix`, or null when the end
@@ -1109,7 +1117,7 @@ function findOperationArgumentContext(maskedPrefix, maskedSuffix = "") {
     if (ch === "(" || ch === "[") depth++;
     else if (ch === ")" || ch === "]") depth--;
     else if (ch === "," && depth === 0) {
-      const name = /^\s*([A-Za-z][\w-]*)\s*:(?!:)/.exec(text.slice(segmentStart, i))?.[1];
+      const name = ARGUMENT_NAME_REGEX.exec(text.slice(segmentStart, i))?.[2];
       if (name) used.push(name);
       segmentStart = i + 1;
     }
@@ -1142,7 +1150,7 @@ function findOperationArgumentContext(maskedPrefix, maskedSuffix = "") {
 
   /** @param {string} segment - One argument, masked */
   function addUsed(segment) {
-    const name = /^\s*([A-Za-z][\w-]*)\s*:(?!:)/.exec(segment)?.[1];
+    const name = ARGUMENT_NAME_REGEX.exec(segment)?.[2];
     if (name) used.push(name);
   }
 }
@@ -1227,6 +1235,7 @@ module.exports = {
   variableKey,
   NAME_PATTERN,
   findOperationArgumentContext,
+  ARGUMENT_NAME_REGEX,
   parseModuleParameters,
   BRACED_NAME_PATTERN,
 

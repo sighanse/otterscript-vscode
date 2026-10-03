@@ -30,7 +30,10 @@
  * }} ReferenceDoc
  */
 
-/** @typedef {{ name: string, required: boolean, format?: string, description?: string }} ReferenceParam */
+/**
+ * @typedef {{ name: string, required: boolean, format?: string, description?: string, output?: true }} ReferenceParam
+ *   `output`: the operation sets it -- written `Name => $variable`.
+ */
 
 /**
  * One generated entry, compact: `p` products (letters, see
@@ -78,6 +81,21 @@ function expandParams(compact = []) {
     ...(format ? { format: String(format) } : {}),
     ...(description ? { description: String(description) } : {}),
   }));
+}
+
+/**
+ * An operation argument as hover and completion use it: one Inedo's reference
+ * marks as an output (its description starts with `⇒`, "⇒ Store response
+ * as") gets `output`, and its description loses the marker.
+ *
+ * @param {ReferenceParam} param
+ * @returns {ReferenceParam}
+ */
+function operationParam(param) {
+  if (!param.description?.startsWith("⇒")) return param;
+  const { description, ...rest } = param;
+  const text = description.slice(1).trim();
+  return { ...rest, ...(text ? { description: text } : {}), output: true };
 }
 
 /**
@@ -205,7 +223,7 @@ function expandReference({ functions, operations }) {
       description: entry.d,
       documentation: referenceDocumentation(null, products),
       products,
-      params,
+      params: params.map(operationParam),
     };
     if (variantNamespace === undefined) tables.operationDocs[name] = doc;
     else (tables.operationVariants[name] ??= []).push(doc);
@@ -217,6 +235,7 @@ module.exports = {
   PRODUCT_LETTERS,
   expandReference,
   functionSignature,
+  operationParam,
   operationSignature,
   operationSnippet,
   referenceDocumentation,

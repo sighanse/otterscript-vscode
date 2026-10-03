@@ -90,7 +90,10 @@
  */
 
 /** @typedef {Record<string, DocEntry>} DocsTable */
-/** @typedef {{ name: string, required: boolean, description?: string, format?: string }} DocParam */
+/**
+ * @typedef {{ name: string, required: boolean, description?: string, format?: string, output?: true }} DocParam
+ *   `output`: the operation sets it -- written `Name => $variable`.
+ */
 
 const { NAMESPACES } = require("./namespaces");
 

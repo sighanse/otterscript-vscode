@@ -243,9 +243,10 @@ function registerCompletion(settings, listWorkspaceModules) {
 
   /**
    * Argument-name items for an operation or module call: the arguments not
-   * given yet, required ones first, each inserted as `Name: `.
+   * given yet, required ones first, each inserted as `Name: ` (an output as
+   * `Name => `).
    *
-   * @param {{ callee: string, params: { name: string, required: boolean, format?: string, description?: string }[] }} called -
+   * @param {{ callee: string, params: { name: string, required: boolean, format?: string, description?: string, output?: true }[] }} called -
    *   From findCallArguments
    * @param {import("../scanner").OperationArgumentContext} context
    * @param {vscode.Position} position
@@ -258,9 +259,10 @@ function registerCompletion(settings, listWorkspaceModules) {
       .filter((param) => !used.has(param.name.toLowerCase()))
       .map((param, i) => {
         const item = new vscode.CompletionItem({ label: param.name, description: param.format }, vscode.CompletionItemKind.Property);
-        item.detail = `${param.required ? "Required" : "Optional"} argument of ${called.callee}`;
+        item.detail = `${param.output ? "Output" : param.required ? "Required" : "Optional"} argument of ${called.callee}`;
         if (param.description) item.documentation = param.description;
-        item.insertText = `${param.name}: `;
+        // An output goes into a variable: `ResponseBody => $body`.
+        item.insertText = param.output ? `${param.name} => ` : `${param.name}: `;
         item.sortText = `${param.required ? 0 : 1}_${String(i).padStart(3, "0")}`;
         item.range = range;
         return item;

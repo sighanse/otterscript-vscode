@@ -294,7 +294,13 @@ function createMissingArgumentFix(document, diagnostic) {
   const lines = text.split("\n");
   const codeState = createCodeScanState();
   const commentState = createCodeScanState();
-  const masked = lines.map((line) => maskNonCodeSpans(line, codeState)).join("\n");
+  /** @type {boolean[]} Per line, whether it ends inside a block comment that goes on */
+  const endsInComment = [];
+  const masked = lines.map((line) => {
+    const lineMasked = maskNonCodeSpans(line, codeState);
+    endsInComment.push(codeState.inBlockComment);
+    return lineMasked;
+  }).join("\n");
   const withStrings = lines.map((line) => maskComments(line, commentState)).join("\n");
 
   const nameStart = document.offsetAt(diagnostic.range.start);
@@ -308,18 +314,19 @@ function createMissingArgumentFix(document, diagnostic) {
 
   // Insert after the last argument: when the `)` is on a later line, on new
   // lines indented like it (after any comment ending its line, with the `,`
-  // before that comment); else on the same line.
+  // before that comment); else -- or when a block comment opened on that line
+  // goes on, which new lines would land in -- on the same line.
   const inside = withStrings.slice(nameEnd + open, call.close).trimEnd();
   const lastEnd = nameEnd + open + inside.length;
+  const lastLine = document.positionAt(lastEnd).line;
   const comma = inside.endsWith(",");
   const added = missing.map((name) => `${name}: `);
   /** @type {[number, string][]} */
   const inserts = [];
   if (!inside.trim()) {
     inserts.push([lastEnd, added.join(", ")]);
-  } else if (text.slice(lastEnd, call.close).includes("\n")) {
+  } else if (text.slice(lastEnd, call.close).includes("\n") && !endsInComment[lastLine]) {
     const eol = document.eol === vscode.EndOfLine.CRLF ? "\r\n" : "\n";
-    const lastLine = document.positionAt(lastEnd).line;
     const indent = /^[ \t]*/.exec(document.lineAt(lastLine).text)?.[0] ?? "";
     if (!comma) inserts.push([lastEnd, ","]);
     inserts.push([document.offsetAt(document.lineAt(lastLine).range.end), `${eol}${indent}${added.join(`,${eol}${indent}`)}`]);

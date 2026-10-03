@@ -312,7 +312,7 @@ function getTypedIdentifier(document, position, triggerChar) {
 /**
  * One named argument of an operation (a DocEntry's `params`).
  *
- * @typedef {{ name: string, required: boolean, description?: string, format?: string }} OperationParam
+ * @typedef {{ name: string, required: boolean, description?: string, format?: string, output?: true }} OperationParam
  */
 
 /**
@@ -405,7 +405,7 @@ function buildHoverMarkdown(doc, product = "any") {
  * @returns {string}
  */
 function argumentSummary(param) {
-  const flags = [param.required ? "required" : "optional", param.format].filter(Boolean).join(", ");
+  const flags = [param.output ? "output" : param.required ? "required" : "optional", param.format].filter(Boolean).join(", ");
   return `\`${param.name}\` (${flags})${param.description ? ` - ${param.description}` : ""}`;
 }
 

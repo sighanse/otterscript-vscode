@@ -923,6 +923,10 @@ describe("findOperationArgumentContext", () => {
     assert.deepEqual(at('Copy-Files(From: "a,b", To: $PathCombine($a, $b), Inc')?.used, ["From", "To"]);
   });
 
+  it("counts output captures (`Name => $x`) as given, before and after the cursor", () => {
+    assert.deepEqual(at("Get-Http(ResponseBody => $body, ", " Method => $m)")?.used, ["ResponseBody", "Method"]);
+  });
+
   it("reads dashed argument names, as a module parameter may have", () => {
     assert.deepEqual(at("call Report(output-file: $f, out-"), { operation: "Report", namespace: null, module: true, typed: "out-", used: ["output-file"] });
     assert.deepEqual(at("call Report(", "log-level: 1)")?.used, [], "the name being typed");

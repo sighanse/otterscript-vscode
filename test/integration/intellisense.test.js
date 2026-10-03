@@ -120,6 +120,9 @@ describe("hover", () => {
     assert.equal(await hoverText(source, positionOf(source, '"b"', 1)), "", "not in a value");
     assert.match(await hoverText(source, positionOf(source, "Copy-Files", 2)), /\*\*Arguments:\*\*\n- `Include`/);
 
+    const output = await openContent('Get-Http(\n    Url: "u",\n    ResponseBody => $body\n);\n');
+    assert.match(await hoverText(output, positionOf(output, "ResponseBody", 2)), /`ResponseBody` \(output, text\) - Store response as/);
+
     const call = await openContent("module Report<in $path, out $result> {\n}\ncall Report(path: $p, result: $r);\n");
     assert.match(await hoverText(call, positionOf(call, "result:", 1)), /Argument of `module Report`: `result` \(optional, out \$result\)/);
     assert.match(await hoverText(call, positionOf(call, "call Report", 6)), /module Report<\$path, out \$result>/);
@@ -276,6 +279,15 @@ describe("completion", () => {
     assert.ok((await completionLabels(opened, positionOf(opened, "(", 1), "(")).includes("To"), "on '('");
     const fn = await openContent("set $s = $Substring(");
     assert.deepEqual(await completionLabels(fn, positionOf(fn, "(", 1), "("), [], "nothing for a function's '('");
+  });
+
+  it("inserts an output argument as Name => ", async () => {
+    const document = await openContent('Get-Http(\n    Url: "u",\n    \n);\n');
+    /** @type {vscode.CompletionList} */
+    const list = await vscode.commands.executeCommand("vscode.executeCompletionItemProvider", document.uri, new vscode.Position(2, 4));
+    const body = list.items.find((item) => (typeof item.label === "string" ? item.label : item.label.label) === "ResponseBody");
+    assert.equal(body?.insertText, "ResponseBody => ");
+    assert.equal(body?.detail, "Output argument of Get-Http");
   });
 
   it("offers a module's parameters inside call Module(, from this file or the workspace", async () => {

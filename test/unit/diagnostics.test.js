@@ -502,6 +502,13 @@ describe("updateDiagnostics — unknown namespace", () => {
     assert.equal(only('DevEnv::Build(Configuration: "Release");', "missing-required-argument")[0]?.message, "'Build' is missing its required argument 'ProjectFile'.");
   });
 
+  it("reads an output capture (`Name => $x`) as a named argument", () => {
+    assert.equal(only('Get-Http(ResponseBody => $body);', "missing-required-argument")[0]?.message,
+      "'Get-Http' is missing its required argument 'Url'.", "not taken for a positional argument");
+    assert.equal(only('Get-Http(Url: $u, ResponseBdy => $body);', "unknown-argument")[0]?.message,
+      "'ResponseBdy' isn't a documented argument of 'Get-Http'. Did you mean 'ResponseBody'?");
+  });
+
   it("hints at an argument name that looks misspelt, and doesn't call its intended one missing", () => {
     const [d] = only('Copy-Files(Fomr: "a", To: "b", Frobnicate: 1);', "unknown-argument");
     assert.equal(d.message, "'Fomr' isn't a documented argument of 'Copy-Files'. Did you mean 'From'?");

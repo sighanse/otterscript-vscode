@@ -8,7 +8,7 @@ const vscode = require("vscode");
 const { lookupOperation, scalarFunctionDocs, vectorFunctionDocs, mapFunctionDocs } = require("../language-data");
 const { lookupOwn } = require("../helpers");
 const { getModuleParameters, resolveModule } = require("../document-index");
-const { getActiveParameterIndex, maskClosedGroups, splitSignatureParameters } = require("../scanner");
+const { ARGUMENT_NAME_REGEX, getActiveParameterIndex, maskClosedGroups, splitSignatureParameters } = require("../scanner");
 
 /**
  * The function call the cursor is in, from the text before the cursor:
@@ -82,7 +82,7 @@ async function findModuleSignatureCall(document, textBeforeCursor, listWorkspace
  * @returns {number}
  */
 function activeParameterIndex(args, parameters) {
-  const named = /^\s*([A-Za-z][\w-]*)\s*:(?!:)/.exec(args.slice(args.lastIndexOf(",") + 1))?.[1]?.toLowerCase();
+  const named = ARGUMENT_NAME_REGEX.exec(args.slice(args.lastIndexOf(",") + 1))?.[2]?.toLowerCase();
   const byName = named === undefined ? -1 : parameters.findIndex((label) =>
     label.replace(/^\[|\]$/g, "").replace(/^(?:in|out|ref)\s+/i, "").split(":")[0].trim().toLowerCase() === named);
   return byName !== -1 ? byName : getActiveParameterIndex(args);

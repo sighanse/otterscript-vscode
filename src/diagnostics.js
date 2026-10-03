@@ -25,6 +25,7 @@ const {
   vectorFunctionDocs,
 } = require("./language-data");
 const {
+  ARGUMENT_NAME_REGEX,
   createCodeScanState,
   createTemplateScanState,
   documentUsesTemplateTags,
@@ -408,8 +409,8 @@ const OPERATION_CALL_REGEX = /(?<![$@%\w:-])(?:([A-Za-z][A-Za-z0-9]*)::)?([A-Za-
 
 /**
  * The top-level arguments of the call whose `(` is at `open`: the named
- * ones (`Name:`), with where each name starts, and whether any is
- * positional. Null when the `)` is missing.
+ * ones (`Name:`, or an output capture `Name => $x`), with where each name
+ * starts, and whether any is positional. Null when the `)` is missing.
  *
  * @param {string} maskedText - Masked by {@link maskNonCodeSpans}
  * @param {string} text - The same text unmasked
@@ -430,7 +431,7 @@ function parseCallArguments(maskedText, text, open) {
     else if ((ch === ")" || ch === "]") && i < close) depth--;
     if (i === close || (ch === "," && depth === 0)) {
       const segment = maskedText.slice(segmentStart, i);
-      const argument = /^(\s*)([A-Za-z][\w-]*)\s*:(?!:)/.exec(segment);
+      const argument = ARGUMENT_NAME_REGEX.exec(segment);
       if (argument) named.push({ name: argument[2], start: segmentStart + argument[1].length });
       else if (hasArgumentText(text, segmentStart, i)) positional = true;
       segmentStart = i + 1;

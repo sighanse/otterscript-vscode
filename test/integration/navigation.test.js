@@ -51,6 +51,17 @@ describe("navigation and highlighting (main.otter)", () => {
     );
   });
 
+  it("refuses to rename from a call when the declaring file declares the module twice", async () => {
+    await openContent("module Twice2 {\n}\nmodule Twice2 {\n}\n");
+    const caller = await openContent("call Twice2;\n");
+    await assert.rejects(
+      Promise.resolve(vscode.commands.executeCommand(
+        "vscode.executeDocumentRenameProvider", caller.uri, positionOf(caller, "Twice2", 2), "Once"
+      )),
+      /declares 'Twice2' 2 times/
+    );
+  });
+
   it("goes to where an operation's output capture assigns a variable", async () => {
     const source = await openContent('Get-Http(Url: "u", ResponseBody => $body);\nLog-Information $body;\n');
     /** @type {vscode.Location[]} */

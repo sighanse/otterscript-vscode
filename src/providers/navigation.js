@@ -114,9 +114,11 @@ function registerNavigation(settings, workspace) {
    *
    * @param {vscode.TextDocument} document
    * @param {string} name
-   * @returns {Promise<{ locations: vscode.Location[], declaration: vscode.Location | undefined, crossFile: boolean }>}
+   * @returns {Promise<{ locations: vscode.Location[], declaration: vscode.Location | undefined, crossFile: boolean, home: vscode.TextDocument }>}
    *   `locations` include the module's declaration, which `declaration` is
-   *   (when known); `crossFile` tells whether other files were searched.
+   *   (when known); `crossFile` tells whether other files were searched;
+   *   `home` is the file whose declaration the uses belong to (`document`
+   *   itself unless another file declares the module).
    */
   async function findModuleUses(document, name) {
     const self = document.uri.toString();
@@ -137,6 +139,7 @@ function registerNavigation(settings, workspace) {
         locations: findModuleReferences(document, name, true),
         declaration: localDeclaration ? new vscode.Location(document.uri, localDeclaration) : undefined,
         crossFile: false,
+        home: document,
       };
     }
 
@@ -149,7 +152,7 @@ function registerNavigation(settings, workspace) {
       const other = await documentMentioning(uri, name);
       if (other && !findModuleDeclarationRange(other, name)) locations.push(...findModuleReferences(other, name, false));
     }
-    return { locations, declaration, crossFile: true };
+    return { locations, declaration, crossFile: true, home };
   }
 
   // ============================================================
@@ -256,7 +259,9 @@ function registerNavigation(settings, workspace) {
         if (!sameName && findModuleDeclarationRange(document, target)) {
           throw new Error(`A module named '${target}' is already declared in this file.`);
         }
-        const { locations, crossFile } = await findModuleUses(document, moduleAt.name);
+        const { locations, crossFile, home } = await findModuleUses(document, moduleAt.name);
+        // Started from a call: the declaring file mustn't declare it twice either.
+        if (home !== document) assertSingleDeclaration(home, moduleAt.name);
         if (crossFile && !sameName) {
           // A call renamed in another file must still mean this module.
           const clash = (await workspace.listModules()).find((m) => moduleKey(m.name) === moduleKey(target));

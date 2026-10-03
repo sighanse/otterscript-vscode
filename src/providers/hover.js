@@ -13,7 +13,8 @@ const { findOperationArgumentContext } = require("../scanner");
 
 /**
  * Hover for an argument name of an operation or module call -- a name
- * followed by `:` (not `::`) where an argument starts -- or null.
+ * followed by `:` (not `::`) or, for an output, `=>`, where an argument
+ * starts -- or null.
  *
  * @param {vscode.TextDocument} document
  * @param {vscode.Position} position
@@ -22,7 +23,7 @@ const { findOperationArgumentContext } = require("../scanner");
  */
 async function hoverArgument(document, position, listWorkspaceModules) {
   const range = document.getWordRangeAtPosition(position, /[A-Za-z][\w-]*/);
-  if (!range || !/^\s*:(?!:)/.test(document.lineAt(range.end.line).text.slice(range.end.character))) return null;
+  if (!range || !/^\s*(?::(?!:)|=>)/.test(document.lineAt(range.end.line).text.slice(range.end.character))) return null;
   const context = findOperationArgumentContext(getMaskedTextBefore(document, range.start));
   if (!context || context.typed) return null;
   const called = await findCallArguments(document, context, listWorkspaceModules);

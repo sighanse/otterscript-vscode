@@ -504,7 +504,7 @@ function getModuleParameters(document, range) {
  * @param {vscode.TextDocument} document
  * @param {import("./scanner").OperationArgumentContext} context
  * @param {() => Promise<{ name: string, uri: vscode.Uri }[]>} listWorkspaceModules
- * @returns {Promise<{ callee: string, params: { name: string, required: boolean, format?: string, description?: string }[] } | null>}
+ * @returns {Promise<{ callee: string, params: { name: string, required: boolean, format?: string, description?: string, output?: true }[] } | null>}
  */
 async function findCallArguments(document, context, listWorkspaceModules) {
   if (!context.module) {

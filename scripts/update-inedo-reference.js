@@ -45,6 +45,7 @@ const OUTPUT_PATH = path.join(__dirname, "..", "src", "inedo-reference-data.js")
 const {
   PRODUCT_LETTERS,
   functionSignature,
+  operationParam,
   operationSignature,
   operationSnippet,
   referenceDocumentation,
@@ -399,7 +400,7 @@ function buildReference(snapshot, declared) {
           description: first.description,
           documentation: referenceDocumentation(null, pageProducts),
           products: pageProducts,
-          params,
+          params: params.map(operationParam),
         };
         /** @type {CompactEntry} */
         const entry = {
