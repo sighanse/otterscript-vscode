@@ -142,10 +142,15 @@ function registerCompletion(settings, listWorkspaceModules) {
           // -- Check if completion is enabled and not in a string/comment
           if (!isValidCompletionPosition(document, position, settings.completionEnabled)) return [];
 
-          // -- At an argument name inside an operation call: its arguments.
+          // -- At an argument name inside an operation or module call: its
+          // arguments -- or nothing when the call can't be resolved (an
+          // unknown operation, `call Missing(`): operations and keywords
+          // don't belong in an argument list.
           const argumentContext = findOperationArgumentContext(getMaskedTextBefore(document, position), getMaskedTextAfter(document, position));
-          const called = argumentContext && await findCallArguments(document, argumentContext, listWorkspaceModules);
-          if (argumentContext && called) return argumentItems(called, argumentContext, position);
+          if (argumentContext) {
+            const called = await findCallArguments(document, argumentContext, listWorkspaceModules);
+            return called ? argumentItems(called, argumentContext, position) : [];
+          }
           // `(` and `,` trigger only argument names.
           if (localContext.triggerKind === vscode.CompletionTriggerKind.TriggerCharacter) return [];
 

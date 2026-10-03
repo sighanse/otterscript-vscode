@@ -107,6 +107,13 @@ describe("hover", () => {
     assert.match(await hoverText(source, positionOf(source, "Copy-Files", 2)), /### Copy-Files/);
   });
 
+  it("documents an operation only where a statement starts, not as an argument", async () => {
+    const source = await openContent("Log-Information Build;\n<% Copy-Files(To: \"b\"); %>\nx; Copy-Files(To: \"c\");\n");
+    assert.equal(await hoverText(source, positionOf(source, "Build;", 1)), "", "an implicit-string argument");
+    assert.match(await hoverText(source, positionOf(source, "Copy-Files", 2)), /### Copy-Files/, "after <%");
+    assert.match(await hoverText(source, positionOf(source, "x; Copy-Files", 5)), /### Copy-Files/, "after ;");
+  });
+
   it("shows no operation for a module named like one, declared or not", async () => {
     const call = await openContent("call Build;\n");
     assert.equal(await hoverText(call, positionOf(call, "Build;", 1)), "", "a module no file declares");
@@ -313,6 +320,13 @@ describe("completion", () => {
     assert.ok(!labels.includes("path"), "path is given");
     const elsewhere = await openContent("call Greet(");
     assert.deepEqual(await completionLabels(elsewhere, positionOf(elsewhere, "(", 1), "("), ["name"], "Greet<$name> in main.otter");
+  });
+
+  it("offers nothing in the argument list of a call it can't resolve, even on Ctrl+Space", async () => {
+    for (const source of ["call Missing(", "Frob-Nicate("]) {
+      const document = await openContent(source);
+      assert.deepEqual(await completionLabels(document, positionOf(document, "(", 1)), [], source);
+    }
   });
 
   it("offers Adaptive Card values inside a card in a text template", async () => {

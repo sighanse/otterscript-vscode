@@ -12,6 +12,14 @@ const { findCallArguments, getMaskedTextBefore, getModuleNameAt, getModuleParame
 const { findOperationArgumentContext } = require("../scanner");
 
 /**
+ * The code before a word (strings and comments masked) when the word is where
+ * a statement starts, so it can be an operation: at the start of the line,
+ * or after `;`, `}`, a block's `{` (not a braced variable's `${`) or a
+ * template tag's `<%`. The rule the `unknown-operation` diagnostic uses.
+ */
+const OPERATION_POSITION_REGEX = /(?:^|[;}]|<%|(?<![$@%])\{)\s*$/;
+
+/**
  * Hover for an argument name of an operation or module call -- a name
  * followed by `:` (not `::`) or, for an output, `=>`, where an argument
  * starts -- or null.
@@ -208,14 +216,16 @@ function registerHover(settings, listWorkspaceModules) {
         }
 
         // -- Operations (Log-Information, Copy-Files, PSCall, ...): a documented
-        // name that isn't the name part of a `$`/`@`/`%` token. A
+        // name where a statement starts (see OPERATION_POSITION_REGEX), so
+        // not an argument such as `Build` in `Log-Information Build;`. A
         // `Namespace::` before it picks between same-named operations
         // (`DotNet::Build`); without one, the others are listed.
         const operationRange = document.getWordRangeAtPosition(position, /[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*/);
-        const lineBefore = operationRange && document.lineAt(position.line).text.slice(0, operationRange.start.character);
-        if (operationRange && !/[$@%]\{?$/.test(lineBefore ?? "")) {
+        const lineBefore = operationRange ? getMaskedTextBefore(document, operationRange.start, 0) : "";
+        const namespace = /([A-Za-z][A-Za-z0-9]*)::$/.exec(lineBefore)?.[1];
+        const statementBefore = namespace ? lineBefore.slice(0, -(namespace.length + 2)) : lineBefore;
+        if (operationRange && OPERATION_POSITION_REGEX.test(statementBefore)) {
           const name = document.getText(operationRange);
-          const namespace = /([A-Za-z][A-Za-z0-9]*)::$/.exec(lineBefore ?? "")?.[1];
           const doc = lookupOperation(name, namespace);
           if (doc) {
             const markdown = buildHoverMarkdown(doc, settings.product);
