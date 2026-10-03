@@ -22,6 +22,8 @@ const {
 } = require("../document-index");
 const { createCodeScanState, findTemplateTagDelimiters, maskNonCodeSpans, NAME_PATTERN } = require("../scanner");
 
+/** Decodes the workspace files a cross-file search reads (one, reused). */
+const UTF8 = new TextDecoder("utf-8");
 /** How many workspace files a cross-file search reads at once. */
 const CROSS_FILE_READ_CONCURRENCY = 20;
 
@@ -87,7 +89,7 @@ function registerNavigation(settings, workspace) {
     const open = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString());
     if (open) return open;
     try {
-      const text = new TextDecoder("utf-8").decode(await vscode.workspace.fs.readFile(uri));
+      const text = UTF8.decode(await vscode.workspace.fs.readFile(uri));
       return text.toLowerCase().includes(moduleKey(name)) ? await vscode.workspace.openTextDocument(uri) : undefined;
     } catch {
       return undefined; // gone or unreadable

@@ -446,10 +446,21 @@ function isAvailableIn(doc, product) {
 }
 
 /**
+ * The docs entry of each item {@link buildCompletionItem} made whose
+ * documentation hasn't been built yet. Weak, so items VS Code drops are
+ * garbage-collected.
+ * @type {WeakMap<vscode.CompletionItem, import("./language-data.js").DocEntry>}
+ */
+const pendingDocumentation = new WeakMap();
+
+/**
  * Builds a completion item with consistent formatting.
  *
  * This centralizes completion item creation to ensure all providers
  * produce consistent UI elements (labels, details, documentation, sorting).
+ * The documentation is built only when VS Code shows the item's details:
+ * a provider that returns these items must also implement
+ * `resolveCompletionItem` with {@link resolveCompletionDocumentation}.
  *
  * @param {import('./language-data.js').DocEntry} doc - Documentation object
  * @param {vscode.CompletionItemKind} kind - Item kind (Function, Variable, Keyword, etc.)
@@ -474,7 +485,9 @@ function buildCompletionItem(doc, kind, sortPrefix, insertText, triggerSignature
 
   item.insertText = insertText;
   item.detail = doc.signature ?? doc.description;
-  item.documentation = buildHoverMarkdown(doc);
+  // Built lazily: a list holds hundreds of items, and VS Code shows the
+  // documentation of only the focused one.
+  pendingDocumentation.set(item, doc);
   // A superseded name is struck through and listed after the rest.
   item.sortText = `${sortPrefix}${doc.superseded ? "~" : ""}${doc.name}`;
   if (doc.superseded) item.tags = [vscode.CompletionItemTag.Deprecated];
@@ -487,6 +500,23 @@ function buildCompletionItem(doc, kind, sortPrefix, insertText, triggerSignature
     };
   }
 
+  return item;
+}
+
+/**
+ * Fills in the documentation of an item from {@link buildCompletionItem}
+ * (a CompletionItemProvider's `resolveCompletionItem`). Other items are
+ * returned as they are.
+ *
+ * @param {vscode.CompletionItem} item
+ * @returns {vscode.CompletionItem}
+ */
+function resolveCompletionDocumentation(item) {
+  const doc = pendingDocumentation.get(item);
+  if (doc) {
+    item.documentation = buildHoverMarkdown(doc);
+    pendingDocumentation.delete(item);
+  }
   return item;
 }
 
@@ -627,6 +657,7 @@ module.exports = {
   buildArgumentHoverMarkdown,
   buildCompletionItem,
   buildSigilCompletionItems,
+  resolveCompletionDocumentation,
 
   // -- Text utilities
   closestMatch,

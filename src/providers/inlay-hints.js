@@ -78,8 +78,11 @@ function findParameterNameHints(text) {
       const segment = text.slice(segmentStart, i);
       const start = segment.search(/\S/);
       const param = params[index];
-      // Already self-describing: a variable of the parameter's name.
-      const named = new RegExp(`^[$@%]\\{?${param}\\}?$`, "i").test(segment.trim());
+      // Already self-describing: a variable of the parameter's name
+      // (`$Text` or `${Text}` for `Text`).
+      const argument = segment.trim();
+      const named = param !== undefined && /^[$@%]/.test(argument) &&
+        argument.slice(1).replace(/^\{(.*)\}$/, "$1").toLowerCase() === param.toLowerCase();
       if (param && start !== -1 && !named) {
         hints.push({ offset: segmentStart + start, label: `${param}:` });
       }

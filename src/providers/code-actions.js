@@ -16,8 +16,8 @@ const {
   scalarFunctionDocs,
   vectorFunctionDocs,
 } = require("../language-data");
-const { createCodeScanState, findOperationArgumentContext, maskComments, maskNonCodeSpans } = require("../scanner");
-const { getMaskedTextBefore } = require("../document-index");
+const { findOperationArgumentContext, maskComments, maskNonCodeSpans } = require("../scanner");
+const { getLineStartScanState, getMaskedTextBefore, MASKED_CONTEXT_MAX_LINES } = require("../document-index");
 const {
   createCardVersionFix,
   createContentTypeFix,
@@ -293,12 +293,19 @@ function createUnknownArgumentFix(document, diagnostic) {
  *   can't be read (no `)` yet) or no longer misses anything
  */
 function createMissingArgumentFix(document, diagnostic) {
-  // The document masked twice: for brackets and argument names (strings and
+  // The call's lines -- from the operation's line, as far as a statement
+  // goes -- masked twice: for brackets and argument names (strings and
   // comments blanked), and for where the last argument ends (comments only).
-  const text = document.getText();
+  // Both start from the cached scan state at that line, so a lightbulb
+  // request doesn't rescan the whole document. Offsets below are relative to
+  // `base`, the start of the operation's line.
+  const firstLine = diagnostic.range.start.line;
+  const windowEnd = Math.min(document.lineCount - 1, firstLine + MASKED_CONTEXT_MAX_LINES);
+  const base = document.offsetAt(new vscode.Position(firstLine, 0));
+  const text = document.getText(new vscode.Range(firstLine, 0, windowEnd, document.lineAt(windowEnd).text.length));
   const lines = text.split("\n");
-  const codeState = createCodeScanState();
-  const commentState = createCodeScanState();
+  const codeState = getLineStartScanState(document, firstLine);
+  const commentState = { ...codeState };
   /** @type {boolean[]} Per line, whether it ends inside a block comment that goes on */
   const endsInComment = [];
   const masked = lines.map((line) => {
@@ -308,11 +315,11 @@ function createMissingArgumentFix(document, diagnostic) {
   }).join("\n");
   const withStrings = lines.map((line) => maskComments(line, commentState)).join("\n");
 
-  const nameStart = document.offsetAt(diagnostic.range.start);
-  const nameEnd = document.offsetAt(diagnostic.range.end);
+  const nameStart = document.offsetAt(diagnostic.range.start) - base;
+  const nameEnd = document.offsetAt(diagnostic.range.end) - base;
   const open = /^\s*\(/.exec(masked.slice(nameEnd))?.[0].length;
   if (!open) return null;
-  const namespace = /([A-Za-z][A-Za-z0-9]*)::$/.exec(masked.slice(Math.max(0, nameStart - 40), nameStart))?.[1] ?? null;
+  const namespace = /([A-Za-z][A-Za-z0-9]*)::$/.exec(masked.slice(0, nameStart))?.[1] ?? null;
   const call = parseCallArguments(masked, text, nameEnd + open - 1);
   const missing = call && findArgumentProblems(text.slice(nameStart, nameEnd), namespace, call)?.missing;
   if (!call || !missing?.length) return null;
@@ -323,25 +330,25 @@ function createMissingArgumentFix(document, diagnostic) {
   // goes on, which new lines would land in -- on the same line.
   const inside = withStrings.slice(nameEnd + open, call.close).trimEnd();
   const lastEnd = nameEnd + open + inside.length;
-  const lastLine = document.positionAt(lastEnd).line;
+  const lastLine = document.positionAt(base + lastEnd).line;
   const comma = inside.endsWith(",");
   const added = missing.map((name) => `${name}: `);
   /** @type {[number, string][]} */
   const inserts = [];
   if (!inside.trim()) {
     inserts.push([lastEnd, added.join(", ")]);
-  } else if (text.slice(lastEnd, call.close).includes("\n") && !endsInComment[lastLine]) {
+  } else if (text.slice(lastEnd, call.close).includes("\n") && !endsInComment[lastLine - firstLine]) {
     const eol = document.eol === vscode.EndOfLine.CRLF ? "\r\n" : "\n";
     const indent = /^[ \t]*/.exec(document.lineAt(lastLine).text)?.[0] ?? "";
     if (!comma) inserts.push([lastEnd, ","]);
-    inserts.push([document.offsetAt(document.lineAt(lastLine).range.end), `${eol}${indent}${added.join(`,${eol}${indent}`)}`]);
+    inserts.push([document.offsetAt(document.lineAt(lastLine).range.end) - base, `${eol}${indent}${added.join(`,${eol}${indent}`)}`]);
   } else {
     inserts.push([lastEnd, `${comma ? " " : ", "}${added.join(", ")}`]);
   }
 
   const title = `Add missing argument${missing.length === 1 ? "" : "s"} ${missing.map((m) => `'${m}'`).join(", ")}`;
   const action = createCodeAction(title, diagnostic, (edit) => {
-    for (const [offset, insertText] of inserts) edit.insert(document.uri, document.positionAt(offset), insertText);
+    for (const [offset, insertText] of inserts) edit.insert(document.uri, document.positionAt(base + offset), insertText);
   });
   action.isPreferred = false;
   return action;

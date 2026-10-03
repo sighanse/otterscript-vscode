@@ -537,6 +537,7 @@ module.exports = {
   getDocumentVariables,
   getMaskedTextAfter,
   getMaskedTextBefore,
+  getLineStartScanState,
   getModuleCallReferencesByName,
   getModuleDeclarations,
   getModuleNameAt,
@@ -544,6 +545,7 @@ module.exports = {
   getVariableAt,
   getVariableOccurrences,
   isInStringOrCommentDoc,
+  MASKED_CONTEXT_MAX_LINES,
   moduleKey,
   resolveModule,
 };

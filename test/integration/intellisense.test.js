@@ -286,6 +286,17 @@ describe("completion", () => {
     assert.deepEqual(await completionLabels(fn, positionOf(fn, "(", 1), "("), [], "nothing for a function's '('");
   });
 
+  it("fills in an operation's documentation when the item is resolved", async () => {
+    const document = await openContent("Copy-Fi");
+    /** @type {vscode.CompletionList} */
+    const list = await vscode.commands.executeCommand(
+      "vscode.executeCompletionItemProvider", document.uri, new vscode.Position(0, 7), undefined, 1000
+    );
+    const copy = list.items.find((item) => (typeof item.label === "string" ? item.label : item.label.label) === "Copy-Files");
+    const documentation = /** @type {vscode.MarkdownString | undefined} */ (copy?.documentation);
+    assert.match(documentation?.value ?? "", /### Copy-Files/);
+  });
+
   it("inserts an output argument as Name => ", async () => {
     const document = await openContent('Get-Http(\n    Url: "u",\n    \n);\n');
     /** @type {vscode.CompletionList} */

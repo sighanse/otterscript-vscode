@@ -36,6 +36,7 @@ const { makeDocument } = require("./fake-document");
 const { advanceScanState, createCodeScanState, isInStringOrComment } = require("../../src/scanner.js");
 const {
   buildCompletionItem,
+  resolveCompletionDocumentation,
   buildHoverMarkdown,
   buildArgumentHoverMarkdown,
   buildSigilCompletionItems,
@@ -740,9 +741,19 @@ describe("buildCompletionItem", () => {
     );
   });
 
-  it("documentation is a hover MarkdownString", () => {
-    const md = /** @type {any} */ (buildCompletionItem(doc, KIND, "1_", "x").documentation);
+  it("documentation is a hover MarkdownString, built when the item is resolved", () => {
+    const item = buildCompletionItem(doc, KIND, "1_", "x");
+    assert.equal(item.documentation, undefined);
+    assert.equal(resolveCompletionDocumentation(item), item);
+    const md = /** @type {any} */ (item.documentation);
     assert.match(md.value, /### \$ToJson/);
+  });
+
+  it("resolving leaves other items as they are", () => {
+    const other = buildCompletionItem(doc, KIND, "1_", "x");
+    resolveCompletionDocumentation(other);
+    other.documentation = "own";
+    assert.equal(resolveCompletionDocumentation(other).documentation, "own");
   });
 
   it("sets the signature-help trigger command only when asked", () => {

@@ -14,6 +14,7 @@ const {
   getTypedIdentifier,
   isAvailableIn,
   isValidCompletionPosition,
+  resolveCompletionDocumentation,
 } = require("../helpers");
 const { findCallArguments, getDocumentVariables, getMaskedTextAfter, getMaskedTextBefore, getModuleDeclarations } = require("../document-index");
 const { findOperationArgumentContext } = require("../scanner");
@@ -115,7 +116,8 @@ function registerCompletion(settings, listWorkspaceModules) {
             ...tables.flatMap((table) => buildSigilCompletionItems(table, typed, sort, settings.product)),
             ...(sigil === "%" ? [mapLiteralItem] : []),
           ];
-        }
+        },
+        resolveCompletionItem: resolveCompletionDocumentation,
       },
       "$", "@", "%"
     );
@@ -235,7 +237,8 @@ function registerCompletion(settings, listWorkspaceModules) {
           }
 
           return items;
-        }
+        },
+        resolveCompletionItem: resolveCompletionDocumentation,
       },
       "(", ","
     );

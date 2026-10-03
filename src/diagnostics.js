@@ -1169,8 +1169,8 @@ function updateDiagnostics(document, collection, ctx) {
   const joinedMasked = maskedLines.join("\n");
   try {
     issues.push(...findDuplicateMapKeyDiagnosticsFromMasked(document, joinedMasked));
-    issues.push(...findArgumentCountDiagnosticsFromMasked(document, joinedMasked));
-    issues.push(...findOperationArgumentDiagnosticsFromMasked(document, joinedMasked));
+    issues.push(...findArgumentCountDiagnosticsFromMasked(document, joinedMasked, text));
+    issues.push(...findOperationArgumentDiagnosticsFromMasked(document, joinedMasked, text));
     issues.push(...findDuplicateModuleDiagnostics(document, maskedLines));
     if (templateAware) {
       // Triggered by a literal "type": "AdaptiveCard" in the literal output.

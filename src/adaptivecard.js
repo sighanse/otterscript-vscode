@@ -53,6 +53,37 @@ const { ADAPTIVE_CARD_TYPES, ADAPTIVE_CARD_PROPERTIES, ADAPTIVE_CARD_VALUE_LISTS
 const FREE_FORM_KEYS = new Set(["data", "msteams", "buttons"]);
 
 /**
+ * Per-view results of {@link findFreeFormSpans}, which one diagnostics pass
+ * asks for several times over the same card. Weak, so a view's results go
+ * with it. Callers only read the results.
+ * @type {WeakMap<JsonView, { start: number, end: number }[]>}
+ */
+const freeFormSpanCache = new WeakMap();
+/**
+ * Per-view results of {@link findObjectTypes}, like {@link freeFormSpanCache}.
+ * @type {WeakMap<JsonView, Map<number, string>>}
+ */
+const objectTypeCache = new WeakMap();
+
+/**
+ * `cache`'s value for `json`, computed by `compute` the first time.
+ *
+ * @template T
+ * @param {WeakMap<JsonView, T>} cache
+ * @param {JsonView} json
+ * @param {() => T} compute
+ * @returns {T}
+ */
+function memoized(cache, json, compute) {
+  let value = cache.get(json);
+  if (value === undefined) {
+    value = compute();
+    cache.set(json, value);
+  }
+  return value;
+}
+
+/**
  * Finds the `[start, end]` spans of every object/array value belonging to a
  * {@link FREE_FORM_KEYS} key. A scalar value (e.g. `"data": "x"`) contains
  * nothing nested, so it yields no span.
@@ -61,16 +92,18 @@ const FREE_FORM_KEYS = new Set(["data", "msteams", "buttons"]);
  * @returns {{ start: number, end: number }[]}
  */
 function findFreeFormSpans(json) {
-  /** @type {{ start: number, end: number }[]} */
-  const spans = [];
-  for (const token of json.tokens) {
-    if (!FREE_FORM_KEYS.has(token.value)) continue;
-    const valueStart = valueStartAfterKey(json.text, token);
-    if (valueStart === -1) continue;
-    const end = json.closeOf.get(valueStart); // only set for a '{' or '['
-    if (end !== undefined) spans.push({ start: valueStart, end });
-  }
-  return spans;
+  return memoized(freeFormSpanCache, json, () => {
+    /** @type {{ start: number, end: number }[]} */
+    const spans = [];
+    for (const token of json.tokens) {
+      if (!FREE_FORM_KEYS.has(token.value)) continue;
+      const valueStart = valueStartAfterKey(json.text, token);
+      if (valueStart === -1) continue;
+      const end = json.closeOf.get(valueStart); // only set for a '{' or '['
+      if (end !== undefined) spans.push({ start: valueStart, end });
+    }
+    return spans;
+  });
 }
 
 /**
@@ -193,14 +226,16 @@ function findOwnVersionProperty(card) {
  * @returns {Map<number, string>}
  */
 function findObjectTypes(card) {
-  const freeFormSpans = findFreeFormSpans(card);
-  /** @type {Map<number, string>} */
-  const types = new Map();
-  for (const { value, valueStart, objectStart } of findStringProperties(card, "type")) {
-    if (objectStart === -1 || types.has(objectStart) || isInsideAny(freeFormSpans, valueStart)) continue;
-    types.set(objectStart, value);
-  }
-  return types;
+  return memoized(objectTypeCache, card, () => {
+    const freeFormSpans = findFreeFormSpans(card);
+    /** @type {Map<number, string>} */
+    const types = new Map();
+    for (const { value, valueStart, objectStart } of findStringProperties(card, "type")) {
+      if (objectStart === -1 || types.has(objectStart) || isInsideAny(freeFormSpans, valueStart)) continue;
+      types.set(objectStart, value);
+    }
+    return types;
+  });
 }
 
 /**
@@ -564,6 +599,9 @@ const TYPES_BY_CONTAINER = (() => {
  *   null when the cursor isn't in a card value this knows about.
  */
 function findCardCompletions(text, offset) {
+  // Cheap exit for the common case, a document without a card: this runs on
+  // every completion request in every OtterScript file.
+  if (!text.includes("AdaptiveCard")) return null;
   const literal = maskTemplateTags(text);
   const { open, openString } = scanJsonPrefix(literal.slice(0, offset));
   if (openString === -1 || literal.slice(openString, offset).includes("\n")) return null;

@@ -9,6 +9,9 @@ const vscode = require("vscode");
 const { clearTimerForUri, log, mapWithConcurrency, scheduleTimerForUri } = require("../helpers");
 const { findModuleDeclarations } = require("../scanner");
 
+/** Decodes the files the index reads (one, reused). */
+const UTF8 = new TextDecoder("utf-8");
+
 /**
  * Registers the workspace symbol provider and its file watcher.
  *
@@ -104,7 +107,7 @@ function registerWorkspaceSymbols(settings) {
     if (!isIndexed(uri)) return;
     try {
       const bytes = await vscode.workspace.fs.readFile(uri);
-      setModuleIndexEntry(uri, new TextDecoder("utf-8").decode(bytes));
+      setModuleIndexEntry(uri, UTF8.decode(bytes));
     } catch {
       // Gone or unreadable -- drop it.
       workspaceModuleIndex.delete(uri.toString());
