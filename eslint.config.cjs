@@ -1,6 +1,16 @@
 const js = require("@eslint/js");
 const globals = require("globals");
 const jsdoc = require("eslint-plugin-jsdoc");
+const stylistic = require("@stylistic/eslint-plugin");
+
+/**
+ * A Node.js built-in required without the `node:` prefix (`require("fs")`):
+ * the prefix makes it unmistakably the built-in, never an npm package.
+ */
+const NODE_PROTOCOL_RESTRICTION = {
+  selector: "CallExpression[callee.name='require'][arguments.0.value=/^(assert|child_process|crypto|events|fs|module|os|path|stream|test|url|util|zlib)$/]",
+  message: "Require Node.js built-ins with the node: prefix (require(\"node:fs\")).",
+};
 
 /** Every file ESLint lints in this repo. */
 const ALL_JS = ["**/*.{js,cjs,mjs}"];
@@ -12,7 +22,9 @@ module.exports = [
       "node_modules/**",
       // VS Code builds downloaded by the integration tests
       ".vscode-test/**",
-      "*.vsix"
+      "*.vsix",
+      // The bundle `npm run build` writes
+      "dist/**"
     ]
   },
 
@@ -49,6 +61,7 @@ module.exports = [
 
   {
     files: ALL_JS,
+    plugins: { "@stylistic": stylistic },
 
     rules: {
       "no-unused-vars": [
@@ -91,7 +104,9 @@ module.exports = [
       "default-case-last": "warn",
       // Line endings and final newline are enforced by .gitattributes plus the
       // mixed-line-ending / end-of-file-fixer pre-commit hooks; ESLint's own
-      // formatting rules are deprecated, so none are configured here.
+      // formatting rules are deprecated, so the one style rule kept comes
+      // from @stylistic: double quotes, unless that needs escaping.
+      "@stylistic/quotes": ["warn", "double", { avoidEscape: true }],
 
       /*
        * Other
@@ -105,6 +120,7 @@ module.exports = [
       "prefer-promise-reject-errors": "warn",
       "no-throw-literal": "error",
       "unicode-bom": "error",
+      "no-restricted-syntax": ["error", NODE_PROTOCOL_RESTRICTION],
 
       "no-restricted-globals": ["error",
         { name: "window", message: "Use vscode.window instead." },
@@ -173,8 +189,8 @@ module.exports = [
     rules: {
       "no-restricted-syntax": ["error", {
         selector: "CallExpression[callee.name='require'][arguments.0.value='vscode']",
-        message: "scanner.js must stay vscode-free; put vscode-dependent code in helpers.js.",
-      }],
+        message: "scanner.js must stay vscode-free; put vscode-dependent code in document-index.js, helpers.js or providers/.",
+      }, NODE_PROTOCOL_RESTRICTION],
     }
   }
 ];

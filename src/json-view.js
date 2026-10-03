@@ -168,8 +168,43 @@ function hasOwnKeyProperty(json, keyName) {
   );
 }
 
+/**
+ * Where the end of `text` sits in its JSON structure -- for completion, where
+ * `text` is everything before the cursor and the string being typed may not
+ * be closed yet (which would throw {@link findJsonStringTokens} off).
+ *
+ * @param {string} text
+ * @returns {{ open: number[], openString: number }} `open`: the indices of
+ *   the `{` and `[` still open at the end, outermost first; `openString`: the
+ *   index of the opening quote of the string the end is inside, or -1.
+ */
+function scanJsonPrefix(text) {
+  /** @type {number[]} */
+  const open = [];
+  let openString = -1;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (openString !== -1) {
+      if (ch === "\\") i++;
+      else if (ch === '"') openString = -1;
+      continue;
+    }
+    if (ch === '"') openString = i;
+    else if (ch === "{" || ch === "[") open.push(i);
+    else if (ch === "}" || ch === "]") {
+      // Pop up to the matching opener, so a stray closer can't empty the stack.
+      const opener = ch === "}" ? "{" : "[";
+      let at = open.length - 1;
+      while (at >= 0 && text[open[at]] !== opener) at--;
+      if (at !== -1) open.length = at;
+    }
+  }
+  return { open, openString };
+}
+
 module.exports = {
   analyzeJson,
+  scanJsonPrefix,
   findJsonStringTokens,
   findStringProperties,
   hasOwnKeyProperty,

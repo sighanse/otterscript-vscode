@@ -78,11 +78,83 @@ describe("hover", () => {
   });
 
   it("documents a vector function", async () => {
-    assert.match(await hoverText(document, positionOf(document, "@Split", 2)), /@Split\(text, separator/);
+    assert.match(await hoverText(document, positionOf(document, "@Split", 2)), /@Split\(Text, Separator/);
   });
 
   it("documents the map form of FromJson", async () => {
-    assert.match(await hoverText(document, positionOf(document, "%FromJson", 2)), /%FromJson\(jsonString\)/);
+    assert.match(await hoverText(document, positionOf(document, "%FromJson", 2)), /%FromJson\(json\)/);
+  });
+
+  it("documents an operation that only Inedo's generated reference describes", async () => {
+    const reference = await openContent('Extract-ZipFile (Name: "a.zip");');
+    const text = await hoverText(reference, positionOf(reference, "Extract-ZipFile", 3));
+    assert.match(text, /Extracts a zip file/);
+    assert.match(text, /From Inedo's/);
+  });
+
+  it("documents the namespace's operation of a shared name, and lists the others without a namespace", async () => {
+    const source = await openContent('DotNet::Build(Project: "a.csproj");\nBuild(ProjectFile: "a.sln", Configuration: "Release");\n');
+    const qualified = await hoverText(source, positionOf(source, "Build(Project", 1));
+    assert.match(qualified, /dotnet build/);
+    assert.doesNotMatch(qualified, /Also/);
+    const bare = await hoverText(source, positionOf(source, "Build(ProjectFile", 1));
+    assert.match(bare, /devenv\.exe/);
+    assert.match(bare, /Also `DotNet::Build` \(BuildMaster\): write the namespace to pick one/);
+  });
+
+  it("documents an operation right after a block's '{'", async () => {
+    const source = await openContent('if $x {Copy-Files(To: "b");}\n');
+    assert.match(await hoverText(source, positionOf(source, "Copy-Files", 2)), /### Copy-Files/);
+  });
+
+  it("documents an operation only where a statement starts, not as an argument", async () => {
+    const source = await openContent("Log-Information Build;\nx; Copy-Files(To: \"c\");\n");
+    assert.equal(await hoverText(source, positionOf(source, "Build;", 1)), "", "an implicit-string argument");
+    assert.match(await hoverText(source, positionOf(source, "x; Copy-Files", 5)), /### Copy-Files/, "after ;");
+    const template = await openContent("<% Copy-Files(To: \"b\"); %>\n");
+    assert.match(await hoverText(template, positionOf(template, "Copy-Files", 2)), /### Copy-Files/, "after <%");
+  });
+
+  it("in a text template, documents the tags' code but not the literal text around them", async () => {
+    const source = await openContent("<% set $x = 1; %>\n# Notes for Copy-Files <% Copy-Files(To: \"b\"); %>\n");
+    assert.equal(await hoverText(source, positionOf(source, "Copy-Files <%", 2)), "", "literal text");
+    assert.match(await hoverText(source, positionOf(source, "Copy-Files(", 2)), /### Copy-Files/, "after a literal #");
+    assert.match(await hoverText(source, positionOf(source, "To:", 1)), /Argument of `Copy-Files`/);
+  });
+
+  it("shows no operation for a module named like one, declared or not", async () => {
+    const call = await openContent("call Build;\n");
+    assert.equal(await hoverText(call, positionOf(call, "Build;", 1)), "", "a module no file declares");
+    const declaration = await openContent("module Build {\n}\n");
+    assert.equal(await hoverText(declaration, positionOf(declaration, "module Build", 8)), "", "the declaration");
+  });
+
+  it("says which name to write for PSCall2", async () => {
+    const source = await openContent("PSCall2 MyScript;\n");
+    assert.match(await hoverText(source, positionOf(source, "PSCall2", 2)), /`PSCall` is the alias for `PSCall2`, and the name to write/);
+  });
+
+  it("documents an operation's argument name, and lists the arguments on the operation", async () => {
+    const source = await openContent('Copy-Files(\n    From: "a",\n    To: "b"\n);\n');
+    assert.match(await hoverText(source, positionOf(source, "To:", 1)), /Argument of `Copy-Files`: `To` \(required, text\) - Target directory/);
+    assert.equal(await hoverText(source, positionOf(source, '"b"', 1)), "", "not in a value");
+    assert.match(await hoverText(source, positionOf(source, "Copy-Files", 2)), /\*\*Arguments:\*\*\n- `Include`/);
+
+    const output = await openContent('Get-Http(\n    Url: "u",\n    ResponseBody => $body\n);\n');
+    assert.match(await hoverText(output, positionOf(output, "ResponseBody", 2)), /`ResponseBody` \(output, text\) - Store response as/);
+
+    const call = await openContent("module Report<in $path, out $result> {\n}\ncall Report(path: $p, result: $r);\n");
+    assert.match(await hoverText(call, positionOf(call, "result:", 1)), /Argument of `module Report`: `result` \(optional, out \$result\)/);
+    assert.match(await hoverText(call, positionOf(call, "call Report", 6)), /module Report<\$path, out \$result>/);
+  });
+
+  it("shows a called module's declaration and its comment, also from another workspace file", async () => {
+    const local = await openContent("# Says hello.\n# Twice.\nmodule Hi<$who> {\n}\ncall Hi(who: x);\n");
+    const text = await hoverText(local, positionOf(local, "call Hi", 6));
+    assert.match(text, /module Hi<\$who>/);
+    assert.match(text, /Says hello\. {2}\nTwice\./);
+    const elsewhere = await openContent('call Greet(name: "x");\n');
+    assert.match(await hoverText(elsewhere, positionOf(elsewhere, "Greet", 2)), /module Greet<\$name>[\s\S]*Declared in `main\.otter`/);
   });
 
   it("documents an operation", async () => {
@@ -97,6 +169,19 @@ describe("hover", () => {
   it("documents #region only at the start of a line, not in a string or trailing comment", async () => {
     assert.equal(await hoverText(document, positionOf(document, '"#region in', 3)), "");
     assert.equal(await hoverText(document, positionOf(document, "# #endregion", 4)), "");
+  });
+
+  it("notes when an entry isn't in the otterscript.product setting's product", async () => {
+    const config = vscode.workspace.getConfiguration("otterscript");
+    const source = await openContent("set $x = $ReleaseName;\n");
+    const at = positionOf(source, "$ReleaseName", 2);
+    try {
+      assert.doesNotMatch(await hoverText(source, at), /Not in/, "nothing with 'any'");
+      await config.update("product", "Otter", vscode.ConfigurationTarget.Global);
+      assert.match(await hoverText(source, at), /Not in Otter:\*\* only in BuildMaster/);
+    } finally {
+      await config.update("product", undefined, vscode.ConfigurationTarget.Global);
+    }
   });
 
   it("shows nothing for names that are only inherited Object members", async () => {
@@ -141,7 +226,9 @@ describe("completion", () => {
   });
 
   it("offers operations and keywords by name", async () => {
-    const document = await openContent("Log-Inf");
+    // Not a one-line document: "Log-Inf" has a quick fix, and VS Code 1.85's
+    // lightbulb reads the line below it unchecked ("Illegal value for lineNumber").
+    const document = await openContent("Log-Inf\n");
     const labels = await completionLabels(document, positionOf(document, "Log-Inf", 7));
     assert.ok(labels.includes("Log-Information"));
   });
@@ -151,6 +238,120 @@ describe("completion", () => {
     assert.ok((await completionLabels(core, positionOf(core, "Log-Inf", 7))).includes("Log-Information"));
     const proget = await openContent("ProGet::Log-Inf");
     assert.ok(!(await completionLabels(proget, positionOf(proget, "Log-Inf", 7))).includes("Log-Information"));
+  });
+
+  it("offers each same-named operation: by its namespace, or qualified without one", async () => {
+    const dotnet = await openContent("DotNet::Bui\n");
+    assert.ok((await completionLabels(dotnet, positionOf(dotnet, "Bui", 3))).includes("Build"));
+    const bare = await openContent("Bui\n");
+    const labels = await completionLabels(bare, positionOf(bare, "Bui", 3));
+    assert.ok(labels.includes("Build") && labels.includes("DotNet::Build"), labels.join(" "));
+  });
+
+  it("offers the file's own variables after $, @ and %, but not the one being typed", async () => {
+    const document = await openContent("set $myCount = 1;\nset @myList = @(1);\nforeach %myItem in @maps {\n}\nLog-Information $my");
+    const scalars = await completionLabels(document, positionOf(document, "Information $my", 15), "$");
+    assert.ok(scalars.includes("$myCount"), scalars.join(" "));
+    assert.ok(!scalars.includes("$my"), "not the token being typed");
+    const vectors = await completionLabels(document, positionOf(document, "set @myList", 5), "@");
+    assert.ok(vectors.includes("@maps"));
+    const maps = await completionLabels(document, positionOf(document, "foreach %", 9), "%");
+    assert.ok(maps.includes("%myItem"));
+  });
+
+  it("offers module names after call, from this file and other workspace files", async () => {
+    const document = await openContent("module LocalHelper {\n}\ncall ");
+    const labels = await completionLabels(document, positionOf(document, "call ", 5));
+    assert.ok(labels.includes("LocalHelper"), labels.join(" "));
+    assert.ok(labels.includes("Greet"), "declared in the workspace's main.otter");
+    assert.ok(!labels.includes("Log-Information"), "no operations after call");
+  });
+
+  it("leaves out what the otterscript.product setting's product doesn't have", async () => {
+    const config = vscode.workspace.getConfiguration("otterscript");
+    const document = await openContent("set $x = $Rel");
+    const at = positionOf(document, "$Rel", 4);
+    try {
+      assert.ok((await completionLabels(document, at)).includes("$ReleaseName"), "BuildMaster's, offered with 'any'");
+      await config.update("product", "ProGet", vscode.ConfigurationTarget.Global);
+      const labels = await completionLabels(document, at);
+      assert.ok(!labels.includes("$ReleaseName"), "BuildMaster-only, left out for ProGet");
+      assert.ok(labels.includes("$ReleaseNumber"), "ProGet's own variable stays");
+    } finally {
+      await config.update("product", undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
+
+  it("offers an operation's arguments inside its call, leaving out the ones given", async () => {
+    const document = await openContent('Copy-Files(\n    From: "a",\n    \n);\n');
+    const labels = await completionLabels(document, new vscode.Position(2, 4));
+    assert.ok(labels.includes("To") && labels.includes("Include"), labels.join(" "));
+    assert.ok(!labels.includes("From"), "already given");
+    assert.ok(!labels.includes("Log-Information"), "no operations in an argument list");
+
+    const later = await openContent('Copy-Files(\n    \n    To: "b"\n);\n');
+    const laterLabels = await completionLabels(later, new vscode.Position(1, 4));
+    assert.ok(laterLabels.includes("From") && !laterLabels.includes("To"), `given after the cursor: ${laterLabels.join(" ")}`);
+    const jira = await openContent("Jira::Create-Issue(");
+    assert.ok((await completionLabels(jira, positionOf(jira, "(", 1), "(")).includes("Type"), "the namespace's operation");
+
+    const opened = await openContent("Copy-Files(");
+    assert.ok((await completionLabels(opened, positionOf(opened, "(", 1), "(")).includes("To"), "on '('");
+    const fn = await openContent("set $s = $Substring(");
+    assert.deepEqual(await completionLabels(fn, positionOf(fn, "(", 1), "("), [], "nothing for a function's '('");
+  });
+
+  it("fills in an operation's documentation when the item is resolved", async () => {
+    const document = await openContent("Copy-Fi");
+    /** @type {vscode.CompletionList} */
+    const list = await vscode.commands.executeCommand(
+      "vscode.executeCompletionItemProvider", document.uri, new vscode.Position(0, 7), undefined, 1000
+    );
+    const copy = list.items.find((item) => (typeof item.label === "string" ? item.label : item.label.label) === "Copy-Files");
+    const documentation = /** @type {vscode.MarkdownString | undefined} */ (copy?.documentation);
+    assert.match(documentation?.value ?? "", /### Copy-Files/);
+  });
+
+  it("inserts an output argument as Name => ", async () => {
+    const document = await openContent('Get-Http(\n    Url: "u",\n    \n);\n');
+    /** @type {vscode.CompletionList} */
+    const list = await vscode.commands.executeCommand("vscode.executeCompletionItemProvider", document.uri, new vscode.Position(2, 4));
+    const body = list.items.find((item) => (typeof item.label === "string" ? item.label : item.label.label) === "ResponseBody");
+    assert.equal(body?.insertText, "ResponseBody => ");
+    assert.equal(body?.detail, "Output argument of Get-Http");
+  });
+
+  it("offers a module's parameters inside call Module(, from this file or the workspace", async () => {
+    const local = await openContent("module Report<in $path, in $count = 0, out $result> {\n}\ncall Report(\n    path: $p,\n    \n);\n");
+    const labels = await completionLabels(local, new vscode.Position(4, 4));
+    assert.ok(labels.includes("count") && labels.includes("result"), labels.join(" "));
+    assert.ok(!labels.includes("path"), "path is given");
+    const elsewhere = await openContent("call Greet(");
+    assert.deepEqual(await completionLabels(elsewhere, positionOf(elsewhere, "(", 1), "("), ["name"], "Greet<$name> in main.otter");
+  });
+
+  it("offers nothing in the argument list of a call it can't resolve, even on Ctrl+Space", async () => {
+    for (const source of ["call Missing(", "Frob-Nicate("]) {
+      const document = await openContent(source);
+      assert.deepEqual(await completionLabels(document, positionOf(document, "(", 1)), [], source);
+    }
+  });
+
+  it("offers arguments in a text template's tag after literal text that looks like a comment", async () => {
+    const document = await openContent("<% set $x = 1; %>\n# Notes <% Copy-Files(");
+    assert.ok((await completionLabels(document, positionOf(document, "Copy-Files(", 11), "(")).includes("To"));
+  });
+
+  it("offers Adaptive Card values inside a card in a text template", async () => {
+    const document = await openContent(
+      "<% if $Notify { %>\n" +
+      '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "TextBlock", "weight": "" } ] }\n' +
+      "<% } %>\n"
+    );
+    const weights = await completionLabels(document, positionOf(document, '"weight": "', 11), '"');
+    assert.deepEqual(weights, ["default", "lighter", "bolder"]);
+    const types = await completionLabels(document, positionOf(document, '"TextBlock"', 1), '"');
+    assert.ok(types.includes("TextBlock") && !types.includes("Table"), types.join(" "));
   });
 
   it("offers nothing from this extension inside a comment", async () => {
@@ -167,7 +368,7 @@ describe("signature help", () => {
     const document = await openContent("set $s = $Substring($text, 2, ");
     const help = await signatureHelp(document, positionOf(document, "2, ", 3));
     assert.ok(help, "signature help is shown");
-    assert.equal(help.signatures[0].label, "$Substring(text, startIndex, [length])");
+    assert.equal(help.signatures[0].label, "$Substring(Text, Offset, [Length])");
     assert.equal(help.activeParameter, 2);
   });
 
@@ -175,21 +376,93 @@ describe("signature help", () => {
     for (const source of ["set $s = $Substring($Trim($x), ", 'set $s = $Substring("a(b", ']) {
       const document = await openContent(source);
       const help = await signatureHelp(document, document.positionAt(source.length));
-      assert.equal(help?.signatures[0].label, "$Substring(text, startIndex, [length])", source);
+      assert.equal(help?.signatures[0].label, "$Substring(Text, Offset, [Length])", source);
       assert.equal(help?.activeParameter, 1, source);
     }
+  });
+
+  it("knows a block comment opened more than 10 lines up is still a comment", async () => {
+    // Inside the comment, `$Substring(` is text: no call is open at the end.
+    const source = `/*\n${"x\n".repeat(12)}$Substring(\n*/\nLog-Information x`;
+    const document = await openContent(source);
+    const help = await signatureHelp(document, document.positionAt(source.length));
+    assert.equal(help?.signatures.length ?? 0, 0);
+  });
+
+  it("finds the call in a text template's tag after literal text that looks like a comment", async () => {
+    const source = "<% set $x = 1; %>\n# Notes <% set $y = $Substring(";
+    const document = await openContent(source);
+    const help = await signatureHelp(document, document.positionAt(source.length));
+    assert.equal(help?.signatures[0].label, "$Substring(Text, Offset, [Length])");
+  });
+
+  it("shows the otterscript.product setting's form of a function, or every form for any", async () => {
+    const config = vscode.workspace.getConfiguration("otterscript");
+    const source = "set $p = $PackageProperty($a, $b, ";
+    const document = await openContent(source);
+    const at = document.positionAt(source.length);
+    try {
+      const any = await signatureHelp(document, at);
+      assert.deepEqual(any?.signatures.map((s) => s.label), [
+        "$PackageProperty(name, [default])",
+        "$PackageProperty(packageName, packageProperty, [sourceName])",
+      ]);
+      assert.equal(any?.activeSignature, 1, "only BuildMaster's takes a third argument");
+      await config.update("product", "BuildMaster", vscode.ConfigurationTarget.Global);
+      const buildMaster = await signatureHelp(document, at);
+      assert.deepEqual(buildMaster?.signatures.map((s) => s.label), ["$PackageProperty(packageName, packageProperty, [sourceName])"]);
+      assert.equal(buildMaster?.activeParameter, 2);
+    } finally {
+      await config.update("product", undefined, vscode.ConfigurationTarget.Global);
+    }
+  });
+
+  it("shows a module's parameters for call Module(, the named one active", async () => {
+    const document = await openContent("module Report<in $path, in $count = 0, out $result> {\n}\ncall Report(result: $r, path: ");
+    const help = await signatureHelp(document, positionOf(document, "path: ", 6));
+    assert.equal(help?.signatures[0].label, "Report(path, [count], [out result])");
+    assert.equal(help?.activeParameter, 0);
   });
 
   it("works for the map form of FromJson", async () => {
     const document = await openContent("set %m = %FromJson(");
     const help = await signatureHelp(document, positionOf(document, "%FromJson(", 10));
-    assert.equal(help?.signatures[0].label, "%FromJson(jsonString)");
+    assert.equal(help?.signatures[0].label, "%FromJson(json)");
+  });
+
+  it("shows no operation's signature in a call of a module it can't find", async () => {
+    const document = await openContent("call Jira::Create-Issue(Title: 1, \n");
+    const help = await signatureHelp(document, new vscode.Position(0, 34));
+    assert.equal(help?.signatures.length ?? 0, 0);
   });
 
   it("shows nothing outside a call", async () => {
     const document = await openContent("set $s = 1;");
     const help = await signatureHelp(document, positionOf(document, "1;", 1));
     assert.equal(help?.signatures.length ?? 0, 0);
+  });
+});
+
+describe("inlay hints", () => {
+  after(closeAllEditors);
+
+  it("names a call's positional arguments, unless otterscript.inlayHints.parameterNames is off", async () => {
+    const config = vscode.workspace.getConfiguration("otterscript");
+    const document = await openContent("set $s = $Substring($x, 2, 3);\n");
+    const range = new vscode.Range(0, 0, 1, 0);
+    /** @returns {Promise<string[]>} */
+    const labels = async () => {
+      /** @type {vscode.InlayHint[]} */
+      const hints = await vscode.commands.executeCommand("vscode.executeInlayHintProvider", document.uri, range);
+      return hints.map((hint) => (typeof hint.label === "string" ? hint.label : hint.label.map((part) => part.value).join("")));
+    };
+    try {
+      assert.deepEqual(await labels(), ["Text:", "Offset:", "Length:"], "on by default");
+      await config.update("inlayHints.parameterNames", false, vscode.ConfigurationTarget.Global);
+      assert.deepEqual(await labels(), []);
+    } finally {
+      await config.update("inlayHints.parameterNames", undefined, vscode.ConfigurationTarget.Global);
+    }
   });
 });
 

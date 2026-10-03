@@ -1,12 +1,37 @@
 // @ts-check
 /**
- * @fileoverview Go to Symbol in Workspace (Ctrl+T) for OtterScript modules: a
- * lazily built index of every `module` declaration in the workspace, kept
- * current by a file watcher and by the open documents.
+ * @fileoverview The workspace's module index -- a lazily built index of every
+ * `module` declaration in the workspace, kept current by a file watcher and by
+ * the open documents -- and Go to Symbol in Workspace (Ctrl+T) on it.
  */
 
 const vscode = require("vscode");
-const { clearTimerForUri, findModuleDeclarations, log, mapWithConcurrency, scheduleTimerForUri } = require("../helpers");
+const { clearTimerForUri, log, mapWithConcurrency, scheduleTimerForUri } = require("../helpers");
+const { findModuleDeclarations } = require("../scanner");
+
+/** Decodes the files the index reads (one, reused). */
+const UTF8 = new TextDecoder("utf-8");
+
+/**
+ * Whether a Go to Symbol in Workspace query matches a module name: its
+ * characters appear in the name in order, ignoring case (`dpm` matches
+ * `Deploy-Module`). VS Code asks providers to match this loosely and then
+ * ranks and highlights the results itself.
+ *
+ * @param {string} name
+ * @param {string} query
+ * @returns {boolean}
+ */
+function matchesQuery(name, query) {
+  const lowerName = name.toLowerCase();
+  let at = 0;
+  for (const ch of query.toLowerCase()) {
+    if (/\s/.test(ch)) continue;
+    at = lowerName.indexOf(ch, at) + 1;
+    if (at === 0) return false;
+  }
+  return true;
+}
 
 /**
  * Registers the workspace symbol provider and its file watcher.
@@ -18,9 +43,12 @@ const { clearTimerForUri, findModuleDeclarations, log, mapWithConcurrency, sched
  *   setModuleIndexEntry: (uri: vscode.Uri, text: string) => void,
  *   indexModuleFile: (uri: vscode.Uri) => Promise<void>,
  *   removeModuleIndexEntry: (uri: vscode.Uri) => void,
- *   resetWorkspaceIndex: () => void
- * }} The index operations extension.js calls on document events and
- *   settings changes
+ *   listModules: import("../document-index").ListWorkspaceModules,
+ *   listFiles: () => Promise<vscode.Uri[]>
+ * }} The index operations extension.js calls on document events;
+ *   `listModules` for the cross-file module features (completion, hover and
+ *   signature help on `call`, Go to Definition, Rename, Find References), and
+ *   `listFiles` for module Rename and Find References across files
  */
 function registerWorkspaceSymbols(settings) {
   // ============================================================
@@ -32,17 +60,28 @@ function registerWorkspaceSymbols(settings) {
   // is still served by the document symbol provider.
   //
   // The index is built lazily: activation does NO disk I/O for it. The first
-  // Ctrl+T (provideWorkspaceSymbols) triggers the one-time scan; the watcher
-  // then keeps it current. Workspaces that never use Ctrl+T never pay for it.
+  // use -- Ctrl+T, or a cross-file module feature (Go to Definition, Rename,
+  // Find References, hover, completion and signature help on `call`) --
+  // triggers the one-time scan; the watcher then keeps it current. Workspaces
+  // that never use them never pay for it.
   //
-  // All index work is also gated on `otterscript.workspaceSymbols.enable`: when
-  // it is off, no scanning, disk reads, or index mutations happen.
+  // `otterscript.workspaceSymbols.enable` turns off only the Ctrl+T provider;
+  // the cross-file module features keep the index.
 
   const OTTER_FILE_GLOB = "**/*.{otter,oscript}";
-  // Documents that belong in the index: files on disk, plus untitled ones
-  // while they're open. Other schemes (a Git diff's old side, a PR review,
-  // ...) are extra views of a file and would show up as duplicates.
-  const INDEXED_SCHEMES = new Set(["file", "untitled"]);
+  /**
+   * Whether a document belongs in the index: a file on disk, an untitled
+   * document while it's open, or a file of a workspace folder whatever its
+   * scheme (a virtual workspace's `vscode-vfs:`). Other schemes (a Git
+   * diff's old side, a PR review, ...) are extra views of a file and would
+   * show up as duplicates.
+   *
+   * @param {vscode.Uri} uri
+   * @returns {boolean}
+   */
+  function isIndexed(uri) {
+    return uri.scheme === "file" || uri.scheme === "untitled" || vscode.workspace.getWorkspaceFolder(uri) !== undefined;
+  }
   // Cap on the workspace scan: files matched, and concurrent reads in flight.
   const WORKSPACE_SCAN_FILE_LIMIT = 5000;
   const WORKSPACE_SCAN_CONCURRENCY = 20;
@@ -64,7 +103,7 @@ function registerWorkspaceSymbols(settings) {
    * @returns {void}
    */
   function setModuleIndexEntry(uri, text) {
-    if (!settings.workspaceSymbolsEnabled || !INDEXED_SCHEMES.has(uri.scheme)) return;
+    if (!isIndexed(uri)) return;
     const symbols = findModuleDeclarations(text).map(hit => ({
       name: hit.name,
       range: new vscode.Range(
@@ -86,10 +125,10 @@ function registerWorkspaceSymbols(settings) {
    * @returns {Promise<void>}
    */
   async function indexModuleFile(uri) {
-    if (!settings.workspaceSymbolsEnabled) return;
+    if (!isIndexed(uri)) return;
     try {
       const bytes = await vscode.workspace.fs.readFile(uri);
-      setModuleIndexEntry(uri, new TextDecoder("utf-8").decode(bytes));
+      setModuleIndexEntry(uri, UTF8.decode(bytes));
     } catch {
       // Gone or unreadable -- drop it.
       workspaceModuleIndex.delete(uri.toString());
@@ -103,7 +142,6 @@ function registerWorkspaceSymbols(settings) {
    */
   async function rebuildWorkspaceModuleIndex() {
     workspaceModuleIndex.clear();
-    if (!settings.workspaceSymbolsEnabled) return;
 
     const files = await vscode.workspace.findFiles(
       OTTER_FILE_GLOB, undefined, WORKSPACE_SCAN_FILE_LIMIT
@@ -125,11 +163,9 @@ function registerWorkspaceSymbols(settings) {
     );
   }
 
-  // Lazily-built index. `null` until the first workspace-symbol query (or a
-  // watcher event once a build has happened) kicks off rebuildWorkspaceModuleIndex.
-  // Reset to `null` on failure so the next query retries, and when the enable
-  // setting is toggled (resetWorkspaceIndex, called by the settings listener
-  // in extension.js).
+  // Lazily-built index. `null` until the first query kicks off
+  // rebuildWorkspaceModuleIndex. Reset to `null` on failure so the next query
+  // retries.
   /** @type {Promise<void> | null} */
   let workspaceIndexReady = null;
 
@@ -159,12 +195,11 @@ function registerWorkspaceSymbols(settings) {
       if (!settings.workspaceSymbolsEnabled) return [];
       await ensureWorkspaceIndex();
 
-      const needle = query.toLowerCase();
       /** @type {vscode.SymbolInformation[]} */
       const results = [];
       for (const { uri, symbols } of workspaceModuleIndex.values()) {
         for (const { name, range } of symbols) {
-          if (needle && !name.toLowerCase().includes(needle)) continue;
+          if (!matchesQuery(name, query)) continue;
           results.push(new vscode.SymbolInformation(
             name,
             vscode.SymbolKind.Module,
@@ -178,12 +213,12 @@ function registerWorkspaceSymbols(settings) {
   });
 
   // Watcher events only matter once the index has actually been built: before
-  // the first Ctrl+T there is nothing to keep fresh, and touching it here would
+  // its first use there is nothing to keep fresh, and touching it here would
   // leave a misleading partial index. `!workspaceIndexReady` covers both "never
   // built" and "last build failed"; the next query rebuilds from scratch anyway.
   const otterFileWatcher = vscode.workspace.createFileSystemWatcher(OTTER_FILE_GLOB);
   otterFileWatcher.onDidCreate(uri => {
-    if (!settings.workspaceSymbolsEnabled || !workspaceIndexReady) return;
+    if (!workspaceIndexReady) return;
     void indexModuleFile(uri);
   });
   otterFileWatcher.onDidDelete(uri => {
@@ -191,26 +226,12 @@ function registerWorkspaceSymbols(settings) {
     clearTimerForUri(workspaceIndexTimers, uri);
   });
   otterFileWatcher.onDidChange(uri => {
-    // Gated so no debounce timers accumulate in workspaceIndexTimers when the
-    // feature is off or the index has not been built yet.
-    if (!settings.workspaceSymbolsEnabled || !workspaceIndexReady) return;
+    // Gated so no debounce timers accumulate in workspaceIndexTimers before
+    // the index has been built.
+    if (!workspaceIndexReady) return;
     // Debounced -- a save can arrive alongside editor change events.
     scheduleTimerForUri(workspaceIndexTimers, uri, 400, () => { void indexModuleFile(uri); });
   });
-
-  /**
-   * Resets the lazy workspace index when `otterscript.workspaceSymbols.enable`
-   * flips. Either way: enabling does NOT eagerly scan (the next Ctrl+T builds
-   * it, like a fresh activation); disabling drops the index and any pending
-   * debounce timers.
-   *
-   * @returns {void}
-   */
-  function resetWorkspaceIndex() {
-    workspaceModuleIndex.clear();
-    clearIndexTimers();
-    workspaceIndexReady = null;
-  }
 
   /**
    * Cancels every pending index debounce timer.
@@ -220,6 +241,36 @@ function registerWorkspaceSymbols(settings) {
   function clearIndexTimers() {
     for (const timer of workspaceIndexTimers.values()) clearTimeout(timer);
     workspaceIndexTimers.clear();
+  }
+
+  /**
+   * Every module declared in the workspace, building the index first if
+   * nothing has yet.
+   *
+   * @returns {Promise<import("../document-index").WorkspaceModule[]>}
+   */
+  async function listModules() {
+    await ensureWorkspaceIndex();
+    return [...workspaceModuleIndex.values()].flatMap(({ uri, symbols }) => symbols.map(({ name, range }) => ({ name, uri, range })));
+  }
+
+  /**
+   * Every OtterScript file in the workspace, plus open untitled ones -- the
+   * files a module's calls may be in. Read fresh each time (the index keeps
+   * only files that declare modules).
+   *
+   * @returns {Promise<vscode.Uri[]>}
+   */
+  async function listFiles() {
+    /** @type {Map<string, vscode.Uri>} */
+    const files = new Map();
+    for (const uri of await vscode.workspace.findFiles(OTTER_FILE_GLOB, undefined, WORKSPACE_SCAN_FILE_LIMIT)) {
+      files.set(uri.toString(), uri);
+    }
+    for (const doc of vscode.workspace.textDocuments) {
+      if (doc.languageId === "otterscript" && isIndexed(doc.uri)) files.set(doc.uri.toString(), doc.uri);
+    }
+    return [...files.values()];
   }
 
   return {
@@ -232,8 +283,9 @@ function registerWorkspaceSymbols(settings) {
     setModuleIndexEntry,
     indexModuleFile,
     removeModuleIndexEntry: (uri) => { workspaceModuleIndex.delete(uri.toString()); },
-    resetWorkspaceIndex,
+    listModules,
+    listFiles,
   };
 }
 
-module.exports = { registerWorkspaceSymbols };
+module.exports = { matchesQuery, registerWorkspaceSymbols };

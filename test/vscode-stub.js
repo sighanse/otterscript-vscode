@@ -11,7 +11,7 @@
  * Usage — require this **before** requiring anything that pulls in `vscode`:
  *
  *   require("../vscode-stub");
- *   const { checkMissingDollar } = require("../../src/helpers.js");
+ *   const { checkMissingDollar } = require("../../src/diagnostics.js");
  *
  * Only the members actually exercised by the tests are implemented; enum values
  * mirror the real `vscode` API so assertions on `.severity` / `.kind` are
@@ -31,6 +31,15 @@ class Position {
   constructor(line, character) {
     this.line = line;
     this.character = character;
+  }
+
+  /**
+   * @param {number} [lineDelta]
+   * @param {number} [characterDelta]
+   * @returns {Position}
+   */
+  translate(lineDelta = 0, characterDelta = 0) {
+    return new Position(this.line + lineDelta, this.character + characterDelta);
   }
 }
 
@@ -211,10 +220,15 @@ class WorkspaceEdit {
   }
 }
 
-// Only `appendLine` is exercised (helpers.js `appendOutputLine`); extend if a
+// A log output channel (helpers.js `log`) that drops every line; extend if a
 // future test drives more of the logger.
 const outputChannel = {
   appendLine() {},
+  info() {},
+  warn() {},
+  error() {},
+  debug() {},
+  trace() {},
   name: "OtterScript (stub)",
 };
 /** Mirrors `vscode.CompletionItemKind` (only the members the providers use). */
@@ -245,10 +259,17 @@ const vscode = {
   MarkdownString,
   CompletionItem,
   CompletionItemKind,
+  CompletionItemTag: Object.freeze({ Deprecated: 1 }),
   SnippetString,
   CodeAction,
   CodeActionKind,
   WorkspaceEdit,
+  EndOfLine: Object.freeze({ LF: 1, CRLF: 2 }),
+  /** Mirrors `vscode.Uri.parse` (only `toString` is read). */
+  Uri: Object.freeze({
+    /** @param {string} value */
+    parse: (value) => ({ toString: () => value }),
+  }),
   window: {
     createOutputChannel: () => outputChannel,
   },

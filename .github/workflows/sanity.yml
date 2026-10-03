@@ -11,6 +11,7 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read   # list the pull request's commits (attribution check)
 
 jobs:
   sanity:
@@ -18,14 +19,14 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
           persist-credentials: false
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: 'npm'
 
       - name: Install dependencies
@@ -58,6 +59,12 @@ jobs:
       - name: Adaptive Card data up to date
         id: cards
         run: npm run check:cards
+        continue-on-error: true
+
+      # src/inedo-reference-data.js is generated from scripts/inedo-reference.json.
+      - name: Inedo reference data up to date
+        id: reference
+        run: npm run check:reference
         continue-on-error: true
 
       - name: Unit tests
@@ -100,6 +107,29 @@ jobs:
           "
           echo "✅ JSONC validation passed"
 
+      # No AI attribution in this repository's history (CLAUDE.md): fails on a
+      # Co-authored-by trailer or a "Generated with Claude Code" line in any of
+      # the pull request's commits -- e.g. one the @claude workflow added.
+      - name: No attribution trailers in commit messages
+        id: trailers
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -z "$PR" ]; then
+            echo "Not a pull request; nothing to check."
+            exit 0
+          fi
+          found=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/commits" \
+            --jq '.[] | select(.commit.message | test("(^|\n)co-authored-by:|generated with [[]claude code[]]"; "i")) | "\(.sha[0:7]) \(.commit.message | split("\n")[0])"')
+          if [ -n "$found" ]; then
+            echo "::error::Commit messages with an attribution trailer (reword them):"
+            echo "$found"
+            exit 1
+          fi
+          echo "✅ No attribution trailers"
+
       - name: Verify LF line endings
         id: lineEndings
         continue-on-error: true
@@ -136,7 +166,7 @@ jobs:
         run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
 
       - name: Cache VS Code test builds
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .vscode-test
           key: vscode-test-${{ runner.os }}-${{ hashFiles('.vscode-test.mjs') }}-${{ steps.vscodeCacheKey.outputs.week }}
@@ -185,6 +215,13 @@ jobs:
             echo "❌ Adaptive Card data: stale (regenerate with node scripts/update-adaptivecard-data.js)" >> "$GITHUB_STEP_SUMMARY"
           fi
 
+          # Inedo reference data
+          if [ "${{ steps.reference.outcome }}" == "success" ]; then
+            echo "✅ Inedo reference data: up to date" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ Inedo reference data: stale (regenerate with node scripts/update-inedo-reference.js)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
           # Unit tests
           if [ "${{ steps.tests.outcome }}" == "success" ]; then
             echo "✅ Unit tests: passed" >> "$GITHUB_STEP_SUMMARY"
@@ -211,6 +248,13 @@ jobs:
             echo "✅ Line endings: LF" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "❌ Line endings: CRLF detected" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # Attribution trailers
+          if [ "${{ steps.trailers.outcome }}" == "success" ]; then
+            echo "✅ Commit messages: no attribution trailers" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ Commit messages: attribution trailer found" >> "$GITHUB_STEP_SUMMARY"
           fi
 
           # Packaging
@@ -246,10 +290,12 @@ jobs:
             Type-check=${{ steps.jscheck.outcome }}
             Grammar-sync=${{ steps.langsync.outcome }}
             Adaptive-Card-data=${{ steps.cards.outcome }}
+            Inedo-reference-data=${{ steps.reference.outcome }}
             Unit-tests=${{ steps.tests.outcome }}
             JSON=${{ steps.json.outcome }}
             JSONC=${{ steps.jsonc.outcome }}
             Line-endings=${{ steps.lineEndings.outcome }}
+            Commit-messages=${{ steps.trailers.outcome }}
             Package=${{ steps.package.outcome }}
             Integration-tests=${{ steps.integration.outcome }}
         run: |

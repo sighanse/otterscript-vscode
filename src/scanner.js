@@ -10,15 +10,15 @@
  * spans — quoted strings, line comments, block comments, and swim-strings — plus
  * what builds on that scan: the `<% %>` text-template tag masking, the
  * signature-help helpers (active parameter, parameter splitting), the
- * variable-occurrence index behind highlighting, and the module-name regexes.
+ * variable-occurrence index behind highlighting and rename, the module-name
+ * regexes, and the operation-argument helpers (the argument context at the
+ * cursor, module parameter lists).
  * Everything here operates on plain strings, numbers, and plain state objects
  * ({@link CodeScanState}, {@link TemplateScanState}); nothing here constructs a
  * `vscode.*` value.
  *
- * `helpers.js` re-exports the members its own callers need (the provider
- * modules and diagnostics.js import them from there); the rest — used only
- * internally, by adaptivecard.js / json-view.js, or by tests — are imported
- * from this module directly.
+ * Callers import from this module directly; document-index.js wraps its
+ * results in `vscode` ranges for open documents.
  *
  * @module scanner
  */
@@ -291,13 +291,26 @@ function stepCodeScan(line, i, state) {
 }
 
 /**
- * Core line scanner shared by {@link maskNonCodeSpans} and {@link advanceScanState}.
+ * Which kinds of span ({@link ScanKind}) each mask keeps; every other
+ * character is blanked:
+ * - `code` -- only code ({@link maskNonCodeSpans})
+ * - `stringContent` -- code and what's inside strings, their delimiters
+ *   blanked ({@link maskCommentSpans})
+ * - `strings` -- code and whole strings, delimiters included ({@link maskComments})
+ * @type {Readonly<Record<"code" | "stringContent" | "strings", ReadonlySet<ScanKind>>>}
+ */
+const KEPT_KINDS = Object.freeze({
+  code: new Set(/** @type {ScanKind[]} */ (["code"])),
+  stringContent: new Set(/** @type {ScanKind[]} */ (["code", "stringContent"])),
+  strings: new Set(/** @type {ScanKind[]} */ (["code", "stringContent", "stringDelimiter"])),
+});
+
+/**
+ * Core line scanner shared by every mask in this module and {@link advanceScanState}.
  *
  * Advances `state` by processing every character of `lineText`.  When `chars`
  * is non-null it is treated as a split-string output buffer: every character
- * that belongs to a non-code span is replaced with a space in that buffer --
- * except, with `keepStrings`, the contents of quoted strings and swim-strings
- * (see {@link maskCommentSpans}).
+ * of a span `keep` doesn't list is replaced with a space in that buffer.
  *
  * Exported (rather than kept file-private) so unit tests can exercise the
  * character-classification logic directly.
@@ -305,16 +318,17 @@ function stepCodeScan(line, i, state) {
  * @param {string} lineText
  * @param {CodeScanState} state - Mutated in place.
  * @param {string[] | null} chars - Output buffer, or null for state-only mode.
- * @param {boolean} [keepStrings] - Leave quoted-string and swim-string
- *   contents unmasked (their delimiters are still blanked).
+ * @param {keyof typeof KEPT_KINDS} [keep] - What stays unmasked (default:
+ *   code only)
  * @returns {void}
  * @internal
  */
-function scanLineState(lineText, state, chars, keepStrings = false) {
+function scanLineState(lineText, state, chars, keep = "code") {
+  const kept = KEPT_KINDS[keep];
   let i = 0;
   while (i < lineText.length) {
     const { kind, next } = stepCodeScan(lineText, i, state);
-    if (chars && kind !== "code" && !(keepStrings && kind === "stringContent")) {
+    if (chars && !kept.has(kind)) {
       for (let j = i; j < next && j < chars.length; j++) chars[j] = " ";
     }
     i = next;
@@ -334,6 +348,23 @@ function scanLineState(lineText, state, chars, keepStrings = false) {
 function maskNonCodeSpans(lineText, state) {
   const chars = lineText.split("");
   scanLineState(lineText, state, chars);
+  return chars.join("");
+}
+
+/**
+ * A length-preserving mask of comments only: strings stay whole, their quotes
+ * included. Unlike {@link maskCommentSpans}, which blanks string delimiters,
+ * this keeps every non-comment character, so a caller can find where the
+ * last argument of a call really ends (the add-missing-argument fix inserts
+ * after a trailing string argument, not inside it).
+ *
+ * @param {string} lineText
+ * @param {CodeScanState} state - Mutated in place.
+ * @returns {string}
+ */
+function maskComments(lineText, state) {
+  const chars = lineText.split("");
+  scanLineState(lineText, state, chars, "strings");
   return chars.join("");
 }
 
@@ -622,7 +653,7 @@ function documentUsesTemplateTags(text) {
  * reported per line (the grammar allows only one). Line endings may be LF or
  * CRLF -- suitable for scanning raw file contents read from disk.
  *
- * The single declaration scan: `helpers.getModuleInfo` wraps these hits in
+ * The single declaration scan: `document-index.getModuleInfo` wraps these hits in
  * `vscode` ranges for an open document, and the workspace-symbol index uses
  * them directly on raw file text read from disk.
  *
@@ -695,26 +726,23 @@ function isInStringOrComment(line, position, initialState) {
 // ============================================================
 
 /**
- * Prepares the text before the cursor for signature-help matching: blanks
- * strings and comments, then every fully closed `( ... )` group, so only the
- * still-open calls keep their parentheses. Length-preserving (blanked chars
- * become spaces).
+ * Prepares the code before the cursor for signature-help matching: blanks
+ * every fully closed `( ... )` group, so only the still-open calls keep their
+ * parentheses. Length-preserving (blanked chars become spaces; line breaks
+ * stay).
  *
  * This is what lets signature help find the call the cursor is really in
- * when an earlier argument contains a nested call or a parenthesis inside a
- * string -- e.g. `$Substring($Trim($x), ` or `$Substring("a(b", ` -- and
- * keeps commas inside those closed groups from shifting the active parameter.
+ * when an earlier argument contains a nested call -- e.g.
+ * `$Substring($Trim($x), ` -- and keeps commas inside those closed groups
+ * from shifting the active parameter.
  *
- * @param {string} text - Document text up to the cursor
+ * @param {string} maskedText - The code before the cursor, with strings and
+ *   comments already masked by {@link maskNonCodeSpans} (so a `(` inside a
+ *   string, as in `$Substring("a(b", `, doesn't count)
  * @returns {string}
  */
-function maskClosedGroups(text) {
-  const state = createCodeScanState();
-  const chars = text
-    .split("\n")
-    .map((line) => maskNonCodeSpans(line, state))
-    .join("\n")
-    .split("");
+function blankClosedGroups(maskedText) {
+  const chars = maskedText.split("");
 
   /** @type {number[]} indexes of the currently open '(' */
   const open = [];
@@ -837,7 +865,7 @@ function getActiveParameterIndex(argsText) {
  */
 function maskCommentSpans(lineText, state) {
   const chars = lineText.split("");
-  scanLineState(lineText, state, chars, true);
+  scanLineState(lineText, state, chars, "stringContent");
   return chars.join("");
 }
 
@@ -894,6 +922,15 @@ function templateVariableViews(lines) {
 }
 
 /**
+ * Inedo's name rule, as regex source (no anchors, no groups that capture):
+ * letters, digits, `-` and `_`, starting with a letter and not ending with
+ * `-` or `_`. For variable, module and parameter names.
+ */
+const NAME_PATTERN = "[A-Za-z](?:[A-Za-z0-9_-]*[A-Za-z0-9])?";
+/** An explicit variable name, inside braces (`${my var}`): spaces allowed too. */
+const BRACED_NAME_PATTERN = "[A-Za-z][A-Za-z0-9_ -]*";
+
+/**
  * A variable token: a sigil (group 1), then either a plain name (group 2) or
  * an explicit name in braces (group 3) -- `$name` or `${name}`, likewise for
  * `@` / `%`. Per Inedo's formal grammar a name is letters, digits, dashes and
@@ -906,8 +943,10 @@ function templateVariableViews(lines) {
  * `$Fo` of `$Foo(` or `$a` of `$a-b(`).
  * @type {RegExp}
  */
-const VARIABLE_TOKEN_REGEX =
-  /(?<![A-Za-z0-9_`$@%])([$@%])(?:([A-Za-z](?:[A-Za-z0-9_-]*[A-Za-z0-9])?)(?![A-Za-z0-9_(]|-[A-Za-z0-9])|\{([A-Za-z][A-Za-z0-9_ -]*)\})/g;
+const VARIABLE_TOKEN_REGEX = new RegExp(
+  String.raw`(?<![A-Za-z0-9_\`$@%])([$@%])(?:(${NAME_PATTERN})(?![A-Za-z0-9_(]|-[A-Za-z0-9])|\{(${BRACED_NAME_PATTERN})\})`,
+  "g"
+);
 
 /** Text before a token that makes it a `foreach` loop variable. */
 const FOREACH_VARIABLE_PREFIX_REGEX = /\bforeach\s+$/i;
@@ -920,6 +959,8 @@ const MODULE_PARAMETER_LIST_OPEN_REGEX = /^\s*module\s+[A-Za-z][\w-]*\s*</i;
 const MODULE_PARAMETER_PREFIX_REGEX = /(?:^|,|\b(?:in|out|ref))\s*$/i;
 /** Text before a token at statement start (optionally after `set` / `global`). */
 const ASSIGNMENT_PREFIX_REGEX = /(?:^|[;{}]|\bset|\bglobal)\s*$/i;
+/** Text before a token that receives an operation's output (`ResponseBody => $body`). */
+const OUTPUT_CAPTURE_PREFIX_REGEX = /=>\s*$/;
 /** Text after a token that makes it an assignment target (`=` but not `==`). */
 const ASSIGNMENT_SUFFIX_REGEX = /^\s*=(?!=)/;
 
@@ -928,8 +969,8 @@ const ASSIGNMENT_SUFFIX_REGEX = /^\s*=(?!=)/;
  *   `line`/`character` are 0-based and point at the sigil; `length` covers
  *   the whole token (`$name` or `${name}`). `write` is true for a declaration
  *   or assignment target (`set $x = ...`, `$x = ...`, `global $x = ...`,
- *   `foreach %p in ...`, or a module parameter, whose list may span several
- *   lines).
+ *   `foreach %p in ...`, an operation's output capture `Name => $x`, or a
+ *   module parameter, whose list may span several lines).
  */
 
 /**
@@ -989,6 +1030,7 @@ function indexVariableOccurrences(text) {
       const write = !inString && (
         isParameter ||
         FOREACH_VARIABLE_PREFIX_REGEX.test(before) ||
+        OUTPUT_CAPTURE_PREFIX_REGEX.test(before) ||
         (ASSIGNMENT_PREFIX_REGEX.test(before) && ASSIGNMENT_SUFFIX_REGEX.test(after))
       );
 
@@ -1002,18 +1044,171 @@ function indexVariableOccurrences(text) {
   return index;
 }
 
+// ============================================================
+// OPERATION ARGUMENTS
+// ============================================================
+
 /**
- * Finds every reference to one variable in a document (see
- * {@link indexVariableOccurrences} for the rules). For repeated lookups on
- * the same text, build the index once and use {@link variableKey} instead.
+ * Where an argument name may be typed in an operation or module call: right
+ * after its `(` or a top-level `,` -- `Copy-Files(To: $x, |`,
+ * `Copy-Files(\n\tFr|` or `call Greet(|`.
  *
- * @param {string} text - Full document text
- * @param {string} sigil - `$`, `@`, or `%`
- * @param {string} name - Variable name without its sigil
- * @returns {VariableOccurrence[]}
+ * @typedef {{
+ *   operation: string,
+ *   namespace: string | null,
+ *   module: boolean,
+ *   typed: string,
+ *   used: string[]
+ * }} OperationArgumentContext
+ *   `operation` / `namespace` name the call (`ProGet::Create-Directory`);
+ *   for a `call` (`module` true) they are the module and its raft, if any.
+ *   `typed` is the part of the argument name before the cursor; `used` the
+ *   names of the arguments the call already gives (`Name:` or `Name =>`),
+ *   before it and after it.
  */
-function findVariableOccurrences(text, sigil, name) {
-  return indexVariableOccurrences(text).get(variableKey(sigil, name)) ?? [];
+
+/**
+ * An argument's name at the start of an argument (group 2, after the
+ * whitespace in group 1): `Name:` (not `::`) or an output capture
+ * `Name => $variable`.
+ */
+const ARGUMENT_NAME_REGEX = /^(\s*)([A-Za-z][\w-]*)\s*(?::(?!:)|=>)/;
+
+/**
+ * The argument context at the end of `maskedPrefix`, or null when the end
+ * isn't at an argument name inside an operation or module call (it's in a
+ * value, outside any call, in a function call `$F(`, a literal, ...).
+ *
+ * @param {string} maskedPrefix - The code before the cursor, masked by
+ *   {@link maskNonCodeSpans} (so brackets in strings and comments are gone);
+ *   from at least the start of the statement
+ * @param {string} [maskedSuffix] - The code after the cursor, masked the same
+ *   way, for the arguments given after it (none when left out)
+ * @returns {OperationArgumentContext | null}
+ */
+function findOperationArgumentContext(maskedPrefix, maskedSuffix = "") {
+  // A braced variable's `}` (`${my dir}`) isn't a block's.
+  const text = maskedPrefix.replace(/[$@%]\{[^{}\n]*\}/g, (m) => "_".repeat(m.length));
+
+  // Back to the call's unclosed `(`, noting the last top-level `,`.
+  let depth = 0;
+  let argumentStart = -1;
+  let open = -1;
+  for (let i = text.length - 1; i >= 0 && open === -1; i--) {
+    const ch = text[i];
+    if (ch === ")" || ch === "]") depth++;
+    else if (ch === "(" || ch === "[") {
+      if (depth > 0) depth--;
+      else if (ch === "(") open = i;
+      else return null; // inside a vector literal or an index
+    } else if (depth === 0 && (ch === ";" || ch === "{" || ch === "}")) return null; // statement boundary
+    else if (depth === 0 && ch === "," && argumentStart === -1) argumentStart = i + 1;
+  }
+  if (open === -1) return null;
+
+  const typedMatch = /^\s*([A-Za-z][\w-]*)?$/.exec(text.slice(argumentStart === -1 ? open + 1 : argumentStart));
+  if (!typedMatch) return null; // in a value
+
+  // The operation or module: a dashed or plain name right before `(`, not a
+  // function (`$F(`) or a map or vector literal.
+  const before = text.slice(0, open);
+  const callee = /(?<![$@%\w:-])(?:([A-Za-z][A-Za-z0-9]*)::)?([A-Za-z][A-Za-z0-9-]*)\s*$/.exec(before);
+  if (!callee) return null;
+  const module = /\bcall\s+(?:[A-Za-z]\w*::)?[A-Za-z][\w-]*\s*$/i.test(before);
+
+  // Arguments already given: each complete top-level `Name:` segment.
+  /** @type {string[]} */
+  const used = [];
+  let segmentStart = open + 1;
+  depth = 0;
+  for (let i = open + 1; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === "(" || ch === "[") depth++;
+    else if (ch === ")" || ch === "]") depth--;
+    else if (ch === "," && depth === 0) {
+      const name = ARGUMENT_NAME_REGEX.exec(text.slice(segmentStart, i))?.[2];
+      if (name) used.push(name);
+      segmentStart = i + 1;
+    }
+  }
+
+  // Arguments given after the cursor: each top-level `Name:` segment up to
+  // the call's `)` -- or, while it has none, the end of the statement --
+  // past the rest of the name being typed, when the cursor is inside one.
+  const after = maskedSuffix.replace(/[$@%]\{[^{}\n]*\}/g, (m) => "_".repeat(m.length));
+  let inCurrent = /^\w/.test(after);
+  segmentStart = 0;
+  depth = 0;
+  let end = 0;
+  for (; end < after.length; end++) {
+    const ch = after[end];
+    if (ch === "(" || ch === "[") depth++;
+    else if (ch === ")" || ch === "]") {
+      if (depth === 0) break;
+      depth--;
+    } else if (depth === 0 && (ch === ";" || ch === "{" || ch === "}")) break;
+    else if (depth === 0 && ch === ",") {
+      if (!inCurrent) addUsed(after.slice(segmentStart, end));
+      inCurrent = false;
+      segmentStart = end + 1;
+    }
+  }
+  if (!inCurrent) addUsed(after.slice(segmentStart, end));
+
+  return { operation: callee[2], namespace: callee[1] ?? null, module, typed: typedMatch[1] ?? "", used };
+
+  /** @param {string} segment - One argument, masked */
+  function addUsed(segment) {
+    const name = ARGUMENT_NAME_REGEX.exec(segment)?.[2];
+    if (name) used.push(name);
+  }
+}
+
+/**
+ * One parameter of a `module Name<...>` declaration.
+ *
+ * @typedef {{ name: string, sigil: string, direction: "in" | "out" | "ref", optional: boolean }} ModuleParameter
+ *   `name` without its sigil or braces; `optional` when it has a default
+ *   value or is an `out` parameter (the call needn't pass it).
+ */
+
+/**
+ * The parameters of the module declared at the start of `maskedText` --
+ * `module Name<in $path, in $count = 0, out $result>`, possibly over several
+ * lines.
+ *
+ * @param {string} maskedText - From the `module` line on, masked by
+ *   {@link maskNonCodeSpans} (so a `>` or `,` in a default string is gone)
+ * @returns {ModuleParameter[]}
+ */
+function parseModuleParameters(maskedText) {
+  const header = MODULE_PARAMETER_LIST_OPEN_REGEX.exec(maskedText);
+  if (!header) return [];
+  // The parameters: split at the top-level commas up to the list's `>`, so a
+  // default value's own commas (`in @tags = @($a, $b)`) stay inside it.
+  /** @type {string[]} */
+  const parts = [];
+  let depth = 0;
+  let start = header[0].length;
+  for (let i = start; i <= maskedText.length; i++) {
+    const ch = maskedText[i];
+    if (ch === "(" || ch === "[") depth++;
+    else if ((ch === ")" || ch === "]") && depth > 0) depth--;
+    else if (i === maskedText.length || (depth === 0 && (ch === "," || ch === ">"))) {
+      parts.push(maskedText.slice(start, i));
+      if (ch !== ",") break;
+      start = i + 1;
+    }
+  }
+  /** @type {ModuleParameter[]} */
+  const params = [];
+  for (const part of parts) {
+    const match = /^\s*(?:(in|out|ref)\s+)?([$@%])(?:\{([^}]*)\}|([A-Za-z][\w-]*))\s*(=)?/i.exec(part);
+    if (!match) continue;
+    const direction = /** @type {"in" | "out" | "ref"} */ ((match[1] ?? "in").toLowerCase());
+    params.push({ name: (match[3] ?? match[4]).trim(), sigil: match[2], direction, optional: Boolean(match[5]) || direction === "out" });
+  }
+  return params;
 }
 
 // ============================================================
@@ -1029,6 +1224,7 @@ module.exports = {
   isUnescapedQuoteAt,
   scanLineState,
   maskNonCodeSpans,
+  maskComments,
   advanceScanState,
 
   // -- Text-template tags
@@ -1044,14 +1240,20 @@ module.exports = {
 
   // -- Variable occurrences
   maskCommentSpans,
-  findVariableOccurrences,
   indexVariableOccurrences,
   variableKey,
+  NAME_PATTERN,
+  BRACED_NAME_PATTERN,
+
+  // -- Operation arguments
+  findOperationArgumentContext,
+  ARGUMENT_NAME_REGEX,
+  parseModuleParameters,
 
   // -- Argument helpers
   getActiveParameterIndex,
   splitSignatureParameters,
-  maskClosedGroups,
+  blankClosedGroups,
 
   // -- Module-name regexes & context predicates
   MODULE_NAME_TOKEN_REGEX,

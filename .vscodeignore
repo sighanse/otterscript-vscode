@@ -4,6 +4,8 @@
 .vscode-test/
 .vscode-test.mjs
 node_modules/
+# The extension ships as one bundle, dist/extension.js (`npm run build`).
+src/
 test/
 docs/
 .eslintcache
@@ -11,6 +13,7 @@ docs/
 .gitignore
 .DS_Store
 .markdownlint.jsonc
+.nvmrc
 .pre-commit-config.yaml
 scripts/
 *.vsix
@@ -19,14 +22,14 @@ scripts/
 **/*.tmp
 **/*.map
 CONTRIBUTING.md
+CLAUDE.md
 CODE_OF_CONDUCT.md
 eslint.config.cjs
 package-lock.json
 SECURITY.md
 jsconfig.json
 # Always ship the extension's own files. Named by file type, not whole
-# folders: re-including a folder would also bring back stray files in it,
-# such as a crash log VS Code leaves in src/.
-!src/**/*.js
+# folders: re-including a folder would also bring back stray files in it.
+!dist/extension.js
 !syntaxes/*.json
 !snippets/*.json

@@ -12,6 +12,11 @@ changelog:
       - dependabot[bot]
       - github-actions[bot]
   categories:
+    # GitHub files each pull request under the first category whose label it
+    # has, so breaking changes come first.
+    - title: "🛠 Breaking Changes"
+      labels:
+        - breaking-change
     - title: "🚀 Features"
       labels:
         - "feat"
@@ -40,9 +45,6 @@ changelog:
     - title: "🔄 Reverts"
       labels:
         - "revert"
-    - title: Breaking Changes 🛠
-      labels:
-        - breaking-change
     - title: "Other Changes"
       labels:
         - "*"

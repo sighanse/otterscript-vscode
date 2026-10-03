@@ -17,26 +17,38 @@
     "url": "https://github.com/sighanse/otterscript-vscode/issues"
   },
   "homepage": "https://github.com/sighanse/otterscript-vscode#readme",
+  "qna": "https://github.com/sighanse/otterscript-vscode/discussions",
   "markdown": "github",
   "license": "MIT",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "icon": "images/logo.png",
   "engines": {
     "vscode": "^1.85.0"
   },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    },
+    "virtualWorkspaces": {
+      "supported": true
+    }
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@stylistic/eslint-plugin": "^5.10.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^18.19.130",
     "@types/vscode": "1.85.0",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.1.0",
     "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.28.2",
     "eslint": "^10.11.0",
     "eslint-plugin-jsdoc": "^65.0.1",
     "globals": "^17.13.0",
     "jsonc-parser": "^3.3.1",
-    "ovsx": "^1.2.0"
+    "ovsx": "^1.2.0",
+    "typescript": "6.0.3"
   },
   "categories": [
     "Programming Languages",
@@ -56,7 +68,11 @@
     "teams",
     "webhook"
   ],
-  "main": "./src/extension.js",
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "workspaceContains:**/*.otter",
+    "workspaceContains:**/*.oscript"
+  ],
   "contributes": {
     "languages": [
       {
@@ -111,7 +127,29 @@
         "otterscript.workspaceSymbols.enable": {
           "type": "boolean",
           "default": true,
-          "description": "Index module declarations across .otter/.oscript files for 'Go to Symbol in Workspace' (Ctrl+T)"
+          "description": "List the modules declared in .otter/.oscript files in 'Go to Symbol in Workspace' (Ctrl+T). Cross-file Go to Definition, Rename and Find References work either way."
+        },
+        "otterscript.inlayHints.parameterNames": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show parameter names before the positional arguments of a function call, such as `$Substring($x, Offset: 2, Length: 3)`. Functions with one parameter and arguments that are already a variable of that name get none. VS Code's `#editor.inlayHints.enabled#` setting also hides or shows all inlay hints."
+        },
+        "otterscript.product": {
+          "type": "string",
+          "enum": [
+            "any",
+            "ProGet",
+            "Otter",
+            "BuildMaster"
+          ],
+          "default": "any",
+          "enumDescriptions": [
+            "Offer everything.",
+            "Leave out what only Otter or only BuildMaster has (ProGet runs the core execution engine both share), keeping ProGet's notifier variables.",
+            "Leave out what only BuildMaster or only ProGet has.",
+            "Leave out what only Otter or only ProGet has."
+          ],
+          "markdownDescription": "The Inedo product your scripts run in. Completion then leaves out the functions, variables and operations that product doesn't have, based on Inedo's Otter and BuildMaster reference. Hover notes when a function, variable or operation isn't in that product, and signature help and parameter-name hints use the product's form of a function whose arguments differ between products; diagnostics are not affected."
         },
         "otterscript.diagnostics.rules": {
           "type": "object",
@@ -173,6 +211,17 @@
               ],
               "markdownDescription": "`for` used as a loop (OtterScript loops use `foreach`)."
             },
+            "duplicate-module": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "A `module` whose name another module in the same file already has."
+            },
             "duplicate-map-key": {
               "type": "string",
               "enum": [
@@ -206,6 +255,17 @@
               ],
               "markdownDescription": "An `@Name(...)` call to a function this extension doesn't know."
             },
+            "unknown-map-function": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "An unknown `%Name(...)` map function."
+            },
             "unknown-operation": {
               "type": "string",
               "enum": [
@@ -238,6 +298,39 @@
                 "hint"
               ],
               "markdownDescription": "A function call with more arguments than the function accepts."
+            },
+            "missing-required-argument": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "An operation call without one of its required arguments, such as `Copy-Files` without `To`. A hint by default: an operation may accept argument names Inedo's reference doesn't list."
+            },
+            "unknown-argument": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "An operation argument name that looks like a typo of a documented one, such as `Fomr:` in `Copy-Files`. A hint by default: an operation may accept argument names Inedo's reference doesn't list."
+            },
+            "too-few-arguments": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "A function call with fewer arguments than every documented form of the function requires."
             },
             "template-unexpected-close": {
               "type": "string",
@@ -360,6 +453,28 @@
               ],
               "markdownDescription": "An Adaptive Card Templating key such as `\"$data\"` or `\"$when\"`, which OtterScript expands as a variable in a text template."
             },
+            "adaptivecard-unknown-target": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "An `Action.ToggleVisibility` target that isn't the `\"id\"` of any element in the Adaptive Card."
+            },
+            "adaptivecard-duplicate-id": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "An `\"id\"` that another element in the same Adaptive Card already has."
+            },
             "adaptivecard-content-type": {
               "type": "string",
               "enum": [
@@ -430,16 +545,22 @@
     "lint": "eslint . --cache",
     "lint:fix": "eslint . --fix --cache",
     "lint:ci": "eslint . --max-warnings=0 --cache",
-    "check:js": "npx -y -p typescript@6.0.3 tsc --noEmit -p jsconfig.json && npx -y -p typescript@6.0.3 tsc --noEmit -p test/jsconfig.json && npx -y -p typescript@6.0.3 tsc --noEmit -p scripts/jsconfig.json",
+    "check:js": "tsc --noEmit -p jsconfig.json && tsc --noEmit -p test/jsconfig.json && tsc --noEmit -p scripts/jsconfig.json",
     "check:lang": "node scripts/check-language-sync.js",
     "check:cards": "node scripts/update-adaptivecard-data.js --check",
     "update:cards": "node scripts/update-adaptivecard-data.js --fetch",
+    "check:reference": "node scripts/update-inedo-reference.js --check",
+    "update:reference": "node scripts/update-inedo-reference.js --fetch && node scripts/check-language-sync.js --write",
+    "update:grammar": "node scripts/check-language-sync.js --write",
     "test": "node --test \"test/unit/*.test.js\"",
+    "bundle": "esbuild src/extension.js --bundle --platform=node --format=cjs --target=node18 --external:vscode --minify --keep-names --outfile=dist/extension.js",
+    "build": "npm run bundle -- --sourcemap=linked",
+    "pretest:integration": "npm run build",
     "test:integration": "vscode-test",
     "test:cov": "node --test --experimental-test-coverage \"test/unit/*.test.js\"",
-    "check": "npm run lint:ci && npm run check:js && npm run check:lang && npm run check:cards && npm test",
+    "check": "npm run lint:ci && npm run check:js && npm run check:lang && npm run check:cards && npm run check:reference && npm test",
     "package": "vsce package --no-yarn",
-    "vscode:prepublish": "npm run lint:ci",
+    "vscode:prepublish": "npm run lint:ci && npm run bundle",
     "publish:vsce": "vsce publish",
     "publish:ovsx": "ovsx publish --no-dependencies"
   },

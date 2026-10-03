@@ -31,12 +31,182 @@ describe("navigation and highlighting (main.otter)", () => {
     assert.equal(range.start.line, declarationLine());
   });
 
+  it("goes to a module declared in another workspace file", async () => {
+    const source = await openContent('call Greet(name: "x");\n');
+    /** @type {(vscode.Location | vscode.LocationLink)[]} */
+    const results = await vscode.commands.executeCommand(
+      "vscode.executeDefinitionProvider", source.uri, positionOf(source, "Greet", 2)
+    );
+    const uris = results.map((l) => ("targetUri" in l ? l.targetUri : l.uri).fsPath);
+    assert.ok(uris.some((p) => p.endsWith("main.otter")), uris.join(", "));
+  });
+
+  it("refuses to rename a call no module declaration answers", async () => {
+    const source = await openContent("call Nowhere;\n");
+    await assert.rejects(
+      Promise.resolve(vscode.commands.executeCommand(
+        "vscode.executeDocumentRenameProvider", source.uri, positionOf(source, "Nowhere", 2), "Somewhere"
+      )),
+      /no one module declaration was found/
+    );
+  });
+
+  it("refuses to rename a module the file declares twice", async () => {
+    const source = await openContent("module Twice {\n}\nmodule Twice {\n}\ncall Twice;\n");
+    await assert.rejects(
+      Promise.resolve(vscode.commands.executeCommand(
+        "vscode.executeDocumentRenameProvider", source.uri, positionOf(source, "call Twice", 6), "Once"
+      )),
+      /declares 'Twice' 2 times/
+    );
+  });
+
+  it("refuses to rename from a call when the declaring file declares the module twice", async () => {
+    await openContent("module Twice2 {\n}\nmodule Twice2 {\n}\n");
+    const caller = await openContent("call Twice2;\n");
+    await assert.rejects(
+      Promise.resolve(vscode.commands.executeCommand(
+        "vscode.executeDocumentRenameProvider", caller.uri, positionOf(caller, "Twice2", 2), "Once"
+      )),
+      /declares 'Twice2' 2 times/
+    );
+  });
+
+  it("goes to where an operation's output capture assigns a variable", async () => {
+    const source = await openContent('Get-Http(Url: "u", ResponseBody => $body);\nLog-Information $body;\n');
+    /** @type {vscode.Location[]} */
+    const results = await vscode.commands.executeCommand(
+      "vscode.executeDefinitionProvider", source.uri, positionOf(source, "Information $body", 13)
+    );
+    assert.deepEqual(results.map((l) => l.range.start.line), [0]);
+  });
+
+  it("matches module names case-insensitively, also with Go to Symbol in Workspace turned off", async () => {
+    const config = vscode.workspace.getConfiguration("otterscript");
+    await config.update("workspaceSymbols.enable", false, vscode.ConfigurationTarget.Workspace);
+    try {
+      const source = await openContent('call greet(name: "x");\n');
+      /** @type {(vscode.Location | vscode.LocationLink)[]} */
+      const results = await vscode.commands.executeCommand(
+        "vscode.executeDefinitionProvider", source.uri, positionOf(source, "greet", 2)
+      );
+      const uris = results.map((l) => ("targetUri" in l ? l.targetUri : l.uri).fsPath);
+      assert.ok(uris.some((p) => p.endsWith("main.otter")), uris.join(", "));
+      /** @type {vscode.SymbolInformation[]} */
+      const symbols = await vscode.commands.executeCommand("vscode.executeWorkspaceSymbolProvider", "Greet");
+      assert.deepEqual(symbols.filter((s) => s.name === "Greet"), [], "Ctrl+T is off");
+    } finally {
+      await config.update("workspaceSymbols.enable", undefined, vscode.ConfigurationTarget.Workspace);
+    }
+  });
+
+  /**
+   * Renames the symbol at `needle` (+ `offset`) and applies the edit.
+   *
+   * @param {vscode.TextDocument} source
+   * @param {string} needle
+   * @param {number} offset
+   * @param {string} newName
+   * @returns {Promise<void>}
+   */
+  async function rename(source, needle, offset, newName) {
+    /** @type {vscode.WorkspaceEdit} */
+    const edit = await vscode.commands.executeCommand(
+      "vscode.executeDocumentRenameProvider", source.uri, positionOf(source, needle, offset), newName
+    );
+    await vscode.workspace.applyEdit(edit);
+  }
+
+  it("renames a variable everywhere in the file, strings included, adding braces a spaced name needs", async () => {
+    const source = await openContent('set $count = 1;\nLog-Information "$count items" ${count};\n');
+    await rename(source, "$count =", 2, "total");
+    assert.equal(source.getText(), 'set $total = 1;\nLog-Information "$total items" ${total};\n');
+    await rename(source, "$total =", 2, "item total");
+    assert.equal(source.getText(), 'set ${item total} = 1;\nLog-Information "${item total} items" ${item total};\n');
+  });
+
+  it("renames a module's declaration and its calls", async () => {
+    const source = await openContent("module Old-Name {\n}\ncall Old-Name;\n");
+    await rename(source, "call Old-Name", 6, "New-Name");
+    assert.equal(source.getText(), "module New-Name {\n}\ncall New-Name;\n");
+  });
+
+  /**
+   * The rename edit for the symbol at `needle` (+ `offset`), per file name
+   * (`<untitled>` for this test's document): how many edits, not applied.
+   *
+   * @param {vscode.TextDocument} source
+   * @param {string} needle
+   * @param {number} offset
+   * @param {string} newName
+   * @returns {Promise<Map<string, number>>}
+   */
+  async function renameEditCounts(source, needle, offset, newName) {
+    /** @type {vscode.WorkspaceEdit} */
+    const edit = await vscode.commands.executeCommand(
+      "vscode.executeDocumentRenameProvider", source.uri, positionOf(source, needle, offset), newName
+    );
+    return new Map(edit.entries().map(([uri, edits]) => [
+      uri.toString() === source.uri.toString() ? "<untitled>" : uri.path.split("/").pop() ?? "", edits.length,
+    ]));
+  }
+
+  it("renames a module in the workspace file that declares it, with its calls there and here", async () => {
+    const source = await openContent('call Greet(name: "x");\n');
+    const counts = await renameEditCounts(source, "Greet", 2, "Welcome");
+    assert.equal(counts.get("main.otter"), 3, "declaration and two calls");
+    assert.equal(counts.get("<untitled>"), 1);
+  });
+
+  it("finds a module's references across workspace files", async () => {
+    const source = await openContent('call Greet(name: "x");\n');
+    /** @type {vscode.Location[]} */
+    const references = await vscode.commands.executeCommand(
+      "vscode.executeReferenceProvider", source.uri, positionOf(source, "Greet", 2)
+    );
+    const inMain = references.filter((l) => l.uri.path.endsWith("main.otter"));
+    assert.equal(inMain.length, 3, "declaration and two calls");
+    assert.ok(references.some((l) => l.uri.toString() === source.uri.toString()));
+  });
+
+  it("renames only this file's module when it declares one of the same name", async () => {
+    const source = await openContent("module Greet {\n}\ncall Greet;\n");
+    const counts = await renameEditCounts(source, "call Greet", 6, "Welcome");
+    assert.deepEqual([...counts], [["<untitled>", 2]]);
+    // While open, this second `module Greet` makes main.otter's ambiguous to
+    // the other tests' calls.
+    await vscode.commands.executeCommand("workbench.action.revertAndCloseActiveEditor");
+  });
+
+  it("refuses an invalid or already-used name", async () => {
+    const source = await openContent("set $a = 1;\nset $b = 2;\n");
+    await assert.rejects(rename(source, "$a", 1, "1bad"), /isn't a valid variable name/);
+    await assert.rejects(rename(source, "$a", 1, "b"), /already used/);
+  });
+
+  it("goes to a variable's assignments, and nowhere for a variable that is only read", async () => {
+    const source = await openContent("set $count = 1;\nset $count = 2;\nLog-Information $count $PackageName;\n");
+    /** @type {(vscode.Location | vscode.LocationLink)[]} */
+    const results = await vscode.commands.executeCommand(
+      "vscode.executeDefinitionProvider", source.uri, positionOf(source, "Information $count", 14)
+    );
+    const lines = results.map((l) => ("targetRange" in l ? l.targetRange : l.range).start.line).sort();
+    assert.deepEqual(lines, [0, 1]);
+
+    /** @type {unknown[]} */
+    const none = await vscode.commands.executeCommand(
+      "vscode.executeDefinitionProvider", source.uri, positionOf(source, "$PackageName", 2)
+    );
+    assert.deepEqual(none, []);
+  });
+
   it("finds a module's declaration and both calls", async () => {
     /** @type {vscode.Location[]} */
     const references = await vscode.commands.executeCommand(
       "vscode.executeReferenceProvider", document.uri, positionOf(document, "module Greet", 8)
     );
-    assert.equal(references.length, 3);
+    // Calls in the other tests' open documents count too.
+    assert.equal(references.filter((l) => l.uri.toString() === document.uri.toString()).length, 3);
   });
 
   it("lists the module in the outline", async () => {

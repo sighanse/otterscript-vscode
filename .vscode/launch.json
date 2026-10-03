@@ -12,7 +12,9 @@
         "--extensionDevelopmentPath=${workspaceFolder}",
         "${workspaceFolder}"
       ],
-      "outFiles": ["${workspaceFolder}/src/**/*.js"]
+      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
+      // The extension runs from the bundle; rebuild it first.
+      "preLaunchTask": "npm: build"
     },
     {
       // Same as "Run Extension", but with every other extension disabled, so
@@ -26,7 +28,9 @@
         "--disable-extensions",
         "${workspaceFolder}"
       ],
-      "outFiles": ["${workspaceFolder}/src/**/*.js"]
+      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
+      // The extension runs from the bundle; rebuild it first.
+      "preLaunchTask": "npm: build"
     },
     {
       // Runs the integration tests (test/integration/) under the debugger,
@@ -40,7 +44,8 @@
       "args": [
         "--extensionDevelopmentPath=${workspaceFolder}",
         "--disable-extensions"
-      ]
+      ],
+      "preLaunchTask": "npm: build"
     }
   ]
 }

@@ -1,47 +1,21 @@
 // @ts-check
 /**
- * @fileoverview VS Code-facing helper functions for the OtterScript extension.
+ * @fileoverview Shared helpers for the OtterScript extension: settings, the
+ * logger, per-document timers and bounded concurrency, docs-table lookup and
+ * product filtering, the hover and completion item builders, and typo
+ * suggestions ({@link closestMatch}).
  *
- * The `vscode`-free text scanning primitives (non-code masking, string/comment
- * detection, argument parsing, module-name regexes) live in {@link module:scanner}
- * and are re-exported from here so existing `require("./helpers")` callers keep
- * working. Everything defined directly in this file may touch the `vscode` API.
- *
- * Dependencies:
- * - vscode (required for OutputChannel, CompletionItem, etc.)
- * - ./scanner (pure text primitives)
+ * Elsewhere: text scanning in {@link module:scanner}, per-document indexes
+ * (modules, variables, string/comment state) in {@link module:document-index},
+ * diagnostic checks in diagnostics.js, quick fixes in providers/code-actions.js
+ * and folding in providers/navigation.js.
  *
  * @module helpers
  */
 
 const vscode = require("vscode");
 
-// Pure text-scanning primitives. Imported for internal use below and re-exported
-// from this module's `module.exports` for backward compatibility.
-const {
-  createCodeScanState,
-  createTemplateScanState,
-  maskNonCodeSpans,
-  advanceScanState,
-  maskOutsideTemplateTags,
-  documentUsesTemplateTags,
-  findTemplateTagDelimiters,
-  isInStringOrComment,
-  getActiveParameterIndex,
-  splitSignatureParameters,
-  maskClosedGroups,
-  MODULE_NAME_TOKEN_REGEX,
-  MODULE_CALL_TARGET_GLOBAL_REGEX,
-  isModuleDeclarationContext,
-  isModuleCallContext,
-  findModuleDeclarations,
-  indexVariableOccurrences,
-  variableKey,
-} = require("./scanner");
-
-// Namespace allowlist — the single source of truth lives with the data it
-// describes. Plain data module, no vscode dependency.
-const { NAMESPACES } = require("./language-data");
+const { isInStringOrCommentDoc } = require("./document-index");
 
 // ============================================================
 // CONFIGURATION
@@ -66,8 +40,10 @@ const { NAMESPACES } = require("./language-data");
  *   signatureHelpEnabled: boolean,
  *   codeLensEnabled: boolean,
  *   workspaceSymbolsEnabled: boolean,
+ *   parameterNameHints: boolean,
  *   diagnosticRules: Readonly<Record<string, string>>,
- *   adaptiveCardMaxVersion: string
+ *   adaptiveCardMaxVersion: string,
+ *   product: string
  * }}
  *
  * @example
@@ -87,8 +63,10 @@ function loadConfig() {
     signatureHelpEnabled: config.get("signatureHelp.enable", true),
     codeLensEnabled: config.get("codeLens.enable", true),
     workspaceSymbolsEnabled: config.get("workspaceSymbols.enable", true),
+    parameterNameHints: config.get("inlayHints.parameterNames", true),
     diagnosticRules: config.get("diagnostics.rules", {}),
-    adaptiveCardMaxVersion: config.get("adaptiveCards.maxVersion", "1.6")
+    adaptiveCardMaxVersion: config.get("adaptiveCards.maxVersion", "1.6"),
+    product: config.get("product", "any")
   };
 }
 
@@ -123,7 +101,7 @@ function isReadOnlyView(document) {
  *
  * Used by diagnostics to avoid false "missing $" errors on literals.
  * @readonly
- * @type {Set<string>}
+ * @type {ReadonlySet<string>}
  */
 const NON_VARIABLE_IDENTIFIERS = new Set([
   "true",   // Boolean literal
@@ -132,55 +110,43 @@ const NON_VARIABLE_IDENTIFIERS = new Set([
 ]);
 
 // ============================================================
-// TIME UTILITIES
-// ============================================================
-
-/**
- * Returns the current local time as a 24-hour clock string (e.g. "14:03:59";
- * exact format follows the host locale).
- * @returns {string}
- * @private
- */
-function timestamp() {
-  return new Date().toLocaleTimeString([], { hour12: false });
-}
-
-// ============================================================
 // LOGGER
 // ============================================================
 
-const LOGPREFIX = '[OtterScript] ';
-/** @type {import('vscode').OutputChannel | null} */
+/** @type {import('vscode').LogOutputChannel | null} */
 let outputChannel = null;
 
 /**
- * Gets or creates the OtterScript output channel.
- * The channel appears in VS Code under View → Output → OtterScript.
+ * Gets or creates the OtterScript log output channel, which appears under
+ * View → Output → OtterScript. A log channel: VS Code timestamps each line,
+ * tags its level, and shows only the levels the user picks (the gear in the
+ * Output view, or "Developer: Set Log Level...").
  *
- * @returns {import('vscode').OutputChannel}
+ * @returns {import('vscode').LogOutputChannel}
  */
 function getOutputChannel() {
   if (!outputChannel) {
-    outputChannel = vscode.window.createOutputChannel('OtterScript');
+    outputChannel = vscode.window.createOutputChannel("OtterScript", { log: true });
   }
   return outputChannel;
 }
 
 /**
- * Appends a line to the cached output channel with lazy initialization.
+ * The message and the rest of a log call's arguments, as a LogOutputChannel
+ * method takes them (it formats the rest, an Error with its stack).
  *
- * @param {string} line
- * @returns {void}
+ * @param {unknown[]} args
+ * @returns {[string, ...unknown[]]}
  */
-function appendOutputLine(line) {
-  getOutputChannel().appendLine(line);
+function logArguments(args) {
+  const [first, ...rest] = args;
+  return [String(first), ...rest];
 }
 
 /**
- * Centralized logger for OtterScript Language extension.
- *
- * `info` / `warn` / `error` write to both the developer console and the
- * OtterScript output channel; `debug` writes to the console only.
+ * Centralized logger for OtterScript Language extension: writes to the
+ * OtterScript log output channel ({@link getOutputChannel}). `debug` lines
+ * show only when the user sets the channel's level to Debug or Trace.
  *
  * @example
  * log.info('Extension activated');
@@ -189,34 +155,17 @@ function appendOutputLine(line) {
  * log.debug('Processing line', lineIndex);
  */
 const log = {
-  /** @param {...any} args - e.g. `log.info('Extension activated')` */
-  info: (...args) => {
-    const now = timestamp();
-    console.log(LOGPREFIX, `[${now}]`, ...args);
-    appendOutputLine(`[${now}] ${args.join(' ')}`);
-  },
+  /** @param {...unknown} args - e.g. `log.info('Extension activated')` */
+  info: (...args) => { getOutputChannel().info(...logArguments(args)); },
 
-  /** @param {...any} args - e.g. `log.warn('Missing field')` */
-  warn: (...args) => {
-    const now = timestamp();
-    console.warn(LOGPREFIX, `[${now}]`, ...args);
-    appendOutputLine(`⚠️ [${now}] ${args.join(' ')}`);
-  },
+  /** @param {...unknown} args - e.g. `log.warn('Missing field')` */
+  warn: (...args) => { getOutputChannel().warn(...logArguments(args)); },
 
-  /** @param {...any} args - e.g. `log.error('Failed', err)` */
-  error: (...args) => {
-    const now = timestamp();
-    console.error(LOGPREFIX, `[${now}]`, ...args);
-    appendOutputLine(`❌ [${now}] ${args.join(' ')}`);
-  },
+  /** @param {...unknown} args - e.g. `log.error('Failed', err)` */
+  error: (...args) => { getOutputChannel().error(...logArguments(args)); },
 
-  /** @param {...any} args - e.g. `log.debug('Processing', lineIndex)` */
-  debug: (...args) => {
-    const now = timestamp();
-    // Debug logs go to console only - intentionally excluded from Output Channel
-    // to avoid flooding the user-visible log with internal diagnostics.
-    console.debug(LOGPREFIX, `[${now}]`, '[DEBUG]', ...args);
-  }
+  /** @param {...unknown} args - e.g. `log.debug('Processing', lineIndex)` */
+  debug: (...args) => { getOutputChannel().debug(...logArguments(args)); },
 };
 
 // ============================================================
@@ -286,79 +235,6 @@ async function mapWithConcurrency(items, limit, worker) {
 }
 
 // ============================================================
-// VALIDATION
-// ============================================================
-
-/**
- * Performs best-effort validation of documentation tables.
- *
- * @param {string} label - Human-readable category label (e.g. "keywordDocs")
- * @param {Record<string, unknown>} docsTable - Documentation table to validate
- * @returns {{ errors: string[], warnings: string[] }}
- */
-function validateDocs(label, docsTable) {
-  const errors = [];
-  const warnings = [];
-
-  for (const [key, rawDoc] of Object.entries(docsTable)) {
-    /** @type {any} */
-    const doc = rawDoc;
-
-    if (!doc || typeof doc !== "object") {
-      errors.push(`${label}.${key} is not an object`);
-      continue;
-    }
-
-    // Required Field: 'name'
-    if (!doc.name || typeof doc.name !== "string" || doc.name.trim() === "") {
-      errors.push(`${label}.${key} is missing required 'name'`);
-    }
-
-    // Required Field: 'description'
-    if (!doc.description || typeof doc.description !== "string") {
-      errors.push(`${label}.${key} is missing required 'description'`);
-    }
-
-    // Required Field: 'namespace' — must be present and either null or one of
-    // the known OtterScript namespace tokens (guards against typos / drift).
-    if (!("namespace" in doc)) {
-      errors.push(`${label}.${key} is missing required 'namespace'`);
-    } else if (doc.namespace !== null && !NAMESPACES.has(doc.namespace)) {
-      errors.push(
-        `${label}.${key} 'namespace' must be null or one of ` +
-        `${[...NAMESPACES].join(", ")} (got ${JSON.stringify(doc.namespace)})`
-      );
-    }
-
-    // Optional Field: 'snippet'
-    if (doc.snippet && typeof doc.snippet !== "string") {
-      warnings.push(`${label}.${key} 'snippet' must be a string`);
-    }
-
-    // Optional Field: 'signature'
-    if (doc.signature && typeof doc.signature !== "string") {
-      warnings.push(`${label}.${key} 'signature' must be a string`);
-    }
-
-    // Optional Field: 'documentation'
-    if (doc.documentation && typeof doc.documentation !== "string") {
-      warnings.push(`${label}.${key} 'documentation' must be a string`);
-    }
-  }
-
-  // Log errors
-  if (errors.length) {
-    log.error(`[docs] ${label} errors:`, errors);
-  }
-  // Log warnings
-  if (warnings.length) {
-    log.warn(`[docs] ${label} warnings:`, warnings);
-  }
-
-  return { errors, warnings };
-}
-
-// ============================================================
 // COMPLETION HELPERS
 // ============================================================
 
@@ -376,9 +252,9 @@ function isValidCompletionPosition(document, position, completionEnabled) {
 
 /** @type {Readonly<Record<"$" | "@" | "%", RegExp>>} */
 const TYPED_IDENTIFIER_PATTERNS = Object.freeze({
-  "$": /\$([a-zA-Z]*)$/,
-  "@": /@([a-zA-Z]*)$/,
-  "%": /%([a-zA-Z]*)$/,
+  "$": /\$((?:[A-Za-z][\w-]*)?)$/,
+  "@": /@((?:[A-Za-z][\w-]*)?)$/,
+  "%": /%((?:[A-Za-z][\w-]*)?)$/,
 });
 
 /**
@@ -402,378 +278,14 @@ function getTypedIdentifier(document, position, triggerChar) {
 }
 
 // ============================================================
-// REGEX UTILITIES
-// ============================================================
-
-/**
- * Builds a word-boundary RegExp that matches any of the given names.
- * Used for creating efficient lookup regexes from Sets of known identifiers.
- *
- * @param {Iterable<string>} names - Collection of strings to match
- * @returns {RegExp} Regular expression with word boundaries
- * @private
- *
- * @example
- * const regex = buildWordRegex(['Log-Information', 'Log-Error']);
- * // Returns: /\b(Log\-Information|Log\-Error)\b/  (regex metacharacters escaped)
- */
-function buildWordRegex(names) {
-  return new RegExp(
-    `\\b(${[...names]
-      .map(name =>
-        name.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")
-      )
-      .join("|")})\\b`
-  );
-}
-
-/**
- * Creates all regex patterns needed for the extension.
- *
- * Each entry is a factory returning a FRESH RegExp, so callers never share a
- * global regex's `lastIndex` state between scans.
- *
- * - `*CallRegex` (global): find `$Name(` / `@Name(` / bare-word tokens in a line.
- * - `*SignatureRegex` (anchored to end of input): find the call the cursor is inside,
- *   given the text before the cursor; group 1 = name, group 2 = args so far.
- * - `operationRegex`: word-boundary match of any known operation name.
- *
- * @param {Set<string>} knownOperations - Set of operation names
- * @returns {{
- *   scalarCallRegex: () => RegExp,
- *   vectorCallRegex: () => RegExp,
- *   operationCallRegex: () => RegExp,
- *   scalarSignatureRegex: () => RegExp,
- *   vectorSignatureRegex: () => RegExp,
- *   mapSignatureRegex: () => RegExp,
- *   operationSignatureRegex: () => RegExp,
- *   operationRegex: () => RegExp
- * }}
- */
-function createRegexPatterns(knownOperations) {
-  return {
-    scalarCallRegex: () => /\$([A-Za-z][A-Za-z0-9_]*)\s*\(/g,
-    vectorCallRegex: () => /@([A-Za-z][A-Za-z0-9_]*)\s*\(/g,
-    operationCallRegex: () => /\b([A-Za-z][A-Za-z-]*)\b/g,
-    scalarSignatureRegex: () => /\$([A-Za-z][A-Za-z0-9_]*)\s*\(([^()]*)$/,
-    vectorSignatureRegex: () => /@([A-Za-z][A-Za-z0-9_]*)\s*\(([^()]*)$/,
-    // Requires a name after `%`, so a `%(` map literal never matches.
-    mapSignatureRegex: () => /%([A-Za-z][A-Za-z0-9_]*)\s*\(([^()]*)$/,
-    // Group 1: operation name. Group 2: argument text typed so far (cursor at end).
-    // The optional segment after the name allows one default/positional argument
-    // between the name and the "(" -- a quoted string or a single bare token --
-    // e.g. `ProGet::Create-Directory my/folder/path\n(`. It deliberately excludes
-    // whitespace and "=" so it cannot swallow an assignment like `set $x = (`.
-    operationSignatureRegex: () => /(?:^|\s)(?:[A-Za-z][\w-]*::)?([A-Za-z][A-Za-z-]*)(?:[ \t]+(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s(){};=]+))?\s*\(([^()]*)$/,
-    operationRegex: () => buildWordRegex(knownOperations),
-  };
-}
-
-// ============================================================
-// MODULE NAVIGATION
-// ============================================================
-
-/**
- * A `module <Name>` declaration in an open document.
- * `range` covers just the name; `lineRange` covers the whole declaration line
- * (used as the DocumentSymbol's full range).
- *
- * @typedef {{ name: string, range: vscode.Range, lineRange: vscode.Range }} ModuleDeclaration
- */
-
-/**
- * @typedef {{
- *   version: number,
- *   declarations: ModuleDeclaration[],
- *   refsByName: Map<string, vscode.Location[]>
- * }} ModuleInfoCacheEntry
- */
-
-/**
- * Per-document module analysis, keyed by `uri.toString()` and invalidated by
- * `document.version`. Entries are dropped on close via {@link clearDocumentCaches}.
- * @type {Map<string, ModuleInfoCacheEntry>}
- */
-const moduleInfoCache = new Map();
-
-/**
- * Carried scanning state for cross-line constructs. Defined in {@link module:scanner};
- * aliased here so JSDoc in this file can refer to it.
- *
- * @typedef {import("./scanner").CodeScanState} CodeScanState
- */
-
-/**
- * Returns all module declarations in a document (cached per document version).
- *
- * @param {vscode.TextDocument} document
- * @returns {ModuleDeclaration[]}
- */
-function getModuleDeclarations(document) {
-  return getModuleInfo(document).declarations;
-}
-
-/**
- * Builds and caches module declarations and module call references for a document version.
- *
- * @param {vscode.TextDocument} document
- * @returns {{ declarations: ModuleDeclaration[], refsByName: Map<string, vscode.Location[]> }}
- */
-function getModuleInfo(document) {
-  const cacheKey = document.uri.toString();
-  const cached = moduleInfoCache.get(cacheKey);
-  if (cached && cached.version === document.version) {
-    return { declarations: cached.declarations, refsByName: cached.refsByName };
-  }
-
-  // Declarations: reuse the shared pure scanner so the `module <Name>` scan
-  // lives in exactly one place ({@link module:scanner}.findModuleDeclarations).
-  /** @type {ModuleDeclaration[]} */
-  const declarations = findModuleDeclarations(document.getText()).map(hit => ({
-    name: hit.name,
-    range: new vscode.Range(
-      new vscode.Position(hit.line, hit.character),
-      new vscode.Position(hit.line, hit.character + hit.name.length)
-    ),
-    lineRange: document.lineAt(hit.line).range,
-  }));
-
-  // Call references: a second length-preserving masked pass, line by line.
-  /** @type {Map<string, vscode.Location[]>} */
-  const refsByName = new Map();
-  const scanState = createCodeScanState();
-
-  for (let line = 0; line < document.lineCount; line++) {
-    const maskedLineText = maskNonCodeSpans(document.lineAt(line).text, scanState);
-
-    MODULE_CALL_TARGET_GLOBAL_REGEX.lastIndex = 0;
-    for (const callMatch of maskedLineText.matchAll(MODULE_CALL_TARGET_GLOBAL_REGEX)) {
-      const moduleName = callMatch[1];
-      if (typeof moduleName !== "string" || typeof callMatch.index !== "number") {
-        continue;
-      }
-
-      const start = callMatch.index + callMatch[0].indexOf(moduleName);
-      const range = new vscode.Range(
-        new vscode.Position(line, start),
-        new vscode.Position(line, start + moduleName.length)
-      );
-      const location = new vscode.Location(document.uri, range);
-
-      const existing = refsByName.get(moduleName);
-      if (existing) {
-        existing.push(location);
-      } else {
-        refsByName.set(moduleName, [location]);
-      }
-    }
-  }
-
-  moduleInfoCache.set(cacheKey, {
-    version: document.version,
-    declarations,
-    refsByName
-  });
-
-  return { declarations, refsByName };
-}
-
-/**
- * Finds the declaration range of a module in the document.
- *
- * @param {vscode.TextDocument} document
- * @param {string} moduleName
- * @returns {vscode.Range | null}
- */
-function findModuleDeclarationRange(document, moduleName) {
-  const { declarations } = getModuleInfo(document);
-  const declaration = declarations.find(entry => entry.name === moduleName);
-  return declaration?.range ?? null;
-}
-
-/**
- * Returns module call references by name from cached module analysis.
- *
- * This reuses `getModuleInfo(document)` and optionally filters to a subset
- * of module names.
- *
- * @param {vscode.TextDocument} document
- * @param {ReadonlySet<string>} [allowedModuleNames] - Optional filter of module names to include
- * @returns {Map<string, vscode.Location[]>}
- */
-function getModuleCallReferencesByName(document, allowedModuleNames) {
-  const { refsByName } = getModuleInfo(document);
-  if (!allowedModuleNames) {
-    return refsByName;
-  }
-
-  /** @type {Map<string, vscode.Location[]>} */
-  const filtered = new Map();
-  for (const moduleName of allowedModuleNames) {
-    const refs = refsByName.get(moduleName);
-    if (refs) {
-      filtered.set(moduleName, refs);
-    }
-  }
-
-  return filtered;
-}
-
-/**
- * Per-document variable index ({@link indexVariableOccurrences}), keyed by
- * `uri.toString()` and invalidated by `document.version`, so highlighting on
- * every cursor move doesn't rescan an unchanged document. Entries are dropped
- * on close via {@link clearDocumentCaches}.
- * @type {Map<string, { version: number, index: Map<string, import("./scanner").VariableOccurrence[]> }>}
- */
-const variableIndexCache = new Map();
-
-/**
- * Scan states at the start of each line, per document version: `states[i]`
- * is the state on entering line `i`. Filled in lazily, only as far as a
- * request has needed, so hover, completion and highlight on every keystroke
- * don't rescan the document from line 1. Dropped on close via
- * {@link clearDocumentCaches}.
- * @type {Map<string, { version: number, states: import("./scanner").CodeScanState[] }>}
- */
-const lineStartStateCache = new Map();
-
-/**
- * Every reference to one variable in a document (see
- * {@link indexVariableOccurrences}), from a per-version cache.
- *
- * @param {vscode.TextDocument} document
- * @param {string} sigil - `$`, `@`, or `%`
- * @param {string} name - Variable name without its sigil
- * @returns {import("./scanner").VariableOccurrence[]}
- */
-function getVariableOccurrences(document, sigil, name) {
-  const cacheKey = document.uri.toString();
-  let cached = variableIndexCache.get(cacheKey);
-  if (!cached || cached.version !== document.version) {
-    cached = { version: document.version, index: indexVariableOccurrences(document.getText()) };
-    variableIndexCache.set(cacheKey, cached);
-  }
-  return cached.index.get(variableKey(sigil, name)) ?? [];
-}
-
-/**
- * Clears the per-document caches (module info, variable index and line-start
- * scan states) for a document URI.
- *
- * @param {import('vscode').Uri} uri
- * @returns {void}
- */
-function clearDocumentCaches(uri) {
-  moduleInfoCache.delete(uri.toString());
-  variableIndexCache.delete(uri.toString());
-  lineStartStateCache.delete(uri.toString());
-}
-
-/**
- * The module name under the cursor, when it is a real module reference: the
- * name in a `module X` declaration or a `call X` statement, outside strings
- * and comments. Shared by Go to Definition, Find References and Highlight.
- *
- * @param {vscode.TextDocument} document
- * @param {vscode.Position} position
- * @returns {{ name: string, range: vscode.Range, isDeclaration: boolean } | null}
- */
-function getModuleNameAt(document, position) {
-  const range = document.getWordRangeAtPosition(position, MODULE_NAME_TOKEN_REGEX);
-  if (!range || isInStringOrCommentDoc(document, range.start)) return null;
-
-  const lineText = document.lineAt(range.start.line).text;
-  const isDeclaration = isModuleDeclarationContext(lineText, range.start.character);
-  if (!isDeclaration && !isModuleCallContext(lineText, range.start.character)) return null;
-
-  return { name: document.getText(range), range, isDeclaration };
-}
-
-/**
- * Finds references to a module declaration and module calls in the document.
- *
- * @param {vscode.TextDocument} document
- * @param {string} moduleName
- * @param {boolean} includeDeclaration
- * @returns {vscode.Location[]}
- */
-function findModuleReferences(document, moduleName, includeDeclaration) {
-  /** @type {vscode.Location[]} */
-  const locations = [];
-
-  const { declarations, refsByName } = getModuleInfo(document);
-
-  if (includeDeclaration) {
-    const declaration = declarations.find(entry => entry.name === moduleName);
-    if (declaration) {
-      locations.push(new vscode.Location(document.uri, declaration.range));
-    }
-  }
-
-  const callRefs = refsByName.get(moduleName);
-  if (callRefs) {
-    locations.push(...callRefs);
-  }
-
-  return locations;
-}
-
-// ============================================================
-// STRING & COMMENT DETECTION
-// ============================================================
-
-/**
- * Document-aware version of {@link isInStringOrComment}.
- *
- * Scans from the beginning of the document with carried {@link CodeScanState}
- * so that multi-line block comments (`/* ... *\/`) and swim-strings that
- * opened on a previous line are correctly detected.
- *
- * Use this in providers that have access to a full `TextDocument` object.
- * Fall back to {@link isInStringOrComment} only for isolated single-line
- * analysis (e.g. inside loops that already carry external state).
- *
- * @param {import('vscode').TextDocument} document - The open text document
- * @param {import('vscode').Position} position - Cursor or token position to test
- * @returns {boolean} true if the position is inside a string, comment, or swim-string
- */
-function isInStringOrCommentDoc(document, position) {
-  return isInStringOrComment(
-    document.lineAt(position.line).text,
-    position.character,
-    getLineStartScanState(document, position.line)
-  );
-}
-
-/**
- * The scan state on entering `line` (a fresh copy the caller may change).
- *
- * @param {vscode.TextDocument} document
- * @param {number} line
- * @returns {import("./scanner").CodeScanState}
- */
-function getLineStartScanState(document, line) {
-  const cacheKey = document.uri.toString();
-  let cached = lineStartStateCache.get(cacheKey);
-  if (!cached || cached.version !== document.version) {
-    cached = { version: document.version, states: [createCodeScanState()] };
-    lineStartStateCache.set(cacheKey, cached);
-  }
-  const { states } = cached;
-  // Use advanceScanState (not maskNonCodeSpans) for the lines in between: only
-  // the state is needed, not the masked text.
-  while (states.length <= line) {
-    const state = { ...states[states.length - 1] };
-    advanceScanState(document.lineAt(states.length - 1).text, state);
-    states.push(state);
-  }
-  return { ...states[line] };
-}
-
-// ============================================================
 // HOVER & COMPLETION BUILDERS
 // ============================================================
+
+/**
+ * One named argument of an operation (a DocEntry's `params`).
+ *
+ * @typedef {{ name: string, required: boolean, description?: string, format?: string, output?: true }} OperationParam
+ */
 
 /**
  * Builds a standardized hover MarkdownString from a documentation entry.
@@ -781,12 +293,22 @@ function getLineStartScanState(document, line) {
  * This creates the formatted tooltip content shown when hovering over
  * symbols, keywords, operations, and syntax elements.
  *
- * @param {Readonly<{ name: string, signature?: string, description?: string, documentation?: string, namespace?: string | null }>} doc
+ * @param {Readonly<{ name: string, signature?: string, overloads?: { product: string, signature: string }[], description?: string, documentation?: string, namespace?: string | null, products?: ReadonlyArray<string>, anySigil?: boolean, superseded?: { by: string, note: string }, params?: ReadonlyArray<OperationParam> }>} doc
  *   - name: Required - Display name (e.g., "$ToJson")
  *   - signature: Optional - Function signature (monospace formatted)
+ *   - overloads: Optional - The function's form in other Inedo products, each
+ *     shown as "**In <product>:** `signature`"
  *   - description: Optional - Short description
  *   - documentation: Optional - Extended Markdown documentation
  *   - namespace: Optional - Owning OtterScript namespace (shown as provenance)
+ *   - products: Optional - The products that have it; a note says so when
+ *     `product` isn't one of them (see {@link isAvailableIn})
+ *   - anySigil: Optional - Works with every sigil (noted below the signature)
+ *   - superseded: Optional - A name Inedo recommends against writing; its
+ *     `note` is shown right under the name
+ *   - params: Optional - An operation's arguments, listed unless
+ *     `documentation` has its own **Arguments:** section
+ * @param {string} [product] - The `otterscript.product` setting
  * @returns {vscode.MarkdownString} - Formatted hover content
  *
  * @example
@@ -797,19 +319,36 @@ function getLineStartScanState(document, line) {
  * // **Signature:** `$ToJson(data)`
  * // Converts to JSON
  */
-function buildHoverMarkdown(doc) {
+function buildHoverMarkdown(doc, product = "any") {
   const md = new vscode.MarkdownString();
 
   // Heading (### is h3 in Markdown, renders bold in VS Code)
   md.appendMarkdown(`### ${doc.name}\n\n`);
 
+  // Not in the product the user writes for -- right under the name, where it's seen.
+  if (doc.products && !isAvailableIn(doc, product)) {
+    md.appendMarkdown(`⚠️ **Not in ${product}:** only in ${doc.products.join(" and ")} (setting \`otterscript.product\`).\n\n`);
+  }
+
+  // A name Inedo recommends against writing, and what to write instead
+  if (doc.superseded) {
+    md.appendMarkdown(`⚠️ ${doc.superseded.note}\n\n`);
+  }
+
   // Signature (monospace for code clarity)
   if (doc.signature) {
     md.appendMarkdown(`**Signature:** \`${doc.signature}\`\n\n`);
   }
+  // The same function's form in other Inedo products, when it differs
+  for (const overload of doc.overloads ?? []) {
+    md.appendMarkdown(`**In ${overload.product}:** \`${overload.signature}\`\n\n`);
+  }
+  if (doc.anySigil) {
+    md.appendMarkdown("Works with `$`, `@` and `%`: the sigil picks what it returns.\n\n");
+  }
 
-  // Namespace provenance -- the extension/namespace this construct belongs to.
-  // Omitted for pure language constructs (keywords, syntax, Log-*) where it is null.
+  // Namespace provenance -- the `[ScriptNamespace]` this construct belongs to.
+  // Omitted when it is null: keywords, syntax and every `Core::` built-in.
   if (doc.namespace) {
     md.appendMarkdown(`**Namespace:** \`${doc.namespace}\`\n\n`);
   }
@@ -819,19 +358,98 @@ function buildHoverMarkdown(doc) {
     md.appendMarkdown(`${doc.description}\n\n`);
   }
 
+  // An operation's arguments, unless its documentation lists them itself
+  const documentation = typeof doc.documentation === "string" ? doc.documentation : "";
+  if (doc.params?.length && !documentation.includes("**Arguments:**")) {
+    md.appendMarkdown(`**Arguments:**\n${doc.params.map((p) => `- ${argumentSummary(p)}`).join("\n")}\n\n`);
+  }
+
   // Extended documentation (supports Markdown)
-  if (typeof doc.documentation === "string") {
-    md.appendMarkdown(doc.documentation);
+  if (documentation) {
+    md.appendMarkdown(documentation);
   }
 
   return md;
 }
 
 /**
+ * One operation argument on a line: `` `To` (required, text) - Target directory ``.
+ *
+ * @param {OperationParam} param
+ * @returns {string}
+ */
+function argumentSummary(param) {
+  const flags = [param.output ? "output" : param.required ? "required" : "optional", param.format].filter(Boolean).join(", ");
+  return `\`${param.name}\` (${flags})${param.description ? ` - ${param.description}` : ""}`;
+}
+
+/**
+ * Hover for an argument name inside an operation or module call (`To:` in
+ * `Copy-Files(To: ...)`): the argument, and what it belongs to.
+ *
+ * @param {string} callee - `Copy-Files`, `module Greet`
+ * @param {OperationParam} param
+ * @returns {vscode.MarkdownString}
+ */
+function buildArgumentHoverMarkdown(callee, param) {
+  const md = new vscode.MarkdownString();
+  md.appendMarkdown(`### ${param.name}\n\n`);
+  md.appendMarkdown(`Argument of \`${callee}\`: ${argumentSummary(param)}\n`);
+  return md;
+}
+
+/**
+ * Whether a docs entry exists in `product` (the `otterscript.product`
+ * setting). Entries without a product list, and every entry for `"any"`, are
+ * available. ProGet has no generated reference, so an entry that Otter and
+ * BuildMaster both have is taken to be part of the core execution engine,
+ * which ProGet runs too; one that only Otter or only BuildMaster has (Otter's
+ * `Ensure-Server`, BuildMaster's release functions) is not in ProGet.
+ *
+ * @param {{ products?: readonly string[] }} doc
+ * @param {string} product - "any", "ProGet", "Otter" or "BuildMaster"
+ * @returns {boolean}
+ */
+function isAvailableIn(doc, product) {
+  if (product === "any" || !doc.products) return true;
+  if (doc.products.includes(product)) return true;
+  return product === "ProGet" && doc.products.includes("Otter") && doc.products.includes("BuildMaster");
+}
+
+/**
+ * The signatures of a docs entry that apply to `product` (the
+ * `otterscript.product` setting): the product's own form when the entry has
+ * one among its `overloads` (BuildMaster's `$PackageProperty(packageName,
+ * packageProperty, [sourceName])`), else the main signature; every form for
+ * `"any"`, the main one first.
+ *
+ * @param {{ signature?: string, overloads?: ReadonlyArray<{ product: string, signature: string }> }} doc
+ * @param {string} product - "any", "ProGet", "Otter" or "BuildMaster"
+ * @returns {string[]} Empty when the entry has no signature
+ */
+function productSignatures(doc, product) {
+  if (!doc.signature) return [];
+  const overloads = doc.overloads ?? [];
+  if (product === "any") return [doc.signature, ...overloads.map((o) => o.signature)];
+  return [overloads.find((o) => o.product === product)?.signature ?? doc.signature];
+}
+
+/**
+ * The docs entry of each item {@link buildCompletionItem} made whose
+ * documentation hasn't been built yet. Weak, so items VS Code drops are
+ * garbage-collected.
+ * @type {WeakMap<vscode.CompletionItem, import("./language-data.js").DocEntry>}
+ */
+const pendingDocumentation = new WeakMap();
+
+/**
  * Builds a completion item with consistent formatting.
  *
  * This centralizes completion item creation to ensure all providers
  * produce consistent UI elements (labels, details, documentation, sorting).
+ * The documentation is built only when VS Code shows the item's details:
+ * a provider that returns these items must also implement
+ * `resolveCompletionItem` with {@link resolveCompletionDocumentation}.
  *
  * @param {import('./language-data.js').DocEntry} doc - Documentation object
  * @param {vscode.CompletionItemKind} kind - Item kind (Function, Variable, Keyword, etc.)
@@ -856,17 +474,38 @@ function buildCompletionItem(doc, kind, sortPrefix, insertText, triggerSignature
 
   item.insertText = insertText;
   item.detail = doc.signature ?? doc.description;
-  item.documentation = buildHoverMarkdown(doc);
-  item.sortText = `${sortPrefix}${doc.name}`;
+  // Built lazily: a list holds hundreds of items, and VS Code shows the
+  // documentation of only the focused one.
+  pendingDocumentation.set(item, doc);
+  // A superseded name is struck through and listed after the rest.
+  item.sortText = `${sortPrefix}${doc.superseded ? "~" : ""}${doc.name}`;
+  if (doc.superseded) item.tags = [vscode.CompletionItemTag.Deprecated];
 
   // Trigger signature help after insertion (for functions with parameters)
   if (triggerSignatureHelp) {
     item.command = {
-      command: 'editor.action.triggerParameterHints',
-      title: ''  // Title required but not shown for built-in commands
+      command: "editor.action.triggerParameterHints",
+      title: ""  // Title required but not shown for built-in commands
     };
   }
 
+  return item;
+}
+
+/**
+ * Fills in the documentation of an item from {@link buildCompletionItem}
+ * (a CompletionItemProvider's `resolveCompletionItem`). Other items are
+ * returned as they are.
+ *
+ * @param {vscode.CompletionItem} item
+ * @returns {vscode.CompletionItem}
+ */
+function resolveCompletionDocumentation(item) {
+  const doc = pendingDocumentation.get(item);
+  if (doc) {
+    item.documentation = buildHoverMarkdown(doc);
+    pendingDocumentation.delete(item);
+  }
   return item;
 }
 
@@ -885,12 +524,14 @@ function buildCompletionItem(doc, kind, sortPrefix, insertText, triggerSignature
  * @param {string} typed - Identifier typed after the sigil (may be empty)
  * @param {{ functionSort: string, variableSort: string }} sort - Sort-text
  *   prefixes for functions and variables (lower sorts first)
+ * @param {string} [product] - The `otterscript.product` setting; entries the
+ *   product doesn't have are left out (see {@link isAvailableIn})
  * @returns {vscode.CompletionItem[]}
  */
-function buildSigilCompletionItems(table, typed, sort) {
+function buildSigilCompletionItems(table, typed, sort, product = "any") {
   const lowerTyped = typed.toLowerCase();
   return Object.entries(table)
-    .filter(([key]) => key.toLowerCase().startsWith(lowerTyped))
+    .filter(([key, doc]) => key.toLowerCase().startsWith(lowerTyped) && isAvailableIn(doc, product))
     .map(([, doc]) => {
       const isFunction = doc.signature?.includes("(") ?? false;
       const bareName = doc.name.replace(/^[$@%]/, "");
@@ -908,272 +549,8 @@ function buildSigilCompletionItems(table, typed, sort) {
 }
 
 // ============================================================
-// DIAGNOSTIC CHECKS
+// LOOKUP & TEXT UTILITIES
 // ============================================================
-
-/**
- * Checks for missing '$' before variable names in if conditions.
- *
- * Only the first operand after `if` (and any opening parens) is checked, and
- * only when it is directly followed by a comparison operator -- e.g.
- * `if count == 5` or `if (count > 5)`.
- *
- * @param {string} line - The line, already masked by {@link maskNonCodeSpans}
- *   (so identifiers inside strings/comments are not seen)
- * @param {number} lineIndex - The line number (0-indexed)
- * @param {Set<string>} nonVariableIdentifiers - Set of literals (true, false, null)
- * @returns {vscode.Diagnostic | null} - Diagnostic if missing '$' found, null otherwise
- */
-function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
-  const match = line.match(/^\s*if\s*(?:\(\s*)*([a-zA-Z][a-zA-Z0-9_]*)\s*(=|==|!=|<=|>=|<|>)/);
-
-  // -- Guard: ensure regex matched and we have a valid index position
-  if (!match || typeof match.index !== 'number') return null;
-
-  const varName = match[1];
-
-  // -- Skip known literals that don't need '$' (true, false, null)
-  if (nonVariableIdentifiers.has(varName)) {
-    return null;
-  }
-
-  // -- Calculate exact position of variable name within the line
-  const varNameIndex = match.index + match[0].indexOf(varName);
-  const diagnostic = new vscode.Diagnostic(
-    new vscode.Range(
-      new vscode.Position(lineIndex, varNameIndex),
-      new vscode.Position(lineIndex, varNameIndex + varName.length)
-    ),
-    `Missing '$' before variable: ${varName}. Use $${varName}`,
-    vscode.DiagnosticSeverity.Error
-  );
-  diagnostic.code = "missing-dollar";
-  diagnostic.source = "OtterScript";
-
-  return diagnostic;
-}
-
-/**
- * Finds the matching ')' for the '(' at `openParenIndex` in text already
- * masked by {@link maskNonCodeSpans} (so no string-awareness is needed).
- * Unlike scanner's `findBalancedParenEnd`, this may cross line breaks.
- *
- * @param {string} maskedText
- * @param {number} openParenIndex - Index of the opening '('
- * @returns {number} Matching ')' index, or -1 when not found
- * @private
- */
-function findMatchingParen(maskedText, openParenIndex) {
-  let depth = 1;
-  for (let i = openParenIndex + 1; i < maskedText.length; i++) {
-    if (maskedText[i] === "(") depth++;
-    if (maskedText[i] === ")") depth--;
-    if (depth === 0) return i;
-  }
-  return -1;
-}
-
-/**
- * Finds duplicate keys inside map expressions and returns diagnostics, given
- * text that has ALREADY been masked by {@link maskNonCodeSpans}.
- *
- * This performs a best-effort scan of `%(... )` blocks and warns when the
- * same key appears more than once at the top level of a map. `updateDiagnostics`
- * masks every line during its own scan and passes that masked copy straight in,
- * so strings, comments, and swim-strings are ignored identically to every other
- * feature. A raw-text caller must run `maskNonCodeSpans` line by line first
- * (see `createCodeScanState`).
- *
- * @param {vscode.TextDocument} document - Document to analyze; used only for
- *   `positionAt()` offset-to-position conversion, not for its text.
- * @param {string} maskedText - Document text already run through
- *   `maskNonCodeSpans`, with strings, comments, and swim-strings blanked out
- *   and line length/offsets preserved (so `document.positionAt()` stays valid).
- * @returns {vscode.Diagnostic[]} Duplicate-key diagnostics
- */
-function findDuplicateMapKeyDiagnosticsFromMasked(document, maskedText) {
-  /** @type {vscode.Diagnostic[]} */
-  const issues = [];
-
-  /**
-   * Parses a map expression body and reports duplicate top-level keys.
-   *
-   * @param {number} start - Start index of map body (after '%(')
-   * @param {number} end - End index of map body (at matching ')')
-   * @returns {void}
-   */
-  function scanMapBody(start, end) {
-    let nestingDepth = 0;
-    let segmentStart = start;
-    const seenKeys = new Set();
-
-    for (let i = start; i <= end; i++) {
-      const ch = i === end ? ',' : maskedText[i];
-
-      if (ch === '(' || ch === '[' || ch === '{') {
-        nestingDepth++;
-        continue;
-      }
-      if (ch === ')' || ch === ']' || ch === '}') {
-        if (nestingDepth > 0) nestingDepth--;
-        continue;
-      }
-
-      if (ch === ',' && nestingDepth === 0) {
-        const segmentText = maskedText.slice(segmentStart, i);
-        const keyMatch = segmentText.match(/^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*:/);
-
-        if (keyMatch) {
-          const key = keyMatch[1];
-          const keyStart = segmentStart + keyMatch[0].indexOf(key);
-
-          if (seenKeys.has(key)) {
-            const diagnostic = new vscode.Diagnostic(
-              new vscode.Range(
-                document.positionAt(keyStart),
-                document.positionAt(keyStart + key.length)
-              ),
-              `Duplicate key '${key}' in map expression.`,
-              vscode.DiagnosticSeverity.Warning
-            );
-            diagnostic.code = "duplicate-map-key";
-            diagnostic.source = "OtterScript";
-            issues.push(diagnostic);
-          } else {
-            seenKeys.add(key);
-          }
-        }
-
-        segmentStart = i + 1;
-      }
-    }
-  }
-
-  // Every `%(` gets its own scan -- including maps nested inside another map,
-  // whose keys scanMapBody deliberately ignores when scanning the outer one.
-  for (let i = 0; i < maskedText.length - 1; i++) {
-    if (maskedText[i] === '%' && maskedText[i + 1] === '(') {
-      const close = findMatchingParen(maskedText, i + 1);
-      if (close !== -1) {
-        scanMapBody(i + 2, close);
-      }
-    }
-  }
-
-  return issues;
-}
-
-/**
- * Parses a `$Name(...)` / `@Name(...)` / `%Name(...)` doc signature and returns the maximum
- * number of arguments the call can take, or `null` when the signature isn't a
- * fixed-arity parenthesized call (a bare property like `$ExecutionId`, or a
- * vararg signature containing a literal `...` parameter such as
- * `$PathCombine(path1, path2, ...)`).
- *
- * Only the total slot count is computed -- required vs. `[optional]` isn't
- * distinguished, since that's all a "too many arguments" check needs and it
- * avoids relying on the optional-bracket convention being 100% consistent.
- *
- * @param {string} signature - e.g. `"$ToJson(data)"`
- * @returns {number | null}
- */
-function parseFixedMaxArity(signature) {
-  const m = signature.match(/^[$@%][A-Za-z]\w*\(([\s\S]*)\)$/);
-  if (!m) return null;
-
-  const argsText = m[1].trim();
-  if (argsText === "") return 0;
-
-  const parts = argsText.split(",").map((s) => s.trim());
-  if (parts.some((p) => p === "...")) return null;
-
-  return parts.length;
-}
-
-/**
- * Finds calls to known scalar/vector/map functions that pass more arguments than
- * their documented signature allows, given text already masked by
- * {@link maskNonCodeSpans} (and, for template-aware documents,
- * {@link maskOutsideTemplateTags}). Only functions with a fixed-arity,
- * parenthesized signature are checked -- see {@link parseFixedMaxArity}.
- *
- * This deliberately does NOT flag too few arguments: which parameters are
- * truly required (vs. documented as optional) is a softer signal than the
- * hard ceiling on total slots, so under-counting stays silent to avoid false
- * positives.
- *
- * @param {vscode.TextDocument} document - Used only for `positionAt()`.
- * @param {string} maskedText - Full document text, already masked.
- * @param {Record<string, {signature?: string}>} scalarFunctionDocs
- * @param {Record<string, {signature?: string}>} vectorFunctionDocs
- * @param {Record<string, {signature?: string}>} [mapFunctionDocs] - `%Name(...)` functions
- * @returns {vscode.Diagnostic[]}
- */
-function findArgumentCountDiagnosticsFromMasked(document, maskedText, scalarFunctionDocs, vectorFunctionDocs, mapFunctionDocs = {}) {
-  /** @type {vscode.Diagnostic[]} */
-  const issues = [];
-
-  /**
-   * @param {number} start - Index just after the call's '('
-   * @param {number} end - Index of the matching ')'
-   * @returns {number} Number of top-level comma-separated arguments
-   */
-  function countArgs(start, end) {
-    const body = maskedText.slice(start, end);
-    if (body.trim() === "") return 0;
-
-    let depth = 0;
-    let count = 1;
-    for (const ch of body) {
-      if (ch === "(" || ch === "[" || ch === "{") depth++;
-      else if (ch === ")" || ch === "]" || ch === "}") { if (depth > 0) depth--; }
-      else if (ch === "," && depth === 0) count++;
-    }
-    return count;
-  }
-
-  /**
-   * @param {RegExp} nameRegex - Global regex; group 1 is the function name
-   * @param {Record<string, {signature?: string}>} docs
-   * @param {string} sigil - `"$"`, `"@"`, or `"%"`, for the diagnostic message
-   */
-  function scan(nameRegex, docs, sigil) {
-    for (const match of maskedText.matchAll(nameRegex)) {
-      const name = match[1];
-      const doc = docs[name];
-      if (!doc?.signature) continue;
-
-      const maxArity = parseFixedMaxArity(doc.signature);
-      if (maxArity === null) continue;
-
-      const openParenIndex = /** @type {number} */ (match.index) + match[0].length - 1;
-      const closeParenIndex = findMatchingParen(maskedText, openParenIndex);
-      if (closeParenIndex === -1) continue;
-
-      const argCount = countArgs(openParenIndex + 1, closeParenIndex);
-      if (argCount <= maxArity) continue;
-
-      const nameStart = /** @type {number} */ (match.index) + 1;
-      const diagnostic = new vscode.Diagnostic(
-        new vscode.Range(
-          document.positionAt(nameStart),
-          document.positionAt(nameStart + name.length)
-        ),
-        `'${sigil}${name}' takes at most ${maxArity} argument${maxArity === 1 ? "" : "s"}, got ${argCount}.`,
-        vscode.DiagnosticSeverity.Warning
-      );
-      diagnostic.code = "too-many-arguments";
-      diagnostic.source = "OtterScript";
-      issues.push(diagnostic);
-    }
-  }
-
-  scan(/\$([A-Za-z][A-Za-z0-9_]*)\s*\(/g, scalarFunctionDocs, "$");
-  scan(/@([A-Za-z][A-Za-z0-9_]*)\s*\(/g, vectorFunctionDocs, "@");
-  scan(/%([A-Za-z][A-Za-z0-9_]*)\s*\(/g, mapFunctionDocs, "%");
-
-  return issues;
-}
 
 /**
  * A table's own entry for `key`, or undefined. The docs tables and the fix
@@ -1187,150 +564,6 @@ function findArgumentCountDiagnosticsFromMasked(document, maskedText, scalarFunc
  */
 function lookupOwn(table, key) {
   return Object.hasOwn(table, key) ? table[key] : undefined;
-}
-
-/**
- * Gets the diagnostic code as a string, unwrapping the `{ value, target }`
- * object form; returns '' when the diagnostic has no code.
- * @param {vscode.Diagnostic} diagnostic
- * @returns {string}
- */
-function getDiagnosticCode(diagnostic) {
-  const code = diagnostic.code;
-  if (code === undefined || code === null) return '';
-  if (typeof code === 'object') return String(code.value);
-  return String(code);
-}
-
-// ============================================================
-// CODE ACTION FACTORY
-// ============================================================
-
-/**
- * Generic code action factory for creating quick-fix actions.
- *
- * This factory centralizes the creation of VS Code CodeAction objects,
- * reducing duplication across multiple fix providers.
- *
- * @private
- * @param {string} title - Human-readable action title shown in lightbulb menu
- * @param {vscode.Diagnostic} diagnostic - The diagnostic this action fixes
- * @param {(edit: vscode.WorkspaceEdit) => void} applyFix - Callback that applies the fix to a WorkspaceEdit
- * @returns {vscode.CodeAction} Configured code action ready to be returned to VS Code
- *
- * @example
- * // Create a fix that inserts a character
- * createCodeAction("Insert '$'", diagnostic, (edit) => {
- *   edit.insert(uri, position, "$");
- * });
- *
- */
-function createCodeAction(title, diagnostic, applyFix) {
-  const action = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
-  action.diagnostics = [diagnostic];
-  action.isPreferred = true;
-  const edit = new vscode.WorkspaceEdit();
-  applyFix(edit);
-  action.edit = edit;
-  return action;
-}
-
-/**
- * Creates a quick-fix that inserts a missing '$' at the diagnostic position.
- *
- * This code action appears in the lightbulb menu (💡) when a variable
- * is used without a '$' prefix in an if condition.
- *
- * @param {vscode.TextDocument} document - The document containing the diagnostic
- * @param {vscode.Diagnostic} diagnostic - The diagnostic with the missing '$' error
- * @returns {vscode.CodeAction} A code action that inserts '$' at the diagnostic position
- *
- * @example
- * // For diagnostic on "if x > 5"
- * // The action inserts "$" before "x" -> "if $x > 5"
- */
-function createMissingDollarFix(document, diagnostic) {
-  const uri = document.uri;
-  const start = diagnostic.range.start;
-
-  return createCodeAction("Insert missing '$'", diagnostic, (edit) => {
-    edit.insert(uri, start, "$");
-  });
-}
-
-/**
- * Creates a quick-fix that replaces invalid boolean operators.
- *
- * This code action appears in the lightbulb menu (💡) when a single
- * '&' or '|' is used instead of '&&' or '||'.
- *
- * @param {vscode.TextDocument} document - The document containing the diagnostic
- * @param {vscode.Diagnostic} diagnostic - The diagnostic with the invalid operator
- * @returns {vscode.CodeAction | null} Code action or null if replacement unknown
- *
- * @example
- * // For diagnostic on "&" -> creates action to replace with "&&"
- */
-function createInvalidOperatorFix(document, diagnostic) {
-  const text = document.getText(diagnostic.range);
-  const replacement = text === "&" ? "&&" : text === "|" ? "||" : null;
-
-  if (!replacement) return null;
-
-  return createCodeAction(`Replace '${text}' with '${replacement}'`, diagnostic, (edit) => {
-    edit.replace(document.uri, diagnostic.range, replacement);
-  });
-}
-
-/**
- * Creates a quick-fix that replaces assignment-like '=' with '==' in conditions.
- *
- * @param {vscode.TextDocument} document - The document containing the diagnostic
- * @param {vscode.Diagnostic} diagnostic - The diagnostic with assignment-like usage
- * @returns {vscode.CodeAction | null} Code action or null if replacement unknown
- */
-function createAssignmentInConditionFix(document, diagnostic) {
-  const text = document.getText(diagnostic.range);
-  if (text !== "=") return null;
-
-  return createCodeAction("Replace '=' with '=='", diagnostic, (edit) => {
-    edit.replace(document.uri, diagnostic.range, "==");
-  });
-}
-
-/**
- * Creates a quick-fix that replaces incorrect 'for' loop usage with 'foreach'.
- * Only for the `for $item in @list` form, which then reads as a valid
- * `foreach`; the counting form (`for $i = 1 to 10`) has no `foreach`
- * equivalent, so it gets no fix.
- *
- * @param {vscode.TextDocument} document - The document containing the diagnostic
- * @param {vscode.Diagnostic} diagnostic - The diagnostic with the incorrect 'for' usage
- * @returns {vscode.CodeAction | null} A code action that replaces 'for' with
- *   'foreach', or null for the counting form
- */
-function createForToForeachFix(document, diagnostic) {
-  const line = document.lineAt(diagnostic.range.start.line).text;
-  if (!/^\s*for\s+[$@%]?[A-Za-z](?:[\w-]*[A-Za-z0-9])?\s+in\s/i.test(line)) return null;
-
-  return createCodeAction("Replace 'for' with 'foreach'", diagnostic, (edit) => {
-    edit.replace(document.uri, diagnostic.range, 'foreach');
-  });
-}
-
-/**
- * Creates a quick-fix that replaces a template block terminator keyword
- * (`<% end %>`, `<% endforeach %>`, ...) with `}`, so it becomes `<% } %>`.
- * The diagnostic range covers exactly the keyword token.
- *
- * @param {vscode.TextDocument} document - The document containing the diagnostic
- * @param {vscode.Diagnostic} diagnostic - The `template-end-keyword` diagnostic
- * @returns {vscode.CodeAction} A code action that replaces the keyword with `}`
- */
-function createTemplateEndFix(document, diagnostic) {
-  return createCodeAction("Replace with '}'", diagnostic, (edit) => {
-    edit.replace(document.uri, diagnostic.range, "}");
-  });
 }
 
 /**
@@ -1357,197 +590,28 @@ function editDistance(a, b) {
 }
 
 /**
- * Picks the closest known namespace to `token`: an exact case-insensitive match
- * wins (canonical casing), otherwise the smallest edit distance within a small
- * threshold. Returns null when nothing is close enough to suggest.
+ * The candidate closest to `value` by edit distance, ignoring case -- a
+ * likely typo's intended word (`"bold"` -> `"bolder"`, `"Windoze"` ->
+ * `"Windows"`) -- or undefined when none is close enough to suggest. A
+ * case-only difference is distance 0, so it always wins.
  *
- * @param {string} token - The unrecognized namespace as written
- * @returns {string | null}
+ * @param {string} value
+ * @param {Iterable<string>} candidates
+ * @returns {string | undefined}
  */
-function nearestNamespace(token) {
-  const lower = token.toLowerCase();
-  /** @type {string | null} */
-  let best = null;
+function closestMatch(value, candidates) {
+  const lower = value.toLowerCase();
+  let best;
   let bestDistance = Infinity;
-  for (const known of NAMESPACES) {
-    if (known.toLowerCase() === lower) return known;
-    const d = editDistance(lower, known.toLowerCase());
+  for (const candidate of candidates) {
+    const d = editDistance(lower, candidate.toLowerCase());
     if (d < bestDistance) {
       bestDistance = d;
-      best = known;
+      best = candidate;
     }
   }
-  // Only suggest when it is a plausible typo, not an unrelated word.
-  return bestDistance <= Math.max(2, Math.ceil(token.length / 3)) ? best : null;
-}
-
-/**
- * Creates a quick-fix that replaces an unknown namespace token with the closest
- * known one (`Frobnicate::Op` -> `Firewall::Op`, `proget::Op` -> `ProGet::Op`).
- *
- * @param {vscode.TextDocument} document - The document containing the diagnostic
- * @param {vscode.Diagnostic} diagnostic - The unknown-namespace diagnostic; its
- *   range covers exactly the namespace token (no `::`)
- * @returns {vscode.CodeAction | null} Code action, or null when nothing is close
- */
-function createUnknownNamespaceFix(document, diagnostic) {
-  const token = document.getText(diagnostic.range);
-  const suggestion = nearestNamespace(token);
-  if (!suggestion || suggestion === token) return null;
-
-  return createCodeAction(`Change namespace to '${suggestion}'`, diagnostic, (edit) => {
-    edit.replace(document.uri, diagnostic.range, suggestion);
-  });
-}
-
-// ============================================================
-// UNBALANCED SYMBOLS
-// ============================================================
-
-/**
- * Creates a diagnostic for unbalanced symbols.
- * @param {number} count - Current count (positive = unclosed, negative = extra closing)
- * @param {number} lastPos - Document offset of the symbol to report: the
- *   outermost still-open opener when `count > 0`, or the extra closer when
- *   `count < 0`
- * @param {string} openChar - Opening character ('{', '(', '[')
- * @param {string} closeChar - Closing character ('}', ')', ']')
- * @param {string} name - Display name ('brace', 'parenthesis', 'bracket')
- * @param {vscode.TextDocument} document - The document
- * @returns {vscode.Diagnostic | null}
- */
-function createUnbalancedDiagnostic(count, lastPos, openChar, closeChar, name, document) {
-  if (count === 0) return null;
-
-  const pos = document.positionAt(lastPos);
-  const lineNum = pos.line + 1;
-  const colNum = pos.character + 1;
-  const message = count > 0
-    ? `Unclosed ${name}(s): ${count} '${openChar}' not closed (first at line ${lineNum}, col ${colNum})`
-    : `Unexpected closing ${name}: Extra '${closeChar}' at line ${lineNum}, col ${colNum}`;
-
-  const diagnostic = new vscode.Diagnostic(
-    new vscode.Range(pos, document.positionAt(lastPos + 1)),
-    message,
-    vscode.DiagnosticSeverity.Error
-  );
-  diagnostic.code = "unbalanced-symbol";
-  diagnostic.source = "OtterScript";
-  return diagnostic;
-}
-
-// ============================================================
-// FOLDING RANGES
-// ============================================================
-
-/**
- * Computes folding ranges for an OtterScript document.
- *
- * Folds `{ }` blocks, multi-line `%( )` / `@( )` literals, multi-line `<% %>`
- * tags, `#region` / `#endregion` pairs, block comments, and swim-strings.
- *
- * Reuses the same `maskNonCodeSpans` pass as diagnostics, so folding respects
- * strings, swim-strings, and block comments identically to every other feature
- * in the extension — braces inside a string or a swim-string body are never
- * treated as fold boundaries.
- *
- * @param {vscode.TextDocument} document
- * @returns {vscode.FoldingRange[]}
- */
-function computeFoldingRanges(document) {
-  /** @type {vscode.FoldingRange[]} */
-  const ranges = [];
-  const braceStack = [];
-  const regionStack = [];
-  const templateTagStack = [];
-  const mapStack = [];   // { line, depthAtOpen } for %(...) / @(... ) literals
-  let parenDepth = 0;    // carried across lines — map bodies can span multiple lines
-  let blockCommentStart = -1;
-  let swimStart = -1;
-  const state = createCodeScanState();
-
-  for (let lineIndex = 0; lineIndex < document.lineCount; lineIndex++) {
-    const rawLine = document.lineAt(lineIndex).text;
-    const wasInBlockComment = state.inBlockComment;
-    const wasInSwim = !!state.swimDelimiter;
-    const wasMidStringOrSwim = state.inString || wasInSwim;
-
-    if (!wasInBlockComment && !wasMidStringOrSwim) {
-      if (/^\s*#region\b/i.test(rawLine)) {
-        regionStack.push(lineIndex);
-      } else if (/^\s*#endregion\b/i.test(rawLine) && regionStack.length > 0) {
-        const start = regionStack.pop();
-        if (start !== undefined && lineIndex > start) {
-          ranges.push(new vscode.FoldingRange(start, lineIndex, vscode.FoldingRangeKind.Region));
-        }
-      }
-    }
-
-    const maskedLine = maskNonCodeSpans(rawLine, state);
-
-    // -- Block comments
-    if (!wasInBlockComment && state.inBlockComment) {
-      blockCommentStart = lineIndex;
-    } else if (wasInBlockComment && !state.inBlockComment && blockCommentStart !== -1) {
-      if (lineIndex > blockCommentStart) {
-        ranges.push(new vscode.FoldingRange(blockCommentStart, lineIndex, vscode.FoldingRangeKind.Comment));
-      }
-      blockCommentStart = -1;
-    }
-
-    // -- Swim-strings (e.g. >END>...multi-line body...>END>)
-    if (!wasInSwim && state.swimDelimiter) {
-      swimStart = lineIndex;
-    } else if (wasInSwim && !state.swimDelimiter && swimStart !== -1) {
-      if (lineIndex > swimStart) {
-        ranges.push(new vscode.FoldingRange(swimStart, lineIndex, vscode.FoldingRangeKind.Region));
-      }
-      swimStart = -1;
-    }
-
-    // -- <% %> template tags (multi-line tags only; brace folding still applies
-    //    inside tags). Delimiter detection is shared with diagnostics via
-    //    scanner.findTemplateTagDelimiters.
-    for (const delim of findTemplateTagDelimiters(maskedLine)) {
-      if (delim.open) {
-        templateTagStack.push(lineIndex);
-      } else {
-        const start = templateTagStack.pop();
-        if (start !== undefined && lineIndex > start) {
-          ranges.push(new vscode.FoldingRange(start, lineIndex, vscode.FoldingRangeKind.Region));
-        }
-      }
-    }
-
-    // -- Braces
-    for (let col = 0; col < maskedLine.length; col++) {
-      const ch = maskedLine[col];
-      if (ch === "{") {
-        braceStack.push(lineIndex);
-      } else if (ch === "}") {
-        const start = braceStack.pop();
-        if (start !== undefined && lineIndex > start) {
-          ranges.push(new vscode.FoldingRange(start, lineIndex, vscode.FoldingRangeKind.Region));
-        }
-      } else if (ch === "(") {
-        if (col > 0 && (maskedLine[col - 1] === "%" || maskedLine[col - 1] === "@")) {
-          mapStack.push({ line: lineIndex, depthAtOpen: parenDepth });
-        }
-        parenDepth++;
-      } else if (ch === ")") {
-        const prevDepth = parenDepth;
-        if (parenDepth > 0) parenDepth--;
-        if (prevDepth > 0 && mapStack.length > 0 && mapStack[mapStack.length - 1].depthAtOpen === parenDepth) {
-          const popped = mapStack.pop();
-          if (popped !== undefined && lineIndex > popped.line) {
-            ranges.push(new vscode.FoldingRange(popped.line, lineIndex, vscode.FoldingRangeKind.Region));
-          }
-        }
-      }
-    }
-  }
-
-  return ranges;
+  // Only a plausible typo, not an unrelated word.
+  return bestDistance <= Math.max(2, Math.ceil(value.length / 3)) ? best : undefined;
 }
 
 // ============================================================
@@ -1564,63 +628,27 @@ module.exports = {
   // -- Logger
   log,
   getOutputChannel,
-  clearTimerForUri,
 
-  // -- Helpers
+  // -- Timers & concurrency
+  clearTimerForUri,
+  scheduleTimerForUri,
+  mapWithConcurrency,
+
+  // -- Docs tables
+  lookupOwn,
+  isAvailableIn,
+  productSignatures,
+
+  // -- Completion & hover
   isReadOnlyView,
   isValidCompletionPosition,
   getTypedIdentifier,
-  isInStringOrCommentDoc,
-  getActiveParameterIndex,
-  splitSignatureParameters,
-  maskClosedGroups,
-  checkMissingDollar,
-  findDuplicateMapKeyDiagnosticsFromMasked,
-  findArgumentCountDiagnosticsFromMasked,
-  validateDocs,
-  createUnbalancedDiagnostic,
-  getDiagnosticCode,
-  computeFoldingRanges,
-
-  // -- Builders
   buildHoverMarkdown,
+  buildArgumentHoverMarkdown,
   buildCompletionItem,
   buildSigilCompletionItems,
+  resolveCompletionDocumentation,
 
-  // -- Code Actions
-  createMissingDollarFix,
-  createInvalidOperatorFix,
-  createAssignmentInConditionFix,
-  createForToForeachFix,
-  createUnknownNamespaceFix,
-  createTemplateEndFix,
-  editDistance,
-  lookupOwn,
-  nearestNamespace,
-
-  // -- Module navigation
-  MODULE_NAME_TOKEN_REGEX,
-  isModuleDeclarationContext,
-  isModuleCallContext,
-  getModuleDeclarations,
-  findModuleDeclarations,
-  getModuleNameAt,
-  getVariableOccurrences,
-  createCodeScanState,
-  createTemplateScanState,
-  maskNonCodeSpans,
-  maskOutsideTemplateTags,
-  documentUsesTemplateTags,
-  // findTemplateTagDelimiters (used by computeFoldingRanges) and
-  // isInStringOrComment (used by isInStringOrCommentDoc) are imported from
-  // ./scanner above but not re-exported -- no external caller needs them here.
-  findModuleDeclarationRange,
-  getModuleCallReferencesByName,
-  clearDocumentCaches,
-  findModuleReferences,
-
-  // -- Regex
-  createRegexPatterns,
-  scheduleTimerForUri,
-  mapWithConcurrency
+  // -- Text utilities
+  closestMatch,
 };

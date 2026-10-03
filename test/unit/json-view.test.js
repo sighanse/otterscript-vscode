@@ -13,6 +13,7 @@ const {
   findStringProperties,
   hasOwnKeyProperty,
   valueStartAfterKey,
+  scanJsonPrefix,
 } = require("../../src/json-view.js");
 
 describe("findJsonStringTokens", () => {
@@ -56,5 +57,16 @@ describe("key lookups", () => {
   it("hasOwnKeyProperty only counts the root object's keys", () => {
     assert.equal(hasOwnKeyProperty(view, "type"), true);
     assert.equal(hasOwnKeyProperty(view, "version"), false);
+  });
+});
+
+describe("scanJsonPrefix", () => {
+  it("finds the containers still open and the unclosed string at the end", () => {
+    const text = '{ "a": [ { "b": "x" }, "c\\"d';
+    assert.deepEqual(scanJsonPrefix(text), { open: [0, 7], openString: text.indexOf('"c') });
+  });
+
+  it("skips brackets in strings and recovers from a stray closer", () => {
+    assert.deepEqual(scanJsonPrefix('{ "}": [ ] ] '), { open: [0], openString: -1 });
   });
 });

@@ -15,7 +15,7 @@
  * - Each provider module receives what it needs from here (the live settings,
  *   regex patterns, a way to re-run diagnostics) instead of reaching for
  *   shared globals; reusable logic that builds vscode objects lives in
- *   helpers.js / diagnostics.js / adaptivecard.js
+ *   helpers.js / document-index.js / diagnostics.js / adaptivecard.js
  * - Snippets own insertion text; providers never guess prefixes
  *
  * DOCUMENTATION
@@ -23,7 +23,8 @@
  * @license MIT
  * @see src/providers/ - One module per group of language features
  * @see src/language-data.js - Plain data documentation module
- * @see src/helpers.js - Helpers, functions, constants
+ * @see src/helpers.js - Settings, logger, timers, docs tables, hover/completion builders
+ * @see src/document-index.js - Per-document module, variable and string/comment indexes
  * @see src/scanner.js - vscode-free text scanning (strings, comments, template tags)
  * @see src/diagnostics.js - Diagnostic checks and rules
  * @see src/adaptivecard.js - Adaptive Card checks for template JSON bodies
@@ -37,34 +38,20 @@
 const vscode = require("vscode");
 const { updateDiagnostics } = require("./diagnostics");
 
-// -- Language documentation (functions, variables, operations, keywords).
 const {
-  NAMESPACES,
-  operationDocs,
-  syntaxDocs,
-  keywordDocs,
-  variableDocs,
-  scalarFunctionDocs,
-  vectorFunctionDocs,
-  mapFunctionDocs
-} = require("./language-data");
-
-const {
-  NON_VARIABLE_IDENTIFIERS,
   log,
   getOutputChannel,
-  clearDocumentCaches,
   clearTimerForUri,
   loadConfig,
-  validateDocs,
   scheduleTimerForUri,
-  createRegexPatterns,
 } = require("./helpers");
+const { clearDocumentCaches } = require("./document-index");
 
 // -- Language features
 const { registerCodeActions } = require("./providers/code-actions");
 const { registerCompletion } = require("./providers/completion");
 const { registerHover } = require("./providers/hover");
+const { registerInlayHints } = require("./providers/inlay-hints");
 const { registerNavigation } = require("./providers/navigation");
 const { registerSignatureHelp } = require("./providers/signature-help");
 const { registerWorkspaceSymbols } = require("./providers/workspace-symbols");
@@ -98,23 +85,6 @@ function activate(context) {
     `workspaceSymbols=${settings.workspaceSymbolsEnabled}`;
   log.info(`Settings loaded: ${describeSettings()}`);
 
-  // -- Validate all documentation sources (intentionally ignore return value)
-  for (const [label, table] of Object.entries({
-    scalarFunctionDocs,  // $ToJson, $Base64Encode, etc.
-    operationDocs,       // Log-Information, Log-Warning, Log-Error, etc.
-    vectorFunctionDocs,  // @Split, @Join, etc.
-    mapFunctionDocs,     // %FromJson, %ListItem
-    variableDocs,        // $BuildId, $FeedName, etc.
-    syntaxDocs,          // Template tags, swim strings, expression delimiters, etc.
-    keywordDocs,         // if, foreach, with, set, etc.
-  })) {
-    void validateDocs(label, table);
-  }
-
-  // -- Knowledge bases (fast lookup sets) and the regex patterns built from them
-  const knownOperations = new Set(Object.keys(operationDocs));
-  const patterns = createRegexPatterns(knownOperations);
-
   // ============================================================
   // DIAGNOSTICS
   // ============================================================
@@ -123,23 +93,6 @@ function activate(context) {
   // 400 ms pause, and on demand (quick fixes, Fix All, settings changes).
 
   const diagnostics = vscode.languages.createDiagnosticCollection("otterscript");
-  /** @type {import("./diagnostics").DiagnosticsContext} */
-  const diagnosticsContext = {
-    nonVariableIdentifiers: NON_VARIABLE_IDENTIFIERS,
-    knownKeywords: new Set(Object.keys(keywordDocs)),
-    knownScalarFunctions: new Set(Object.keys(scalarFunctionDocs)),
-    knownVectorFunctions: new Set(Object.keys(vectorFunctionDocs)),
-    scalarFunctionDocs,
-    vectorFunctionDocs,
-    mapFunctionDocs,
-    knownOperations,
-    knownNamespaces: NAMESPACES,
-    scalarCallRegex: patterns.scalarCallRegex,
-    vectorCallRegex: patterns.vectorCallRegex,
-    operationCallRegex: patterns.operationCallRegex,
-    diagnosticRules: settings.diagnosticRules,
-    adaptiveCardMaxVersion: settings.adaptiveCardMaxVersion,
-  };
 
   /**
    * Checks a document now, cancelling any pending debounced run for it.
@@ -149,7 +102,7 @@ function activate(context) {
    */
   const runDiagnostics = (document) => {
     clearTimerForUri(diagnosticTimers, document.uri);
-    updateDiagnostics(document, diagnostics, diagnosticsContext);
+    updateDiagnostics(document, diagnostics, settings);
   };
 
   // ============================================================
@@ -160,32 +113,29 @@ function activate(context) {
   context.subscriptions.push(
     diagnostics,
     ...registerCodeActions(settings, diagnostics, runDiagnostics),
-    ...registerCompletion(settings),
-    ...registerHover(settings, patterns.operationRegex()),
-    ...registerNavigation(settings),
-    ...registerSignatureHelp(settings, patterns),
+    ...registerCompletion(settings, workspaceSymbols.listModules),
+    ...registerHover(settings, workspaceSymbols.listModules),
+    ...registerInlayHints(settings),
+    ...registerNavigation(settings, workspaceSymbols),
+    ...registerSignatureHelp(settings, workspaceSymbols.listModules),
     ...workspaceSymbols.disposables,
   );
 
   // ============================================================
   // SETTINGS CHANGES
   // ============================================================
-  // The one listener for `otterscript.*` settings: reloads them all at once,
-  // then does what a particular change needs -- reset the workspace index, or
-  // re-run diagnostics in every open file so new rules or a new Adaptive Card
-  // version limit apply without an edit.
+  // The one listener for `otterscript.*` settings: reloads them all at once
+  // (the providers read the shared object, so they see the change at once),
+  // then re-runs diagnostics in every open file when the rules or the
+  // Adaptive Card version limit changed, so those apply without an edit.
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
       if (!e.affectsConfiguration("otterscript")) return;
       Object.assign(settings, loadConfig());
       log.info(`Settings reloaded: ${describeSettings()}`);
 
-      if (e.affectsConfiguration("otterscript.workspaceSymbols.enable")) workspaceSymbols.resetWorkspaceIndex();
-
       if (e.affectsConfiguration("otterscript.diagnostics.rules") ||
           e.affectsConfiguration("otterscript.adaptiveCards.maxVersion")) {
-        diagnosticsContext.diagnosticRules = settings.diagnosticRules;
-        diagnosticsContext.adaptiveCardMaxVersion = settings.adaptiveCardMaxVersion;
         for (const document of vscode.workspace.textDocuments) runDiagnostics(document);
       }
     })
@@ -209,7 +159,7 @@ function activate(context) {
     vscode.workspace.onDidChangeTextDocument(e => {
       if (e.document.languageId !== "otterscript") return;
       scheduleTimerForUri(diagnosticTimers, e.document.uri, 400, () => {
-        updateDiagnostics(e.document, diagnostics, diagnosticsContext);
+        updateDiagnostics(e.document, diagnostics, settings);
         workspaceSymbols.setModuleIndexEntry(e.document.uri, e.document.getText());
       });
     }),
@@ -236,11 +186,11 @@ function activate(context) {
 
     // -- Clean up diagnostics and per-document caches when a file is closed.
     vscode.workspace.onDidCloseTextDocument(doc => {
-      // A file stays in the index (it's still on disk), but its entry came
-      // from the live buffer, so re-read it from disk: closing without saving
-      // must drop unsaved module declarations. An untitled document's entry
-      // goes with it.
-      if (doc.uri.scheme !== "file") workspaceSymbols.removeModuleIndexEntry(doc.uri);
+      // A file stays in the index (it's still on disk, or in the virtual
+      // workspace), but its entry came from the live buffer, so re-read it:
+      // closing without saving must drop unsaved module declarations. An
+      // untitled document's entry goes with it.
+      if (doc.uri.scheme === "untitled") workspaceSymbols.removeModuleIndexEntry(doc.uri);
       else if (doc.languageId === "otterscript") void workspaceSymbols.indexModuleFile(doc.uri);
       diagnostics.delete(doc.uri);
       clearDocumentCaches(doc.uri);

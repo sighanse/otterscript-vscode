@@ -23,6 +23,8 @@
  *   have one of its values, unless the value is filled in by OtterScript;
  * - Adaptive Card Templating keys (`"$data"`, ...) are flagged, since
  *   OtterScript expands them as its own variables;
+ * - every `Action.ToggleVisibility` target must be the `"id"` of an element
+ *   in the card, and no two elements may share an id;
  * - when the card is sent as a Teams message attachment, the attachment
  *   needs the Adaptive Card `contentType`, and `Action.Submit` (unsupported
  *   by incoming webhooks and Workflows) is flagged.
@@ -32,8 +34,8 @@
 
 const vscode = require("vscode");
 const { createTemplateScanState, maskTemplateTagContents } = require("./scanner");
-const { editDistance } = require("./helpers");
-const { analyzeJson, findStringProperties, hasOwnKeyProperty, valueStartAfterKey } = require("./json-view");
+const { closestMatch } = require("./helpers");
+const { analyzeJson, findStringProperties, hasOwnKeyProperty, scanJsonPrefix, valueStartAfterKey } = require("./json-view");
 const { ADAPTIVE_CARD_TYPES, ADAPTIVE_CARD_PROPERTIES, ADAPTIVE_CARD_VALUE_LISTS } = require("./adaptivecard-data");
 
 /** @typedef {import("./json-view").JsonView} JsonView */
@@ -51,6 +53,37 @@ const { ADAPTIVE_CARD_TYPES, ADAPTIVE_CARD_PROPERTIES, ADAPTIVE_CARD_VALUE_LISTS
 const FREE_FORM_KEYS = new Set(["data", "msteams", "buttons"]);
 
 /**
+ * Per-view results of {@link findFreeFormSpans}, which one diagnostics pass
+ * asks for several times over the same card. Weak, so a view's results go
+ * with it. Callers only read the results.
+ * @type {WeakMap<JsonView, { start: number, end: number }[]>}
+ */
+const freeFormSpanCache = new WeakMap();
+/**
+ * Per-view results of {@link findObjectTypes}, like {@link freeFormSpanCache}.
+ * @type {WeakMap<JsonView, Map<number, string>>}
+ */
+const objectTypeCache = new WeakMap();
+
+/**
+ * `cache`'s value for `json`, computed by `compute` the first time.
+ *
+ * @template T
+ * @param {WeakMap<JsonView, T>} cache
+ * @param {JsonView} json
+ * @param {() => T} compute
+ * @returns {T}
+ */
+function memoized(cache, json, compute) {
+  let value = cache.get(json);
+  if (value === undefined) {
+    value = compute();
+    cache.set(json, value);
+  }
+  return value;
+}
+
+/**
  * Finds the `[start, end]` spans of every object/array value belonging to a
  * {@link FREE_FORM_KEYS} key. A scalar value (e.g. `"data": "x"`) contains
  * nothing nested, so it yields no span.
@@ -59,16 +92,18 @@ const FREE_FORM_KEYS = new Set(["data", "msteams", "buttons"]);
  * @returns {{ start: number, end: number }[]}
  */
 function findFreeFormSpans(json) {
-  /** @type {{ start: number, end: number }[]} */
-  const spans = [];
-  for (const token of json.tokens) {
-    if (!FREE_FORM_KEYS.has(token.value)) continue;
-    const valueStart = valueStartAfterKey(json.text, token);
-    if (valueStart === -1) continue;
-    const end = json.closeOf.get(valueStart); // only set for a '{' or '['
-    if (end !== undefined) spans.push({ start: valueStart, end });
-  }
-  return spans;
+  return memoized(freeFormSpanCache, json, () => {
+    /** @type {{ start: number, end: number }[]} */
+    const spans = [];
+    for (const token of json.tokens) {
+      if (!FREE_FORM_KEYS.has(token.value)) continue;
+      const valueStart = valueStartAfterKey(json.text, token);
+      if (valueStart === -1) continue;
+      const end = json.closeOf.get(valueStart); // only set for a '{' or '['
+      if (end !== undefined) spans.push({ start: valueStart, end });
+    }
+    return spans;
+  });
 }
 
 /**
@@ -129,6 +164,18 @@ function compareCardVersions(a, b) {
 }
 
 /**
+ * A document's literal text: everything a text template outputs as written,
+ * with the contents of its `<% %>` tags blanked (same length, same offsets).
+ *
+ * @param {string} text - Full document text
+ * @returns {string}
+ */
+function maskTemplateTags(text) {
+  const state = createTemplateScanState();
+  return text.split("\n").map((line) => maskTemplateTagContents(line, state)).join("\n");
+}
+
+/**
  * Locates the Adaptive Card in a document: the first literal (non-`<% %>`)
  * object with `"type": "AdaptiveCard"` that isn't a lookalike inside a
  * free-form payload.
@@ -141,8 +188,7 @@ function compareCardVersions(a, b) {
  *   at what surrounds the card (see {@link findWebhookEnvelope}).
  */
 function locateCard(text) {
-  const state = createTemplateScanState();
-  const literal = analyzeJson(text.split("\n").map((line) => maskTemplateTagContents(line, state)).join("\n"));
+  const literal = analyzeJson(maskTemplateTags(text));
 
   // A payload that merely looks like a card (e.g. an Action.Submit "data"
   // object with "type": "AdaptiveCard") is not the card -- skip such
@@ -180,14 +226,16 @@ function findOwnVersionProperty(card) {
  * @returns {Map<number, string>}
  */
 function findObjectTypes(card) {
-  const freeFormSpans = findFreeFormSpans(card);
-  /** @type {Map<number, string>} */
-  const types = new Map();
-  for (const { value, valueStart, objectStart } of findStringProperties(card, "type")) {
-    if (objectStart === -1 || types.has(objectStart) || isInsideAny(freeFormSpans, valueStart)) continue;
-    types.set(objectStart, value);
-  }
-  return types;
+  return memoized(objectTypeCache, card, () => {
+    const freeFormSpans = findFreeFormSpans(card);
+    /** @type {Map<number, string>} */
+    const types = new Map();
+    for (const { value, valueStart, objectStart } of findStringProperties(card, "type")) {
+      if (objectStart === -1 || types.has(objectStart) || isInsideAny(freeFormSpans, valueStart)) continue;
+      types.set(objectStart, value);
+    }
+    return types;
+  });
 }
 
 /**
@@ -298,28 +346,6 @@ function isTemplatedValue(value) {
 }
 
 /**
- * The allowed value closest to `value` -- a likely typo such as `"bold"` for
- * `"bolder"` -- or undefined when none is close enough to suggest.
- *
- * @param {string} value
- * @param {readonly string[]} allowed
- * @returns {string | undefined}
- */
-function nearestAllowedValue(value, allowed) {
-  const lower = value.toLowerCase();
-  let best;
-  let bestDistance = Infinity;
-  for (const candidate of allowed) {
-    const d = editDistance(lower, candidate.toLowerCase());
-    if (d < bestDistance) {
-      bestDistance = d;
-      best = candidate;
-    }
-  }
-  return bestDistance <= Math.max(2, Math.ceil(value.length / 3)) ? best : undefined;
-}
-
-/**
  * One property whose string value isn't in its fixed list. `start`/`end`
  * bracket the value without its quotes.
  *
@@ -359,7 +385,7 @@ function findInvalidValues(card) {
       type,
       key,
       allowed,
-      suggestion: nearestAllowedValue(value, allowed),
+      suggestion: closestMatch(value, allowed),
     });
   }
   return results;
@@ -385,6 +411,295 @@ function findTemplatingKeywords(card) {
   return card.tokens
     .filter((token) => TEMPLATING_KEYWORDS.has(token.value) && valueStartAfterKey(card.text, token) !== -1)
     .map((token) => ({ value: token.value, start: token.start + 1, end: token.end }));
+}
+
+/**
+ * One literal string in the card -- an element's `"id"` or a toggle target.
+ * `start`/`end` bracket the value without its quotes.
+ *
+ * @typedef {{ value: string, start: number, end: number }} CardString
+ */
+
+/**
+ * Every `"id": "..."` in the card, in text order. Counts objects without a
+ * `"type"` too (a `Column` or `TableCell` may leave it out), but not ids in
+ * free-form payloads such as a Teams mention's `msteams` entity.
+ *
+ * @param {JsonView} card
+ * @param {{ elementsOnly?: boolean }} [options] - `elementsOnly` leaves out
+ *   actions' ids: a toggle can't show or hide an action (actions have no
+ *   `isVisible`), so only elements are toggle targets
+ * @returns {CardString[]}
+ */
+function findElementIds(card, { elementsOnly = false } = {}) {
+  const freeFormSpans = findFreeFormSpans(card);
+  const types = elementsOnly ? findObjectTypes(card) : undefined;
+  return findStringProperties(card, "id")
+    .filter(({ valueStart, objectStart }) => objectStart !== -1 && !isInsideAny(freeFormSpans, valueStart))
+    .filter(({ objectStart }) => !types?.get(objectStart)?.startsWith("Action."))
+    .map(({ value, valueStart, valueEnd }) => ({ value, start: valueStart, end: valueEnd }));
+}
+
+/**
+ * Every element id an `Action.ToggleVisibility` targets: the strings in its
+ * `"targetElements"` array, and the `"elementId"` of the
+ * `{ "elementId": ..., "isVisible": ... }` objects it may hold instead.
+ *
+ * @param {JsonView} card
+ * @returns {CardString[]}
+ */
+function findToggleTargets(card) {
+  const { text, tokens, enclosing, closeOf } = card;
+  const objectTypes = findObjectTypes(card);
+  /** @type {CardString[]} */
+  const targets = [];
+  tokens.forEach((token, i) => {
+    if (token.value !== "targetElements" || objectTypes.get(enclosing[i]) !== "Action.ToggleVisibility") return;
+    const arrayStart = valueStartAfterKey(text, token);
+    const arrayEnd = text[arrayStart] === "[" ? closeOf.get(arrayStart) : undefined;
+    if (arrayEnd === undefined) return;
+    for (let j = i + 1; j < tokens.length && tokens[j].start < arrayEnd; j++) {
+      const item = tokens[j];
+      // A plain string item belongs to the action's own object; anything
+      // in a nested object is a key or value of a target object.
+      if (enclosing[j] === enclosing[i] && valueStartAfterKey(text, item) === -1) {
+        targets.push({ value: item.value, start: item.start + 1, end: item.end });
+      }
+    }
+    for (const { value, valueStart, valueEnd } of findStringProperties(card, "elementId")) {
+      if (valueStart > arrayStart && valueEnd < arrayEnd) targets.push({ value, start: valueStart, end: valueEnd });
+    }
+  });
+  return targets.sort((a, b) => a.start - b.start);
+}
+
+/**
+ * One `Action.ToggleVisibility` target that no element in the card has as
+ * its id, with the closest id there is (a likely typo), if any.
+ *
+ * @typedef {CardString & { suggestion: string | undefined }} UnknownTarget
+ */
+
+/**
+ * Every toggle target with no matching element id. Ids are compared exactly,
+ * as hosts look them up. Templated targets are skipped, and so is the whole
+ * check when any id is templated (`"id": "row$i"`): a literal target may be
+ * what it renders to.
+ *
+ * @param {JsonView} card
+ * @returns {UnknownTarget[]}
+ */
+function findUnknownToggleTargets(card) {
+  const ids = findElementIds(card, { elementsOnly: true }).map((id) => id.value);
+  if (ids.some(isTemplatedValue)) return [];
+  const known = new Set(ids);
+  return findToggleTargets(card)
+    .filter(({ value }) => value !== "" && !isTemplatedValue(value) && !known.has(value))
+    .map((target) => ({ ...target, suggestion: closestMatch(target.value, known) }));
+}
+
+/**
+ * Every id that an earlier element in the card already has, paired with that
+ * first occurrence. A host finds only one of them, so a toggle can't reach
+ * the other. Two occurrences with a `<% %>` tag between them are skipped:
+ * they may be alternatives (`<% if %>` / `<% else %>`) of which only one is
+ * output.
+ *
+ * @param {JsonView} card
+ * @param {string} source - The card's original text, `<% %>` tags included
+ *   (same offsets as `card.text`)
+ * @returns {{ duplicate: CardString, first: CardString }[]}
+ */
+function findDuplicateIds(card, source) {
+  /** @type {Map<string, CardString>} */
+  const firsts = new Map();
+  /** @type {{ duplicate: CardString, first: CardString }[]} */
+  const results = [];
+  for (const id of findElementIds(card)) {
+    if (id.value === "" || isTemplatedValue(id.value)) continue;
+    const first = firsts.get(id.value);
+    if (!first) {
+      firsts.set(id.value, id);
+    } else if (!source.slice(first.end, id.start).includes("<%")) {
+      results.push({ duplicate: id, first });
+    }
+  }
+  return results;
+}
+
+/**
+ * The types an object may have, by the key that holds it (an array's key, or
+ * the object's own key, like `selectAction`). Keys not listed allow any type.
+ * @type {ReadonlyMap<string, (type: string) => boolean>}
+ */
+const TYPES_BY_CONTAINER = (() => {
+  /** Types that are parts of an element, never an element in `body` / `items`. */
+  const parts = new Set([
+    "AdaptiveCard", "Authentication", "BackgroundImage", "CaptionSource", "CarouselPage", "Column", "Data.Query",
+    "Fact", "Input.Choice", "MediaSource", "Metadata", "Refresh", "TableCell", "TableColumnDefinition", "TableRow",
+    "TargetElement", "TextRun", "TokenExchangeResource",
+  ]);
+  /**
+   * @param {string[]} types
+   * @returns {(type: string) => boolean}
+   */
+  const only = (types) => (/** @type {string} */ type) => types.includes(type);
+  /**
+   * @param {string} type
+   * @returns {boolean}
+   */
+  const isAction = (type) => type.startsWith("Action.");
+  /**
+   * @param {string} type
+   * @returns {boolean}
+   */
+  const isElement = (type) => !isAction(type) && !type.startsWith("Layout.") && !parts.has(type);
+  return new Map([
+    ["actions", isAction],
+    ["selectAction", isAction],
+    ["body", isElement],
+    ["items", isElement],
+    ["columns", only(["Column", "TableColumnDefinition"])],
+    ["rows", only(["TableRow"])],
+    ["cells", only(["TableCell"])],
+    ["facts", only(["Fact"])],
+    ["choices", only(["Input.Choice"])],
+    ["inlines", only(["TextRun"])],
+    ["pages", only(["CarouselPage"])],
+    ["layouts", (type) => type.startsWith("Layout.")],
+    ["sources", only(["MediaSource"])],
+    ["captionSources", only(["CaptionSource"])],
+  ]);
+})();
+
+/**
+ * One completion inside an Adaptive Card string value.
+ *
+ * @typedef {{ label: string, detail: string, kind: "type" | "value" | "id" }} CardCompletionItem
+ */
+
+/**
+ * Completions for the Adaptive Card string value the cursor is in:
+ * - after `"type": "` -- the types the card's `"version"` supports that fit
+ *   where the object is (`Action.*` in `actions`, `Column` in `columns`, ...;
+ *   see {@link TYPES_BY_CONTAINER});
+ * - after a key with a fixed list of values (`"weight": "`) -- that list, for
+ *   the type of the object the key is in;
+ * - in an `Action.ToggleVisibility`'s `targetElements` (a string item, or an
+ *   `"elementId"`) -- the ids of the card's elements.
+ *
+ * Works on everything before the cursor, so the string being typed may still
+ * be unclosed; looks past the cursor only for what isn't found before it (an
+ * object's `"type"` written after the key, ids further down the card).
+ *
+ * @param {string} text - Full document text
+ * @param {number} offset - The cursor
+ * @returns {{ start: number, items: CardCompletionItem[] } | null} `start`:
+ *   where the typed part of the value begins (just past its opening quote);
+ *   null when the cursor isn't in a card value this knows about.
+ */
+function findCardCompletions(text, offset) {
+  // Cheap exit for the common case, a document without a card: this runs on
+  // every completion request in every OtterScript file.
+  if (!text.includes("AdaptiveCard")) return null;
+  const literal = maskTemplateTags(text);
+  const { open, openString } = scanJsonPrefix(literal.slice(0, offset));
+  if (openString === -1 || literal.slice(openString, offset).includes("\n")) return null;
+
+  // Everything before the value's opening quote is complete JSON tokens.
+  const before = analyzeJson(literal.slice(0, openString));
+  /** @type {JsonView | undefined} */
+  let whole;
+  const views = () => [before, (whole ??= analyzeJson(literal))];
+
+  /**
+   * The key whose value starts at `index`, if any.
+   *
+   * @param {number} index
+   * @returns {string | undefined}
+   */
+  const keyOf = (index) => {
+    let k = before.tokens.length - 1;
+    while (k >= 0 && before.tokens[k].start > index) k--;
+    return k >= 0 && valueStartAfterKey(before.text, before.tokens[k]) === index ? before.tokens[k].value : undefined;
+  };
+  /**
+   * The string value of an object's own `key`.
+   *
+   * @param {number} objectStart
+   * @param {string} key
+   * @returns {string | undefined}
+   */
+  const propertyOf = (objectStart, key) => {
+    for (const view of views()) {
+      const found = findStringProperties(view, key).find((p) => p.objectStart === objectStart);
+      if (found) return found.value;
+    }
+    return undefined;
+  };
+
+  // Inside the card, and not in a free-form payload.
+  const root = open.find((o) => literal[o] === "{" && propertyOf(o, "type") === "AdaptiveCard");
+  if (root === undefined || open.some((o) => FREE_FORM_KEYS.has(keyOf(o) ?? ""))) return null;
+
+  const inner = open[open.length - 1];
+  const parent = open[open.length - 2];
+  const precedingChar = before.text.trimEnd().slice(-1);
+  /**
+   * @param {CardCompletionItem[]} items
+   * @returns {{ start: number, items: CardCompletionItem[] } | null}
+   */
+  const result = (items) => (items.length ? { start: openString + 1, items } : null);
+
+  // A string item of an array: only `targetElements` has element ids.
+  if (literal[inner] === "[" && (precedingChar === "[" || precedingChar === ",")) {
+    const action = parent !== undefined && propertyOf(parent, "type") === "Action.ToggleVisibility";
+    return action && keyOf(inner) === "targetElements" ? result(cardIdItems(views())) : null;
+  }
+  if (literal[inner] !== "{" || precedingChar !== ":") return null;
+  const key = keyOf(openString);
+
+  if (key === "type") {
+    // An object's container: an `actions` array, or the key itself (`selectAction`).
+    const containerKey = keyOf(inner) ?? (parent !== undefined && literal[parent] === "[" ? keyOf(parent) : undefined);
+    const cardVersion = parseCardVersion(propertyOf(root, "version") ?? "");
+    const items = [];
+    const fits = (containerKey && TYPES_BY_CONTAINER.get(containerKey)) || (() => true);
+    for (const [type, version] of ADAPTIVE_CARD_TYPES) {
+      if (!fits(type)) continue;
+      const required = parseCardVersion(version);
+      if (cardVersion && required && compareCardVersions(required, cardVersion) > 0) continue;
+      items.push({ label: type, detail: `Adaptive Card ${version}+`, kind: /** @type {const} */ ("type") });
+    }
+    return result(items);
+  }
+
+  if (key === "elementId") {
+    const action = open[open.length - 3];
+    const isTarget = literal[parent] === "[" && keyOf(parent) === "targetElements" &&
+      action !== undefined && propertyOf(action, "type") === "Action.ToggleVisibility";
+    return isTarget ? result(cardIdItems(views())) : null;
+  }
+
+  const type = propertyOf(inner, "type");
+  const listName = key && type ? ADAPTIVE_CARD_PROPERTIES.get(type)?.get(key)?.values : undefined;
+  const values = listName ? ADAPTIVE_CARD_VALUE_LISTS.get(listName) : undefined;
+  return values
+    ? result(values.map((value) => ({ label: value, detail: `${key} on ${type}`, kind: /** @type {const} */ ("value") })))
+    : null;
+}
+
+/**
+ * Completion items for the element ids in the card: each literal id once.
+ *
+ * @param {JsonView[]} views - The text before the cursor, then the whole text
+ * @returns {CardCompletionItem[]}
+ */
+function cardIdItems(views) {
+  const ids = new Set(views.flatMap((view) => findElementIds(view, { elementsOnly: true }).map((id) => id.value)));
+  return [...ids]
+    .filter((id) => id !== "" && !isTemplatedValue(id))
+    .map((id) => ({ label: id, detail: "Element id", kind: /** @type {const} */ ("id") }));
 }
 
 /** The `contentType` a Teams message attachment needs for an Adaptive Card. */
@@ -511,6 +826,33 @@ function findAdaptiveCardDiagnostics(document, text, options = {}) {
     );
   }
 
+  for (const { value, start, end, suggestion } of findUnknownToggleTargets(card)) {
+    addIssue(
+      start, end,
+      `No element in this card has the id '${value}', so 'Action.ToggleVisibility' does nothing for it.` +
+      (suggestion ? ` Did you mean '${suggestion}'?` : ""),
+      "adaptivecard-unknown-target"
+    );
+  }
+
+  const source = text.slice(objStart, objStart + card.text.length);
+  for (const { duplicate, first } of findDuplicateIds(card, source)) {
+    const diagnostic = addIssue(
+      duplicate.start, duplicate.end,
+      `Another element in this card already has the id '${duplicate.value}'. Ids must be unique; ` +
+      "a toggle reaches only one of them.",
+      "adaptivecard-duplicate-id"
+    );
+    diagnostic.relatedInformation = [
+      new vscode.DiagnosticRelatedInformation(
+        new vscode.Location(document.uri, new vscode.Range(
+          document.positionAt(objStart + first.start), document.positionAt(objStart + first.end)
+        )),
+        "First used here"
+      ),
+    ];
+  }
+
   // -- Teams message checks: only when the card is an attachment's "content".
   const envelope = findWebhookEnvelope(literal, objStart);
   if (envelope) {
@@ -635,28 +977,56 @@ function createCardVersionFix(document, diagnostic, options = {}) {
 }
 
 /**
- * Quick fix for `adaptivecard-invalid-value`: replaces the value with the
- * closest allowed one (`"bold"` -> `"bolder"`), when one is close enough to
- * be the intended value. Re-derives the suggestion from the document text,
- * since diagnostics handed back by VS Code keep only their public fields.
+ * A quick fix that replaces a flagged card value with its suggestion -- the
+ * closest valid value, when one is close enough to be the intended one.
+ * Re-derives the suggestion from the document text, since diagnostics handed
+ * back by VS Code keep only their public fields. Preferred -- so Fix All
+ * applies it -- only when just the casing differs; a merely close value is a
+ * guess for the user to confirm.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Diagnostic} diagnostic - Its range is the value without quotes
+ * @param {(card: JsonView) => { start: number, suggestion: string | undefined }[]} findFlagged -
+ *   The card's flagged values (`start` relative to the card)
+ * @returns {vscode.CodeAction | null}
+ */
+function createSuggestionFix(document, diagnostic, findFlagged) {
+  const located = locateCard(document.getText());
+  if (!located) return null;
+  const offset = document.offsetAt(diagnostic.range.start) - located.objStart;
+  const suggestion = findFlagged(located.card).find((v) => v.start === offset)?.suggestion;
+  if (!suggestion) return null;
+
+  const action = new vscode.CodeAction(`Change to '${suggestion}'`, vscode.CodeActionKind.QuickFix);
+  action.diagnostics = [diagnostic];
+  action.isPreferred = suggestion.toLowerCase() === document.getText(diagnostic.range).toLowerCase();
+  action.edit = new vscode.WorkspaceEdit();
+  action.edit.replace(document.uri, diagnostic.range, suggestion);
+  return action;
+}
+
+/**
+ * Quick fix for `adaptivecard-invalid-value`: the closest allowed value
+ * (`"bold"` -> `"bolder"`).
  *
  * @param {vscode.TextDocument} document
  * @param {vscode.Diagnostic} diagnostic
  * @returns {vscode.CodeAction | null}
  */
 function createInvalidValueFix(document, diagnostic) {
-  const located = locateCard(document.getText());
-  if (!located) return null;
-  const offset = document.offsetAt(diagnostic.range.start) - located.objStart;
-  const invalid = findInvalidValues(located.card).find((v) => v.start === offset);
-  if (!invalid?.suggestion) return null;
+  return createSuggestionFix(document, diagnostic, findInvalidValues);
+}
 
-  const action = new vscode.CodeAction(`Change to '${invalid.suggestion}'`, vscode.CodeActionKind.QuickFix);
-  action.diagnostics = [diagnostic];
-  action.isPreferred = true;
-  action.edit = new vscode.WorkspaceEdit();
-  action.edit.replace(document.uri, diagnostic.range, invalid.suggestion);
-  return action;
+/**
+ * Quick fix for `adaptivecard-unknown-target`: the closest id the card has
+ * (`"detials"` -> `"details"`).
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Diagnostic} diagnostic
+ * @returns {vscode.CodeAction | null}
+ */
+function createToggleTargetFix(document, diagnostic) {
+  return createSuggestionFix(document, diagnostic, findUnknownToggleTargets);
 }
 
 /**
@@ -708,5 +1078,7 @@ module.exports = {
   createContentTypeFix,
   createInvalidValueFix,
   createTemplatingKeywordFix,
+  createToggleTargetFix,
   findAdaptiveCardDiagnostics,
+  findCardCompletions,
 };

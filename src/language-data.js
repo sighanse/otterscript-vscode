@@ -4,9 +4,11 @@
  * OtterScript language documentation model.
  *
  * IMPORTANT:
- * - This file contains plain data ONLY.
- * - No vscode imports, no MarkdownString, no runtime logic.
- * - All documentation values are plain strings.
+ * - The tables in this file are plain data: no vscode imports, no
+ *   MarkdownString; all documentation values are plain strings.
+ * - The only logic is at the end (GENERATED REFERENCE): merging Inedo's
+ *   generated reference under the hand-written tables, and the operation
+ *   lookups (`operationForms`, `lookupOperation`, `operationArguments`).
  *
  * Rendering rules:
  * - helpers.js (`buildHoverMarkdown` / `buildCompletionItem`) converts these
@@ -54,67 +56,48 @@
  *     `<%(key1: value1, ...)>`); optional arguments are wrapped in `[ ]`; the
  *     statement terminator `;` is kept. Single positional-argument statements
  *     take no parentheses (`Log-Information "message";`, `Sleep <integer>;`).
- *   - `$`/`@` functions (positional arguments): `$FunctionName(paramName, [optionalParam], ...)`.
- *     Parameter names are lowerCamelCase descriptive labels, no type tokens, no
+ *   - `$`/`@` functions (positional arguments): `$FunctionName(Param, [OptionalParam], ...)`.
+ *     Parameter names are the ones Inedo's reference uses, as it writes them
+ *     (`$Substring(Text, Offset, [Length])`, `$FromJson(json)`), so they match
+ *     the generated entries and Inedo's docs; lowerCamelCase labels only where
+ *     Inedo documents none (ProGet's notifier functions). No type tokens, no
  *     trailing `;`; `...` marks a repeating tail argument.
  *   - Runtime values with no call syntax (`$WorkingDirectory`, `@AllRoles`): bare name.
+ * @property {string[]=} products The Inedo products that have this construct
+ *   ("ProGet", "Otter", "BuildMaster"); none listed means all of them. The
+ *   `otterscript.product` setting uses it to leave other products' entries out
+ *   of completion. Generated entries list the products whose reference has
+ *   them; a hand-written entry without its own list takes the generated one's.
+ * @property {{ product: string, signature: string }[]=} overloads The same
+ *   function's form in another Inedo product, when it differs from `signature`
+ *   -- e.g. ProGet's notifier `$PackageHash(format, algorithm)` (the
+ *   `signature`) vs BuildMaster's `$PackageHash(packageName, [sourceName])`.
+ *   Shown in hover; the argument-count checks allow anything from the fewest
+ *   any form requires to the most any form takes.
+ * @property {DocParam[]=} params
+ *   An operation's named arguments (`Copy-Files(To: ...)`), from Inedo's
+ *   reference: for argument completion and hover, which lists them unless
+ *   `documentation` has its own **Arguments:** section.
+ * @property {{ by: string, note: string }=} superseded Inedo recommends
+ *   writing `by` instead of this name, as `note` explains (`PSCall1` and
+ *   `PSCall2` -> `PSCall`). Hover shows the note; completion lists the
+ *   entry struck through, after the others.
+ * @property {true=} anySigil The function works with every sigil, which picks
+ *   what it returns (`$FromJson` / `@FromJson` / `%FromJson`), as Inedo's
+ *   reference marks it. A hand-written `$` entry's `@` and `%` forms are
+ *   derived from it (see `anySigilForms`).
  * @property {string=} snippet VS Code snippet insertion text
  * @property {string=} documentation Extended Markdown documentation. Do not repeat
  *   `description` verbatim as the first line — hover renders both.
  */
 
 /** @typedef {Record<string, DocEntry>} DocsTable */
-
 /**
- * The set of valid OtterScript namespace prefixes: `Core` (the built-in engine
- * namespace — every unqualified operation/function may optionally be written as
- * `Core::Name`) plus every first-party extension's declared `[ScriptNamespace]`
- * token, verified against Inedo source (github.com/Inedo/inedox-*). A value here
- * is never a typo, so the `unknown-namespace` diagnostic never flags a
- * legitimate prefix.
- *
- * A `DocEntry.namespace` is either `null` (no `[ScriptNamespace]` on the class
- * or its assembly — the common case; such constructs are `Core::` built-ins and
- * are shown without a namespace) or one of the tokens below. NOTE: an extension's
- * name is not a namespace — e.g. the InedoCore extension declares only
- * `Files`, `HTTP`, `Network`, `ProGet`, `UPack`, `Otter`; there is no
- * `InedoCore::` prefix.
- *
- * Single source of truth for `validateDocs`, the grammar/language-data sync
- * check, and any namespace-aware editor feature.
- *
- * `Object.freeze` does not stop `Set.prototype.add`; read-only-ness is enforced
- * by the `ReadonlySet` type under `// @ts-check`, not at runtime.
- *
- * @type {ReadonlySet<string>}
+ * @typedef {{ name: string, required: boolean, description?: string, format?: string, output?: true }} DocParam
+ *   `output`: the operation sets it -- written `Name => $variable`.
  */
-const NAMESPACES = Object.freeze(
-  new Set([
-    // -- Built-in engine namespace (optional prefix for any unqualified name)
-    "Core",
-    // -- InedoCore extension's declared [ScriptNamespace] tokens
-    "Files",
-    "HTTP",
-    "Network",
-    "ProGet",
-    "UPack",
-    "Otter",
-    // -- Windows extension
-    "Windows",
-    "IIS",
-    "Firewall",
-    "DotNet",
-    // -- Scripting extension (assembly-level [ScriptNamespace("Scripting")])
-    "Scripting",
-    "PowerShell",
-    "Linux",
-    // -- Other first-party extensions
-    "Docker",
-    "Python",
-    "Pip",
-    "Git",
-  ])
-);
+
+const { NAMESPACES } = require("./namespaces");
 
 // ============================================================
 // OPERATION DOCS
@@ -197,9 +180,9 @@ Log-Error "Failed to connect to server";
   "Post-Http": {
     namespace: "HTTP",
     name: "Post-Http",
-    signature: 'Post-Http(Url: <text>, [Method: POST|PUT|PATCH], [ContentType: <text>], [TextData: <text>], [FormData: <%(key1: value1, ...)>], [LogRequestData: <true/false>], [LogResponseBody: <true/false>], [ResponseBody: <text>], [ErrorStatusCodes: <text>], [RequestHeaders: <%(key1: value1, ...)>], [MaxResponseLength: <integer>], [ProxyRequest: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [IgnoreSslErrors: <true/false>]);',
+    signature: "Post-Http(Url: <text>, [Method: POST|PUT|PATCH], [ContentType: <text>], [TextData: <text>], [FormData: <%(key1: value1, ...)>], [LogRequestData: <true/false>], [LogResponseBody: <true/false>], [ResponseBody: <text>], [ErrorStatusCodes: <text>], [RequestHeaders: <%(key1: value1, ...)>], [MaxResponseLength: <integer>], [ProxyRequest: <true/false>], [Credentials: <text>], [UserName: <text>], [Password: <text>], [IgnoreSslErrors: <true/false>]);",
     snippet: 'Post-Http(\n    Url: "${1:https://example.com}",\n    ${2:ContentType: "application/json",}\n    ${3:TextData: "${4:request body}"},\n    ${5:FormData: %(\n        ${6:key}: "${7:value}"\n    )},\n    ${8:LogResponseBody: true}\n);',
-    description: 'Executes an HTTP POST/PUT/PATCH request to a URL, typically used for RESTful operations.',
+    description: "Executes an HTTP POST/PUT/PATCH request to a URL, typically used for RESTful operations.",
     documentation: `
 **Required Argument:**
 - \`Url\` - The target URL (text)
@@ -259,7 +242,7 @@ Download-Http(
     Url: <text>,
     [LogResponseBody: <true/false>],
     [ErrorStatusCodes: <text>],
-    [ResponseBody: <text>],
+    [ResponseBody => <text>],
     [RequestHeaders: <%(key1: value1, ...)>],
     [MaxResponseLength: <integer>],
     [ProxyRequest: <true/false>],
@@ -308,7 +291,7 @@ Upload-Http(
     Url: <text>,
     [LogResponseBody: <true/false>],
     [ErrorStatusCodes: <text>],
-    [ResponseBody: <text>],
+    [ResponseBody => <text>],
     [RequestHeaders: <%(key1: value1, ...)>],
     [MaxResponseLength: <integer>],
     [ProxyRequest: <true/false>],
@@ -596,7 +579,7 @@ Ensure-HostsEntry(
 \`\`\`otterscript
 Acquire-Server(
     [Role: <text>],
-    [ServerName: <text>],
+    [ServerName => <text>],
     [Verbose: <true/false>]
 );
 \`\`\`
@@ -618,7 +601,7 @@ Get-Http(
     Url: <text>,
     [LogResponseBody: <true/false>],
     [ErrorStatusCodes: <text>],
-    [ResponseBody: <text>],
+    [ResponseBody => <text>],
     [RequestHeaders: <%(key1: value1, ...)>],
     [MaxResponseLength: <integer>],
     [ProxyRequest: <true/false>],
@@ -775,8 +758,8 @@ Query-Package(
     [UserName: <text>],
     [Password: <text>],
     [ApiKey: <text>],
-    [Exists: <true/false>],
-    [Metadata: <%(key1: value1, ...)>],
+    [Exists => <true/false>],
+    [Metadata => <%(key1: value1, ...)>],
     [FeedUrl: <text>]
 );
 \`\`\`
@@ -1112,7 +1095,7 @@ Applies full template transformation on a literal, a file, or a template asset.
 \`\`\`otterscript
 Apply-Template(
   [Asset: <text>],
-  [OutputVariable: <text>],
+  [OutputVariable => <text>],
   [OutputFile: <text>],
   [Literal: <text>],
   [InputFile: <text>],
@@ -1693,7 +1676,7 @@ If break is used outside of an iteration block, a warning will be written to the
   "foreach": {
     namespace: null,
     name: "foreach",
-    description: 'Iterates over items in a vector. Works in both OtterScript code and template tags.',
+    description: "Iterates over items in a vector. Works in both OtterScript code and template tags.",
     documentation: `
 Two forms:
 
@@ -2131,6 +2114,30 @@ const variableDocs = {
     description: "The display number of the current build.",
     documentation: PROGET_VAR_DOC
   },
+  "EventName": {
+    namespace: null,
+    name: "$EventName",
+    description: "The name of the event that triggered the notification.",
+    documentation: PROGET_VAR_DOC
+  },
+  "ProjectName": {
+    namespace: null,
+    name: "$ProjectName",
+    description: "The name of the project the build belongs to.",
+    documentation: PROGET_VAR_DOC + `
+Used by ProGet's default "issues detected in a build" notification:
+\`Issues detected in $ProjectName $BuildNumber\`.
+`
+  },
+  "ReleaseNumber": {
+    namespace: null,
+    name: "$ReleaseNumber",
+    description: "The release number of the project build in scope.",
+    documentation: PROGET_VAR_DOC + `
+In BuildMaster, \`$ReleaseNumber\` is the release number of the current
+release, or \`0.0.0\` when no release is in context.
+`
+  },
   "BuildProjectName": {
     namespace: null,
     name: "$BuildProjectName",
@@ -2321,7 +2328,7 @@ const scalarFunctionDocs = {
     namespace: null,
     name: "$ToJson",
     signature: "$ToJson(data)",
-    snippet: '\\$ToJson(${1:data})${0}',
+    snippet: "\\$ToJson(${1:data})${0}",
     description: "Converts an OtterScript value to JSON.",
     documentation: `
 **Parameters:**
@@ -2363,12 +2370,12 @@ $json = $ToJson(%(
   "HtmlEncode": {
     namespace: null,
     name: "$HtmlEncode",
-    signature: "$HtmlEncode(text)",
-    snippet: "\\$HtmlEncode(${1:text})",
+    signature: "$HtmlEncode(Text)",
+    snippet: "\\$HtmlEncode(${1:Text})",
     description: "Encodes a string for safe use in HTML.",
     documentation: `
 **Parameters:**
-- \`text\` - The string to HTML-encode
+- \`Text\` - The string to HTML-encode
 
 **Returns:** HTML-encoded string
 
@@ -2382,12 +2389,12 @@ $encoded = $HtmlEncode("<script>alert('xss')</script>");
   "UrlEncode": {
     namespace: null,
     name: "$UrlEncode",
-    signature: "$UrlEncode(text)",
-    snippet: "\\$UrlEncode(${1:text})",
+    signature: "$UrlEncode(Text)",
+    snippet: "\\$UrlEncode(${1:Text})",
     description: "Encodes a string for safe use in URLs.",
     documentation: `
 **Parameters:**
-- \`text\` - The string to URL-encode
+- \`Text\` - The string to URL-encode
 
 **Returns:** URL-encoded string
 
@@ -2400,14 +2407,14 @@ $url = "https://example.com/search?q=" + $UrlEncode($query);
   "PathCombine": {
     namespace: null,
     name: "$PathCombine",
-    signature: "$PathCombine(path1, path2, ...)",
-    snippet: "\\$PathCombine(${1:path1}, ${2:path2})",
+    signature: "$PathCombine(Path1, Path2, ...)",
+    snippet: "\\$PathCombine(${1:Path1}, ${2:Path2})",
     description: "Combines multiple path strings into a single path.",
     documentation: `
 Combines multiple path strings into a single path with the correct separators.
 
 **Parameters:**
-- \`path1, path2, ...\` - Path segments to combine
+- \`Path1, Path2, ...\` - Path segments to combine
 
 **Returns:** Combined path string
 
@@ -2421,12 +2428,12 @@ $fullPath = $PathCombine("C:\\Websites", "MyApp", "web.config");
   "Eval": {
     namespace: null,
     name: "$Eval",
-    signature: "$Eval(expression)",
-    snippet: "\\$Eval(${1:expression})",
+    signature: "$Eval(Text)",
+    snippet: "\\$Eval(${1:Text})",
     description: "Evaluates a string containing variable expressions.",
     documentation: `
 **Parameters:**
-- \`expression\` - String containing variable references to expand
+- \`Text\` - String containing variable references to expand
 
 **Returns:** Expanded string
 
@@ -2441,12 +2448,12 @@ $result = $Eval($template);  # Expands $name
   "ToLower": {
     namespace: null,
     name: "$ToLower",
-    signature: "$ToLower(text)",
-    snippet: "\\$ToLower(${1:text})",
+    signature: "$ToLower(Text)",
+    snippet: "\\$ToLower(${1:Text})",
     description: "Converts a string to lowercase characters.",
     documentation: `
 **Parameters:**
-- \`text\` - The string to convert to lowercase
+- \`Text\` - The string to convert to lowercase
 
 **Returns:** Lowercase string
 
@@ -2460,12 +2467,12 @@ $lower = $ToLower("Hello World");
   "ToUpper": {
     namespace: null,
     name: "$ToUpper",
-    signature: "$ToUpper(text)",
-    snippet: "\\$ToUpper(${1:text})",
+    signature: "$ToUpper(Text)",
+    snippet: "\\$ToUpper(${1:Text})",
     description: "Converts a string to uppercase characters.",
     documentation: `
 **Parameters:**
-- \`text\` - The string to convert to uppercase
+- \`Text\` - The string to convert to uppercase
 
 **Returns:** Uppercase string
 
@@ -2479,14 +2486,13 @@ $upper = $ToUpper("Hello World");
   "Trim": {
     namespace: null,
     name: "$Trim",
-    signature: "$Trim(text)",
-    snippet: "\\$Trim(${1:text})",
-    description: "Removes leading and trailing whitespace from a string.",
+    signature: "$Trim(Text, ...)",
+    snippet: "\\$Trim(${1:Text})",
+    description: "Returns a string with leading and trailing whitespace removed, or optionally a set of specified characters.",
     documentation: `
-Removes all leading and trailing whitespace characters from the specified string.
-
 **Parameters:**
-- \`text\` - The string to trim
+- \`Text\` - The input string.
+- \`...\` - (Optional) One or more characters to trim instead of whitespace.
 
 **Returns:** Trimmed string
 
@@ -2494,29 +2500,31 @@ Removes all leading and trailing whitespace characters from the specified string
 \`\`\`otterscript
 $trimmed = $Trim("  hello  ");
 # Result: "hello"
+$trimmed = $Trim("--hello--", "-");
+# Result: "hello"
 \`\`\`
 `,
   },
   "Substring": {
     namespace: null,
     name: "$Substring",
-    signature: "$Substring(text, startIndex, [length])",
-    snippet: "\\$Substring(${1:text}, ${2:startIndex}, ${3:length})",
+    signature: "$Substring(Text, Offset, [Length])",
+    snippet: "\\$Substring(${1:Text}, ${2:Offset}, ${3:Length})",
     description: "Extracts a substring from a string.",
     documentation: `
 Extracts a substring from the specified string starting at the given index.
 
 **Parameters:**
-- \`text\` - The source string
-- \`startIndex\` - The zero-based starting position
-- \`length\` - (Optional) The number of characters to extract. If omitted, the
+- \`Text\` - The source string
+- \`Offset\` - The zero-based starting position
+- \`Length\` - (Optional) The number of characters to extract. If omitted, the
   remainder of the string is used.
 
 **Returns:** Extracted substring
 
 **Notes:**
-- If \`startIndex\` is at or past the end of \`text\`, the result is \`""\`
-  rather than an error. A negative \`startIndex\` or \`length\` does throw.
+- If \`Offset\` is at or past the end of \`Text\`, the result is \`""\`
+  rather than an error. A negative \`Offset\` or \`Length\` does throw.
 
 **Example:**
 \`\`\`otterscript
@@ -2531,17 +2539,17 @@ $rest = $Substring("Hello World", 6);
   "Replace": {
     namespace: null,
     name: "$Replace",
-    signature: "$Replace(text, oldValue, newValue, [ignoreCase])",
-    snippet: "\\$Replace(${1:text}, ${2:oldValue}, ${3:newValue}, ${4|false,true|})",
+    signature: "$Replace(Text, Value, ReplaceWith, [IgnoreCase])",
+    snippet: "\\$Replace(${1:Text}, ${2:Value}, ${3:ReplaceWith}, ${4|false,true|})",
     description: "Replaces all occurrences of a substring within a string.",
     documentation: `
 Replaces all occurrences of a specified substring with another substring.
 
 **Parameters:**
-- \`text\` - The source string
-- \`oldValue\` - The substring to replace
-- \`newValue\` - The replacement substring
-- \`ignoreCase\` *(optional)* - When \`true\`, performs a case-insensitive comparison
+- \`Text\` - The source string
+- \`Value\` - The substring to replace
+- \`ReplaceWith\` - The replacement substring
+- \`IgnoreCase\` *(optional)* - When \`true\`, performs a case-insensitive comparison
 
 **Returns:** String with replacements
 
@@ -2555,15 +2563,15 @@ $result = $Replace("Hello World", "World", "Otter");
   "Join": {
     namespace: null,
     name: "$Join",
-    signature: "$Join(separator, vector)",
-    snippet: '\\$Join("${1:, }", @${2:vector})',
+    signature: "$Join(Separator, Values)",
+    snippet: '\\$Join("${1:, }", @${2:Values})',
     description: "Joins the elements of a vector into a single string.",
     documentation: `
 Concatenates all elements of a vector into a single string, separated by the specified separator.
 
 **Parameters:**
-- \`separator\` - The string to insert between each element
-- \`vector\` - The vector containing elements to join
+- \`Separator\` - The string to insert between each element
+- \`Values\` - The vector containing elements to join
 
 **Returns:** Joined string
 
@@ -2578,9 +2586,9 @@ $joined = $Join(", ", @("apple", "banana", "cherry"));
   "Date": {
     namespace: null,
     name: "$Date",
-    signature: "$Date([format])",
-    snippet: "\\$Date(${1:format})",
-    description: 'Returns the current date and time of the local timezone.',
+    signature: "$Date([Format])",
+    snippet: "\\$Date(${1:Format})",
+    description: "Returns the current date and time of the local timezone.",
     documentation: `
 Returns the current date and time of the local timezone in the specified .NET datetime format string, or ISO 8601 format (yyyy-MM-ddTHH:mm:ss) if no format is specified.
 
@@ -2608,9 +2616,9 @@ $sortable = $Date("s");
   "DateUtc": {
     namespace: null,
     name: "$DateUtc",
-    signature: "$DateUtc([format])",
-    snippet: "\\$DateUtc(${1:format})",
-    description: 'Returns the current UTC date and time.',
+    signature: "$DateUtc([Format])",
+    snippet: "\\$DateUtc(${1:Format})",
+    description: "Returns the current UTC date and time.",
     documentation: `
 Returns the current UTC date and time in the specified .NET datetime format string,
 or ISO 8601 format (yyyy-MM-ddTHH:mm:ss) if no format is specified.
@@ -2630,61 +2638,18 @@ $customUtc = $DateUtc("yyyy-MM-dd HH:mm:ss");
 \`\`\`
 `
   },
-  // Encoding Functions
-  "Base64Encode": {
-    namespace: null,
-    name: "$Base64Encode",
-    signature: "$Base64Encode(text)",
-    snippet: "\\$Base64Encode(${1:text})",
-    description: "Encodes a string to Base64 format.",
-    documentation: `
-Encodes the specified string to a Base64-encoded string.
-
-**Parameters:**
-- \`text\` - The string to encode
-
-**Returns:** Base64-encoded string
-
-**Example:**
-\`\`\`otterscript
-$encoded = $Base64Encode("Hello World");
-# Result: "SGVsbG8gV29ybGQ="
-\`\`\`
-`,
-  },
-  "Base64Decode": {
-    namespace: null,
-    name: "$Base64Decode",
-    signature: "$Base64Decode(base64Text)",
-    snippet: "\\$Base64Decode(${1:base64Text})",
-    description: "Decodes a Base64 string to plain text.",
-    documentation: `
-Decodes a Base64-encoded string back to its original plain text.
-
-**Parameters:**
-- \`base64Text\` - The Base64-encoded string to decode
-
-**Returns:** Decoded plain text string
-
-**Example:**
-\`\`\`otterscript
-$decoded = $Base64Decode("SGVsbG8gV29ybGQ=");
-# Result: "Hello World"
-\`\`\`
-`,
-  },
   // JSON Functions
   "FromJson": {
     namespace: null,
     name: "$FromJson",
-    signature: "$FromJson(jsonString)",
-    snippet: '\\$FromJson("${1:jsonString}");$0',
+    signature: "$FromJson(json)",
+    snippet: '\\$FromJson("${1:json}");$0',
     description: "Parses a JSON string into an OtterScript value.",
     documentation: `
 Parses a JSON string and converts it into an OtterScript map, vector, or scalar value.
 
 **Parameters:**
-- \`jsonString\` - The JSON string to parse
+- \`json\` - The JSON string to parse
 
 **Returns:** OtterScript value (map, vector, or scalar) — see the sigil note below
 
@@ -2711,14 +2676,14 @@ $name = %data[name];
   "FileExists": {
     namespace: null,
     name: "$FileExists",
-    signature: "$FileExists(filePath)",
-    snippet: '\\$FileExists("${1:filePath}");$0',
+    signature: "$FileExists(name)",
+    snippet: '\\$FileExists("${1:name}");$0',
     description: "Checks if a file exists on the server.",
     documentation: `
 Determines whether the specified file exists on the server in context.
 
 **Parameters:**
-- \`filePath\` - The full path to the file to check
+- \`name\` - The full path to the file to check
 
 **Returns:** \`true\` if the file exists, \`false\` otherwise
 
@@ -2733,14 +2698,14 @@ if $FileExists("C:\\config\\app.config") {
   "DirectoryExists": {
     namespace: null,
     name: "$DirectoryExists",
-    signature: "$DirectoryExists(directoryPath)",
-    snippet: '\\$DirectoryExists("${1:directoryPath}");$0',
+    signature: "$DirectoryExists(name)",
+    snippet: '\\$DirectoryExists("${1:name}");$0',
     description: "Checks if a directory exists on the server.",
     documentation: `
 Determines whether the specified directory exists on the server in context.
 
 **Parameters:**
-- \`directoryPath\` - The full path to the directory to check
+- \`name\` - The full path to the directory to check
 
 **Returns:** \`true\` if the directory exists, \`false\` otherwise
 
@@ -2892,24 +2857,24 @@ $result = $Floor(3.8);
   "Compare": {
     namespace: null,
     name: "$Compare",
-    signature: "$Compare(arg1, operator, arg2, [asNumber])",
+    signature: "$Compare(Arg1, Operator, Arg2, [AsNumber])",
     snippet: "\\$Compare(${1:value1}, ${2|<,>,<=,>=,=,!=|}, ${3:value2}${4:, true})",
     description: "Compares two scalar values and returns \"true\" or \"false\".",
     documentation: `
 Compares two scalar values using the specified operator.
 
 **Parameters:**
-- \`arg1\` - Left-hand value
-- \`operator\` - One of: \`<\`, \`>\`, \`<=\`, \`>=\`, \`=\`, \`!=\`
-- \`arg2\` - Right-hand value
-- \`asNumber\` - (Optional) \`true\`/\`false\`/omitted — see Behavior below
+- \`Arg1\` - Left-hand value
+- \`Operator\` - One of: \`<\`, \`>\`, \`<=\`, \`>=\`, \`=\`, \`!=\`
+- \`Arg2\` - Right-hand value
+- \`AsNumber\` - (Optional) \`true\`/\`false\`/omitted — see Behavior below
 
 **Behavior:**
 - Omitted (default): numeric comparison if both values parse as numbers,
   otherwise a case-sensitive string comparison
-- \`asNumber: true\`: always numeric — **throws** if either side does not
+- \`AsNumber: true\`: always numeric — **throws** if either side does not
   parse as a number, rather than falling back to a string comparison
-- \`asNumber: false\`: always a string comparison, even if both values look
+- \`AsNumber: false\`: always a string comparison, even if both values look
   numeric
 
 **Returns:**
@@ -2934,15 +2899,15 @@ squiggle is a known false positive; \`=\` is correct and required by
   "MatchesRegex": {
     namespace: null,
     name: "$MatchesRegex",
-    signature: "$MatchesRegex(text, pattern)",
-    snippet: "\\$MatchesRegex(${1:text}, \"${2:pattern}\")",
+    signature: "$MatchesRegex(Text, RegexPattern)",
+    snippet: "\\$MatchesRegex(${1:Text}, \"${2:RegexPattern}\")",
     description: "Checks if a string matches a regular expression pattern.",
     documentation: `
 Determines whether the specified string matches the given regular expression pattern.
 
 **Parameters:**
-- \`text\` - The string to test
-- \`pattern\` - The regular expression pattern to match
+- \`Text\` - The string to test
+- \`RegexPattern\` - The regular expression pattern to match
 
 **Returns:** \`true\` if the pattern matches, \`false\` otherwise
 
@@ -2957,16 +2922,16 @@ if $MatchesRegex($email, "^[\\w\\.]+@[\\w\\.]+\\.\\w+$") {
   "RegexReplace": {
     namespace: null,
     name: "$RegexReplace",
-    signature: "$RegexReplace(text, pattern, replacement)",
-    snippet: "\\$RegexReplace(${1:text}, \"${2:pattern}\", \"${3:replacement}\")",
+    signature: "$RegexReplace(Text, MatchExpression, ReplaceWith)",
+    snippet: "\\$RegexReplace(${1:Text}, \"${2:MatchExpression}\", \"${3:ReplaceWith}\")",
     description: "Replaces text matching a regular expression pattern.",
     documentation: `
 Replaces all occurrences of a regular expression pattern in a string with a replacement string.
 
 **Parameters:**
-- \`text\` - The source string
-- \`pattern\` - The regular expression pattern to match
-- \`replacement\` - The replacement text
+- \`Text\` - The source string
+- \`MatchExpression\` - The regular expression pattern to match
+- \`ReplaceWith\` - The replacement text
 
 **Returns:** String with replacements applied
 
@@ -3020,14 +2985,14 @@ if $EnvironmentName == "Production" {
   "ListCount": {
     namespace: null,
     name: "$ListCount",
-    signature: "$ListCount(vector)",
-    snippet: "\\$ListCount(${1:vector})",
+    signature: "$ListCount(List)",
+    snippet: "\\$ListCount(${1:List})",
     description: "Returns the number of items in a vector.",
     documentation: `
 Returns the number of elements in the specified vector.
 
 **Parameters:**
-- \`vector\` - The vector to count
+- \`List\` - The vector to count
 
 **Returns:** Integer count of items
 
@@ -3042,15 +3007,15 @@ $count = $ListCount($items);
   "ListItem": {
     namespace: null,
     name: "$ListItem",
-    signature: "$ListItem(vector, index)",
-    snippet: "\\$ListItem(${1:vector}, ${2:index})",
+    signature: "$ListItem(List, Index)",
+    snippet: "\\$ListItem(${1:List}, ${2:Index})",
     description: "Gets an item from a vector by index.",
     documentation: `
 Retrieves an element from a vector at the specified index (0-based).
 
 **Parameters:**
-- \`vector\` - The source vector
-- \`index\` - The zero-based index of the item to retrieve
+- \`List\` - The source vector
+- \`Index\` - The zero-based index of the item to retrieve
 
 **Returns:** The item at the specified index — see the sigil note below
 
@@ -3072,6 +3037,7 @@ $second = $ListItem(@items, 1);
   // ProGet Functions
   "EncodeBasicAuth": {
     namespace: null,
+    products: ["ProGet"],
     name: "$EncodeBasicAuth",
     signature: "$EncodeBasicAuth(userName, password)",
     snippet: "\\$EncodeBasicAuth(\"${1:userName}\", \"${2:password}\")",
@@ -3143,47 +3109,58 @@ Exec sometool.exe --host $host;
   },
   "PackageHash": {
     namespace: null,
+    products: ["ProGet", "BuildMaster"],
     name: "$PackageHash",
-    signature: "$PackageHash(packageName, [sourceName])",
-    snippet: "\\$PackageHash(\"${1:packageName}\")",
-    description: "Returns the hex-encoded SHA1 hash of a package's current version.",
+    signature: "$PackageHash([format], [algorithm])",
+    overloads: [{ product: "BuildMaster", signature: "$PackageHash(packageName, [sourceName])" }],
+    snippet: "\\$PackageHash",
+    description: "Returns the hash of a package.",
     documentation: `
-Gets the hex-encoded SHA1 hash of the version of \`packageName\` associated
-with the current build. There is no format/algorithm choice — the hash is
-always hex-encoded SHA1.
+The two products define this differently:
 
-**Parameters:**
-- \`packageName\` - The package name
-- \`sourceName\` - (Optional) The package source to look in
-
-**Returns:** Hex-encoded SHA1 hash as string
+- **ProGet** (notifier and webhook content): the hash of the package the event
+  is about. Used bare (\`$PackageHash\`) or with an optional format and
+  algorithm, \`$PackageHash(format, algorithm)\`; ProGet lists the accepted
+  values under Admin > Notifications & Webhooks > Variables & Expressions.
+- **BuildMaster**: the hex-encoded SHA1 hash of the version of \`packageName\`
+  associated with the current build, optionally looked up in \`sourceName\`.
 
 **Example:**
 \`\`\`otterscript
+# ProGet webhook body
+"hash": "$PackageHash"
+# BuildMaster
 $hash = $PackageHash("MyPackage");
 \`\`\`
 `
   },
   "PackageProperty": {
     namespace: null,
+    products: ["ProGet", "BuildMaster"],
     name: "$PackageProperty",
     signature: "$PackageProperty(name, [default])",
+    overloads: [{ product: "BuildMaster", signature: "$PackageProperty(packageName, packageProperty, [sourceName])" }],
     snippet: "\\$PackageProperty(\"${1:propertyName}\", \"${2:defaultValue}\")",
-    description: "Returns the value of any property of the package currently in scope.",
+    description: "Returns the value of a package property.",
     documentation: `
-Returns the value of any property of the package currently in scope or the default value. Note an error will occur if a default is not specified and the package does not have that property.
+The two products define this differently:
 
-**Parameters:**
-- \`name\` - The property name to retrieve
-- \`default\` - (Optional) Value to return if the property doesn't exist. Omitting
-  it is only safe when the property is guaranteed to be set — otherwise the call
-  throws rather than returning an empty value; see the note above.
+- **ProGet** (notifier and webhook content): the value of any property of the
+  package currently in scope, or \`default\`. An error occurs if no default is
+  given and the package doesn't have that property, so omit \`default\` only
+  when the property is guaranteed to be set.
+- **BuildMaster**: the value of \`packageProperty\` from the metadata of the
+  version of \`packageName\` associated with the current build, optionally
+  looked up in \`sourceName\`.
 
 **Returns:** Property value as string
 
 **Example:**
 \`\`\`otterscript
+# ProGet
 $description = $PackageProperty("myPropertyName", "No property defined");
+# BuildMaster
+$description = $PackageProperty("MyPackage", "description");
 \`\`\`
 `
   },
@@ -3210,7 +3187,7 @@ $name = $Coalesce($OverrideName, $DefaultName, "unnamed");
   "PadLeft": {
     namespace: null,
     name: "$PadLeft",
-    signature: "$PadLeft(text, length, [padCharacter])",
+    signature: "$PadLeft(Text, Length, [PadCharacter])",
     snippet: "\\$PadLeft(${1:Text}, ${2:Length})${0}",
     description: "Returns a new string that right-aligns the characters by padding them on the left with a specified character, for a specified total length.",
     documentation: `
@@ -3231,7 +3208,7 @@ $padded = $PadLeft("7", 3, "0");
   "PadRight": {
     namespace: null,
     name: "$PadRight",
-    signature: "$PadRight(text, length, [padCharacter])",
+    signature: "$PadRight(Text, Length, [PadCharacter])",
     snippet: "\\$PadRight(${1:Text}, ${2:Length})${0}",
     description: "Returns a new string that left-aligns the characters by padding them on the right with a specified character, for a specified total length.",
     documentation: `
@@ -3252,7 +3229,7 @@ $padded = $PadRight("Name", 10, ".");
   "TrimStart": {
     namespace: null,
     name: "$TrimStart",
-    signature: "$TrimStart(text, ...)",
+    signature: "$TrimStart(Text, ...)",
     snippet: "\\$TrimStart(${1:Text})${0}",
     description: "Returns a string with all leading whitespace characters removed, or optionally a set of specified characters.",
     documentation: `
@@ -3272,7 +3249,7 @@ $trimmed = $TrimStart("   hello");
   "TrimEnd": {
     namespace: null,
     name: "$TrimEnd",
-    signature: "$TrimEnd(text, ...)",
+    signature: "$TrimEnd(Text, ...)",
     snippet: "\\$TrimEnd(${1:Text})${0}",
     description: "Returns a string with all trailing whitespace characters removed, or optionally a set of specified characters.",
     documentation: `
@@ -3292,8 +3269,8 @@ $trimmed = $TrimEnd("hello   ");
   "IsVariableDefined": {
     namespace: null,
     name: "$IsVariableDefined",
-    signature: "$IsVariableDefined(variableName, [variableType])",
-    snippet: "\\$IsVariableDefined(\"${1:variableName}\")${0}",
+    signature: "$IsVariableDefined(VariableName, [VariableType])",
+    snippet: "\\$IsVariableDefined(\"${1:VariableName}\")${0}",
     description: "Returns true if the specified variable name is available in the current context; otherwise returns false.",
     documentation: `
 **Parameters:**
@@ -3314,8 +3291,8 @@ if $IsVariableDefined("OptionalSetting")
   "GetVariableValue": {
     namespace: null,
     name: "$GetVariableValue",
-    signature: "$GetVariableValue(variableName, [variableType])",
-    snippet: "\\$GetVariableValue(\"${1:variableName}\")${0}",
+    signature: "$GetVariableValue(VariableName, [VariableType])",
+    snippet: "\\$GetVariableValue(\"${1:VariableName}\")${0}",
     description: "Returns the value of a variable if it's defined in the current context; otherwise returns null.",
     documentation: `
 Unlike \`$IsVariableDefined\` (which only returns \`true\`/\`false\`), this
@@ -3324,8 +3301,8 @@ useful to avoid a separate existence check before reading an optional
 variable.
 
 **Parameters:**
-- \`variableName\` (required) - The name of the variable, without the \`$\`, \`@\`, or \`%\` sigil.
-- \`variableType\` - (Optional) Must be one of: \`any\`, \`scalar\`, \`vector\`, \`map\`.
+- \`VariableName\` (required) - The name of the variable, without the \`$\`, \`@\`, or \`%\` sigil.
+- \`VariableType\` - (Optional) Must be one of: \`any\`, \`scalar\`, \`vector\`, \`map\`.
 
 **Returns:** The variable's value, or \`null\` if not defined
 
@@ -3341,7 +3318,7 @@ if $value != null {
   "JSEncode": {
     namespace: null,
     name: "$JSEncode",
-    signature: "$JSEncode(text)",
+    signature: "$JSEncode(Text)",
     snippet: "\\$JSEncode(${1:Text})${0}",
     description: "Encodes a string for use in a JavaScript string literal.",
     documentation: `
@@ -3354,7 +3331,7 @@ if $value != null {
   "SHEval": {
     namespace: "Scripting",
     name: "$SHEval",
-    signature: "$SHEval(scriptText)",
+    signature: "$SHEval(ScriptText)",
     snippet: "\\$SHEval(${1:ScriptText})${0}",
     description: "Returns the output of a shell script.",
     documentation: `
@@ -3377,7 +3354,7 @@ Log-Information $NextYear;
   "ListIndexOf": {
     namespace: null,
     name: "$ListIndexOf",
-    signature: "$ListIndexOf(list, item)",
+    signature: "$ListIndexOf(List, Item)",
     snippet: "\\$ListIndexOf(${1:List}, ${2:Item})${0}",
     description: "Finds the index of an item in a list.",
     documentation: `
@@ -3391,7 +3368,7 @@ Log-Information $NextYear;
   "XmlEncode": {
     namespace: null,
     name: "$XmlEncode",
-    signature: "$XmlEncode(text)",
+    signature: "$XmlEncode(Text)",
     snippet: "\\$XmlEncode(${1:Text})${0}",
     description: "Encodes a string for use in an XML element.",
     documentation: `
@@ -3404,7 +3381,7 @@ Log-Information $NextYear;
   "NewLine": {
     namespace: null,
     name: "$NewLine",
-    signature: "$NewLine([windowsOrLinux])",
+    signature: "$NewLine([WindowsOrLinux])",
     snippet: "\\$NewLine(${1:WindowsOrLinux})${0}",
     description: "Returns the newline string for either the operating system of the current server in context, or specifically Windows or Linux.",
     documentation: `
@@ -3461,7 +3438,7 @@ if $IsSimulation() {
   "SpecialWindowsPath": {
     namespace: null,
     name: "$SpecialWindowsPath",
-    signature: "$SpecialWindowsPath(name)",
+    signature: "$SpecialWindowsPath(Name)",
     snippet: "\\$SpecialWindowsPath(${1:Name})${0}",
     description: "Returns the full path of a special directory on a Windows system.",
     documentation: `
@@ -3474,7 +3451,7 @@ if $IsSimulation() {
   "ResolvePath": {
     namespace: null,
     name: "$ResolvePath",
-    signature: "$ResolvePath(path)",
+    signature: "$ResolvePath(Path)",
     snippet: "\\$ResolvePath(${1:Path})${0}",
     description: "Provides an absolute path (terminated with a directory separator) based on a relative path and the current working directory.",
     documentation: `
@@ -3497,12 +3474,12 @@ $ResolvePath(~\\path)                      # -> {ExecutionDirectory}\\path
     namespace: null,
     name: "$FileContents",
     signature: "$FileContents(name, [maxLength])",
-    snippet: "\\$FileContents(${1:Name})${0}",
+    snippet: "\\$FileContents(${1:name})${0}",
     description: "Returns the contents of a file on the current server.",
     documentation: `
 **Parameters:**
-- \`Name\` (required) - The path of the file.
-- \`MaxLength\` - (Optional) The maximum length (in characters) of the file to read.
+- \`name\` (required) - The path of the file.
+- \`maxLength\` - (Optional) The maximum length (in characters) of the file to read.
 
 **Returns:** The file's text content.
 `
@@ -3510,7 +3487,7 @@ $ResolvePath(~\\path)                      # -> {ExecutionDirectory}\\path
   "EnvironmentVariable": {
     namespace: null,
     name: "$EnvironmentVariable",
-    signature: "$EnvironmentVariable(environmentVariableName)",
+    signature: "$EnvironmentVariable(EnvironmentVariableName)",
     snippet: "\\$EnvironmentVariable(${1:EnvironmentVariableName})${0}",
     description: "Returns the value of the specified environment variable on the current server.",
     documentation: `
@@ -3547,9 +3524,9 @@ const vectorFunctionDocs = {
   "Split": {
     namespace: null,
     name: "@Split",
-    signature: '@Split(text, separator, [count])',
-    snippet: "@Split(\"${1:text}\", \"${2:,}\"${3:, ${4:count}})",
-    description: 'Splits a string into substrings based on a specified separator.',
+    signature: "@Split(Text, Separator, [Count])",
+    snippet: "@Split(\"${1:Text}\", \"${2:,}\"${3:, ${4:Count}})",
+    description: "Splits a string into substrings based on a specified separator.",
     documentation: `
 **Parameters:**
 - \`Text\` - The string to split
@@ -3568,29 +3545,14 @@ const vectorFunctionDocs = {
 \`\`\`
 `
   },
-  // -- Sigil-polymorphic functions: the same function as the scalar entry, called
-  //    with `@` to get a vector back. Documentation is shared with the `$` entry
-  //    (which explains all sigil forms) so the two cannot drift apart.
-  "FromJson": {
-    ...scalarFunctionDocs.FromJson,
-    name: "@FromJson",
-    signature: "@FromJson(jsonString)",
-    snippet: "@FromJson(${1:jsonString})",
-    description: "Parses a JSON array string into an OtterScript vector.",
-  },
-  "ListItem": {
-    ...scalarFunctionDocs.ListItem,
-    name: "@ListItem",
-    signature: "@ListItem(vector, index)",
-    snippet: "@ListItem(${1:@vector}, ${2:index})",
-    description: "Gets an item that is itself a vector from a vector by index.",
-  },
+  // The `@` forms of functions that work with every sigil (`@FromJson`,
+  // `@ListItem`, ...) are derived from their `$` entry: see anySigilForms.
   "ListConcat": {
     namespace: null,
     name: "@ListConcat",
-    signature: '@ListConcat(list1, list2, ...)',
+    signature: "@ListConcat(list1, list2, ...)",
     snippet: "@ListConcat(${1:@list1}, ${2:@list2})",
-    description: 'Creates a list containing the contents of each list in sequence.',
+    description: "Creates a list containing the contents of each list in sequence.",
     documentation: `
 **Parameters:**
 - \`list1, list2, ...\` - Lists to concatenate
@@ -3607,14 +3569,14 @@ const vectorFunctionDocs = {
   "ListInsert": {
     namespace: null,
     name: "@ListInsert",
-    signature: '@ListInsert(list, item, [index])',
-    snippet: "@ListInsert(${1:@list}, \"${2:item}\", ${3:index})",
-    description: 'Inserts an item into a list, at a given position or at the end.',
+    signature: "@ListInsert(List, Item, [Index])",
+    snippet: "@ListInsert(${1:@list}, \"${2:Item}\", ${3:Index})",
+    description: "Inserts an item into a list, at a given position or at the end.",
     documentation: `
 **Parameters:**
-- \`list\` - The list to modify
-- \`item\` - The item to insert
-- \`index\` - (Optional) The zero-based position to insert the item. If
+- \`List\` - The list to modify
+- \`Item\` - The item to insert
+- \`Index\` - (Optional) The zero-based position to insert the item. If
   omitted, the item is appended to the end of the list.
 
 **Returns:** New list with item inserted
@@ -3633,13 +3595,13 @@ const vectorFunctionDocs = {
   "ListRemove": {
     namespace: null,
     name: "@ListRemove",
-    signature: '@ListRemove(list, index)',
-    snippet: "@ListRemove(${1:@list}, ${2:index})",
-    description: 'Removes an item from a list at the specified index.',
+    signature: "@ListRemove(List, Index)",
+    snippet: "@ListRemove(${1:@list}, ${2:Index})",
+    description: "Removes an item from a list at the specified index.",
     documentation: `
 **Parameters:**
-- \`list\` - The list to modify
-- \`index\` - The zero-based position to remove
+- \`List\` - The list to modify
+- \`Index\` - The zero-based position to remove
 
 **Returns:** New list with item removed
 
@@ -3654,14 +3616,14 @@ const vectorFunctionDocs = {
   "ListSet": {
     namespace: null,
     name: "@ListSet",
-    signature: '@ListSet(list, index, item)',
-    snippet: "@ListSet(${1:@list}, ${2:index}, \"${3:item}\")",
-    description: 'Updates the value at a given position in the list to a new value.',
+    signature: "@ListSet(List, Index, Item)",
+    snippet: "@ListSet(${1:@list}, ${2:Index}, \"${3:Item}\")",
+    description: "Updates the value at a given position in the list to a new value.",
     documentation: `
 **Parameters:**
-- \`list\` - The list to modify
-- \`index\` - The zero-based position to update
-- \`item\` - The new value
+- \`List\` - The list to modify
+- \`Index\` - The zero-based position to update
+- \`Item\` - The new value
 
 **Returns:** New list with updated item
 
@@ -3676,12 +3638,12 @@ const vectorFunctionDocs = {
   "MapKeys": {
     namespace: null,
     name: "@MapKeys",
-    signature: '@MapKeys(map)',
+    signature: "@MapKeys(Map)",
     snippet: "@MapKeys(${1:@map})",
-    description: 'Lists the keys of a map as a vector.',
+    description: "Lists the keys of a map as a vector.",
     documentation: `
 **Parameters:**
-- \`map\` - The map to extract keys from
+- \`Map\` - The map to extract keys from
 
 **Returns:** Vector of map keys
 
@@ -3696,13 +3658,13 @@ const vectorFunctionDocs = {
   "Range": {
     namespace: null,
     name: "@Range",
-    signature: '@Range(start, count)',
-    snippet: "@Range(${1:start}, ${2:count})",
-    description: 'Returns a range of integers starting from a specified value.',
+    signature: "@Range(Start, Count)",
+    snippet: "@Range(${1:Start}, ${2:Count})",
+    description: "Returns a range of integers starting from a specified value.",
     documentation: `
 **Parameters:**
-- \`start\` - The starting integer
-- \`count\` - The number of integers to generate
+- \`Start\` - The starting integer
+- \`Count\` - The number of integers to generate
 
 **Returns:** Vector of integers
 
@@ -3716,14 +3678,14 @@ const vectorFunctionDocs = {
   "RegexFind": {
     namespace: null,
     name: "@RegexFind",
-    signature: '@RegexFind(text, matchExpression, [matchGroup])',
-    snippet: "@RegexFind(${1:text}, ${2:matchExpression}${3:, ${4:matchGroup}})",
-    description: 'Finds all matches of a regular expression in a string, optionally returning only a matched group.',
+    signature: "@RegexFind(Text, MatchExpression, [MatchGroup])",
+    snippet: "@RegexFind(${1:Text}, ${2:MatchExpression}${3:, ${4:MatchGroup}})",
+    description: "Finds all matches of a regular expression in a string, optionally returning only a matched group.",
     documentation: `
 **Parameters:**
-- \`text\` - The string to search
-- \`matchExpression\` - The regular expression pattern
-- \`matchGroup\` - (Optional) Specific capture group to return
+- \`Text\` - The string to search
+- \`MatchExpression\` - The regular expression pattern
+- \`MatchGroup\` - (Optional) Specific capture group to return
 
 **Returns:** Vector of matches
 
@@ -3737,9 +3699,10 @@ const vectorFunctionDocs = {
   // Vector Variables (ProGet)
   "AffectedPackages": {
     namespace: null,
+    products: ["ProGet"],
     name: "@AffectedPackages",
-    signature: '@AffectedPackages',
-    description: 'Returns a list of packages affected by the vulnerability in the current scope.',
+    signature: "@AffectedPackages",
+    description: "Returns a list of packages affected by the vulnerability in the current scope.",
     documentation: `
 **Properties:**
 - \`Name\` - Package name (string)
@@ -3755,9 +3718,10 @@ const vectorFunctionDocs = {
   },
   "ApiKeys": {
     namespace: null,
+    products: ["ProGet"],
     name: "@ApiKeys",
-    signature: '@ApiKeys',
-    description: 'Returns a list of API Keys in the current scope.',
+    signature: "@ApiKeys",
+    description: "Returns a list of API Keys in the current scope.",
     documentation: `
 **Properties:**
 - \`Name\` - API Key name
@@ -3776,9 +3740,10 @@ foreach %key in @ApiKeys {
   },
   "BuildIssues": {
     namespace: null,
+    products: ["ProGet"],
     name: "@BuildIssues",
-    signature: '@BuildIssues([includeClosed])',
-    description: 'Returns a list of issues on the build in the current scope.',
+    signature: "@BuildIssues([includeClosed])",
+    description: "Returns a list of issues on the build in the current scope.",
     documentation: `
 **Parameters:**
 - \`includeClosed\` - (Optional) Include closed issues
@@ -3798,9 +3763,9 @@ foreach %issue in @BuildIssues(true) {
   "FilesOnDisk": {
     namespace: null,
     name: "@FilesOnDisk",
-    signature: '@FilesOnDisk(includes, [excludes], [directory])',
+    signature: "@FilesOnDisk(includes, [excludes], [directory])",
     snippet: "@FilesOnDisk(\"${1:*.txt}\")",
-    description: 'Returns a list of files matching the mask on the current server.',
+    description: "Returns a list of files matching the mask on the current server.",
     documentation: `
 **Parameters:**
 - \`includes\` (required) - File mask(s) to include
@@ -3819,9 +3784,9 @@ set @ProjectFiles = @FilesOnDisk(*.csproj);
   "AcquiredServers": {
     namespace: null,
     name: "@AcquiredServers",
-    signature: '@AcquiredServers(role)',
+    signature: "@AcquiredServers(Role)",
     snippet: "@AcquiredServers(\"${1:roleName}\")",
-    description: 'Returns the list of all servers acquired for a specified role.',
+    description: "Returns the list of all servers acquired for a specified role.",
     documentation: `
 **Parameters:**
 - \`Role\` (required) - The name of the server role.
@@ -3842,8 +3807,8 @@ foreach $server in @AcquiredServers("WebServer") {
   "AllEnvironments": {
     namespace: null,
     name: "@AllEnvironments",
-    signature: '@AllEnvironments',
-    description: 'Returns the list of all environments configured in the instance.',
+    signature: "@AllEnvironments",
+    description: "Returns the list of all environments configured in the instance.",
     documentation: `
 **Returns:** Vector of environment names
 
@@ -3860,8 +3825,8 @@ foreach $Env in @AllEnvironments
   "AllRoles": {
     namespace: null,
     name: "@AllRoles",
-    signature: '@AllRoles',
-    description: 'Returns the list of all server roles configured in the instance.',
+    signature: "@AllRoles",
+    description: "Returns the list of all server roles configured in the instance.",
     documentation: `
 **Returns:** Vector of role names
 
@@ -3878,9 +3843,9 @@ foreach $Role in @AllRoles
   "AllServers": {
     namespace: null,
     name: "@AllServers",
-    signature: '@AllServers([includeInactive])',
+    signature: "@AllServers([IncludeInactive])",
     snippet: "@AllServers",
-    description: 'Returns the list of all servers configured in the instance.',
+    description: "Returns the list of all servers configured in the instance.",
     documentation: `
 **Parameters:**
 - \`IncludeInactive\` - (Optional) If true, includes servers marked as inactive.
@@ -3900,9 +3865,9 @@ foreach $Server in @AllServers
   "ServersInEnvironment": {
     namespace: null,
     name: "@ServersInEnvironment",
-    signature: '@ServersInEnvironment([environmentName], [includeInactive])',
-    snippet: "@ServersInEnvironment(\"${1:environmentName}\")",
-    description: 'Returns the list of all the servers in the specified environment name.',
+    signature: "@ServersInEnvironment([EnvironmentName], [IncludeInactive])",
+    snippet: "@ServersInEnvironment(\"${1:EnvironmentName}\")",
+    description: "Returns the list of all the servers in the specified environment name.",
     documentation: `
 **Parameters:**
 - \`EnvironmentName\` - (Optional) The name of the environment. If not supplied, the current environment in context is used.
@@ -3921,9 +3886,9 @@ foreach $server in @ServersInEnvironment("Production") {
   "ServersInRole": {
     namespace: null,
     name: "@ServersInRole",
-    signature: '@ServersInRole([roleName], [includeInactive])',
-    snippet: "@ServersInRole(\"${1:roleName}\")",
-    description: 'Returns the list of servers in the specified role.',
+    signature: "@ServersInRole([RoleName], [IncludeInactive])",
+    snippet: "@ServersInRole(\"${1:RoleName}\")",
+    description: "Returns the list of servers in the specified role.",
     documentation: `
 **Parameters:**
 - \`RoleName\` - (Optional) The name of the server role. If not supplied, the current role in context is used.
@@ -3942,9 +3907,9 @@ foreach $server in @ServersInRole("WebServer") {
   "ServersInRoleAndEnvironment": {
     namespace: null,
     name: "@ServersInRoleAndEnvironment",
-    signature: '@ServersInRoleAndEnvironment([roleName], [environmentName], [includeInactive])',
-    snippet: "@ServersInRoleAndEnvironment(\"${1:roleName}\", \"${2:environmentName}\")",
-    description: 'Returns the list of all the servers in the specified role and environment name.',
+    signature: "@ServersInRoleAndEnvironment([RoleName], [EnvironmentName], [IncludeInactive])",
+    snippet: "@ServersInRoleAndEnvironment(\"${1:RoleName}\", \"${2:EnvironmentName}\")",
+    description: "Returns the list of all the servers in the specified role and environment name.",
     documentation: `
 **Parameters:**
 - \`RoleName\` - (Optional) The name of the server role. If not supplied, the current role in context is used.
@@ -3966,30 +3931,17 @@ foreach $server in @ServersInRoleAndEnvironment("WebServer", "Production") {
 // ============================================================
 // MAP FUNCTION DOCS
 // ============================================================
-// Functions callable with the `%` sigil to get a map back. These are the
-// sigil-polymorphic functions -- the same function as the `$` entry, whose
-// documentation (shared here so it cannot drift) explains every sigil form.
+// Functions callable with the `%` sigil to get a map back. All of them work
+// with every sigil, so their `%` forms are derived from the `$` entries or
+// come from Inedo's reference (see anySigilForms); none is written out here.
 
 /** @type {DocsTable} */
-const mapFunctionDocs = {
-  "FromJson": {
-    ...scalarFunctionDocs.FromJson,
-    name: "%FromJson",
-    signature: "%FromJson(jsonString)",
-    snippet: "%FromJson(${1:jsonString})",
-    description: "Parses a JSON object string into an OtterScript map.",
-  },
-  "ListItem": {
-    ...scalarFunctionDocs.ListItem,
-    name: "%ListItem",
-    signature: "%ListItem(vector, index)",
-    snippet: "%ListItem(${1:@vector}, ${2:index})",
-    description: "Gets an item that is itself a map from a vector by index.",
-  },
-};
+const mapFunctionDocs = {};
 
-// Freeze the exported tables so no consumer can add, remove, or replace an
+// Freeze the hand-written tables so nothing can add, remove, or replace an
 // entry at runtime. Shallow: the individual DocEntry objects are not frozen.
+// syntaxDocs and keywordDocs are exported as they are; the others are
+// merged with the generated reference below, and those tables frozen too.
 Object.freeze(operationDocs);
 Object.freeze(syntaxDocs);
 Object.freeze(keywordDocs);
@@ -3998,14 +3950,244 @@ Object.freeze(scalarFunctionDocs);
 Object.freeze(vectorFunctionDocs);
 Object.freeze(mapFunctionDocs);
 
-// Export
+// ============================================================
+// GENERATED REFERENCE
+// ============================================================
+// Every function and operation in Inedo's Otter and BuildMaster reference
+// (src/inedo-reference-data.js, generated by scripts/update-inedo-reference.js;
+// expanded by src/inedo-reference.js)
+// is added to the hand-written tables above, so none of them is flagged as
+// unknown and all get hover, completion and signature help.
+
+const reference = require("./inedo-reference").expandReference(require("./inedo-reference-data"));
+
+/**
+ * The hand-written entries plus the generated ones they don't cover. A
+ * hand-written entry always wins -- it has examples and ProGet's meaning --
+ * and names are compared case-insensitively, against every table listed in
+ * `alsoCovered` too (ProGet's `$PackageVersion` in variableDocs keeps the
+ * generated BuildMaster `$PackageVersion` out of scalarFunctionDocs).
+ *
+ * @param {DocsTable} handWritten
+ * @param {DocsTable} generated
+ * @param {DocsTable[]} [alsoCovered]
+ * @returns {DocsTable}
+ */
+function withReference(handWritten, generated, alsoCovered = []) {
+  const covered = new Set([handWritten, ...alsoCovered].flatMap((t) => Object.keys(t)).map((k) => k.toLowerCase()));
+  const handKeys = new Map(Object.keys(handWritten).map((k) => [k.toLowerCase(), k]));
+  /** @type {DocsTable} */
+  const merged = { ...handWritten };
+  for (const [key, doc] of Object.entries(generated)) {
+    const handKey = handKeys.get(key.toLowerCase());
+    if (!covered.has(key.toLowerCase())) merged[key] = doc;
+    // A hand-written entry takes the reference's product list and argument
+    // list when it has none of its own, and its `anySigil` mark.
+    else if (handKey) {
+      const own = merged[handKey];
+      merged[handKey] = {
+        ...own,
+        ...(!own.products && doc.products ? { products: doc.products } : {}),
+        ...(doc.anySigil ? { anySigil: doc.anySigil } : {}),
+        ...(!own.params && doc.params ? { params: doc.params } : {}),
+      };
+    }
+  }
+  return merged;
+}
+
+/**
+ * The `@` or `%` form of every hand-written `$` function that Inedo's
+ * reference marks `anySigil`: the same entry with the other sigil. Derived
+ * rather than written out, so the forms can't drift apart; the `$` entry's
+ * documentation explains what each sigil returns.
+ *
+ * @param {"@" | "%"} sigil
+ * @returns {DocsTable}
+ */
+function anySigilForms(sigil) {
+  const marked = new Set(Object.entries(reference.scalarFunctionDocs)
+    .filter(([, doc]) => doc.anySigil)
+    .map(([key]) => key.toLowerCase()));
+  /** @type {DocsTable} */
+  const forms = {};
+  for (const [key, doc] of Object.entries(scalarFunctionDocs)) {
+    if (!marked.has(key.toLowerCase())) continue;
+    forms[key] = {
+      ...doc,
+      name: doc.name.replace(/^\$/, sigil),
+      ...(doc.signature ? { signature: doc.signature.replace(/^\$/, sigil) } : {}),
+      // A `$` snippet starts with an escaped `\$`.
+      ...(doc.snippet ? { snippet: doc.snippet.replace(/^\\?\$/, sigil) } : {}),
+    };
+  }
+  return forms;
+}
+
+/**
+ * A table whose entries without a product list get `products` -- for
+ * variableDocs, which holds only ProGet's notifier variables.
+ *
+ * @param {DocsTable} table
+ * @param {string[]} products
+ * @returns {DocsTable}
+ */
+function forProducts(table, products) {
+  return Object.fromEntries(Object.entries(table).map(([key, doc]) => [key, doc.products ? doc : { ...doc, products }]));
+}
+
+/**
+ * An operation entry whose signature writes each output argument as it is
+ * called, `Name => <format>`, rather than `Name: <format>` as Inedo's
+ * reference prints it (`Get-Http(..., [ResponseBody => <text>], ...)`):
+ * hover and signature help then show the syntax to write.
+ *
+ * @param {DocEntry} doc
+ * @returns {DocEntry}
+ */
+function withOutputSyntax(doc) {
+  const outputs = doc.params?.filter((p) => p.output) ?? [];
+  if (!outputs.length || !doc.signature) return doc;
+  let signature = doc.signature;
+  for (const { name } of outputs) {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    signature = signature.replace(new RegExp(`([(,[]\\s*)${escaped}\\s*:(?!:)`), `$1${name} =>`);
+  }
+  return { ...doc, signature };
+}
+
+const mergedOperationDocs = withReference(operationDocs, reference.operationDocs);
+
+/**
+ * PowerShell operation names Inedo recommends against writing (BuildMaster
+ * 2022 notes): `PSCall1`, `PSEnsure1` and `PSVerify1` are the old
+ * operations; `PSCall2`, `PSEnsure2` and `PSVerify2` the current ones,
+ * whose aliases `PSCall`, `PSEnsure` and `PSVerify` are what to write. The
+ * `2` names aren't in Inedo's reference, so they get the alias's entry.
+ */
+const SUPERSEDED_OPERATIONS = Object.freeze({
+  PSCall1: "PSCall",
+  PSEnsure1: "PSEnsure",
+  PSVerify1: "PSVerify",
+  PSCall2: "PSCall",
+  PSEnsure2: "PSEnsure",
+  PSVerify2: "PSVerify",
+});
+for (const [name, by] of Object.entries(SUPERSEDED_OPERATIONS)) {
+  const current = mergedOperationDocs[by];
+  if (Object.hasOwn(mergedOperationDocs, name)) {
+    mergedOperationDocs[name] = {
+      ...mergedOperationDocs[name],
+      superseded: { by, note: `The older operation: write \`${by}\` for the current one.` },
+    };
+  } else {
+    mergedOperationDocs[name] = {
+      ...current,
+      name,
+      ...(current.signature ? { signature: current.signature.replace(by, name) } : {}),
+      ...(current.snippet ? { snippet: current.snippet.replace(by, name) } : {}),
+      superseded: { by, note: `\`${by}\` is the alias for \`${name}\`, and the name to write.` },
+    };
+  }
+}
+for (const [key, doc] of Object.entries(mergedOperationDocs)) mergedOperationDocs[key] = withOutputSyntax(doc);
+
+/**
+ * Same-named operations of other namespaces than the operationDocs entry
+ * (`DotNet::Build` beside `DevEnv::Build`, `Jira::Create-Issue` beside
+ * `GitHub::Create-Issue`), by name. All from Inedo's reference.
+ *
+ * @type {Readonly<Record<string, DocEntry[]>>}
+ */
+const operationVariants = Object.freeze(Object.fromEntries(
+  Object.entries(reference.operationVariants).map(([name, forms]) => [name, forms.map(withOutputSyntax)])
+));
+
+/**
+ * Every operation documented as `name`: the operationDocs entry, then its
+ * variants. Empty for an unknown name.
+ *
+ * @param {string} name
+ * @returns {DocEntry[]}
+ */
+function operationForms(name) {
+  if (!Object.hasOwn(mergedOperationDocs, name)) return [];
+  return [mergedOperationDocs[name], ...(Object.hasOwn(operationVariants, name) ? operationVariants[name] : [])];
+}
+
+/**
+ * The docs entry for operation `name` as it's called: with a namespace,
+ * that namespace's form (`DotNet::Build`; `Core` names a built-in, whose
+ * namespace is null) -- none when no form has it (`Kubernetes::Copy-Files`
+ * is some other extension's operation) -- else the operationDocs entry.
+ *
+ * @param {string} name
+ * @param {string | null} [namespace]
+ * @returns {DocEntry | undefined}
+ */
+function lookupOperation(name, namespace) {
+  const forms = operationForms(name);
+  if (!namespace) return forms[0];
+  const wanted = namespace.toLowerCase();
+  return forms.find((doc) => (doc.namespace ?? "Core").toLowerCase() === wanted);
+}
+
+/**
+ * The documented arguments of operation `name` as it's called. With a
+ * namespace, that form's (see {@link lookupOperation}); without one, every
+ * form's -- the call could mean any of them -- an argument required only
+ * when every form requires it. Undefined when nothing documents them.
+ *
+ * @param {string} name
+ * @param {string | null} [namespace]
+ * @returns {DocParam[] | undefined}
+ */
+function operationArguments(name, namespace) {
+  const forms = namespace ? [lookupOperation(name, namespace)].filter((doc) => doc !== undefined) : operationForms(name);
+  if (forms.length <= 1) return forms[0]?.params;
+  /** @type {Map<string, DocParam>} */
+  const merged = new Map();
+  for (const param of forms.flatMap((doc) => doc.params ?? [])) {
+    const key = param.name.toLowerCase();
+    if (merged.has(key)) continue;
+    const required = forms.every((doc) => doc.params?.some((p) => p.name.toLowerCase() === key && p.required));
+    merged.set(key, { ...param, required });
+  }
+  return merged.size ? [...merged.values()] : undefined;
+}
+
+// The exported tables, frozen like the hand-written ones (shallowly).
+Object.freeze(mergedOperationDocs);
+const exportedVariableDocs = Object.freeze(forProducts(variableDocs, ["ProGet"]));
+const exportedScalarFunctionDocs = Object.freeze(withReference(scalarFunctionDocs, reference.scalarFunctionDocs, [variableDocs]));
+const exportedVectorFunctionDocs = Object.freeze(withReference({ ...anySigilForms("@"), ...vectorFunctionDocs }, reference.vectorFunctionDocs));
+const exportedMapFunctionDocs = Object.freeze(withReference({ ...anySigilForms("%"), ...mapFunctionDocs }, reference.mapFunctionDocs));
+
+/**
+ * The function table for each call sigil: `$Name(` is looked up in
+ * scalarFunctionDocs, `@Name(` in vectorFunctionDocs, `%Name(` in
+ * mapFunctionDocs.
+ *
+ * @type {Readonly<Record<"$" | "@" | "%", DocsTable>>}
+ */
+const FUNCTION_TABLES = Object.freeze({
+  "$": exportedScalarFunctionDocs,
+  "@": exportedVectorFunctionDocs,
+  "%": exportedMapFunctionDocs,
+});
+
 module.exports = {
   NAMESPACES,
-  operationDocs,
+  operationDocs: mergedOperationDocs,
+  operationVariants,
+  operationForms,
+  lookupOperation,
+  operationArguments,
   syntaxDocs,
   keywordDocs,
-  variableDocs,
-  scalarFunctionDocs,
-  vectorFunctionDocs,
-  mapFunctionDocs
+  variableDocs: exportedVariableDocs,
+  scalarFunctionDocs: exportedScalarFunctionDocs,
+  vectorFunctionDocs: exportedVectorFunctionDocs,
+  mapFunctionDocs: exportedMapFunctionDocs,
+  FUNCTION_TABLES,
 };

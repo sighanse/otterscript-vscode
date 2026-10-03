@@ -6,18 +6,93 @@
  */
 
 const vscode = require("vscode");
-const { keywordDocs, mapFunctionDocs, operationDocs, scalarFunctionDocs, syntaxDocs, variableDocs, vectorFunctionDocs } = require("../language-data");
-const { buildHoverMarkdown, isInStringOrCommentDoc, lookupOwn } = require("../helpers");
+const { keywordDocs, lookupOperation, mapFunctionDocs, operationForms, scalarFunctionDocs, syntaxDocs, variableDocs, vectorFunctionDocs } = require("../language-data");
+const { buildArgumentHoverMarkdown, buildHoverMarkdown, lookupOwn } = require("../helpers");
+const { findCallArguments, getMaskedTextBefore, getModuleNameAt, getModuleParameters, isInStringOrCommentDoc, resolveModule } = require("../document-index");
+const { findOperationArgumentContext } = require("../scanner");
+
+/**
+ * The code before a word (strings and comments masked) when the word is where
+ * a statement starts, so it can be an operation: at the start of the line,
+ * or after `;`, `}`, a block's `{` (not a braced variable's `${`) or a
+ * template tag's `<%`. The rule the `unknown-operation` diagnostic uses.
+ */
+const OPERATION_POSITION_REGEX = /(?:^|[;}]|<%|(?<![$@%])\{)\s*$/;
+
+/**
+ * Hover for an argument name of an operation or module call -- a name
+ * followed by `:` (not `::`) or, for an output, `=>`, where an argument
+ * starts -- or null.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Position} position
+ * @param {import("../document-index").ListWorkspaceModules} listWorkspaceModules
+ * @returns {Promise<vscode.Hover | null>}
+ */
+async function hoverArgument(document, position, listWorkspaceModules) {
+  const range = document.getWordRangeAtPosition(position, /[A-Za-z][\w-]*/);
+  if (!range || !/^\s*(?::(?!:)|=>)/.test(document.lineAt(range.end.line).text.slice(range.end.character))) return null;
+  const context = findOperationArgumentContext(getMaskedTextBefore(document, range.start));
+  if (!context || context.typed) return null;
+  const called = await findCallArguments(document, context, listWorkspaceModules);
+  const name = document.getText(range).toLowerCase();
+  const param = called?.params.find((p) => p.name.toLowerCase() === name);
+  return called && param ? new vscode.Hover(buildArgumentHoverMarkdown(called.callee, param), range) : null;
+}
+
+/**
+ * Hover for the module name in a `call`: the module's declaration line and
+ * the `#` comment lines right above it -- from this file, or else from the
+ * one workspace file that declares it -- or null.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Position} position
+ * @param {import("../document-index").ListWorkspaceModules} listWorkspaceModules
+ * @returns {Promise<vscode.Hover | null>}
+ */
+async function hoverModuleCall(document, position, listWorkspaceModules) {
+  const moduleAt = getModuleNameAt(document, position);
+  if (!moduleAt || moduleAt.isDeclaration) return null;
+
+  const resolved = await resolveModule(document, moduleAt.name, listWorkspaceModules);
+  if (!resolved) return null;
+  const { document: home, range: declaration } = resolved;
+
+  // The declaration (its parameters spelled out, whatever lines they span),
+  // and the comment block right above it.
+  const params = getModuleParameters(home, declaration);
+  const header = params.length
+    ? `module ${moduleAt.name}<${params.map((param) => [
+      param.direction === "in" ? "" : `${param.direction} `,
+      param.sigil,
+      param.name.includes(" ") ? `{${param.name}}` : param.name,
+      param.optional && param.direction !== "out" ? " = …" : "",
+    ].join("")).join(", ")}>`
+    : home.lineAt(declaration.start.line).text.replace(/\{.*$/, "").trim();
+  const comment = [];
+  for (let line = declaration.start.line - 1; line >= 0; line--) {
+    const match = /^\s*#\s?(.*)$/.exec(home.lineAt(line).text);
+    if (!match) break;
+    comment.unshift(match[1]);
+  }
+
+  const md = new vscode.MarkdownString();
+  md.appendCodeblock(header, "otterscript");
+  if (comment.length) md.appendMarkdown(`${comment.join("  \n")}\n\n`);
+  if (home !== document) md.appendMarkdown(`Declared in \`${vscode.workspace.asRelativePath(home.uri)}\``);
+  return new vscode.Hover(md, moduleAt.range);
+}
 
 /**
  * Registers the hover provider.
  *
  * @param {import("../helpers").Settings} settings - Live settings, updated in
  *   place by the settings listener in extension.js
- * @param {RegExp} operationRegex - Matches a known operation name
+ * @param {import("../document-index").ListWorkspaceModules} listWorkspaceModules -
+ *   Every module declared in the workspace (workspace-symbols.js)
  * @returns {vscode.Disposable[]}
  */
-function registerHover(settings, operationRegex) {
+function registerHover(settings, listWorkspaceModules) {
   // ============================================================
   // HOVER PROVIDER
   // ============================================================
@@ -29,7 +104,7 @@ function registerHover(settings, operationRegex) {
   const hoverProvider = vscode.languages.registerHoverProvider(
     "otterscript",
     {
-      provideHover(document, position) {
+      async provideHover(document, position) {
         // -- Check if hover is enabled in settings
         if (!settings.hoverEnabled) {
           return null;
@@ -46,7 +121,7 @@ function registerHover(settings, operationRegex) {
           const end = start + regionMatch[2].length;
           if (position.character >= start && position.character <= end) {
             const doc = regionMatch[2].toLowerCase() === "#region" ? syntaxDocs.regionStart : syntaxDocs.regionEnd;
-            return new vscode.Hover(buildHoverMarkdown(doc), new vscode.Range(position.line, start, position.line, end));
+            return new vscode.Hover(buildHoverMarkdown(doc, settings.product), new vscode.Range(position.line, start, position.line, end));
           }
         }
 
@@ -55,19 +130,28 @@ function registerHover(settings, operationRegex) {
           return null;
         }
 
+        // -- An argument name in an operation call (`To` in `Copy-Files(To: $x)`)
+        const argumentHover = await hoverArgument(document, position, listWorkspaceModules);
+        if (argumentHover) return argumentHover;
+
+        // -- A module name in a `call`: the module's declaration. A module name
+        // is never anything else, so nothing further is tried: an unresolved
+        // `call Build` or a `module Build` mustn't show the `Build` operation.
+        if (getModuleNameAt(document, position)) return hoverModuleCall(document, position, listWorkspaceModules);
+
         // -- Template tags (<% and %>)
         // OtterScript uses ASP-style template tags for embedding code
 
         const templateRange = document.getWordRangeAtPosition(position, /<%|%>/);
         if (templateRange) {
           const text = document.getText(templateRange);
-          if (text === '<%') {
+          if (text === "<%") {
             return new vscode.Hover(
-              buildHoverMarkdown(syntaxDocs.templateOpen), templateRange);
+              buildHoverMarkdown(syntaxDocs.templateOpen, settings.product), templateRange);
           }
-          if (text === '%>') {
+          if (text === "%>") {
             return new vscode.Hover(
-              buildHoverMarkdown(syntaxDocs.templateClose), templateRange);
+              buildHoverMarkdown(syntaxDocs.templateClose, settings.product), templateRange);
           }
         }
 
@@ -79,20 +163,21 @@ function registerHover(settings, operationRegex) {
 
         const exprRange = document.getWordRangeAtPosition(position, /%\(|@\(|\$\(/);
         if (exprRange) {
-            const text = document.getText(exprRange);
-            if (text === '%(') {
-              return new vscode.Hover(
-                buildHoverMarkdown(syntaxDocs.mapExpr), exprRange);
-            }
-            if (text === '@(') {
-              return new vscode.Hover(
-                buildHoverMarkdown(syntaxDocs.vectorExpr), exprRange);
-            }
-            if (text === '$(') {
-              return new vscode.Hover(
-                buildHoverMarkdown(syntaxDocs.nestedEval), exprRange);
-            }
+          const text = document.getText(exprRange);
+          if (text === "%(") {
+            return new vscode.Hover(
+              buildHoverMarkdown(syntaxDocs.mapExpr, settings.product), exprRange);
+          }
+          if (text === "@(") {
+            return new vscode.Hover(
+              buildHoverMarkdown(syntaxDocs.vectorExpr, settings.product), exprRange);
+          }
+          if (text === "$(") {
+            return new vscode.Hover(
+              buildHoverMarkdown(syntaxDocs.nestedEval, settings.product), exprRange);
+          }
         }
+
         // -- Keywords (if, foreach, with, set, etc.)
         // Control flow and language keywords.
 
@@ -113,7 +198,7 @@ function registerHover(settings, operationRegex) {
 
           // -- Check if it's a known keyword
           const doc = lookupOwn(keywordDocs, word);
-          if (doc) return new vscode.Hover(buildHoverMarkdown(doc), wordRange);
+          if (doc) return new vscode.Hover(buildHoverMarkdown(doc, settings.product), wordRange);
         }
 
         // -- Swim-string delimiters (Fish Sentinels)
@@ -127,30 +212,37 @@ function registerHover(settings, operationRegex) {
 
         if (swimRange) {
           return new vscode.Hover(
-            buildHoverMarkdown(syntaxDocs.swimString), swimRange);
+            buildHoverMarkdown(syntaxDocs.swimString, settings.product), swimRange);
         }
 
-        // -- Operations (Log-Information, Log-Warning, Log-Error, etc.)
-        // Built-in operations. Distinguished by hyphenated names.
-        const operationRange = document.getWordRangeAtPosition(
-          position,
-          operationRegex
-        );
-
-        if (operationRange) {
-          const opName = document.getText(operationRange);
-          const doc = lookupOwn(operationDocs, opName);
-
-          // -- No documentation found
-          if (!doc) return null;
-
-          // -- Make hover
-          return new vscode.Hover(buildHoverMarkdown(doc), operationRange);
+        // -- Operations (Log-Information, Copy-Files, PSCall, ...): a documented
+        // name where a statement starts (see OPERATION_POSITION_REGEX), so
+        // not an argument such as `Build` in `Log-Information Build;`. A
+        // `Namespace::` before it picks between same-named operations
+        // (`DotNet::Build`); without one, the others are listed.
+        const operationRange = document.getWordRangeAtPosition(position, /[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*/);
+        const lineBefore = operationRange ? getMaskedTextBefore(document, operationRange.start, 0) : "";
+        const namespace = /([A-Za-z][A-Za-z0-9]*)::$/.exec(lineBefore)?.[1];
+        const statementBefore = namespace ? lineBefore.slice(0, -(namespace.length + 2)) : lineBefore;
+        if (operationRange && OPERATION_POSITION_REGEX.test(statementBefore)) {
+          const name = document.getText(operationRange);
+          const doc = lookupOperation(name, namespace);
+          if (doc) {
+            const markdown = buildHoverMarkdown(doc, settings.product);
+            const others = namespace ? [] : operationForms(name).filter((form) => form !== doc);
+            if (others.length) {
+              markdown.appendMarkdown(`\n\n---\n\nAlso ${others
+                .map((form) => `\`${form.namespace ?? "Core"}::${form.name}\`${form.products ? ` (${form.products.join(", ")})` : ""}`)
+                .join(", ")}: write the namespace to pick one.`);
+            }
+            return new vscode.Hover(markdown, operationRange);
+          }
         }
 
         // -- Symbols ($function, @vector, %map function, $variable)
         // Most general case - matches any $, @, or % prefixed identifier
-        // Checks scalar/vector/map functions and variables
+        // Checks scalar/vector/map functions and the documented runtime
+        // variables; the file's own variables have no docs, so no hover.
         // Must be LAST because it matches many things
         const symbolRange = document.getWordRangeAtPosition(
           position,
@@ -180,7 +272,7 @@ function registerHover(settings, operationRegex) {
         if (!doc) return null;
 
         // -- Make hover
-        return new vscode.Hover(buildHoverMarkdown(doc), symbolRange);
+        return new vscode.Hover(buildHoverMarkdown(doc, settings.product), symbolRange);
       }
     }
   );

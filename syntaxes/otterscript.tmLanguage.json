@@ -145,15 +145,15 @@
         },
         {
           "name": "support.function.variable.otterscript",
-          "match": "\\$(ToJson|FromJson|HtmlEncode|UrlEncode|Base64Encode|Base64Decode|ListCount|ListItem|PathCombine|Eval|Date|DateUtc|Trim|ToLower|ToUpper|Substring|Replace|Join|MatchesRegex|RegexReplace|Expr|Increment|Decrement|Abs|Ceiling|Floor|Compare|FileExists|DirectoryExists|ServerName|EnvironmentName|Coalesce|PadLeft|PadRight|TrimStart|TrimEnd|IsVariableDefined|GetVariableValue|JSEncode|SHEval|ListIndexOf|XmlEncode|NewLine|SpecialWindowsPath|ResolvePath|FileContents|EnvironmentVariable|EncodeBasicAuth|SecureCredentialProperty|SecureResourceProperty|PackageHash|PackageProperty|IsSimulation)\\("
+          "match": "\\$(ConfigurationFileVersion|DockerRepositoryResource|SecureCredentialProperty|ApplicationDescription|CompareReleaseSequence|IncrementReleaseNumber|SecureResourceProperty|ApplicationGitLibrary|ConfigurationFileText|PreviousReleaseNumber|EnvironmentVariable|SpecialWindowsPath|ApplicationExists|IsVariableDefined|PromotionComments|ReleaseNumberPart|DockerRepository|GetVariableValue|ContainerDigest|DirectoryExists|EncodeBasicAuth|EnvironmentName|PackageProperty|ReleaseVariable|BuildMasterUrl|CIProjectScope|BuildMasterId|BuildVariable|CIBuildNumber|PullRequestId|ArtifactPath|ContainerTag|FileContents|IsSimulation|MatchesRegex|PSCredential|RegexReplace|ListIndexOf|PackageHash|PathCombine|ReleaseName|ResolvePath|FileExists|HtmlEncode|Repository|ServerName|CIProject|Decrement|DockerTag|Increment|ListCount|MapRemove|Substring|TrimStart|UrlEncode|XmlEncode|Coalesce|FromJson|JqlValue|JSEncode|ListItem|PadRight|Ceiling|CIBuild|Compare|DateUtc|MapItem|NewLine|PadLeft|Replace|ToLower|ToUpper|TrimEnd|Branch|Commit|MapAdd|MapSet|PSEval|SHEval|ToJson|Floor|Date|Eval|Expr|Join|Trim|Abs)\\("
         },
         {
         "name": "support.function.vector.otterscript",
-        "match": "@(Split|FromJson|ListItem|ListConcat|ListInsert|ListRemove|ListSet|MapKeys|Range|RegexFind|BuildIssues|FilesOnDisk|AcquiredServers|AllServers|ServersInEnvironment|ServersInRole|ServersInRoleAndEnvironment)\\("
+        "match": "@(DatabaseConnectionsInEnvironment|ServersInRoleAndEnvironment|ConfigurationFileInstances|ReleasesInApplication|ServersInEnvironment|ApplicationsInGroup|ConfigurationFiles|ContainersInBuild|ArtifactsInBuild|GetVariableValue|AcquiredServers|BuildsInRelease|PackagesInBuild|ReleaseVariable|BuildVariable|ServersInRole|BuildIssues|FilesOnDisk|AllServers|ListConcat|ListInsert|ListRemove|MapRemove|RegexFind|FromJson|ListItem|ListSet|MapItem|MapKeys|MapAdd|MapSet|PSEval|Range|Split|Eval)\\("
         },
         {
         "name": "support.function.map.otterscript",
-        "match": "%(FromJson|ListItem)\\("
+        "match": "%(GetVariableValue|ReleaseVariable|BuildVariable|MapRemove|FromJson|ListItem|MapItem|MapAdd|MapSet|PSEval|Eval)\\("
         },
         {
           "name": "constant.language.otterscript",
@@ -161,7 +161,7 @@
         },
         {
           "name": "keyword.other.operation.otterscript",
-          "match": "\\b(Log-Debug|Log-Information|Log-Warning|Log-Error|Post-Http|Download-Http|Upload-Http|Get-Http|Execute-PowerShell|Ensure-Service|Ensure-Directory|Ensure-Server|Ensure-Asset|Ensure-HostsEntry|Ensure-PsModule|Ensure-Package|Ensure-File|Acquire-Server|Concatenate-Files|Create-ZipFile|Create-Directory|Create-File|Rename-File|Transfer-Files|Sign-Exe|Collect-RpmPackages|Sleep|Restart-Server|Get-Asset|Release-Server|Apply-Template|Install-Package|Push-PackageFile|Query-Package|Copy-Files|Delete-Files|Set-Variable|Exec)\\b"
+          "match": "\\b(Collect-InstalledPackages|Execute-DatabaseStatement|Set-ConfigurationVariable|Ensure-RegistryKeyValue|Ensure-VirtualDirectory|Execute-DatabaseScripts|Perform-ManualOperation|Collect-DebianPackages|Ensure-NetFirewallRule|Execute-ChangeScripts|Generate-ReleaseNotes|Write-AssemblyVersion|Archive-ProjectBuild|Promote-ProjectBuild|Upload-ReleaseAssets|Collect-RpmPackages|Create-IssueComment|Ensure-PsRepository|Set-ReleaseVariable|WaitFor-Deployments|Backup-Application|Collect-Containers|Collect-DscModules|Create-PullRequest|Create-ReleaseNote|Ensure-Application|Ensure-DscResource|Ensure-SiteBinding|Execute-PowerShell|Set-FileAttributes|Set-ProjectVersion|Collect-PsModules|Concatenate-Files|Deploy-ConfigFile|Ensure-AppSetting|Ensure-HostsEntry|Get-RegistryValue|Merge-PullRequest|Set-BuildVariable|Transition-Issues|Create-Directory|Ensure-Directory|Ensure-Milestone|Get-Dependencies|Push-PackageFile|Restore-Database|Restore-Packages|Set-CommitStatus|Transform-Config|Backup-Database|Create-Artifact|Deploy-Artifact|Ensure-Metadata|Ensure-PsModule|Extract-ZipFile|Install-Package|Log-Information|PSEnsureScripts|Recycle-AppPool|Remediate-Drift|Set-BuildNumber|Acquire-Server|Apply-Template|Attach-Package|Create-Package|Create-Release|Create-ZipFile|Download-Asset|Ensure-AppPool|Ensure-Package|Ensure-Release|Ensure-Service|Execute-VSTest|Release-Server|Restart-Server|Transfer-Files|Build-Project|Checkout-Code|Download-Http|Ensure-Server|Query-Package|Start-AppPool|Start-Service|Upload-Assets|Create-Build|Create-Issue|Delete-Files|Deploy-Build|Ensure-Asset|Push-Package|Reject-Build|Replace-Text|Set-Variable|Stop-AppPool|Stop-Service|Close-Issue|Create-File|Ensure-File|Ensure-Site|Log-Warning|Rename-File|Upload-Http|Copy-Files|Ensure-Tag|Send-Email|Start-Site|Get-Asset|Log-Debug|Log-Error|Post-Http|PSEnsure1|PSEnsure2|Stop-Site|Get-Http|PSEnsure|Sign-Exe|PSCall1|PSCall2|OSCall|OSExec|PSCall|PSDsc|Sleep|Exec)\\b"
         }
       ]
     },
@@ -173,7 +173,7 @@
         },
         {
           "name": "variable.other.readwrite.otterscript.proget",
-          "match": "\\$(BuildId|BuildNumber|BuildProjectName|BuildReleaseNumber|FeedId|FeedName|FeedType|NotifierId|NotifierName|PackageComplianceDetails|PackageComplianceResult|PackageEvent|PackageGroup|PackageId|PackageName|PackageSize|PackageVersion|UserName|VulnerabilityId|VulnerabilityScore|VulnerabilitySeverity|VulnerabilitySummary|WebBaseUrl|WorkingDirectory)\\b"
+          "match": "\\$(BuildId|BuildNumber|EventName|ProjectName|ReleaseNumber|BuildProjectName|BuildReleaseNumber|FeedId|FeedName|FeedType|NotifierId|NotifierName|PackageComplianceDetails|PackageComplianceResult|PackageEvent|PackageGroup|PackageId|PackageName|PackageSize|PackageVersion|UserName|VulnerabilityId|VulnerabilityScore|VulnerabilitySeverity|VulnerabilitySummary|WebBaseUrl|WorkingDirectory)\\b"
         },
         {
           "name": "support.function.otterscript.proget",

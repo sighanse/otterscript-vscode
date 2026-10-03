@@ -19,8 +19,8 @@
 
 "use strict";
 
-const fs = require("fs");
-const path = require("path");
+const fs = require("node:fs");
+const path = require("node:path");
 
 /** The newest published schema (the adaptivecards.microsoft.com one stops at 1.5). */
 const SCHEMA_URL = "https://raw.githubusercontent.com/microsoft/AdaptiveCards/main/schemas/1.6.0/adaptive-card.json";
@@ -324,7 +324,7 @@ module.exports = {
  * @returns {Promise<void>}
  */
 async function fetchSchema() {
-  const response = await fetch(SCHEMA_URL);
+  const response = await fetch(SCHEMA_URL, { signal: AbortSignal.timeout(60_000) });
   if (!response.ok) throw new Error(`GET ${SCHEMA_URL}: ${response.status} ${response.statusText}`);
   const text = await response.text();
   JSON.parse(text); // fail before overwriting the snapshot with something broken

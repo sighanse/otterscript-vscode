@@ -14,10 +14,12 @@ const assert = require("node:assert/strict");
 const { makeDocument } = require("./fake-document");
 const {
   findAdaptiveCardDiagnostics,
+  findCardCompletions,
   createCardVersionFix,
   createContentTypeFix,
   createInvalidValueFix,
   createTemplatingKeywordFix,
+  createToggleTargetFix,
 } = require("../../src/adaptivecard.js");
 
 /**
@@ -63,16 +65,16 @@ describe("findAdaptiveCardDiagnostics — card detection", () => {
 
   it("does not flag a 'type' field outside the Adaptive Card object (e.g. a Teams envelope)", () => {
     const src = [
-      '{',
+      "{",
       '  "type": "message",',
       '  "attachments": [',
       '    { "contentType": "application/vnd.microsoft.card.adaptive", "content": {',
       '      "type": "AdaptiveCard",',
       '      "version": "1.2",',
       '      "body": []',
-      '    } }',
-      '  ]',
-      '}',
+      "    } }",
+      "  ]",
+      "}",
     ].join("\n");
     assert.deepEqual(diagnose(src), []);
   });
@@ -140,17 +142,17 @@ describe("findAdaptiveCardDiagnostics — unknown type", () => {
 
   it("does not flag known element and action types, including nested ones", () => {
     const src = [
-      '{',
+      "{",
       '  "type": "AdaptiveCard", "version": "1.2",',
       '  "body": [',
       '    { "type": "TextBlock", "text": "hi" },',
       '    { "type": "ColumnSet", "columns": [',
       '      { "type": "Column", "items": [ { "type": "Image", "url": "x" } ] }',
-      '    ] },',
+      "    ] },",
       '    { "type": "FactSet", "facts": [ { "title": "a", "value": "b" } ] }',
-      '  ],',
+      "  ],",
       '  "actions": [ { "type": "Action.OpenUrl", "title": "View", "url": "x" } ]',
-      '}',
+      "}",
     ].join("\n");
     assert.deepEqual(only(src, "adaptivecard-unknown-type"), []);
   });
@@ -197,10 +199,10 @@ describe("findAdaptiveCardDiagnostics — <% %> template regions", () => {
     const src = [
       '{ "type": "AdaptiveCard", "version": "1.2", "body": [',
       '  { "type": "TextBlock", "text": "hi" }',
-      '<% foreach %p in @AffectedPackages { %>',
+      "<% foreach %p in @AffectedPackages { %>",
       '  ,{ "type": "TextBlock", "text": $ToJson(%p.Name) }',
-      '<% } %>',
-      '] }',
+      "<% } %>",
+      "] }",
     ].join("\n");
     assert.deepEqual(diagnose(src), []);
   });
@@ -212,7 +214,7 @@ describe("findAdaptiveCardDiagnostics — <% %> template regions", () => {
     const src = [
       '{ "type": "AdaptiveCard", "version": "1.2", "body": [',
       '<% $m = %( type: "NotARealType" ) %>',
-      '] }',
+      "] }",
     ].join("\n");
     assert.deepEqual(diagnose(src), []);
   });
@@ -372,6 +374,7 @@ describe("createInvalidValueFix", () => {
     const [[, , range, text]] = fix.edit.edits;
     assert.equal(range.start.character, src.indexOf("bold\""));
     assert.equal(text, "bolder");
+    assert.equal(fix.isPreferred, false, "a guess: left to the lightbulb, not Fix All");
   });
 
   it("offers nothing when no allowed value is close", () => {
@@ -541,5 +544,148 @@ describe("findAdaptiveCardDiagnostics — Teams message", () => {
     // An attachment, but not in a "type": "message" object.
     const src = `{ "attachments": [ { "contentType": "application/vnd.microsoft.card.adaptive", "content": ${CARD} } ] }`;
     assert.deepEqual(only(src, "adaptivecard-webhook-submit"), []);
+  });
+});
+
+describe("findAdaptiveCardDiagnostics — ToggleVisibility targets and ids", () => {
+  /**
+   * A 1.2 card with the given body elements and one toggle action.
+   *
+   * @param {string} body
+   * @param {string} targets - The `targetElements` array's contents
+   */
+  const card = (body, targets) =>
+    `{ "type": "AdaptiveCard", "version": "1.2", "body": [ ${body} ], ` +
+    `"actions": [ { "type": "Action.ToggleVisibility", "title": "More", "targetElements": [ ${targets} ] } ] }`;
+  const details = '{ "type": "TextBlock", "id": "details", "text": "x", "isVisible": false }';
+
+  it("accepts targets that are element ids, as strings or elementId objects", () => {
+    const src = card(`${details}, { "type": "ColumnSet", "columns": [ { "id": "col", "items": [] } ] }`,
+      '"details", { "elementId": "col", "isVisible": true }');
+    assert.deepEqual(diagnose(src), []);
+  });
+
+  it("flags a target no element has, with a quick fix to the closest id", () => {
+    const src = card(details, '"detials"');
+    const [d] = only(src, "adaptivecard-unknown-target");
+    assert.match(d.message, /'detials'.*Did you mean 'details'\?/);
+    assert.equal(d.range.start.character, src.indexOf("detials"));
+    const fix = createToggleTargetFix(oneLineDocument(src), d);
+    assert.equal(fix?.title, "Change to 'details'");
+    assert.equal(fix?.isPreferred, false, "a guess: left to the lightbulb, not Fix All");
+  });
+
+  it("flags an unknown elementId, and compares ids case-sensitively", () => {
+    const src = card(details, '{ "elementId": "Details" }');
+    assert.equal(only(src, "adaptivecard-unknown-target").length, 1);
+  });
+
+  it("flags a target that is an action's id: a toggle can't hide an action", () => {
+    const src = `{ "type": "AdaptiveCard", "version": "1.2", "body": [ ${details} ], "actions": [ ` +
+      '{ "type": "Action.OpenUrl", "id": "open", "title": "Open", "url": "https://example.com" }, ' +
+      '{ "type": "Action.ToggleVisibility", "title": "More", "targetElements": [ "open" ] } ] }';
+    assert.equal(only(src, "adaptivecard-unknown-target").length, 1);
+  });
+
+  it("offers no fix when no id is close", () => {
+    const src = card(details, '"somethingElse"');
+    const [d] = only(src, "adaptivecard-unknown-target");
+    assert.doesNotMatch(d.message, /Did you mean/);
+    assert.equal(createToggleTargetFix(oneLineDocument(src), d), null);
+  });
+
+  it("skips templated targets, and every target when an id is templated", () => {
+    assert.deepEqual(only(card(details, '"$Target"'), "adaptivecard-unknown-target"), []);
+    const templatedId = '{ "type": "TextBlock", "id": "row$i", "text": "x" }';
+    assert.deepEqual(only(card(templatedId, '"row1"'), "adaptivecard-unknown-target"), []);
+  });
+
+  it("ignores ids and targetElements in free-form payloads and other actions", () => {
+    const src = "{ \"type\": \"AdaptiveCard\", \"version\": \"1.2\", \"body\": [], \"actions\": [ " +
+      '{ "type": "Action.Submit", "title": "Go", "data": { "id": "x", "targetElements": [ "nowhere" ] } } ] }';
+    assert.deepEqual(only(src, "adaptivecard-unknown-target"), []);
+    assert.deepEqual(only(src, "adaptivecard-duplicate-id"), []);
+  });
+
+  it("flags a duplicate id, pointing at the first one", () => {
+    const src = card(`${details}, ${details}`, '"details"');
+    const [d] = only(src, "adaptivecard-duplicate-id");
+    assert.equal(d.range.start.character, src.lastIndexOf("details\", \"text"));
+    assert.equal(d.relatedInformation[0].location.range.start.character, src.indexOf("details"));
+    assert.deepEqual(only(src, "adaptivecard-unknown-target"), []);
+  });
+
+  it("doesn't flag the same id in alternative <% %> branches", () => {
+    const src = card(`<% if $x { %>${details}<% } else { %>${details}<% } %>`, '"details"');
+    assert.deepEqual(only(src, "adaptivecard-duplicate-id"), []);
+  });
+});
+
+describe("findCardCompletions", () => {
+  /**
+   * The completion labels at the `|` in `source`, or null.
+   *
+   * @param {string} source
+   * @returns {string[] | null}
+   */
+  const labelsAt = (source) => {
+    const offset = source.indexOf("|");
+    const found = findCardCompletions(source.slice(0, offset) + source.slice(offset + 1), offset);
+    if (found) assert.equal(found.start, source.lastIndexOf('"', offset) + 1, "starts after the opening quote");
+    return found && found.items.map((item) => item.label);
+  };
+  const CARD = '{ "type": "AdaptiveCard", "version": "1.2", ';
+
+  it("offers element types in body, limited to the card's version", () => {
+    const labels = labelsAt(`${CARD}"body": [ { "type": "|" } ] }`) ?? [];
+    assert.ok(labels.includes("TextBlock") && labels.includes("ActionSet"), labels.join(" "));
+    assert.ok(!labels.includes("Table"), "1.5, newer than the card");
+    assert.ok(!labels.includes("Action.OpenUrl") && !labels.includes("Column") && !labels.includes("AdaptiveCard"));
+  });
+
+  it("offers only actions in actions and selectAction, and Column in columns", () => {
+    assert.deepEqual(labelsAt(`${CARD}"actions": [ { "type": "|`)?.every((l) => l.startsWith("Action.")), true);
+    assert.deepEqual(labelsAt(`${CARD}"body": [ { "type": "Container", "selectAction": { "type": "Action.Op|" } } ] }`)
+      ?.every((l) => l.startsWith("Action.")), true);
+    assert.deepEqual(labelsAt(`${CARD}"body": [ { "type": "ColumnSet", "columns": [ { "type": "|" } ] } ] }`), ["Column"]);
+  });
+
+  it("offers every type the version allows when the version is templated or missing", () => {
+    const labels = labelsAt('{ "type": "AdaptiveCard", "version": "$V", "body": [ { "type": "|" } ] }') ?? [];
+    assert.ok(labels.includes("Table"));
+  });
+
+  it("offers a property's allowed values, with the object's type before or after the key", () => {
+    assert.deepEqual(labelsAt(`${CARD}"body": [ { "type": "TextBlock", "weight": "b|" } ] }`), ["default", "lighter", "bolder"]);
+    assert.deepEqual(labelsAt(`${CARD}"body": [ { "weight": "|", "type": "TextBlock" } ] }`), ["default", "lighter", "bolder"]);
+    assert.equal(labelsAt(`${CARD}"body": [ { "type": "TextBlock", "text": "|" } ] }`), null, "free text");
+  });
+
+  it("offers the card's element ids as ToggleVisibility targets", () => {
+    const body = `${CARD}"body": [ { "type": "TextBlock", "id": "details", "text": "x" }, { "type": "Image", "id": "row$i" } ], `;
+    assert.deepEqual(labelsAt(`${body}"actions": [ { "type": "Action.ToggleVisibility", "targetElements": [ "|" ] } ] }`), ["details"]);
+    assert.deepEqual(labelsAt(`${body}"actions": [ { "type": "Action.ToggleVisibility", "targetElements": [ "a", { "elementId": "|" } ] } ] }`), ["details"]);
+    assert.equal(labelsAt(`${body}"actions": [ { "type": "Action.Submit", "targetElements": [ "|" ] } ] }`), null);
+    // Not an action's own id.
+    assert.deepEqual(labelsAt(`${body}"actions": [ { "type": "Action.Submit", "id": "go", "title": "Go" }, ` +
+      '{ "type": "Action.ToggleVisibility", "targetElements": [ "|" ] } ] }'), ["details"]);
+  });
+
+  it("offers nothing outside a card, in a key, in a free-form payload or in a <% %> tag", () => {
+    assert.equal(labelsAt('{ "type": "message", "weight": "|" }'), null);
+    assert.equal(labelsAt(`${CARD}"body": [ { "|`), null);
+    assert.equal(labelsAt(`${CARD}"actions": [ { "type": "Action.Submit", "data": { "type": "|" } } ] }`), null);
+    assert.equal(labelsAt(`${CARD}"body": [ <% set $x = "|"; %> ] }`), null);
+  });
+
+  it("works with <% %> tags around the card's parts", () => {
+    const src = `<% if $Notify { %>
+${CARD}"body": [
+<% foreach $n in @Names { %>
+{ "type": "TextBlock", "size": "|" },
+<% } %>
+] }
+<% } %>`;
+    assert.ok(labelsAt(src)?.includes("large"));
   });
 });

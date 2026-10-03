@@ -1,8 +1,8 @@
 // @ts-check
 /**
- * @fileoverview Unit tests for src/diagnostics.js `updateDiagnostics` — every
+ * @fileoverview Unit tests for src/diagnostics.js: `updateDiagnostics` — every
  * check it emits, plus non-code masking, cross-line scan state, and the
- * languageId guard.
+ * languageId guard — and, at the end, the single checks it is built from.
  *
  * Requires the vscode stub before diagnostics.js (which pulls in vscode) loads.
  */
@@ -14,22 +14,16 @@ const assert = require("node:assert/strict");
 const { makeDocument } = require("./fake-document");
 
 const { DiagnosticSeverity } = require("../vscode-stub");
-const { updateDiagnostics } = require("../../src/diagnostics.js");
-const { createRegexPatterns, NON_VARIABLE_IDENTIFIERS } = require("../../src/helpers.js");
-const data = require("../../src/language-data.js");
+const {
+  checkMissingDollar,
+  createUnbalancedDiagnostic,
+  findDuplicateMapKeyDiagnosticsFromMasked,
+  getDiagnosticCode,
+  updateDiagnostics,
+} = require("../../src/diagnostics.js");
 
-const ctx = {
-  nonVariableIdentifiers: NON_VARIABLE_IDENTIFIERS,
-  knownKeywords: new Set(Object.keys(data.keywordDocs)),
-  knownScalarFunctions: new Set(Object.keys(data.scalarFunctionDocs)),
-  knownVectorFunctions: new Set(Object.keys(data.vectorFunctionDocs)),
-  scalarFunctionDocs: data.scalarFunctionDocs,
-  vectorFunctionDocs: data.vectorFunctionDocs,
-  mapFunctionDocs: data.mapFunctionDocs,
-  knownOperations: new Set(Object.keys(data.operationDocs)),
-  knownNamespaces: data.NAMESPACES,
-  ...createRegexPatterns(new Set(Object.keys(data.operationDocs))),
-};
+/** The diagnostics context: settings left at their defaults. */
+const ctx = {};
 
 /**
  * Runs updateDiagnostics over `source` and returns the collected diagnostics
@@ -38,25 +32,30 @@ const ctx = {
  *
  * @param {string} source
  * @param {string} [languageId]
+ * @param {object} [extraCtx] - Added to the diagnostics context
  * @returns {any[]}
  */
-function diagnose(source, languageId = "otterscript") {
+function diagnose(source, languageId = "otterscript", extraCtx = {}) {
   const document = makeDocument(source, { languageId });
   /** @type {any[]} */
   let collected = [];
   const collection = /** @type {any} */ ({
-    set: (/** @type {unknown} */ _uri, /** @type {any[]} */ issues) => { collected = issues; },
+    // Plain string codes, for comparing: the links are tested on their own.
+    set: (/** @type {unknown} */ _uri, /** @type {any[]} */ issues) => {
+      collected = issues.map((d) => Object.assign(d, { code: d.code.value }));
+    },
   });
-  updateDiagnostics(document, collection, ctx);
+  updateDiagnostics(document, collection, { ...ctx, ...extraCtx });
   return collected;
 }
 
 /**
  * @param {string} source
  * @param {string} code
+ * @param {object} [extraCtx] - Added to the diagnostics context
  * @returns {any[]}
  */
-const only = (source, code) => diagnose(source).filter((d) => d.code === code);
+const only = (source, code, extraCtx) => diagnose(source, "otterscript", extraCtx).filter((d) => d.code === code);
 
 // ============================================================
 // languageId guard
@@ -71,6 +70,18 @@ describe("updateDiagnostics — languageId guard", () => {
 
   it("runs for an otterscript document", () => {
     assert.ok(diagnose("if x = 5").length > 0);
+  });
+
+  it("links each code to the README's table of codes", () => {
+    /** @type {any[]} */
+    let published = [];
+    const collection = /** @type {any} */ ({ set: (/** @type {unknown} */ _uri, /** @type {any[]} */ issues) => { published = issues; } });
+    updateDiagnostics(makeDocument("if x = 5"), collection, ctx);
+    assert.ok(published.length > 0);
+    for (const d of published) {
+      assert.equal(typeof d.code.value, "string");
+      assert.match(d.code.target.toString(), /^https:\/\/github\.com\/sighanse\/otterscript-vscode#turning-individual-diagnostics-off$/);
+    }
   });
 });
 
@@ -164,7 +175,7 @@ describe("updateDiagnostics — unknown scalar function", () => {
   });
 
   it("does not flag a known scalar function", () => {
-    assert.deepEqual(only('$r = $ToJson($d);', "unknown-scalar-function"), []);
+    assert.deepEqual(only("$r = $ToJson($d);", "unknown-scalar-function"), []);
   });
 
   it("does not flag inside a string", () => {
@@ -194,9 +205,26 @@ describe("updateDiagnostics — unknown vector function", () => {
 // too many arguments
 // ============================================================
 
+describe("updateDiagnostics — too many arguments (Inedo's arity)", () => {
+  it("accepts $Trim's optional characters to trim", () => {
+    assert.deepEqual(only('$r = $Trim($a, "-", "_");', "too-many-arguments"), []);
+  });
+
+  it("allows the largest count of any product's form, and flags beyond it", () => {
+    // ProGet takes (name, [default]); BuildMaster (packageName, packageProperty, [sourceName]).
+    assert.deepEqual(only("$r = $PackageProperty($a, $b, $c);", "too-many-arguments"), []);
+    assert.equal(only("$r = $PackageProperty($a, $b, $c, $d);", "too-many-arguments").length, 1);
+  });
+
+  it("no longer knows $Base64Encode / $Base64Decode, which Inedo doesn't have", () => {
+    assert.equal(only("$r = $Base64Encode($a);", "unknown-scalar-function").length, 1);
+    assert.equal(only("$r = $Base64Decode($a);", "unknown-scalar-function").length, 1);
+  });
+});
+
 describe("updateDiagnostics — too many arguments", () => {
   it("flags a fixed-arity scalar function called with an extra argument", () => {
-    const [d] = only('$r = $ToJson($a, $b);', "too-many-arguments");
+    const [d] = only("$r = $ToJson($a, $b);", "too-many-arguments");
     assert.ok(d);
     assert.equal(d.message, "'$ToJson' takes at most 1 argument, got 2.");
     assert.equal(d.severity, DiagnosticSeverity.Warning);
@@ -217,7 +245,7 @@ describe("updateDiagnostics — too many arguments", () => {
   });
 
   it("does not flag a call within the documented argument count", () => {
-    assert.deepEqual(only('$r = $ToJson($a);', "too-many-arguments"), []);
+    assert.deepEqual(only("$r = $ToJson($a);", "too-many-arguments"), []);
     assert.deepEqual(only("$r = @Split($a, $b, $c);", "too-many-arguments"), []);
     assert.deepEqual(only("set %m = %ListItem(@x, 0);", "too-many-arguments"), []);
   });
@@ -228,12 +256,12 @@ describe("updateDiagnostics — too many arguments", () => {
 
   it("does not flag implicit-string juxtaposition as extra arguments", () => {
     // $a $b with no comma is ONE implicit-string argument, not two.
-    assert.deepEqual(only('$r = $ToJson($a $b);', "too-many-arguments"), []);
+    assert.deepEqual(only("$r = $ToJson($a $b);", "too-many-arguments"), []);
   });
 
   it("does not flag a nested map/vector literal as multiple top-level arguments", () => {
     assert.deepEqual(
-      only('$r = $ToJson(%( a: $x, b: $y ));', "too-many-arguments"),
+      only("$r = $ToJson(%( a: $x, b: $y ));", "too-many-arguments"),
       []
     );
   });
@@ -246,7 +274,7 @@ describe("updateDiagnostics — too many arguments", () => {
   });
 
   it("does not flag an unknown function (that check is owned by unknown-scalar-function)", () => {
-    assert.deepEqual(only('$r = $Frobnicate($a, $b, $c);', "too-many-arguments"), []);
+    assert.deepEqual(only("$r = $Frobnicate($a, $b, $c);", "too-many-arguments"), []);
   });
 });
 
@@ -266,6 +294,12 @@ describe("updateDiagnostics — unknown operation", () => {
 
   it("does not flag a known operation", () => {
     assert.deepEqual(only('Log-Information "hi";', "unknown-operation"), []);
+    // PSCall2 isn't in Inedo's reference but is PSCall's own name.
+    assert.deepEqual(only("PSCall2 MyScript;\nPSCall1 MyScript;", "unknown-operation"), []);
+  });
+
+  it("flags a dashed name with digits", () => {
+    assert.equal(only('Copy-Files2 "x";', "unknown-operation")[0]?.message, "Unknown operation 'Copy-Files2'");
   });
 
   it("does not flag a non-dashed identifier", () => {
@@ -286,9 +320,21 @@ describe("updateDiagnostics — unknown operation", () => {
       "Log-Information (\n    Some-Param: x\n);",
       "module My-Module {\n}",
       "call My-Module;",
-      'Log-Information My-Arg;',
+      "Log-Information My-Arg;",
     ]) {
       assert.deepEqual(only(source, "unknown-operation"), [], source);
+    }
+  });
+
+  it("knows every operation and function in Inedo's reference", () => {
+    for (const source of [
+      "Extract-ZipFile (Name: a.zip);",
+      "Replace-Text (Include: *.txt, SearchText: a, ReplaceWith: b);",
+      "Ensure-DscResource (Name: x);",
+      "IIS::Ensure-AppPool (Name: x);",
+      "set %m = %MapAdd(%m, k, v);",
+    ]) {
+      assert.deepEqual(diagnose(source).filter((d) => /^unknown-/.test(d.code)), [], source);
     }
   });
 
@@ -438,6 +484,92 @@ describe("updateDiagnostics — masking & cross-line state", () => {
 describe("updateDiagnostics — unknown namespace", () => {
   /** @param {string} source */
   const namespaceIssues = (source) => only(source, "unknown-namespace");
+
+  it("knows every namespace Inedo's public extensions declare, in any case", () => {
+    for (const ns of ["GitHub", "jira", "NuGet", "MSBuild", "WindowsSDK", "DevEnv", "SqlServer", "Kubernetes", "AzureDevOps", "npm"]) {
+      assert.deepEqual(namespaceIssues(`${ns}::Do-Thing;`), [], ns);
+    }
+  });
+
+  it("knows BuildMaster's own namespaces, but not an extension's name (InedoCore::)", () => {
+    for (const source of ["DB::Backup-Database;", "Packages::Attach-Package;", "System::Backup-Application;"]) {
+      assert.deepEqual(namespaceIssues(source), [], source);
+    }
+    assert.equal(namespaceIssues("InedoCore::Sleep 5;").length, 1);
+  });
+
+  it("checks operations only under namespaces whose operations are documented", () => {
+    // No Kubernetes operation is documented; ProGet's and the built-ins are.
+    assert.deepEqual(only("Kubernetes::Ensure-Thing;", "unknown-operation"), []);
+    assert.equal(only("ProGet::Bogus-Op;", "unknown-operation").length, 1);
+    assert.equal(only("Bogus-Op;", "unknown-operation").length, 1);
+  });
+
+  it("flags an unknown %Name( map function, but not a %( map literal or a known one", () => {
+    const [d] = only("set %m = %Frob(1);", "unknown-map-function");
+    assert.equal(d.message, "Unknown map function '%Frob'");
+    assert.deepEqual(only("set %m = %(a: 1);\nset %n = %FromJson('{}');\nset %o = %MapAdd(%m, b, 2);", "unknown-map-function"), []);
+  });
+
+  it("hints at an operation call without a required argument", () => {
+    const [d] = only('Copy-Files(\n  From: "a",\n  Include: @("*")\n);', "missing-required-argument");
+    assert.equal(d.message, "'Copy-Files' is missing its required argument 'To'.");
+    assert.equal(d.severity, DiagnosticSeverity.Hint);
+    assert.deepEqual(only('Copy-Files(From: "a", to: "b");', "missing-required-argument"), [], "names ignore case");
+    assert.deepEqual(only('Copy-Files("a");', "missing-required-argument"), [], "a positional argument: unknown which");
+    assert.deepEqual(only('Log-Information "x";\ncall Copy-Files(From: "a");', "missing-required-argument"), [], "a module call");
+    // A raft-qualified module call whose raft is named like a namespace.
+    for (const code of ["missing-required-argument", "unknown-argument"]) {
+      assert.deepEqual(only('Log-Information "x";\ncall Jira::Create-Issue(Titel: "x");', code), [], `a raft's module call: ${code}`);
+    }
+    // Same-named operations of different namespaces: the namespace picks
+    // one; without it, only what every one requires is.
+    assert.deepEqual(only('GitHub::Create-Issue(Title: "x");\nDotNet::Build(Project: "a.csproj");\nBuild(Configuration: "Release");', "missing-required-argument"), []);
+    assert.equal(only('Jira::Create-Issue(Title: "x");', "missing-required-argument")[0]?.message, "'Create-Issue' is missing its required argument 'Type'.");
+    assert.equal(only('DevEnv::Build(Configuration: "Release");', "missing-required-argument")[0]?.message, "'Build' is missing its required argument 'ProjectFile'.");
+  });
+
+  it("doesn't check an operation's arguments behind a namespace none of its forms has", () => {
+    assert.deepEqual(only('Kubernetes::Copy-Files(From: "a");', "missing-required-argument"), []);
+  });
+
+  it("reads an output capture (`Name => $x`) as a named argument", () => {
+    assert.equal(only("Get-Http(ResponseBody => $body);", "missing-required-argument")[0]?.message,
+      "'Get-Http' is missing its required argument 'Url'.", "not taken for a positional argument");
+    assert.equal(only("Get-Http(Url: $u, ResponseBdy => $body);", "unknown-argument")[0]?.message,
+      "'ResponseBdy' isn't a documented argument of 'Get-Http'. Did you mean 'ResponseBody'?");
+  });
+
+  it("hints at an argument name that looks misspelt, and doesn't call its intended one missing", () => {
+    const [d] = only('Copy-Files(Fomr: "a", To: "b", Frobnicate: 1);', "unknown-argument");
+    assert.equal(d.message, "'Fomr' isn't a documented argument of 'Copy-Files'. Did you mean 'From'?");
+    assert.equal(d.severity, DiagnosticSeverity.Hint);
+    assert.deepEqual([d.range.start.character, d.range.end.character], [11, 15]);
+    assert.deepEqual(only('Copy-Files(From: "a", Too: "b");', "missing-required-argument"), [], "'Too' stands for 'To'");
+    assert.deepEqual(only('Copy-Files(From: "a", to: "b");', "unknown-argument"), [], "names ignore case");
+    // A namespace's own arguments: DotNet::Build's `Project` is no typo of DevEnv's `ProjectFile`.
+    assert.deepEqual(only('DotNet::Build(Project: "a.csproj");\nBuild(Project: "a.csproj");', "unknown-argument"), []);
+  });
+
+  it("flags a module declared twice in one file, pointing at the first", () => {
+    const [d] = only("module Greet {\n}\nmodule greet {\n}\nmodule Other {\n}", "duplicate-module");
+    assert.equal(d.message, "A module named 'greet' is already declared in this file.");
+    assert.equal(d.range.start.line, 2);
+    assert.equal(d.relatedInformation[0].location.range.start.line, 0);
+  });
+
+  it("flags too few arguments, using the [optional] markers and the most lenient form", () => {
+    const [d] = only("set $s = $Substring($x);", "too-few-arguments");
+    assert.equal(d.message, "'$Substring' needs at least 2 arguments, got 1.");
+    assert.deepEqual(only("set $s = $Substring($x, 1);\nset $t = $Substring($x, 1, 2);", "too-few-arguments"), []);
+    // A lone string argument (blank once strings are masked) still counts.
+    assert.deepEqual(only('set $l = $ToLower("HELLO");\nset $m = $ToLower(\n  "x" # why\n);', "too-few-arguments"), []);
+    assert.equal(only("set $l = $ToLower( # nothing\n);", "too-few-arguments").length, 1);
+    // ProGet's $PackageProperty(name, [default]) next to BuildMaster's three-argument form.
+    assert.deepEqual(only("set $p = $PackageProperty(Name);", "too-few-arguments"), []);
+    // A vararg tail never makes a call too long.
+    assert.deepEqual(only("set $p = $PathCombine(a, b, c, d, e);", "too-many-arguments"), []);
+  });
 
   it("flags a qualifier whose namespace is not known", () => {
     const issues = namespaceIssues("Frobnicate::Do-Thing xyz;");
@@ -710,5 +842,160 @@ describe("updateDiagnostics - implicit-string juxtaposition (not a diagnostic)",
     ]) {
       assert.deepEqual(diagnose(src).map((d) => d.code), [], src);
     }
+  });
+});
+
+// ============================================================
+// checkMissingDollar
+// ============================================================
+
+/** The literal words an `if` condition may use bare. */
+const LITERALS = new Set(["true", "false", "null"]);
+
+describe("checkMissingDollar", () => {
+  it("flags a bare variable on the left of an if comparison", () => {
+    const diag = checkMissingDollar("if x == 5", 0, LITERALS);
+    assert.ok(diag, "expected a diagnostic");
+    assert.equal(diag.code, "missing-dollar");
+    assert.equal(diag.source, "OtterScript");
+    assert.equal(diag.severity, DiagnosticSeverity.Error);
+    assert.match(diag.message, /\$x/);
+    assert.equal(diag.range.start.line, 0);
+    assert.equal(diag.range.start.character, 3, "points at 'x'");
+    assert.equal(diag.range.end.character, 4);
+  });
+
+  it("returns null when the variable already has a '$'", () => {
+    assert.equal(checkMissingDollar("if $x == 5", 0, LITERALS), null);
+  });
+
+  it("returns null for boolean/null literals", () => {
+    assert.equal(checkMissingDollar("if true == 1", 0, LITERALS), null);
+    assert.equal(checkMissingDollar("if null != 1", 0, LITERALS), null);
+  });
+
+  it("returns null for non-if lines", () => {
+    assert.equal(checkMissingDollar("set $x = 5", 0, LITERALS), null);
+    assert.equal(checkMissingDollar("foreach $s in @servers", 0, LITERALS), null);
+  });
+
+  it("sees through leading parentheses", () => {
+    const diag = checkMissingDollar("if (count > 3", 0, LITERALS);
+    assert.ok(diag);
+    assert.equal(diag.range.start.character, 4, "points past '('");
+    assert.equal(diag.range.end.character, 9);
+  });
+
+  it("accounts for leading indentation and reports the given line index", () => {
+    const diag = checkMissingDollar("    if ready == false", 7, LITERALS);
+    assert.ok(diag);
+    assert.equal(diag.range.start.line, 7);
+    assert.equal(diag.range.start.character, 7);
+  });
+
+  it("handles the various comparison operators", () => {
+    for (const op of ["=", "==", "!=", "<", ">", "<=", ">="]) {
+      assert.ok(checkMissingDollar(`if x ${op} 1`, 0, LITERALS), `operator ${op}`);
+    }
+  });
+});
+
+// ============================================================
+// findDuplicateMapKeyDiagnosticsFromMasked
+// ============================================================
+
+describe("findDuplicateMapKeyDiagnosticsFromMasked", () => {
+  /** @param {string} src */
+  const run = (src) => findDuplicateMapKeyDiagnosticsFromMasked(makeDocument(src), src);
+
+  it("reports the second occurrence of a repeated top-level key", () => {
+    const src = "%( a: 1, b: 2, a: 3 )";
+    const diags = run(src);
+    assert.equal(diags.length, 1);
+    assert.equal(diags[0].code, "duplicate-map-key");
+    assert.equal(diags[0].source, "OtterScript");
+    assert.equal(diags[0].severity, DiagnosticSeverity.Warning);
+    assert.match(diags[0].message, /Duplicate key 'a'/);
+    // range points at the duplicate 'a', i.e. the second one
+    assert.equal(diags[0].range.start.character, src.lastIndexOf("a"));
+  });
+
+  it("does not report when every key is unique", () => {
+    assert.deepEqual(run("%( a: 1, b: 2, c: 3 )"), []);
+  });
+
+  it("ignores keys nested inside a child map", () => {
+    // inner 'a' is nested; only the outer 'a' repeats
+    const diags = run("%( a: 1, b: %( a: 9 ), a: 2 )");
+    assert.equal(diags.length, 1);
+    assert.match(diags[0].message, /Duplicate key 'a'/);
+  });
+
+  it("reports a duplicate inside a map nested in another map", () => {
+    const src = "%( x: %( a: 1, a: 2 ) )";
+    const diags = run(src);
+    assert.equal(diags.length, 1);
+    assert.equal(diags[0].range.start.character, src.lastIndexOf("a"));
+  });
+
+  it("reports duplicates independently per map expression", () => {
+    const diags = run("x = %( a: 1, a: 2 ); y = %( b: 1, b: 2 )");
+    assert.equal(diags.length, 2);
+    assert.deepEqual(diags.map((d) => d.message).sort(), [
+      "Duplicate key 'a' in map expression.",
+      "Duplicate key 'b' in map expression.",
+    ]);
+  });
+
+  it("accepts dashes in key names", () => {
+    assert.equal(run("%( my-key: 1, my-key: 2 )").length, 1);
+  });
+
+  it("reports a third occurrence too", () => {
+    assert.equal(run("%( a: 1, a: 2, a: 3 )").length, 2);
+  });
+
+  it("does not crash on an unclosed '%(' (no matching ')')", () => {
+    assert.deepEqual(run("$m = %( a: 1, a: 2"), []);
+  });
+});
+
+// ============================================================
+// createUnbalancedDiagnostic
+// ============================================================
+
+describe("createUnbalancedDiagnostic", () => {
+  const doc = makeDocument("line one\nline two three");
+
+  it("describes unclosed openers", () => {
+    const d = createUnbalancedDiagnostic(2, 0, "{", "}", "brace", doc);
+    assert.ok(d);
+    assert.match(d.message, /Unclosed brace\(s\): 2 '\{' not closed \(first at line 1, col 1\)/);
+    assert.equal(d.severity, DiagnosticSeverity.Error);
+    assert.equal(d.source, "OtterScript");
+  });
+
+  it("describes an unexpected closer (negative count)", () => {
+    const d = createUnbalancedDiagnostic(-1, 9, "(", ")", "parenthesis", doc);
+    assert.ok(d);
+    assert.match(d.message, /Unexpected closing parenthesis: Extra '\)' at line 2, col 1/);
+  });
+
+  it("returns null when balanced", () => {
+    assert.equal(createUnbalancedDiagnostic(0, 0, "{", "}", "brace", doc), null);
+  });
+});
+
+// ============================================================
+// getDiagnosticCode
+// ============================================================
+
+describe("getDiagnosticCode", () => {
+  it("normalizes string / {value} / number / missing", () => {
+    assert.equal(getDiagnosticCode(/** @type {any} */ ({ code: "missing-dollar" })), "missing-dollar");
+    assert.equal(getDiagnosticCode(/** @type {any} */ ({ code: { value: "x", target: {} } })), "x");
+    assert.equal(getDiagnosticCode(/** @type {any} */ ({ code: 42 })), "42");
+    assert.equal(getDiagnosticCode(/** @type {any} */ ({ code: undefined })), "");
+    assert.equal(getDiagnosticCode(/** @type {any} */ ({})), "");
   });
 });

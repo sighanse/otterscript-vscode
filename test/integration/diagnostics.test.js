@@ -175,6 +175,51 @@ describe("quick fixes", () => {
     assert.equal((await refreshDiagnostics(document)).length, 0);
   });
 
+  it("offers Fix All as a source.fixAll action, for fixing on save", async () => {
+    const document = await openContent("if count == 1 {\n}\nif $a & $b {\n}\n");
+    /** @type {vscode.CodeAction[]} */
+    const actions = await vscode.commands.executeCommand(
+      "vscode.executeCodeActionProvider", document.uri, new vscode.Range(0, 0, 0, 0), "source.fixAll"
+    );
+    const fixAll = actions.find((a) => a.kind?.value === "source.fixAll.otterscript");
+    assert.ok(fixAll?.edit, "offered with an edit");
+    await vscode.workspace.applyEdit(fixAll.edit);
+    assert.equal(document.getText(), "if $count == 1 {\n}\nif $a && $b {\n}\n");
+
+    /** @type {vscode.CodeAction[]} */
+    const quick = await vscode.commands.executeCommand(
+      "vscode.executeCodeActionProvider", document.uri, new vscode.Range(0, 0, 0, 0), vscode.CodeActionKind.QuickFix.value
+    );
+    assert.ok(!quick.some((a) => a.kind?.value === "source.fixAll.otterscript"), "not in the lightbulb");
+  });
+
+  it("'Change to' fixes a misspelt function, operation and argument name", async () => {
+    const document = await openContent('set $s = $Substrng($x, 1);\nCopy-Fils(To: "b");\nCopy-Files(Fomr: "a", To: "b");\n');
+    for (const [code, title] of [
+      ["unknown-scalar-function", "Change to '$Substring'"],
+      ["unknown-operation", "Change to 'Copy-Files'"],
+      ["unknown-argument", "Change to 'From'"],
+    ]) {
+      const diagnostic = (await refreshDiagnostics(document)).find((d) => codeOf(d) === code);
+      assert.ok(diagnostic, code);
+      const fix = (await quickFixes(document, diagnostic)).find((a) => a.title === title);
+      assert.ok(fix?.edit, `${title} is offered`);
+      await vscode.workspace.applyEdit(fix.edit);
+    }
+    assert.equal(document.getText(), 'set $s = $Substring($x, 1);\nCopy-Files(To: "b");\nCopy-Files(From: "a", To: "b");\n');
+    assert.equal((await refreshDiagnostics(document)).length, 0);
+  });
+
+  it("'Add missing argument' adds a required argument to fill in, on its own line in a multi-line call", async () => {
+    const document = await openContent('Jira::Create-Issue(\n    Title: "Broken build"\n);\n');
+    const [diagnostic] = await refreshDiagnostics(document);
+    assert.equal(codeOf(diagnostic), "missing-required-argument");
+    const fix = (await quickFixes(document, diagnostic)).find((a) => a.title === "Add missing argument 'Type'");
+    assert.ok(fix?.edit, "the fix is offered");
+    await vscode.workspace.applyEdit(fix.edit);
+    assert.equal(document.getText(), 'Jira::Create-Issue(\n    Title: "Broken build",\n    Type: \n);\n');
+  });
+
   it("'Change card version' raises the card version to what the card needs", async () => {
     const document = await openFile(path.join(SAMPLES_DIR, "sample-card-version.otter"));
     const diagnostics = await refreshDiagnostics(document);
@@ -195,12 +240,29 @@ describe("quick fixes", () => {
       "<% } %>\n"
     );
     const [diagnostic] = await refreshDiagnostics(document);
-    assert.equal(diagnostic?.code, "adaptivecard-invalid-value");
+    assert.equal(codeOf(diagnostic), "adaptivecard-invalid-value");
 
     const fix = (await quickFixes(document, diagnostic)).find((a) => a.title === "Change to 'bolder'");
     assert.ok(fix?.edit, "the fix is offered");
     await vscode.workspace.applyEdit(fix.edit);
     assert.ok(document.lineAt(1).text.includes('"weight": "bolder"'));
+    assert.equal((await refreshDiagnostics(document)).length, 0);
+  });
+
+  it("'Change to' points a ToggleVisibility target at the closest element id", async () => {
+    const document = await openContent(
+      "<% if $Notify { %>\n" +
+      '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "TextBlock", "id": "details", "text": "x" } ],\n' +
+      '  "actions": [ { "type": "Action.ToggleVisibility", "title": "More", "targetElements": [ "detials" ] } ] }\n' +
+      "<% } %>\n"
+    );
+    const [diagnostic] = await refreshDiagnostics(document);
+    assert.equal(codeOf(diagnostic), "adaptivecard-unknown-target");
+
+    const fix = (await quickFixes(document, diagnostic)).find((a) => a.title === "Change to 'details'");
+    assert.ok(fix?.edit, "the fix is offered");
+    await vscode.workspace.applyEdit(fix.edit);
+    assert.ok(document.lineAt(2).text.includes('[ "details" ]'));
     assert.equal((await refreshDiagnostics(document)).length, 0);
   });
 });

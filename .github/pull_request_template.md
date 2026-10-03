@@ -30,5 +30,7 @@
 <!--- Extension Host (F5) smoke testing and your VS Code version. -->
 
 - [ ] `npm run check` passes
+- [ ] `npm run test:integration` passes (provider behavior: hover, completion, diagnostics, quick fixes, navigation)
+- [ ] `CHANGELOG.md` `[Unreleased]` updated (user-visible changes only)
 
 ## Screenshots (if appropriate)

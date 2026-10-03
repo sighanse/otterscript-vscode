@@ -17,12 +17,12 @@ This extension started as a learning project while implementing [custom webhook 
 ## Features
 
 - Syntax highlighting, including namespaced operations (`ProGet::`, `Otter::`, `Windows::`)
-- Hover documentation, completion and signature help for built-in functions, operations, variables and map/vector expressions
+- Hover documentation, completion and signature help for every function and operation in Inedo's Otter and BuildMaster reference, ProGet's notifier variables, and map/vector expressions; inside an operation call, completion and hover for its argument names (`Copy-Files(To: ...)`)
 - Diagnostics for common mistakes (see [the list of checks](#turning-individual-diagnostics-off)) — also for `$` expressions in a text template's literal output, such as `$ToJson(...)` in a webhook body
-- Adaptive Card checks, triggered by a literal `"type": "AdaptiveCard"` object in a template: unknown types, values a property doesn't allow (`"weight": "bold"`), elements or properties newer than the card's `"version"`, and Teams webhook mistakes such as a wrong `"contentType"` or `Action.Submit`. Based on the Adaptive Card 1.6 schema plus Teams-only elements; best-effort, not a full schema validation
-- Quick fixes, plus a **Fix All Issues** command (`Ctrl+Shift+Alt+F`); fixes that would cause a new problem are left to the lightbulb
-- Module navigation: Go to Definition (F12), Find All References (Shift+F12), CodeLens reference counts, Outline and breadcrumbs, and Go to Symbol in Workspace (`Ctrl+T`)
-- Highlight all occurrences of a variable (`$x`, `@list`, `%map`, `${my var}`) or module, with declarations and assignments marked as writes
+- Adaptive Card checks, triggered by a literal `"type": "AdaptiveCard"` object in a template: unknown types, values a property doesn't allow (`"weight": "bold"`), elements or properties newer than the card's `"version"`, `Action.ToggleVisibility` targets with no matching `"id"`, and Teams webhook mistakes such as a wrong `"contentType"` or `Action.Submit`. Completion inside the card offers `"type"` values, a property's allowed values and toggle targets. Based on the Adaptive Card 1.6 schema plus Teams-only elements; best-effort, not a full schema validation
+- Quick fixes, plus a **Fix All Issues** command (`Ctrl+Shift+Alt+F`, `Cmd+Shift+Alt+F` on macOS); fixes that would cause a new problem, or that guess a name, are left to the lightbulb. To apply the same fixes on save, add `"editor.codeActionsOnSave": { "source.fixAll": "explicit" }` to your settings
+- Module navigation: hover on `call MyModule` (its declaration and comment), completion and signature help for its arguments, Go to Definition (F12, also to a module declared in another workspace file), Find All References (Shift+F12) and Rename (F2) across workspace files, CodeLens reference counts, Outline and breadcrumbs, and Go to Symbol in Workspace (`Ctrl+T`); completion of module names after `call`, from this file and the rest of the workspace
+- Variables: completion of the ones the file uses, Go to Definition (F12) to where they're assigned, Rename (F2) everywhere in the file (strings included), and highlighting all occurrences of a variable (`$x`, `@list`, `%map`, `${my var}`) or module, with declarations and assignments marked as writes
 - Code folding via `#region` / `#endregion` and block structure
 - Snippets for common patterns, including `teamscard`: a complete Teams webhook body with an Adaptive Card
 
@@ -34,11 +34,11 @@ Early-stage and in active development; features may change. Developed and tested
 
 - It does not execute OtterScript — diagnostics are static, best-effort pattern checks, not proof a script will run correctly; they prefer missing a problem over flagging correct code
 - It does not connect to Otter, ProGet, or other Inedo services
-- It does not auto-fix on save or format your code; fixes are only applied when you invoke a quick fix or **Fix All Issues**
+- It does not format your code, and fixes nothing on its own: fixes are only applied when you invoke a quick fix or **Fix All Issues**, or on save when you turn that on (see above)
 
 ## Getting Started
 
-Install **OtterScript Language Extension** from the Extensions view (`Ctrl+Shift+X`), then open any `.otter` or `.oscript` file. No configuration is required.
+Install **OtterScript Language Extension** from the Extensions view (`Ctrl+Shift+X`), then open any `.otter` or `.oscript` file. No configuration is required. Requires VS Code 1.85 or newer; it also works in Restricted Mode and in virtual workspaces, since it never runs your scripts.
 
 If hover or completion doesn't appear, check that the language mode in the status bar is OtterScript.
 
@@ -50,7 +50,15 @@ All features are enabled by default and can be toggled individually:
 - `otterscript.signatureHelp.enable` — signature help for functions and operations
 - `otterscript.hover.enable` — hover documentation
 - `otterscript.codeLens.enable` — CodeLens reference counts above module declarations
-- `otterscript.workspaceSymbols.enable` — index module declarations for Go to Symbol in Workspace (`Ctrl+T`)
+- `otterscript.workspaceSymbols.enable` — modules in Go to Symbol in Workspace (`Ctrl+T`); cross-file module navigation works either way
+- `otterscript.inlayHints.parameterNames` — parameter names before a function call's positional arguments, `$Substring($x, Offset: 2)` (VS Code's `editor.inlayHints.enabled` also turns all inlay hints off, or on only while you hold `Ctrl+Alt`)
+
+`otterscript.product` (default `"any"`) is the Inedo product your scripts
+run in: `ProGet`, `Otter` or `BuildMaster`. Completion then leaves out what
+that product doesn't have, such as BuildMaster's release functions in a ProGet
+notifier, and hover says so when you use one anyway. Where a function's
+arguments differ between products (`$PackageProperty`), signature help and
+parameter-name hints follow that product's form.
 
 `otterscript.adaptiveCards.maxVersion` (default `"1.6"`) is the highest
 Adaptive Card version the host that shows your cards supports. Lower it if
@@ -58,7 +66,7 @@ your cards go to an older host.
 
 ### Turning individual diagnostics off
 
-Every diagnostic has a code, shown in the Problems panel. Use
+Every diagnostic has a code, shown in the Problems panel, where it links to this section. Use
 `otterscript.diagnostics.rules` to turn a check off (`"off"`) or change its
 severity (`"error"`, `"warning"`, `"information"`, `"hint"`):
 
@@ -81,11 +89,16 @@ when no folder is open).
 | `invalid-operator` | `&` or `\|` where `&&` or `\|\|` is required |
 | `incorrect-for-usage` | `for` used as a loop (use `foreach`) |
 | `duplicate-map-key` | The same key twice in a `%(...)` map |
+| `duplicate-module` | Two modules with the same name in one file |
 | `unknown-scalar-function` | Unknown `$Name(...)` function |
 | `unknown-vector-function` | Unknown `@Name(...)` function |
+| `unknown-map-function` | Unknown `%Name(...)` function |
 | `unknown-operation` | Unknown operation |
 | `unknown-namespace` | Unknown `Namespace::` prefix |
 | `too-many-arguments` | More arguments than the function accepts |
+| `too-few-arguments` | Fewer arguments than the function requires |
+| `missing-required-argument` | Operation call without a required argument, e.g. `Copy-Files` without `To` (a hint) |
+| `unknown-argument` | Operation argument name that looks like a typo of a documented one, e.g. `Fomr:` in `Copy-Files` (a hint) |
 | `template-unexpected-close` | `%>` with no matching `<%` |
 | `template-unclosed` | `<%` that is never closed |
 | `template-end-keyword` | `<% end %>` where `<% } %>` is required |
@@ -97,6 +110,8 @@ when no folder is open).
 | `adaptivecard-version-too-low` | Card element, action or property newer than the card's `"version"` |
 | `adaptivecard-version-too-high` | Card `"version"` newer than `otterscript.adaptiveCards.maxVersion` |
 | `adaptivecard-templating-keyword` | Adaptive Card Templating key (`"$data"`, `"$when"`, ...) that OtterScript expands |
+| `adaptivecard-unknown-target` | `Action.ToggleVisibility` target that no element in the card has as its `"id"` |
+| `adaptivecard-duplicate-id` | `"id"` that another element in the card already has |
 | `adaptivecard-content-type` | Teams message attachment without the Adaptive Card `"contentType"` |
 | `adaptivecard-webhook-submit` | `Action.Submit` in a Teams message (webhooks don't support it) |
 

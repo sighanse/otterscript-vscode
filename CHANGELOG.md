@@ -1,5 +1,70 @@
 # Changelog
 
+## [0.6.0] - 2026-10-03
+
+### Added
+
+- Hover, completion and signature help for every function and operation in Inedo's Otter and BuildMaster reference — about 100 operations and 80 functions more than before, such as `Extract-ZipFile`, `Replace-Text`, `IIS::Ensure-AppPool`, `Git::Checkout-Code`, `PSCall`, `%MapAdd` and `$PSCredential` — with their arguments and the products that have them, and syntax highlighting for their names
+- ProGet notifier variables `$EventName`, `$ProjectName` and `$ReleaseNumber`
+- Completion of the variables the file uses: after `$`, `@` or `%`, the file's own variables (`set $myVar`, `foreach %item`, module parameters, ...) are listed first, with the line where they're assigned
+- Completion of module names after `call`: the file's own modules first, then those declared in other OtterScript files in the workspace
+- Go to Definition (F12) on a variable goes to where the file assigns it; with several assignments, VS Code lists them all
+- Go to Definition on `call MyModule` also finds a module declared in another OtterScript file in the workspace
+- Rename (F2) for variables and modules. A variable is renamed everywhere in the file, including in strings, where OtterScript expands it; a new name with spaces gets the braces it needs (`${my var}`). A module is renamed with every `call` to it, in other workspace files too. Invalid names and names already in use are refused
+- Find All References (Shift+F12) on a module also lists the calls in other OtterScript files in the workspace. A `call` counts for the module its own file declares, or else for the one workspace file that declares that name; when several files declare it, only the current file is searched
+- Completion inside an Adaptive Card in a text template, on typing the opening `"` of a value (or Ctrl+Space inside it): `"type"` values that fit where the object is (actions in `actions`, `Column` in `columns`, ...) and that the card's `"version"` supports, a property's allowed values (`"weight": "` → `default`, `lighter`, `bolder`), and the card's element ids as `Action.ToggleVisibility` targets
+- `adaptivecard-unknown-target` diagnostic: an `Action.ToggleVisibility` target that no element in the card has as its `"id"` — the button would silently do nothing — with a quick fix to the closest id (`"detials"` → `"details"`)
+- `adaptivecard-duplicate-id` diagnostic: an `"id"` that another element in the same card already has, so a toggle reaches only one of them. Ids in alternative `<% if %>` / `<% else %>` branches aren't flagged
+- `otterscript.product` setting (`any`, `ProGet`, `Otter` or `BuildMaster`): completion leaves out the functions, variables and operations the chosen product doesn't have, based on Inedo's Otter and BuildMaster reference (what both have counts as the core engine, which ProGet runs too). Hover notes it when a function, variable or operation isn't in the chosen product
+- Argument names in operation calls: inside `Copy-Files(` (after the `(` or a `,`), completion lists the operation's arguments that aren't given yet, required ones first, with their format and description, and leaves out those already given before or after the cursor; hovering an argument name (`To:`) shows what it is. An operation's hover now lists its arguments too
+- Hover says when a function works with every sigil (`$FromJson`, `@FromJson`, `%FromJson`), where the sigil picks what it returns. The `@` and `%` forms of `$Eval` and `$GetVariableValue` now have the same full documentation as their `$` form
+- `unknown-map-function` diagnostic: an unknown `%Name(...)` function, as `$Name(...)` and `@Name(...)` calls already are
+- `missing-required-argument` diagnostic, a hint by default: an operation call that leaves out a required argument, such as `Copy-Files(From: ...)` without `To`. Calls with a positional argument aren't checked. A quick fix adds the missing arguments, ready to fill in
+- `unknown-argument` diagnostic, a hint by default: an operation argument name that looks like a typo of a documented one, such as `Copy-Files(Fomr: ...)`, with a quick fix to the documented name (`From`)
+- "Change to" quick fixes for unknown functions and operations, to the closest known name: `$Substrng(...)` becomes `$Substring(...)`, `Copy-Fils` becomes `Copy-Files`. Only names the selected `otterscript.product` has are suggested (behind `Namespace::`, only that namespace's). Fix All applies one only when just the casing differs
+- Same-named operations of different namespaces are told apart: `DotNet::Build` and `DevEnv::Build`, `GitHub::Create-Issue` and `Jira::Create-Issue`, `ProGet::Create-Package` and `NuGet::Create-Package`, BuildMaster's `Ensure-Release` and `GitHub::Ensure-Release`. With the namespace written, hover, signature help, argument completion and the argument checks use that operation; completion offers each one; hovering the name without a namespace lists the others
+- The extension now works in Restricted Mode (a folder you haven't marked as trusted) and in virtual workspaces, such as a GitHub repository opened remotely; it never runs your scripts, so it needs no trust
+- `duplicate-module` diagnostic: a second `module` with a name the file already declares
+- Module arguments: inside `call MyModule(`, completion offers the module's parameters not given yet (required ones first), signature help shows them, and hovering an argument name shows how the module declares it — for a module in this file or in another workspace file
+- Parameter-name inlay hints before the positional arguments of a function call, such as `$Substring($x, Offset: 2, Length: 3)`. Functions with one parameter, and arguments that are already a variable of that name, get none. Turn them off with the `otterscript.inlayHints.parameterNames` setting
+- Signature help for an operation or module call highlights the argument whose `Name:` you are typing, in whatever order the named arguments come
+- Hover on the module name in `call MyModule` shows the module's declaration and the `#` comment lines above it, also when the module is declared in another workspace file
+- `too-few-arguments` diagnostic: a function call with fewer arguments than the function requires (`$Substring($x)`), based on the `[optional]` parameters in its signature and the most lenient of its forms in Inedo's products
+- Fix All on save: the fixes **Fix All Issues** applies are also a `source.fixAll.otterscript` code action, so `"editor.codeActionsOnSave": { "source.fixAll": "explicit" }` applies them when you save
+- Each diagnostic's code in the Problems panel links to the README's table of codes, which also says how to turn one off
+
+### Changed
+
+- The extension package is about 30% smaller (from about 178 KB to 125 KB): it now ships as a single bundled file, with Inedo's reference data stored compactly
+- Function parameter names in hover, signature help and completion are now the ones in Inedo's reference, such as `$Substring(Text, Offset, [Length])` (was `text, startIndex, [length]`) or `$RegexReplace(Text, MatchExpression, ReplaceWith)`
+- **Fix All Issues** no longer applies fixes that guess the intended name: an Adaptive Card value changed to the closest allowed one (`"weight": "bold"` to `"bolder"`), or an unknown namespace changed to the closest known one (`Frobnicate::` to `Firewall::`). They stay in the lightbulb, like the other "Change to" fixes; a namespace that only differs in casing (`proget::`) is still fixed
+- Go to Symbol in Workspace (`Ctrl+T`) finds a module by the characters of its name in order, as VS Code's other symbol searches do: `dpm` finds `Deploy-Module`
+- The OtterScript output channel is now a log: VS Code timestamps each line and shows its level, and setting the channel's level to Debug (the gear in the Output view) shows the extension's debug messages too
+
+### Fixed
+
+- In a text template, hover, completion and signature help read the literal text around the `<% %>` tags as OtterScript: a `#` or `//` in it, as in `# Notes <% Copy-Files(`, hid the tag's code after it as a comment, and a word in it could get an operation's hover. Only the tags' code (and `$` expressions in the text) counts now, as in the diagnostics
+- Hovering a word that only looks like an operation, such as the argument `Build` in `Log-Information Build;`, showed that operation's documentation; operations are now recognized only where a statement starts
+- Hover and signature help showed an operation's output arguments as inputs, such as `[ResponseBody: <text>]` for `Get-Http`; they now show how they're written, `[ResponseBody => <text>]` (`ResponseBody => $body`)
+- **Fold All Regions** (`Ctrl+K Ctrl+8`) folded every `{ }` block, map, template tag and swim string; it now folds only `#region` blocks
+- Signature help could mistake text in a block comment or swim string for code when the comment or string opened more than 10 lines above the cursor
+- Turning `otterscript.codeLens.enable` on or off changed the reference counts only after the next edit
+- Go to Symbol in Workspace (`Ctrl+T`) found no modules until an OtterScript file had been opened: the extension now also starts in a workspace that has `.otter` or `.oscript` files
+- Signature help highlighted part of the function's name instead of the parameter when the parameter has the same name, such as `List` in `$ListCount(List)`
+- Operations and functions that exist in Otter or BuildMaster but weren't documented here, such as `Extract-ZipFile` or `Ensure-DscResource`, were flagged as unknown
+- Hover and completion now recognize `PSCall2`, `PSEnsure2` and `PSVerify2`, and the older `PSCall1`, `PSEnsure1` and `PSVerify1`; hover says to write `PSCall`, `PSEnsure` or `PSVerify`, as Inedo recommends, and completion lists the superseded names struck through
+- Module names are matched case-insensitively, as variable names already were: `call greet` goes to, highlights and counts as a reference of `module Greet`
+- Completion stopped while typing a name with a digit, `_` or `-` in it, such as `$item2` or `$my-var`; signature help was missing for operations with a digit in their name, such as `SHEnsure2`
+- Hovering a module name in `call Name` or `module Name` could show the documentation of an operation with the same name
+- An operation written right after `{`, `;` or `}` with no space, such as `if $x {Copy-Files(...)`, got no hover (after `{`) or signature help
+- `$Trim` accepts the characters to trim (`$Trim($x, "-")`), as `$TrimStart` and `$TrimEnd` already did; it was flagged as too many arguments
+- `$PackageHash` and `$PackageProperty` mixed ProGet's and BuildMaster's forms. Hover now shows ProGet's (`$PackageHash([format], [algorithm])`, `$PackageProperty(name, [default])`) with BuildMaster's below it, signature help shows the form of the selected `otterscript.product` (both for `any`, the one the arguments fit highlighted), and a three-argument BuildMaster `$PackageProperty(...)` is no longer flagged as too many arguments
+- `unknown-namespace` flagged real namespaces of Inedo's extensions, such as `GitHub::`, `Jira::`, `NuGet::`, `MSBuild::`, `Kubernetes::` or `AzureDevOps::`. Every namespace declared in Inedo's public extensions is now known, as are BuildMaster's own `DB::`, `Packages::` and `System::` (`DB::Backup-Database`), and an operation behind a namespace whose operations the extension doesn't document yet (`GitHub::Ensure-Release`) is no longer flagged as unknown either
+
+### Removed
+
+- `$Base64Encode` and `$Base64Decode`, which don't exist in Inedo's products; using them is now flagged as an unknown function
+
 ## [0.5.0] - 2026-10-01
 
 ### Added

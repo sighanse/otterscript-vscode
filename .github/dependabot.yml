@@ -51,3 +51,10 @@ updates:
       - dependency-name: "@types/vscode"
         versions:
           - ">=1.85.0"
+      # Kept on the major of the Node.js that the oldest supported VS Code
+      # (engines.vscode) runs -- Node 18 for 1.85 -- so the type check
+      # catches newer Node APIs. Minor/patch updates still come through;
+      # raise the major by hand together with engines.vscode.
+      - dependency-name: "@types/node"
+        update-types:
+          - "version-update:semver-major"
