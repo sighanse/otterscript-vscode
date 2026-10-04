@@ -4,7 +4,8 @@ name: Claude
 # @claude in a pull request or issue comment, a review comment or a review --
 # e.g. "@claude address Copilot's latest review". Claude reads CLAUDE.md for
 # the project's rules, pushes its commits to the pull request's branch and
-# replies in the thread. There is no automatic review on every pull request.
+# replies in the thread. There is no automatic review on every pull request,
+# and no run on a pull request from a fork (see the first step).
 #
 # Needs the Claude GitHub App on the repository and a CLAUDE_CODE_OAUTH_TOKEN
 # secret (from `claude setup-token`, billed to the Claude subscription).
@@ -55,6 +56,24 @@ jobs:
       actions: read          # read CI results of the pull request
 
     steps:
+      # On a pull request from a fork, the action works on the fork's code,
+      # and Claude may run `npm run check` and the tests -- scripts that code
+      # defines -- with this job's write tokens and the Claude token at hand.
+      # So @claude runs only on this repository's own branches. Fails closed:
+      # if the check itself fails, nothing runs.
+      - name: Refuse pull requests from forks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.issue.pull_request && github.event.issue.number || github.event.pull_request.number }}
+        run: |
+          if [ -n "$PR" ]; then
+            fork=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json isCrossRepository --jq .isCrossRepository)
+            if [ "$fork" != "false" ]; then
+              echo "::error::@claude doesn't run on pull requests from forks"
+              exit 1
+            fi
+          fi
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
