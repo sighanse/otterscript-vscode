@@ -276,7 +276,15 @@ const CompletionItemKind = Object.freeze({
   Variable: "variable",
   Keyword: "keyword",
   Snippet: "snippet",
+  Property: "property",
+  Module: "module",
+  Class: "class",
+  EnumMember: "enumMember",
+  Reference: "reference",
 });
+
+/** Mirrors `vscode.CompletionTriggerKind`: how completion was asked for. */
+const CompletionTriggerKind = Object.freeze({ Invoke: 0, TriggerCharacter: 1, TriggerForIncompleteCompletions: 2 });
 
 /** Mirrors `vscode.SnippetString`: the snippet text is on `.value`. */
 class SnippetString {
@@ -299,6 +307,7 @@ const vscode = {
   Hover,
   CompletionItem,
   CompletionItemKind,
+  CompletionTriggerKind,
   CompletionItemTag: Object.freeze({ Deprecated: 1 }),
   SnippetString,
   CodeAction,
