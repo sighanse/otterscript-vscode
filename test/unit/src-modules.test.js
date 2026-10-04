@@ -1,7 +1,7 @@
 // @ts-check
 /**
  * @fileoverview Loads every module under src/, so the coverage report
- * (`npm run test:coverage`) lists each one: Node reports only the files a
+ * (`npm run test:cov`) lists each one: Node reports only the files a
  * test loads, which would leave a module no test touches out of the report
  * instead of counting it as uncovered.
  *

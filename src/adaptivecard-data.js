@@ -119,7 +119,7 @@ const ADAPTIVE_CARD_VALUE_LISTS = new Map([
  * or accept only the values of one list in {@link ADAPTIVE_CARD_VALUE_LISTS}
  * (`values`). Inherited properties (`spacing`, `isVisible`, ...) are
  * included; properties with nothing to check are left out. Each inner map's
- * entries are cast to `PropertyInfo`: TypeScript 7 infers a map's value type
+ * entries are cast to `PropertyInfo`: TypeScript infers a map's value type
  * from its entries alone, and an entry with only `version` doesn't fit the
  * type it infers from one with only `values`.
  * @type {ReadonlyMap<string, ReadonlyMap<string, PropertyInfo>>}

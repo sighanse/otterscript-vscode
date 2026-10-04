@@ -247,6 +247,12 @@ function isModuleCallContext(lineText, wordStart) {
  *   a `(` without a matching `)` has no entry. Null past the limit.
  */
 function findTopLevelCommas(maskedText, opens, rule) {
+  /** @type {Map<number, TopLevelCommas>} */
+  const result = new Map();
+  // No requested opens means no entries, so skip the document-wide scans and
+  // typed-array allocations that would only return the empty map.
+  if (!opens.length) return result;
+
   const n = maskedText.length;
 
   // Every `(`'s matching `)`, from one stack of parentheses.
@@ -290,8 +296,6 @@ function findTopLevelCommas(maskedText, opens, rule) {
   const isOpen = new Uint8Array(n);
   for (const open of opens) if (closeOf[open] !== -1) isOpen[open] = 1;
 
-  /** @type {Map<number, TopLevelCommas>} */
-  const result = new Map();
   // The calls open at the current position, innermost last; unclamped, also
   // by their starting depth, as a comma counts for exactly those.
   /** @type {number[]} */

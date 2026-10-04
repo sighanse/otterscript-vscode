@@ -1079,6 +1079,12 @@ describe("findTopLevelCommas", () => {
     assert.deepEqual(all("f({a, b})", callArguments), [[1, 8, [4], true]]);
   });
 
+  it("returns an empty map for no requested opens, without scanning", () => {
+    const found = findTopLevelCommas("f(a, b)", [], anyBracket);
+    assert.ok(found);
+    assert.equal(found.size, 0);
+  });
+
   it("gives up on text where the commas would count for many calls at once", () => {
     const k = 3000;
     const text = "%(".repeat(k) + "]".repeat(k) + ",".repeat(k) + ")".repeat(k);
