@@ -13,6 +13,7 @@
 
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
+const { assertLinearTime } = require("./timing");
 
 const {
   createCodeScanState,
@@ -911,16 +912,13 @@ describe("findVariableOccurrences", () => {
 
   it("indexes a very long line in time linear in its length", () => {
     // Whether a variable is assigned was once decided by `...$` regexes
-    // matched against the whole line before it, so one 100 KB line took
-    // seconds -- on every cursor move, for highlighting. The limit leaves
-    // room for a slow CI machine.
-    const text = "set $x = 1; ".repeat(10000);
-    const started = performance.now();
-    const occurrences = findVariableOccurrences(text, "$", "x");
-    const elapsed = performance.now() - started;
-    assert.equal(occurrences.length, 10000);
+    // matched against the whole line before it, so a long line took seconds
+    // -- on every cursor move, for highlighting. This 480 KB one took the
+    // old code about 30 s.
+    const text = "set $x = 1; ".repeat(40000);
+    const occurrences = assertLinearTime(() => findVariableOccurrences(text, "$", "x"));
+    assert.equal(occurrences.length, 40000);
     assert.ok(occurrences.every((o) => o.write), "each one assigned");
-    assert.ok(elapsed < 1000, `took ${Math.round(elapsed)} ms`);
   });
 });
 

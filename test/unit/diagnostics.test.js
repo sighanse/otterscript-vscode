@@ -12,6 +12,7 @@ require("../vscode-stub");
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 const { makeDocument } = require("./fake-document");
+const { assertLinearTime } = require("./timing");
 
 const { DiagnosticSeverity } = require("../vscode-stub");
 const {
@@ -279,17 +280,14 @@ describe("updateDiagnostics — too many arguments", () => {
 
   it("counts the arguments of deeply nested or unclosed calls in time linear in their length", () => {
     // Each call was once read to its `)` on its own: nested calls reread
-    // their inner calls, and unclosed ones the rest of the document, so
-    // 100 KB took seconds. The limit leaves room for a slow CI machine.
+    // their inner calls, and unclosed ones the rest of the document (each
+    // input took the old code 9 s or more).
     for (const [source, expected] of /** @type {[string, number][]} */ ([
       ["$ToJson(".repeat(10000) + "$a, $b" + ")".repeat(10000), 1],
-      ["$ToJson(".repeat(10000), 0],
+      ["$ToJson(".repeat(15000), 0],
     ])) {
-      const started = performance.now();
-      const found = only(source, "too-many-arguments");
-      const elapsed = performance.now() - started;
+      const found = assertLinearTime(() => only(source, "too-many-arguments"), `${source.slice(0, 10)}...`);
       assert.equal(found.length, expected, "only the innermost call has two arguments");
-      assert.ok(elapsed < 1000, `${source.slice(0, 10)}...: took ${Math.round(elapsed)} ms`);
     }
   });
 });
@@ -362,15 +360,10 @@ describe("updateDiagnostics — unknown operation", () => {
 
   it("checks a very long line in time linear in its length", () => {
     // Each word's check once matched a `...$` regex against the whole line
-    // before it, so one 100 KB line (minified, generated, or planted in a
-    // repository) blocked the extension host for seconds. Linear, it takes
-    // milliseconds; the limit leaves room for a slow CI machine.
+    // before it, so this 100 KB line (minified, generated, or planted in a
+    // repository) blocked the extension host for 9 s.
     const line = "word ".repeat(20000) + "Bogus-Op;";
-    const started = performance.now();
-    const found = only(line, "unknown-operation");
-    const elapsed = performance.now() - started;
-    assert.deepEqual(found, [], "not in operation position");
-    assert.ok(elapsed < 1000, `took ${Math.round(elapsed)} ms`);
+    assert.deepEqual(assertLinearTime(() => only(line, "unknown-operation")), [], "not in operation position");
   });
 });
 
@@ -560,19 +553,17 @@ describe("updateDiagnostics — unknown namespace", () => {
 
   it("checks the arguments of deeply nested or unclosed operation calls in time linear in their length", () => {
     // As for functions: each call was read to its `)` on its own, and each
-    // positional argument's text again, so 100 KB took seconds.
+    // positional argument's text again (each input took the old code 10 s
+    // or more).
     for (const [source, expected] of /** @type {[string, number][]} */ ([
       // Only the innermost, empty call misses To: the others have a
       // positional argument, which could be it.
       ["Copy-Files(".repeat(8000) + ")".repeat(8000), 1],
       ["Copy-Files(From: ".repeat(8000) + "a" + ")".repeat(8000), 8000],
-      ["Copy-Files(".repeat(8000), 0],
+      ["Copy-Files(".repeat(12000), 0],
     ])) {
-      const started = performance.now();
-      const found = only(source, "missing-required-argument");
-      const elapsed = performance.now() - started;
+      const found = assertLinearTime(() => only(source, "missing-required-argument"), `${source.slice(0, 12)}...`);
       assert.equal(found.length, expected, source.slice(0, 20));
-      assert.ok(elapsed < 1000, `${source.slice(0, 12)}...: took ${Math.round(elapsed)} ms`);
     }
   });
 
@@ -987,13 +978,10 @@ describe("findDuplicateMapKeyDiagnosticsFromMasked", () => {
 
   it("checks deeply nested or unclosed maps in time linear in their length", () => {
     // Each `%(` was once scanned to its `)` on its own: nested maps rescanned
-    // their whole body, and unclosed ones the rest of the document, so 100 KB
-    // took seconds. The limit leaves room for a slow CI machine.
+    // their whole body, and unclosed ones the rest of the document (each
+    // input took the old code 6 s or more).
     for (const src of ["%( a: ".repeat(15000) + ")".repeat(15000), "%(".repeat(50000)]) {
-      const started = performance.now();
-      assert.deepEqual(run(src), []);
-      const elapsed = performance.now() - started;
-      assert.ok(elapsed < 1000, `${src.slice(0, 10)}...: took ${Math.round(elapsed)} ms`);
+      assert.deepEqual(assertLinearTime(() => run(src), `${src.slice(0, 10)}...`), []);
     }
   });
 

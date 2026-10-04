@@ -67,9 +67,14 @@ jobs:
         run: npm run check:reference
         continue-on-error: true
 
+      # With coverage: also fails when the line, branch or function coverage
+      # of src/ falls below the limits in package.json's test:cov. The output
+      # is kept for the coverage table in the summary.
       - name: Unit tests
         id: tests
-        run: npm test
+        run: |
+          npm run test:cov 2>&1 | tee "$RUNNER_TEMP/unit-tests.txt"
+          exit "${PIPESTATUS[0]}"
         continue-on-error: true
 
       - name: npm security audit
@@ -176,9 +181,13 @@ jobs:
       # Loads the extension in real VS Code (the minimum supported version and
       # current stable) and drives hover, completion, diagnostics, quick fixes
       # and navigation. xvfb provides the display VS Code needs on Linux.
+      # With coverage of src/ (through the bundle's source maps), for the
+      # summary only: no limits.
       - name: Integration tests
         id: integration
-        run: xvfb-run -a npm run test:integration
+        run: |
+          xvfb-run -a npm run test:integration -- --coverage --coverage-reporter text --coverage-output "$RUNNER_TEMP/integration-coverage" 2>&1 | tee "$RUNNER_TEMP/integration-tests.txt"
+          exit "${PIPESTATUS[0]}"
         continue-on-error: true
 
       - name: Summary
@@ -224,9 +233,9 @@ jobs:
 
           # Unit tests
           if [ "${{ steps.tests.outcome }}" == "success" ]; then
-            echo "✅ Unit tests: passed" >> "$GITHUB_STEP_SUMMARY"
+            echo "✅ Unit tests: passed, coverage within its limits" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "❌ Unit tests: failed" >> "$GITHUB_STEP_SUMMARY"
+            echo "❌ Unit tests: failed, or coverage below its limits" >> "$GITHUB_STEP_SUMMARY"
           fi
 
           # JSON
@@ -278,6 +287,27 @@ jobs:
             echo "⚠️ npm audit: vulnerability(ies) found (not blocking)" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "⏭️ npm audit: cancelled/skipped" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # The coverage tables the test steps kept, folded under the summary.
+      # A step of its own, to keep the Summary script short.
+      - name: Coverage tables
+        if: always()
+        run: |
+          # $1: the title, then the table on stdin, folded.
+          fold() {
+            printf '\n<details><summary>%s</summary>\n\n```text\n' "$1"
+            cat
+            printf '```\n\n</details>\n'
+          }
+          if [ -f "$RUNNER_TEMP/unit-tests.txt" ]; then
+            sed -n '/start of coverage report/,/end of coverage report/p' "$RUNNER_TEMP/unit-tests.txt" | sed 's/^ℹ //' \
+              | fold "Unit test coverage of src/" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          # The integration table: from its first border line, every line with a column.
+          if [ -f "$RUNNER_TEMP/integration-tests.txt" ] && grep -q '^All files' "$RUNNER_TEMP/integration-tests.txt"; then
+            awk '/^-+[|]/ { table = 1 } table && /[|]/' "$RUNNER_TEMP/integration-tests.txt" \
+              | fold "Integration test coverage of src/ (report only)" >> "$GITHUB_STEP_SUMMARY"
           fi
 
       # Single gate for every blocking check above. A step that did not run

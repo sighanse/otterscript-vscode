@@ -22,6 +22,8 @@ npm install       # dev dependencies
 npm run check     # ESLint + JSDoc type-check + grammar/language-data sync
                   # + generated-data checks + unit tests
 npm test          # unit tests only (node:test)
+npm run test:cov  # unit tests with coverage of src/; fails below the line,
+                  # branch and function limits in package.json (Sanity runs it)
 npm run lint      # ESLint only
 npm run build              # bundle src/ into dist/extension.js, which the
                            # extension runs from, with a source map (F5 and the
