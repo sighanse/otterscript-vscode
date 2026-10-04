@@ -15,7 +15,16 @@
 const vscode = require("vscode");
 const { keywordDocs, lookupOperation, mapFunctionDocs, operationForms, scalarFunctionDocs, syntaxDocs, variableDocs, vectorFunctionDocs } = require("../language-data");
 const { buildArgumentHoverMarkdown, buildHoverMarkdown, lookupOwn } = require("../helpers");
-const { findCallArguments, getMaskedTextBefore, getModuleNameAt, getModuleParameters, isInStringOrCommentDoc, resolveModule } = require("../document-index");
+const {
+  findCallArguments,
+  getMaskedTextBefore,
+  getModuleDeclarations,
+  getModuleNameAt,
+  getModuleParameters,
+  getVariableAt,
+  isInStringOrCommentDoc,
+  resolveModule,
+} = require("../document-index");
 const { findOperationArgumentContext, namespaceBefore } = require("../scanner");
 
 /**
@@ -61,6 +70,116 @@ function hoverRegion(document, position, { product }) {
   if (position.character < start || position.character > end) return undefined;
   const doc = regionMatch[2].toLowerCase() === "#region" ? syntaxDocs.regionStart : syntaxDocs.regionEnd;
   return new vscode.Hover(buildHoverMarkdown(doc, product), new vscode.Range(position.line, start, position.line, end));
+}
+
+/** How many assignment lines a variable's hover shows; the rest are listed by line number. */
+const VARIABLE_HOVER_MAX_LINES = 3;
+/** How much of an assignment line a variable's hover shows. */
+const VARIABLE_HOVER_LINE_LENGTH = 120;
+
+/**
+ * Whether a docs table documents this name with this sigil -- a function or
+ * runtime variable, which {@link hoverSymbol} shows instead.
+ *
+ * @param {string} sigil
+ * @param {string} name
+ * @returns {boolean}
+ */
+function isDocumentedName(sigil, name) {
+  if (sigil === "$") return Boolean(lookupOwn(scalarFunctionDocs, name) ?? lookupOwn(variableDocs, name));
+  return Boolean(lookupOwn(sigil === "@" ? vectorFunctionDocs : mapFunctionDocs, name));
+}
+
+/**
+ * Line numbers as words: `1`, `1 and 3`, `1, 2 and 3`.
+ *
+ * @param {number[]} lines - 1-based
+ * @returns {string}
+ */
+function listLines(lines) {
+  return lines.length === 1 ? `${lines[0]}` : `${lines.slice(0, -1).join(", ")} and ${lines[lines.length - 1]}`;
+}
+
+/**
+ * `lines` as a markdown code block of OtterScript, fenced by more backticks
+ * than any run in them, so a line can't end the block early (the text is the
+ * file's, which anyone may have written).
+ *
+ * @param {string[]} lines
+ * @returns {string}
+ */
+function codeBlock(lines) {
+  const longest = Math.max(2, ...lines.flatMap((line) => line.match(/`+/g) ?? []).map((run) => run.length));
+  const fence = "`".repeat(longest + 1);
+  return `${fence}otterscript\n${lines.join("\n")}\n${fence}`;
+}
+
+/**
+ * What the first assignment says about a variable: a module parameter (with
+ * its module, direction and whether it's optional), a loop variable, an
+ * operation's output, or a plain variable of the file.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {string} shown - The variable as written, `$x` or `${my var}`
+ * @param {string} name - Without its sigil or braces
+ * @param {import("../scanner").VariableOccurrence} first - Its first assignment
+ * @returns {string} Markdown
+ */
+function describeAssignment(document, shown, name, first) {
+  const line = first.line + 1;
+  if (first.assignedBy === "parameter") {
+    // The module whose header (which may span lines) this is: the last one
+    // declared at or before the parameter.
+    const module = getModuleDeclarations(document).filter((m) => m.range.start.line <= first.line).pop();
+    const param = module && getModuleParameters(document, module.range).find((p) => p.name.toLowerCase() === name.toLowerCase());
+    if (module) {
+      const notes = [param && param.direction !== "in" ? param.direction : "", param?.optional && param.direction !== "out" ? "optional" : ""].filter(Boolean);
+      return `${inlineCode(shown)}: parameter of module ${inlineCode(module.name)}${notes.length ? ` (${notes.join(", ")})` : ""}`;
+    }
+  }
+  if (first.assignedBy === "foreach") return `${inlineCode(shown)}: loop variable of the \`foreach\` on line ${line}`;
+  if (first.assignedBy === "output") {
+    const argument = /([A-Za-z][\w-]*)\s*=>\s*$/.exec(document.lineAt(first.line).text.slice(0, first.character))?.[1];
+    if (argument) return `${inlineCode(shown)}: receives the ${inlineCode(argument)} output on line ${line}`;
+  }
+  return `${inlineCode(shown)}: variable of this file`;
+}
+
+/**
+ * A variable of the file itself (not a documented one): how it gets its
+ * value, the lines that assign it (up to {@link VARIABLE_HOVER_MAX_LINES}),
+ * and how often it's used -- or that the file never assigns it. Before
+ * {@link stopInStringOrComment}, as a variable in a string is expanded; the
+ * variable index leaves out comments and anything else that isn't one.
+ *
+ * @type {HoverResolver}
+ */
+function hoverVariable(document, position) {
+  const variable = getVariableAt(document, position);
+  if (!variable?.isReference || isDocumentedName(variable.sigil, variable.name)) return undefined;
+
+  const shown = `${variable.sigil}${variable.name.includes(" ") ? `{${variable.name}}` : variable.name}`;
+  const writes = variable.occurrences.filter((o) => o.write);
+  const uses = variable.occurrences.length - writes.length;
+  const used = uses === 0 ? "never used" : uses === 1 ? "used once" : `used ${uses} times`;
+
+  if (!writes.length) {
+    return new vscode.Hover(new vscode.MarkdownString(
+      `${inlineCode(shown)} isn't assigned in this file: it may come from the caller, a configuration variable or the runtime.\n\n` +
+      `${used[0].toUpperCase()}${used.slice(1)}`
+    ), variable.range);
+  }
+
+  const lines = [...new Set(writes.map((o) => o.line))];
+  const shownLines = lines.slice(0, VARIABLE_HOVER_MAX_LINES).map((line) => {
+    const text = document.lineAt(line).text.trim();
+    return text.length > VARIABLE_HOVER_LINE_LENGTH ? `${text.slice(0, VARIABLE_HOVER_LINE_LENGTH - 1)}…` : text;
+  });
+  return new vscode.Hover(new vscode.MarkdownString(
+    `${describeAssignment(document, shown, variable.name, writes[0])}\n\n` +
+    `${codeBlock(shownLines)}\n\n` +
+    `Assigned on line${lines.length === 1 ? "" : "s"} ${listLines(lines.map((line) => line + 1))} · ${used}`
+  ), variable.range);
 }
 
 /**
@@ -253,6 +372,7 @@ function hoverSymbol(document, position, { product }) {
  */
 const HOVER_RESOLVERS = Object.freeze([
   hoverRegion,
+  hoverVariable,
   stopInStringOrComment,
   hoverArgument,
   hoverModuleCall,
@@ -329,6 +449,7 @@ module.exports = {
   hoverSwimString,
   hoverSymbol,
   hoverTemplateTag,
+  hoverVariable,
   inlineCode,
   registerHover,
   resolveHover,

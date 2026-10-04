@@ -158,6 +158,17 @@ describe("hover", () => {
     assert.match(await hoverText(elsewhere, positionOf(elsewhere, "Greet", 2)), /module Greet<\$name>[\s\S]*Declared in `main\.otter`/);
   });
 
+  it("shows where the file's own variable is assigned, also inside a string", async () => {
+    const source = await openContent('set $version = "1.2.3";\nLog-Information "Version $version";\n');
+    const text = await hoverText(source, positionOf(source, "$version\"", 1));
+    assert.match(text, /^`\$version`: variable of this file\n\n```otterscript\nset \$version = "1\.2\.3";\n```\n\nAssigned on line 1 · used once$/);
+  });
+
+  it("shows a module parameter's module", async () => {
+    const source = await openContent("module Deploy<out @result> {\n  set @result = @(1);\n}\n");
+    assert.match(await hoverText(source, positionOf(source, "@result =", 1)), /^`@result`: parameter of module `Deploy` \(out\)/);
+  });
+
   it("shows a module's comment as plain text, so a link or image in it isn't rendered", async () => {
     // The comment comes from a workspace file anyone may have written: as
     // markdown, an image in it would be fetched on hover (a tracking pixel)
@@ -197,8 +208,9 @@ describe("hover", () => {
     }
   });
 
-  it("shows nothing for names that are only inherited Object members", async () => {
-    assert.equal(await hoverText(document, positionOf(document, "$constructor", 2)), "");
+  it("shows no docs for names that are only inherited Object members", async () => {
+    // Not looked up on Object's prototype: just a variable the file uses.
+    assert.match(await hoverText(document, positionOf(document, "$constructor", 2)), /^`\$constructor` isn't assigned in this file/);
   });
 
   it("shows nothing for a function name inside a comment", async () => {

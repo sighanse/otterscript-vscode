@@ -133,8 +133,9 @@ class FoldingRange {
  * markdown VS Code would get.
  */
 class MarkdownString {
-  constructor() {
-    this.value = "";
+  /** @param {string} [value] - Markdown to start with */
+  constructor(value = "") {
+    this.value = value;
   }
 
   /**

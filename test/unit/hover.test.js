@@ -24,6 +24,7 @@ const {
   hoverSwimString,
   hoverSymbol,
   hoverTemplateTag,
+  hoverVariable,
   inlineCode,
   resolveHover,
   stopInStringOrComment,
@@ -207,7 +208,73 @@ describe("hoverSymbol", () => {
   });
 });
 
+describe("hoverVariable", () => {
+  it("shows where a variable of the file is assigned, and how often it's used", async () => {
+    const text = 'set $version = "1.2.3";\nLog-Information $version;\nset $version = "2";\nLog-Information $version;\nLog-Information "Version: $version";';
+    const hover = await run(hoverVariable, text, "$version;");
+    assert.equal(markdown(hover),
+      "`$version`: variable of this file\n\n" +
+      '```otterscript\nset $version = "1.2.3";\nset $version = "2";\n```\n\n' +
+      "Assigned on lines 1 and 3 · used 3 times");
+    assert.equal(span(hover), "1:16-24");
+  });
+
+  it("works on the assignment itself and inside a string", async () => {
+    const text = 'set $x = 1;\nLog-Information "x is $x";';
+    assert.equal(span(await run(hoverVariable, text, "$x = ")), "0:4-6");
+    assert.equal(span(await run(hoverVariable, text, "$x\"")), "1:22-24");
+  });
+
+  it("names a module parameter, its direction and whether it's optional", async () => {
+    const text = "module Deploy<in $app, out @result, $mode = fast> {\n  Log-Information $app $mode;\n}";
+    assert.match(markdown(await run(hoverVariable, text, "$app $mode")) ?? "", /^`\$app`: parameter of module `Deploy`\n/);
+    assert.match(markdown(await run(hoverVariable, text, "@result")) ?? "", /^`@result`: parameter of module `Deploy` \(out\)\n/);
+    assert.match(markdown(await run(hoverVariable, text, "$mode;")) ?? "", /^`\$mode`: parameter of module `Deploy` \(optional\)\n/);
+  });
+
+  it("names a loop variable and an operation's output", async () => {
+    const loop = "foreach $item in @items {\n  Log-Information $item;\n}";
+    assert.match(markdown(await run(hoverVariable, loop, "$item;")) ?? "", /^`\$item`: loop variable of the `foreach` on line 1\n/);
+    const output = 'Get-Http(Url: "u", ResponseBody => $body);\nLog-Information $body;';
+    assert.match(markdown(await run(hoverVariable, output, "$body;")) ?? "", /^`\$body`: receives the `ResponseBody` output on line 1\n/);
+  });
+
+  it("says when the file never assigns the variable, or never uses it", async () => {
+    const unassigned = await run(hoverVariable, "Log-Information $fromCaller;", "$fromCaller");
+    assert.equal(markdown(unassigned),
+      "`$fromCaller` isn't assigned in this file: it may come from the caller, a configuration variable or the runtime.\n\n" +
+      "Used once");
+    assert.match(markdown(await run(hoverVariable, "set $unused = 1;", "$unused")) ?? "", /Assigned on line 1 · never used$/);
+  });
+
+  it("shows at most 3 assignments, and the line numbers of the rest", async () => {
+    const text = Array.from({ length: 5 }, (_, i) => `set $n = ${i};`).join("\n");
+    const md = markdown(await run(hoverVariable, text, "$n")) ?? "";
+    assert.equal((md.match(/^set \$n/gm) ?? []).length, 3);
+    assert.match(md, /Assigned on lines 1, 2, 3, 4 and 5 · never used$/);
+  });
+
+  it("shows a name with spaces in braces, and fences a line holding backticks", async () => {
+    const text = "set ${my var} = \"```\";\nLog-Information ${my var};";
+    const md = markdown(await run(hoverVariable, text, "${my var};")) ?? "";
+    assert.match(md, /^`\$\{my var\}`: variable of this file\n\n````otterscript\nset \$\{my var\} = "```";\n````/);
+  });
+
+  it("leaves documented names, function calls, comments and non-variables to the others", async () => {
+    assert.equal(await run(hoverVariable, "set $x = $PackageName;", "$PackageName"), undefined);
+    assert.equal(await run(hoverVariable, "set $x = $ToJson(%m);", "$ToJson"), undefined);
+    assert.equal(await run(hoverVariable, "set $x = 1; # $x", "# $x", 2), undefined);
+    assert.equal(await run(hoverVariable, "set $x = 1;", "set"), undefined);
+  });
+});
+
 describe("resolveHover (the chain's order)", () => {
+  it("shows a variable inside a string, where nothing else has a hover", async () => {
+    const text = 'set $x = 1;\nLog-Information "if $x";';
+    assert.equal(await resolveHover(makeDocument(text), at(text, "if"), context), null);
+    assert.match(markdown(await resolveHover(makeDocument(text), at(text, "$x\""), context)) ?? "", /^`\$x`: variable of this file/);
+  });
+
   it("shows #region although the line is a comment to OtterScript", async () => {
     const text = "#region Setup";
     assert.ok(await resolveHover(makeDocument(text), at(text, "region"), context));

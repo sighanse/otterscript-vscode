@@ -1168,12 +1168,21 @@ function prefixTail(text, end, start = 0) {
 }
 
 /**
- * @typedef {{ line: number, character: number, length: number, write: boolean }} VariableOccurrence
+ * How an occurrence gives its variable a value: as a module parameter, a
+ * `foreach` loop variable, an operation's output (`Name => $x`), or an
+ * assignment (`set $x = ...`, `$x = ...`, `global $x = ...`).
+ *
+ * @typedef {"parameter" | "foreach" | "output" | "assignment"} AssignedBy
+ */
+
+/**
+ * @typedef {{ line: number, character: number, length: number, write: boolean, assignedBy?: AssignedBy }} VariableOccurrence
  *   `line`/`character` are 0-based and point at the sigil; `length` covers
  *   the whole token (`$name` or `${name}`). `write` is true for a declaration
  *   or assignment target (`set $x = ...`, `$x = ...`, `global $x = ...`,
  *   `foreach %p in ...`, an operation's output capture `Name => $x`, or a
- *   module parameter, whose list may span several lines).
+ *   module parameter, whose list may span several lines); `assignedBy` then
+ *   says which.
  */
 
 /**
@@ -1231,15 +1240,18 @@ function indexVariableOccurrences(text) {
       const isParameter =
         paramStart !== -1 && character >= paramStart && character < paramEnd &&
         MODULE_PARAMETER_PREFIX_REGEX.test(prefixTail(code, character, paramStart));
-      const write = !inString && (
-        isParameter ||
-        FOREACH_VARIABLE_PREFIX_REGEX.test(before) ||
-        OUTPUT_CAPTURE_PREFIX_REGEX.test(before) ||
-        (ASSIGNMENT_PREFIX_REGEX.test(before) && ASSIGNMENT_SUFFIX_REGEX.test(after))
-      );
+      /** @type {AssignedBy | undefined} */
+      const assignedBy = inString ? undefined
+        : isParameter ? "parameter"
+          : FOREACH_VARIABLE_PREFIX_REGEX.test(before) ? "foreach"
+            : OUTPUT_CAPTURE_PREFIX_REGEX.test(before) ? "output"
+              : ASSIGNMENT_PREFIX_REGEX.test(before) && ASSIGNMENT_SUFFIX_REGEX.test(after) ? "assignment"
+                : undefined;
 
       const key = variableKey(tokenSigil, tokenName);
-      const occurrence = { line, character, length: match[0].length, write };
+      /** @type {VariableOccurrence} */
+      const occurrence = { line, character, length: match[0].length, write: assignedBy !== undefined };
+      if (assignedBy) occurrence.assignedBy = assignedBy;
       const existing = index.get(key);
       if (existing) existing.push(occurrence);
       else index.set(key, [occurrence]);

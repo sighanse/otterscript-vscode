@@ -888,6 +888,27 @@ describe("findVariableOccurrences", () => {
     assert.deepEqual(find(lines, "%", "p"), ["0:11:w", "1:16:r", "1:42:r"]);
   });
 
+  it("says how each assignment gives the variable its value", () => {
+    const text = [
+      "module M<in $p, out @r = @()> {",
+      "  foreach $item in @list { }",
+      "  Get-Http(Url: u, ResponseBody => $body);",
+      "  set $x = 1;",
+      "  global $g = 2;",
+      '  Log-Information "$x";',
+      "}",
+    ].join("\n");
+    const index = indexVariableOccurrences(text);
+    /** @param {string} key */
+    const how = (key) => index.get(key)?.map((o) => o.assignedBy ?? "read");
+    assert.deepEqual(how("$p"), ["parameter"]);
+    assert.deepEqual(how("@r"), ["parameter"]);
+    assert.deepEqual(how("$item"), ["foreach"]);
+    assert.deepEqual(how("$body"), ["output"]);
+    assert.deepEqual(how("$x"), ["assignment", "read"]);
+    assert.deepEqual(how("$g"), ["assignment"]);
+  });
+
   it("indexes a very long line in time linear in its length", () => {
     // Whether a variable is assigned was once decided by `...$` regexes
     // matched against the whole line before it, so one 100 KB line took

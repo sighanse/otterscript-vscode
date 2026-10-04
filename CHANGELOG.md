@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Hover for the file's own variables (`$version`, `@items`, `%config`, `${my var}`), also inside strings: where the variable gets its value — the lines that assign it, or the module parameter, `foreach` loop or operation output (`ResponseBody => $body`) it comes from — and how often it's used. A variable the file never assigns says so: it may come from the caller, a configuration variable or the runtime
+
 ### Fixed
 
 - A file with a very long line (such as a minified or generated one), or with deeply nested or unclosed calls or maps, no longer freezes VS Code for seconds while it's checked or while you move the cursor: the checks for unknown operations, argument counts, operation arguments and duplicate map keys, and the variable lookup behind highlighting, completion and rename, now take time in proportion to the file's length
