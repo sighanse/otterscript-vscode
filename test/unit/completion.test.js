@@ -24,6 +24,7 @@ const {
   provideCardItems,
   provideOperationItems,
   provideSigilItems,
+  registerCompletion,
   sigilAt,
 } = require("../../src/providers/completion.js");
 
@@ -263,5 +264,38 @@ describe("provideCardItems", () => {
     assert.deepEqual(provideCardItems(document, position, { ...settings, completionEnabled: false }), []);
     const plain = cursor("Log-Information |;");
     assert.deepEqual(provideCardItems(plain.document, plain.position, settings), []);
+  });
+});
+
+// ============================================================
+// registerCompletion
+// ============================================================
+
+describe("registerCompletion", () => {
+  const { captureRegistrations } = require("./fake-workspace");
+  const { providers, options } = captureRegistrations(() => registerCompletion(/** @type {any} */ (settings), listWorkspaceModules));
+  const [sigils, operations, cards] = providers.CompletionItemProvider;
+  /**
+   * @param {any[] | undefined | null} items
+   * @returns {string[]}
+   */
+  const labels = (items) => (items ?? []).map(labelOf);
+
+  it("registers the sigil, call and card completions on their trigger characters", () => {
+    assert.deepEqual(options.CompletionItemProvider, [["$", "@", "%"], ["(", ","], ['"']]);
+  });
+
+  it("passes each request to its provider function", async () => {
+    const sigil = cursor("set $x = $ToJs|");
+    assert.deepEqual(labels(sigils.provideCompletionItems(sigil.document, sigil.position)), labels(provideSigilItems(sigil.document, sigil.position, /** @type {any} */ (settings))));
+    assert.ok(labels(sigils.provideCompletionItems(sigil.document, sigil.position)).includes("$ToJson"));
+
+    const call = cursor("call |");
+    const context = { triggerKind: CompletionTriggerKind.Invoke };
+    assert.ok(labels(await operations.provideCompletionItems(call.document, call.position, undefined, context)).includes("Elsewhere"), "with the workspace's modules");
+
+    const card = cursor('<% set $c = %>{ "type": "|');
+    assert.deepEqual(labels(cards.provideCompletionItems(card.document, card.position)), labels(provideCardItems(card.document, card.position, /** @type {any} */ (settings))));
+    assert.equal(sigils.resolveCompletionItem, operations.resolveCompletionItem, "both resolve documentation the same way");
   });
 });

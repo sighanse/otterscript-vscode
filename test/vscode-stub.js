@@ -401,6 +401,58 @@ class CodeLens {
   }
 }
 
+/** Mirrors `vscode.ParameterInformation`. */
+class ParameterInformation {
+  /** @param {string | [number, number]} label - Text, or offsets into the signature's label */
+  constructor(label) {
+    this.label = label;
+  }
+}
+
+/** Mirrors `vscode.SignatureInformation`. */
+class SignatureInformation {
+  /**
+   * @param {string} label
+   * @param {unknown} [documentation]
+   */
+  constructor(label, documentation) {
+    this.label = label;
+    this.documentation = documentation;
+    /** @type {ParameterInformation[]} */
+    this.parameters = [];
+    /** @type {number | undefined} */
+    this.activeParameter = undefined;
+  }
+}
+
+/** Mirrors `vscode.SignatureHelp`. */
+class SignatureHelp {
+  constructor() {
+    /** @type {SignatureInformation[]} */
+    this.signatures = [];
+    this.activeSignature = 0;
+    this.activeParameter = 0;
+  }
+}
+
+/** Mirrors `vscode.InlayHintKind`. */
+const InlayHintKind = Object.freeze({ Type: 1, Parameter: 2 });
+
+/** Mirrors `vscode.InlayHint`. */
+class InlayHint {
+  /**
+   * @param {Position} position
+   * @param {string} label
+   * @param {number} [kind]
+   */
+  constructor(position, label, kind) {
+    this.position = position;
+    this.label = label;
+    this.kind = kind;
+    this.paddingRight = false;
+  }
+}
+
 /**
  * Mirrors `vscode.EventEmitter`: `event` subscribes a listener, `fire` calls
  * every listener.
@@ -434,10 +486,11 @@ class EventEmitter {
 /**
  * Everything the code under test registered with VS Code, in order: each
  * provider (`kind` is the `register...` name without `register`, such as
- * `RenameProvider`) and each command. A test clears it, calls a
+ * `RenameProvider`), with the arguments after it (`options`: trigger
+ * characters, metadata), and each command. A test clears it, calls a
  * `register...` function, and calls what it registered as VS Code would.
  *
- * @type {{ kind: string, provider?: any, metadata?: any, id?: string, callback?: (...args: any[]) => any }[]}
+ * @type {{ kind: string, provider?: any, options?: any[], id?: string, callback?: (...args: any[]) => any }[]}
  */
 const registrations = [];
 
@@ -450,8 +503,8 @@ const registrations = [];
 function recordProvider(kind) {
   return (...args) => {
     // registerWorkspaceSymbolProvider is the one without a selector.
-    const [provider, metadata] = kind === "WorkspaceSymbolProvider" ? args : args.slice(1);
-    registrations.push({ kind, provider, metadata });
+    const [provider, ...options] = kind === "WorkspaceSymbolProvider" ? args : args.slice(1);
+    registrations.push({ kind, provider, options });
     return { dispose() {} };
   };
 }
@@ -557,6 +610,11 @@ const vscode = {
   SymbolInformation,
   CodeLens,
   EventEmitter,
+  ParameterInformation,
+  SignatureInformation,
+  SignatureHelp,
+  InlayHint,
+  InlayHintKind,
   ConfigurationTarget: Object.freeze({ Global: 1, Workspace: 2, WorkspaceFolder: 3 }),
   EndOfLine: Object.freeze({ LF: 1, CRLF: 2 }),
   Uri: Object.freeze({ parse: parseUri }),
@@ -570,6 +628,10 @@ const vscode = {
     registerFoldingRangeProvider: recordProvider("FoldingRangeProvider"),
     registerWorkspaceSymbolProvider: recordProvider("WorkspaceSymbolProvider"),
     registerCodeActionsProvider: recordProvider("CodeActionsProvider"),
+    registerSignatureHelpProvider: recordProvider("SignatureHelpProvider"),
+    registerInlayHintsProvider: recordProvider("InlayHintsProvider"),
+    registerHoverProvider: recordProvider("HoverProvider"),
+    registerCompletionItemProvider: recordProvider("CompletionItemProvider"),
   },
   commands: {
     /**

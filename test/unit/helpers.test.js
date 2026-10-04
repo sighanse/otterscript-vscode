@@ -15,6 +15,7 @@ const assert = require("node:assert/strict");
 const { Position } = require("../vscode-stub");
 const stub = require("../vscode-stub");
 const { makeDocument } = require("./fake-document");
+const { operationDocs } = require("../../src/language-data.js");
 const {
   buildCompletionItem,
   resolveCompletionDocumentation,
@@ -78,6 +79,11 @@ describe("buildHoverMarkdown (otterscript.product and anySigil)", () => {
     assert.doesNotMatch(text(buildHoverMarkdown(doc, "BuildMaster")), /Not in/);
     assert.doesNotMatch(text(buildHoverMarkdown(doc)), /Not in/, "'any' by default");
     assert.doesNotMatch(text(buildHoverMarkdown({ ...doc, products: ["Otter", "BuildMaster"] }, "ProGet")), /Not in/, "core engine");
+  });
+
+  it("says what to write instead of a superseded name", () => {
+    assert.match(text(buildHoverMarkdown(operationDocs.PSCall1)), /^### PSCall1\n\n⚠️ The older operation: write `PSCall` for the current one\.\n\n/);
+    assert.doesNotMatch(text(buildHoverMarkdown(operationDocs.PSCall)), /⚠️/);
   });
 
   it("says when a function works with every sigil", () => {

@@ -28,6 +28,7 @@ const {
   inlineCode,
   resolveHover,
   stopInStringOrComment,
+  registerHover,
 } = require("../../src/providers/hover.js");
 
 /** A hover context without settings or other workspace files. */
@@ -308,5 +309,29 @@ describe("inlineCode", () => {
   it("pads a name that starts or ends with a backtick", () => {
     assert.equal(inlineCode("`x.otter"), "`` `x.otter ``");
     assert.equal(inlineCode("x`"), "`` x` ``");
+  });
+});
+
+// ============================================================
+// registerHover
+// ============================================================
+
+describe("registerHover", () => {
+  const { captureRegistrations } = require("./fake-workspace");
+
+  /**
+   * The hover provider, registered with `settings`.
+   *
+   * @param {{ hoverEnabled: boolean }} settings
+   * @returns {any}
+   */
+  const provider = (settings) =>
+    captureRegistrations(() => registerHover(/** @type {any} */ ({ product: "any", ...settings }), async () => [])).providers.HoverProvider[0];
+
+  it("hovers with the chain when on, and not at all when off", async () => {
+    const document = makeDocument("Log-Information hi;");
+    const position = document.positionAt(3);
+    assert.match(String(markdown(await provider({ hoverEnabled: true }).provideHover(document, position))), /Log-Information/);
+    assert.equal(provider({ hoverEnabled: false }).provideHover(document, position), null);
   });
 });

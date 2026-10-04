@@ -73,23 +73,31 @@ function useWorkspace({ files = {}, open = [] } = {}) {
 /**
  * Clears the stub's registrations and runs `register`, then returns what
  * it registered: the providers by kind (`RenameProvider`, ...; a list where
- * a kind repeats) and the commands by id.
+ * a kind repeats), the arguments after each (`options`, in the same order)
+ * and the commands by id.
  *
  * @param {() => unknown} register
- * @returns {{ providers: Record<string, any[]>, commands: Record<string, (...args: any[]) => any> }}
+ * @returns {{ providers: Record<string, any[]>, options: Record<string, any[][]>, commands: Record<string, (...args: any[]) => any> }}
  */
 function captureRegistrations(register) {
   stub.registrations.length = 0;
   register();
   /** @type {Record<string, any[]>} */
   const providers = {};
+  /** @type {Record<string, any[][]>} */
+  const options = {};
   /** @type {Record<string, (...args: any[]) => any>} */
   const commands = {};
-  for (const { kind, provider, id, callback } of stub.registrations) {
-    if (kind === "command" && id && callback) commands[id] = callback;
-    else (providers[kind] ??= []).push(provider);
+  for (const registration of stub.registrations) {
+    const { kind, id, callback } = registration;
+    if (kind === "command" && id && callback) {
+      commands[id] = callback;
+    } else {
+      (providers[kind] ??= []).push(registration.provider);
+      (options[kind] ??= []).push(registration.options ?? []);
+    }
   }
-  return { providers, commands };
+  return { providers, options, commands };
 }
 
 module.exports = { captureRegistrations, useWorkspace };
