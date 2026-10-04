@@ -346,3 +346,37 @@ describe("documents that aren't files on disk", () => {
     await waitFor(async () => (await symbolSchemes("UntitledOnly")).length === 0, "the untitled module to leave the index");
   });
 });
+
+describe("OtterScript files on disk", () => {
+  /** Written by the test and deleted after it (and ignored by git). */
+  const folder = vscode.Uri.file(path.join(WORKSPACE_DIR, "generated"));
+
+  /**
+   * The workspace symbols named `name`.
+   *
+   * @param {string} name
+   * @returns {Promise<vscode.SymbolInformation[]>}
+   */
+  async function symbolsNamed(name) {
+    /** @type {vscode.SymbolInformation[]} */
+    const found = await vscode.commands.executeCommand("vscode.executeWorkspaceSymbolProvider", name);
+    return found.filter((s) => s.name === name);
+  }
+
+  it("leaves a file too large to be OtterScript out of the workspace module index", async () => {
+    // Reading such a file whole could run the extension host out of memory;
+    // 6 MB is past the limit, and nobody writes OtterScript that long.
+    const large = vscode.Uri.joinPath(folder, "large.otter");
+    const small = vscode.Uri.joinPath(folder, "small.otter");
+    try {
+      await vscode.workspace.fs.writeFile(large, Buffer.from("module LargeOnDisk {\n}\n" + "# padding\n".repeat(600000)));
+      await vscode.workspace.fs.writeFile(small, Buffer.from("module SmallOnDisk {\n}\n"));
+      await waitFor(async () => (await symbolsNamed("SmallOnDisk")).length === 1, "the small file in the index", 10000);
+      // Both were written at once; give the large one time to be indexed too.
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      assert.deepEqual(await symbolsNamed("LargeOnDisk"), []);
+    } finally {
+      await vscode.workspace.fs.delete(folder, { recursive: true, useTrash: false });
+    }
+  });
+});

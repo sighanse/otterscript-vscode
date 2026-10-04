@@ -26,7 +26,9 @@ const {
   isValidCompletionPosition,
   loadConfig,
   lookupOwn,
+  MAX_WORKSPACE_FILE_BYTES,
   mapWithConcurrency,
+  readWorkspaceText,
   productSignatures,
   scheduleTimerForUri,
 } = require("../../src/helpers.js");
@@ -147,6 +149,43 @@ describe("productSignatures", () => {
 // ============================================================
 // mapWithConcurrency
 // ============================================================
+
+describe("readWorkspaceText", () => {
+  /**
+   * Runs `readWorkspaceText` on a file of `size` bytes, with a stubbed
+   * `workspace.fs` that records whether the file was read.
+   *
+   * @param {number} size
+   * @returns {Promise<{ text: string | undefined, read: boolean }>}
+   */
+  async function readFileOf(size) {
+    const workspace = /** @type {any} */ (stub.workspace);
+    const saved = { fs: workspace.fs, asRelativePath: workspace.asRelativePath };
+    let read = false;
+    workspace.fs = {
+      stat: async () => ({ size }),
+      readFile: async () => {
+        read = true;
+        return new TextEncoder().encode("module M {}");
+      },
+    };
+    workspace.asRelativePath = () => "big.otter";
+    try {
+      const text = await readWorkspaceText(/** @type {any} */ ({ toString: () => "file:///big.otter" }));
+      return { text, read };
+    } finally {
+      Object.assign(workspace, saved);
+    }
+  }
+
+  it("reads a file up to the limit", async () => {
+    assert.deepEqual(await readFileOf(MAX_WORKSPACE_FILE_BYTES), { text: "module M {}", read: true });
+  });
+
+  it("doesn't read a larger file at all", async () => {
+    assert.deepEqual(await readFileOf(MAX_WORKSPACE_FILE_BYTES + 1), { text: undefined, read: false });
+  });
+});
 
 describe("mapWithConcurrency", () => {
   it("visits every item exactly once", async () => {
