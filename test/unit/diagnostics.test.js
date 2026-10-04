@@ -276,6 +276,22 @@ describe("updateDiagnostics — too many arguments", () => {
   it("does not flag an unknown function (that check is owned by unknown-scalar-function)", () => {
     assert.deepEqual(only("$r = $Frobnicate($a, $b, $c);", "too-many-arguments"), []);
   });
+
+  it("counts the arguments of deeply nested or unclosed calls in time linear in their length", () => {
+    // Each call was once read to its `)` on its own: nested calls reread
+    // their inner calls, and unclosed ones the rest of the document, so
+    // 100 KB took seconds. The limit leaves room for a slow CI machine.
+    for (const [source, expected] of /** @type {[string, number][]} */ ([
+      ["$ToJson(".repeat(10000) + "$a, $b" + ")".repeat(10000), 1],
+      ["$ToJson(".repeat(10000), 0],
+    ])) {
+      const started = performance.now();
+      const found = only(source, "too-many-arguments");
+      const elapsed = performance.now() - started;
+      assert.equal(found.length, expected, "only the innermost call has two arguments");
+      assert.ok(elapsed < 1000, `${source.slice(0, 10)}...: took ${Math.round(elapsed)} ms`);
+    }
+  });
 });
 
 // ============================================================
@@ -342,6 +358,19 @@ describe("updateDiagnostics — unknown operation", () => {
     assert.deepEqual(only('Log-Information "a"; Bogus-Op "b";', "unknown-operation").map((d) => d.range.start.character), [21]);
     assert.equal(only("if $a { Bogus-Op; }", "unknown-operation").length, 1);
     assert.equal(only("ProGet::Bogus-Op;", "unknown-operation").length, 1);
+  });
+
+  it("checks a very long line in time linear in its length", () => {
+    // Each word's check once matched a `...$` regex against the whole line
+    // before it, so one 100 KB line (minified, generated, or planted in a
+    // repository) blocked the extension host for seconds. Linear, it takes
+    // milliseconds; the limit leaves room for a slow CI machine.
+    const line = "word ".repeat(20000) + "Bogus-Op;";
+    const started = performance.now();
+    const found = only(line, "unknown-operation");
+    const elapsed = performance.now() - started;
+    assert.deepEqual(found, [], "not in operation position");
+    assert.ok(elapsed < 1000, `took ${Math.round(elapsed)} ms`);
   });
 });
 
@@ -527,6 +556,24 @@ describe("updateDiagnostics — unknown namespace", () => {
     assert.deepEqual(only('GitHub::Create-Issue(Title: "x");\nDotNet::Build(Project: "a.csproj");\nBuild(Configuration: "Release");', "missing-required-argument"), []);
     assert.equal(only('Jira::Create-Issue(Title: "x");', "missing-required-argument")[0]?.message, "'Create-Issue' is missing its required argument 'Type'.");
     assert.equal(only('DevEnv::Build(Configuration: "Release");', "missing-required-argument")[0]?.message, "'Build' is missing its required argument 'ProjectFile'.");
+  });
+
+  it("checks the arguments of deeply nested or unclosed operation calls in time linear in their length", () => {
+    // As for functions: each call was read to its `)` on its own, and each
+    // positional argument's text again, so 100 KB took seconds.
+    for (const [source, expected] of /** @type {[string, number][]} */ ([
+      // Only the innermost, empty call misses To: the others have a
+      // positional argument, which could be it.
+      ["Copy-Files(".repeat(8000) + ")".repeat(8000), 1],
+      ["Copy-Files(From: ".repeat(8000) + "a" + ")".repeat(8000), 8000],
+      ["Copy-Files(".repeat(8000), 0],
+    ])) {
+      const started = performance.now();
+      const found = only(source, "missing-required-argument");
+      const elapsed = performance.now() - started;
+      assert.equal(found.length, expected, source.slice(0, 20));
+      assert.ok(elapsed < 1000, `${source.slice(0, 12)}...: took ${Math.round(elapsed)} ms`);
+    }
   });
 
   it("doesn't check an operation's arguments behind a namespace none of its forms has", () => {
@@ -936,6 +983,26 @@ describe("findDuplicateMapKeyDiagnosticsFromMasked", () => {
     const diags = run(src);
     assert.equal(diags.length, 1);
     assert.equal(diags[0].range.start.character, src.lastIndexOf("a"));
+  });
+
+  it("checks deeply nested or unclosed maps in time linear in their length", () => {
+    // Each `%(` was once scanned to its `)` on its own: nested maps rescanned
+    // their whole body, and unclosed ones the rest of the document, so 100 KB
+    // took seconds. The limit leaves room for a slow CI machine.
+    for (const src of ["%( a: ".repeat(15000) + ")".repeat(15000), "%(".repeat(50000)]) {
+      const started = performance.now();
+      assert.deepEqual(run(src), []);
+      const elapsed = performance.now() - started;
+      assert.ok(elapsed < 1000, `${src.slice(0, 10)}...: took ${Math.round(elapsed)} ms`);
+    }
+  });
+
+  it("reports nested maps' duplicates outer map first, and none for an unclosed map", () => {
+    const src = "%( a: %( b: 1, b: 2 ), a: 3 ) %( c: 1, c: 2";
+    assert.deepEqual(run(src).map((d) => [d.message, d.range.start.character]), [
+      ["Duplicate key 'a' in map expression.", src.indexOf("a: 3")],
+      ["Duplicate key 'b' in map expression.", src.lastIndexOf("b")],
+    ]);
   });
 
   it("reports duplicates independently per map expression", () => {

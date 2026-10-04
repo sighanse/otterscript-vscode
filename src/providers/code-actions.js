@@ -14,7 +14,7 @@ const {
   operationDocs,
   operationForms,
 } = require("../language-data");
-const { findOperationArgumentContext, maskComments, maskNonCodeSpans } = require("../scanner");
+const { findOperationArgumentContext, maskComments, maskNonCodeSpans, namespaceBefore } = require("../scanner");
 const { codeView, getLineStartScanState, getMaskedTextBefore, MASKED_CONTEXT_MAX_LINES } = require("../document-index");
 const {
   createCardVersionFix,
@@ -249,8 +249,7 @@ function createUnknownFunctionFix(document, diagnostic, product) {
  */
 function createUnknownOperationFix(document, diagnostic, product) {
   const name = document.getText(diagnostic.range);
-  const before = document.lineAt(diagnostic.range.start.line).text.slice(0, diagnostic.range.start.character);
-  const namespace = /([A-Za-z][A-Za-z0-9]*)::$/.exec(before)?.[1]?.toLowerCase();
+  const namespace = namespaceBefore(document.lineAt(diagnostic.range.start.line).text, diagnostic.range.start.character)?.toLowerCase();
   const candidates = Object.keys(operationDocs).filter((key) => operationForms(key).some((doc) =>
     isAvailableIn(doc, product) && (!namespace || (doc.namespace ?? "Core").toLowerCase() === namespace)));
   const suggestion = closestMatch(name, candidates);
@@ -315,7 +314,7 @@ function createMissingArgumentFix(document, diagnostic) {
   const nameEnd = document.offsetAt(diagnostic.range.end) - base;
   const open = /^\s*\(/.exec(masked.slice(nameEnd))?.[0].length;
   if (!open) return null;
-  const namespace = /([A-Za-z][A-Za-z0-9]*)::$/.exec(masked.slice(0, nameStart))?.[1] ?? null;
+  const namespace = namespaceBefore(masked, nameStart) ?? null;
   const call = parseCallArguments(masked, text, nameEnd + open - 1);
   const missing = call && findArgumentProblems(text.slice(nameStart, nameEnd), namespace, call)?.missing;
   if (!call || !missing?.length) return null;

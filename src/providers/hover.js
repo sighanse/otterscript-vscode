@@ -9,7 +9,7 @@ const vscode = require("vscode");
 const { keywordDocs, lookupOperation, mapFunctionDocs, operationForms, scalarFunctionDocs, syntaxDocs, variableDocs, vectorFunctionDocs } = require("../language-data");
 const { buildArgumentHoverMarkdown, buildHoverMarkdown, lookupOwn } = require("../helpers");
 const { findCallArguments, getMaskedTextBefore, getModuleNameAt, getModuleParameters, isInStringOrCommentDoc, resolveModule } = require("../document-index");
-const { findOperationArgumentContext } = require("../scanner");
+const { findOperationArgumentContext, namespaceBefore } = require("../scanner");
 
 /**
  * The code before a word (strings and comments masked) when the word is where
@@ -222,7 +222,7 @@ function registerHover(settings, listWorkspaceModules) {
         // (`DotNet::Build`); without one, the others are listed.
         const operationRange = document.getWordRangeAtPosition(position, /[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*/);
         const lineBefore = operationRange ? getMaskedTextBefore(document, operationRange.start, 0) : "";
-        const namespace = /([A-Za-z][A-Za-z0-9]*)::$/.exec(lineBefore)?.[1];
+        const namespace = namespaceBefore(lineBefore, lineBefore.length);
         const statementBefore = namespace ? lineBefore.slice(0, -(namespace.length + 2)) : lineBefore;
         if (operationRange && OPERATION_POSITION_REGEX.test(statementBefore)) {
           const name = document.getText(operationRange);

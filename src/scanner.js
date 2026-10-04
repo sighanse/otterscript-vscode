@@ -202,6 +202,182 @@ function isModuleCallContext(lineText, wordStart) {
 }
 
 // ============================================================
+// TOP-LEVEL COMMAS OF MANY CALLS AT ONCE
+// ============================================================
+
+/**
+ * How {@link findTopLevelCommas} counts nesting inside a call:
+ * - `openers`, `closers` -- the brackets that nest (`"([{"` and `")]}"`)
+ * - `clamp` -- whether a closer with nothing open leaves the depth at 0
+ *   (true), or takes it below 0, where no comma is top-level any more (false)
+ *
+ * @typedef {{ openers: string, closers: string, clamp: boolean }} NestingRule
+ */
+
+/**
+ * The top-level commas of a call: those at depth 0 counted by a
+ * {@link NestingRule} from just after its `(`, and whether the depth is
+ * back at 0 at its `)`.
+ *
+ * @typedef {{ close: number, commas: number[], closesAtTop: boolean }} TopLevelCommas
+ */
+
+/**
+ * For each `(` in `opens`, its matching `)` (counting parentheses only) and
+ * its top-level commas, in text masked by {@link maskNonCodeSpans}: the same
+ * result as walking from each `(` to its `)` and counting depth by `rule`,
+ * but in one pass over the text. Walking each call on its own made nested or
+ * unclosed calls quadratic: every call rescanned its inner calls, and an
+ * unclosed one the rest of the document (100 KB took seconds).
+ *
+ * The one pass works on depth counted from the start of the text. A comma
+ * is top-level for a call when the depth there is where it was at the call's
+ * start (`clamp: false`), or, when clamped, when the depth never went lower
+ * in between: when the last position with a lower depth is before the call.
+ *
+ * A comma can be top-level for many calls at once only in malformed text
+ * (`%( %( ] ] , ...`), where the result can grow with the square of the
+ * text. Past a limit linear in the text's length, this gives up and
+ * returns null, so the caller skips its check.
+ *
+ * @param {string} maskedText
+ * @param {number[]} opens - Indexes of `(`, ascending
+ * @param {NestingRule} rule
+ * @returns {Map<number, TopLevelCommas> | null} Keyed by the `(`'s index;
+ *   a `(` without a matching `)` has no entry. Null past the limit.
+ */
+function findTopLevelCommas(maskedText, opens, rule) {
+  const n = maskedText.length;
+
+  // Every `(`'s matching `)`, from one stack of parentheses.
+  const closeOf = new Int32Array(n).fill(-1);
+  /** @type {number[]} */
+  const parens = [];
+  for (let i = 0; i < n; i++) {
+    if (maskedText[i] === "(") parens.push(i);
+    else if (maskedText[i] === ")" && parens.length) closeOf[/** @type {number} */ (parens.pop())] = i;
+  }
+
+  // depth[i]: the nesting depth before maskedText[i], from the text's start.
+  const depth = new Int32Array(n + 1);
+  for (let i = 0; i < n; i++) {
+    const ch = maskedText[i];
+    depth[i + 1] = depth[i] + (rule.openers.includes(ch) ? 1 : rule.closers.includes(ch) ? -1 : 0);
+  }
+
+  // Clamped: lowerBefore[i] is the last position before i with a lower
+  // depth, or -1 (a stack of positions of rising depth).
+  const lowerBefore = new Int32Array(n + 1);
+  if (rule.clamp) {
+    /** @type {number[]} */
+    const rising = [];
+    for (let i = 0; i <= n; i++) {
+      while (rising.length && depth[rising[rising.length - 1]] >= depth[i]) rising.pop();
+      lowerBefore[i] = rising.length ? rising[rising.length - 1] : -1;
+      rising.push(i);
+    }
+  }
+  /**
+   * Whether position `i`, inside the call whose `(` is at `open`, is at the
+   * call's top level.
+   *
+   * @param {number} open
+   * @param {number} i
+   * @returns {boolean}
+   */
+  const atTopLevel = (open, i) => (rule.clamp ? lowerBefore[i] < open + 1 : depth[i] === depth[open + 1]);
+
+  const isOpen = new Uint8Array(n);
+  for (const open of opens) if (closeOf[open] !== -1) isOpen[open] = 1;
+
+  /** @type {Map<number, TopLevelCommas>} */
+  const result = new Map();
+  // The calls open at the current position, innermost last; unclamped, also
+  // by their starting depth, as a comma counts for exactly those.
+  /** @type {number[]} */
+  const active = [];
+  /** @type {Map<number, number[]>} */
+  const activeByDepth = new Map();
+  let budget = 4 * n + 10000;
+  for (let i = 0; i < n; i++) {
+    const ch = maskedText[i];
+    if (active.length && closeOf[active[active.length - 1]] === i) {
+      const open = /** @type {number} */ (active.pop());
+      /** @type {TopLevelCommas} */ (result.get(open)).closesAtTop = atTopLevel(open, i);
+      if (!rule.clamp) activeByDepth.get(depth[open + 1])?.pop();
+    } else if (ch === ",") {
+      if (rule.clamp) {
+        // The calls whose start is after the last lower depth: a run at the top.
+        for (let k = active.length - 1; k >= 0 && atTopLevel(active[k], i); k--) {
+          /** @type {TopLevelCommas} */ (result.get(active[k])).commas.push(i);
+          if (--budget < 0) return null;
+        }
+      } else {
+        for (const open of activeByDepth.get(depth[i]) ?? []) {
+          /** @type {TopLevelCommas} */ (result.get(open)).commas.push(i);
+          if (--budget < 0) return null;
+        }
+      }
+    } else if (isOpen[i]) {
+      active.push(i);
+      result.set(i, { close: closeOf[i], commas: [], closesAtTop: false });
+      if (!rule.clamp) {
+        const key = depth[i + 1];
+        const list = activeByDepth.get(key);
+        if (list) list.push(i);
+        else activeByDepth.set(key, [i]);
+      }
+    }
+  }
+  return result;
+}
+
+// ============================================================
+// LOOKING BACK FROM A WORD
+// ============================================================
+// These walk back from an index instead of matching a `...$` regex against
+// the text before it: such a regex is tried at every position of that text,
+// so a check run for each word of a line made a long line quadratic (a
+// 100 KB line took seconds).
+
+/**
+ * The namespace written right before `end` (`DotNet` for `DotNet::Build`
+ * with `end` at `B`), or undefined. Same result as matching
+ * `/([A-Za-z][A-Za-z0-9]*)::$/` against `text.slice(0, end)`.
+ *
+ * @param {string} text
+ * @param {number} end - Index right after the `::`
+ * @returns {string | undefined}
+ */
+function namespaceBefore(text, end) {
+  if (end < 2 || text[end - 1] !== ":" || text[end - 2] !== ":") return undefined;
+  const nameEnd = end - 2;
+  let start = nameEnd;
+  while (start > 0 && /[A-Za-z0-9]/.test(text[start - 1])) start--;
+  // A name starts with a letter, so leading digits aren't part of it.
+  while (start < nameEnd && !/[A-Za-z]/.test(text[start])) start++;
+  return start < nameEnd ? text.slice(start, nameEnd) : undefined;
+}
+
+/**
+ * Whether a statement can start at `end`: only whitespace separates it from
+ * the start of `text`, a `;`, a `}`, or a block's `{` (not the `{` of a
+ * braced variable such as `${my-var}`). Same result as testing
+ * `/(?:^|[;}]|(?<![$@%])\{)\s*$/` against `text.slice(0, end)`.
+ *
+ * @param {string} text
+ * @param {number} end
+ * @returns {boolean}
+ */
+function isStatementStart(text, end) {
+  while (end > 0 && /\s/.test(text[end - 1])) end--;
+  if (end === 0) return true;
+  const last = text[end - 1];
+  if (last === ";" || last === "}") return true;
+  return last === "{" && (end < 2 || !/[$@%]/.test(text[end - 2]));
+}
+
+// ============================================================
 // CORE LINE SCANNER
 // ============================================================
 
@@ -1263,4 +1439,11 @@ module.exports = {
   isModuleDeclarationContext,
   isModuleCallContext,
   findModuleDeclarations,
+
+  // -- Top-level commas of many calls at once
+  findTopLevelCommas,
+
+  // -- Looking back from a word
+  namespaceBefore,
+  isStatementStart,
 };

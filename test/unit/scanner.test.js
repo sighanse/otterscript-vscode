@@ -43,6 +43,9 @@ const {
   isModuleDeclarationContext,
   isModuleCallContext,
   findModuleDeclarations,
+  findTopLevelCommas,
+  namespaceBefore,
+  isStatementStart,
 } = require("../../src/scanner.js");
 
 /**
@@ -986,5 +989,87 @@ describe("parseModuleParameters", () => {
   it("keeps the commas of a default value inside it", () => {
     assert.deepEqual(parse("module M<in @tags = @($a, $b), in %m = %(k: $Coalesce($x, $y)), $x> {").map((p) => [p.name, p.optional]),
       [["tags", true], ["m", true], ["x", false]]);
+  });
+});
+
+// ============================================================
+// findTopLevelCommas
+// ============================================================
+
+describe("findTopLevelCommas", () => {
+  const anyBracket = { openers: "([{", closers: ")]}", clamp: true };
+  const callArguments = { openers: "([", closers: ")]", clamp: false };
+  /**
+   * Every `(` of `text` with its commas and whether it closes at its top level.
+   *
+   * @param {string} text
+   * @param {import("../../src/scanner.js").NestingRule} rule
+   * @returns {[number, number, number[], boolean][]}
+   */
+  const all = (text, rule) => {
+    const opens = [...text.matchAll(/\(/g)].map((m) => /** @type {number} */ (m.index));
+    const found = findTopLevelCommas(text, opens, rule);
+    assert.ok(found);
+    return [...found].map(([open, call]) => [open, call.close, call.commas, call.closesAtTop]);
+  };
+
+  it("finds each call's own commas, not its nested calls'", () => {
+    assert.deepEqual(all("f(a, g(b, c), [d, e], {x, y})", anyBracket), [
+      [1, 28, [3, 12, 20], true],
+      [6, 11, [8], true],
+    ]);
+  });
+
+  it("leaves out a `(` without a matching `)`", () => {
+    assert.deepEqual(all("f(a, g(b, c)", anyBracket), [[6, 11, [8], true]]);
+  });
+
+  it("clamped, a stray closer leaves the depth at 0; unclamped, no comma after it counts", () => {
+    assert.deepEqual(all("f(a ], b)", anyBracket), [[1, 8, [5], true]]);
+    assert.deepEqual(all("f(a ], b)", callArguments), [[1, 8, [], false]]);
+  });
+
+  it("clamped, closes off its top level when a bracket inside is still open", () => {
+    assert.deepEqual(all("f(a, [b)", anyBracket), [[1, 7, [3], false]]);
+  });
+
+  it("unclamped, doesn't nest braces, so a comma inside them is top-level", () => {
+    assert.deepEqual(all("f({a, b})", callArguments), [[1, 8, [4], true]]);
+  });
+
+  it("gives up on text where the commas would count for many calls at once", () => {
+    const k = 3000;
+    const text = "%(".repeat(k) + "]".repeat(k) + ",".repeat(k) + ")".repeat(k);
+    const opens = [...text.matchAll(/\(/g)].map((m) => /** @type {number} */ (m.index));
+    assert.equal(findTopLevelCommas(text, opens, anyBracket), null);
+  });
+});
+
+// ============================================================
+// namespaceBefore / isStatementStart
+// ============================================================
+
+describe("namespaceBefore", () => {
+  it("returns the namespace right before an index, or undefined", () => {
+    const text = "x; DotNet::Build";
+    assert.equal(namespaceBefore(text, text.indexOf("Build")), "DotNet");
+    assert.equal(namespaceBefore(text, text.indexOf("DotNet")), undefined);
+    assert.equal(namespaceBefore("::Build", 2), undefined, "no name before the ::");
+    assert.equal(namespaceBefore("9ab::B", 5), "ab", "a name starts with a letter");
+    assert.equal(namespaceBefore("a:b", 2), undefined, "one colon isn't a namespace");
+  });
+});
+
+describe("isStatementStart", () => {
+  it("is true at the start, or after `;`, `}` or a block's `{`, and whitespace", () => {
+    for (const before of ["", "  ", "a; ", "}", "if $x {\t", "\n"]) {
+      assert.equal(isStatementStart(before + "Op", before.length), true, JSON.stringify(before));
+    }
+  });
+
+  it("is false after other text or a braced variable's `{`", () => {
+    for (const before of ["Log ", "${", "@{ ", "%{", "x = "]) {
+      assert.equal(isStatementStart(before + "Op", before.length), false, JSON.stringify(before));
+    }
   });
 });

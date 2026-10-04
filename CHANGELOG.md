@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- A file with a very long line (such as a minified or generated one), or with deeply nested or unclosed calls or maps, no longer freezes VS Code for seconds while it's checked: the checks for unknown operations, argument counts, operation arguments and duplicate map keys now take time in proportion to the file's length
+
 ## [0.6.0] - 2026-10-03
 
 ### Added
