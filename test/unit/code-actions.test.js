@@ -2,19 +2,23 @@
 /**
  * @fileoverview Unit tests for the quick fixes of src/providers/code-actions.js:
  * each fix factory's edit, the closest-name suggestions and the
- * missing-argument fix.
+ * missing-argument fix; then, on the real checks' diagnostics, the
+ * lightbulb provider, Fix All (the command and the source.fixAll action),
+ * and the commands that turn a code off and re-check a file.
  *
  * Requires the vscode stub before code-actions.js (which pulls in vscode) loads.
  */
 
 require("../vscode-stub");
 
-const { describe, it } = require("node:test");
+const { afterEach, describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
 const { Position } = require("../vscode-stub");
 const stub = require("../vscode-stub");
 const { makeDocument } = require("./fake-document");
+const { captureRegistrations, useWorkspace } = require("./fake-workspace");
+const { updateDiagnostics } = require("../../src/diagnostics.js");
 const {
   createAssignmentInConditionFix,
   createForToForeachFix,
@@ -27,6 +31,7 @@ const {
   createUnknownNamespaceFix,
   createUnknownOperationFix,
   nearestNamespace,
+  registerCodeActions,
 } = require("../../src/providers/code-actions.js");
 
 /**
@@ -254,5 +259,271 @@ describe("quick-fix factories", () => {
     assert.equal(fix.title, "Replace with '}'");
     assert.equal(fix.edit.edits[0][0], "replace");
     assert.equal(fix.edit.edits[0][3], "}");
+  });
+});
+
+// ============================================================
+// The providers and commands
+// ============================================================
+
+/**
+ * Registers the quick fixes with a diagnostics collection the real checks
+ * fill, as extension.js does, or else `check`.
+ *
+ * @param {(document: any) => any[]} [check] - The diagnostics to report
+ *   instead of the real checks'
+ *
+ * @returns {{
+ *   quickFixes: any,
+ *   fixAll: any,
+ *   commands: Record<string, (...args: any[]) => any>,
+ *   collection: Map<string, any[]>,
+ *   checked: () => number
+ * }} The lightbulb provider, the source.fixAll provider, the commands,
+ *   the diagnostics by URI, and how many times a document was checked
+ */
+function registerFixes(check) {
+  /** @type {Map<string, any[]>} */
+  const collection = new Map();
+  const diagnostics = {
+    set: (/** @type {any} */ uri, /** @type {any[]} */ issues) => collection.set(uri.toString(), issues),
+    get: (/** @type {any} */ uri) => collection.get(uri.toString()),
+  };
+  let runs = 0;
+  /** @param {any} document */
+  const runDiagnostics = (document) => {
+    runs++;
+    if (check) diagnostics.set(document.uri, check(document));
+    else updateDiagnostics(document, /** @type {any} */ (diagnostics), /** @type {any} */ ({}));
+  };
+  const { providers, commands } = captureRegistrations(() => {
+    registerCodeActions(/** @type {any} */ ({ product: "any", adaptiveCardMaxVersion: "1.6" }), /** @type {any} */ (diagnostics), runDiagnostics);
+  });
+  const [quickFixes, fixAll] = providers.CodeActionsProvider;
+  return { quickFixes, fixAll, commands, collection, checked: () => runs };
+}
+
+/**
+ * `document`'s diagnostics, from the real checks.
+ *
+ * @param {any} document
+ * @returns {any[]}
+ */
+function diagnose(document) {
+  /** @type {any[]} */
+  let found = [];
+  updateDiagnostics(document, /** @type {any} */ ({ set: (/** @type {any} */ _uri, /** @type {any[]} */ issues) => { found = issues; } }), /** @type {any} */ ({}));
+  return found;
+}
+
+/**
+ * Each edit of `edit` as `"<line>:<start>-<end> <text>"`, in order.
+ *
+ * @param {any} edit - A stub WorkspaceEdit
+ * @returns {string[]}
+ */
+const describeEdits = (edit) => edit.edits.map((/** @type {any} */ [op, , where, text]) => {
+  const range = op === "insert" ? { start: where, end: where } : where;
+  return `${range.start.line}:${range.start.character}-${range.end.character} ${text}`;
+});
+
+describe("quick fixes (lightbulb)", () => {
+  it("offers each diagnostic's fix, which re-checks the file once applied", () => {
+    const { quickFixes } = registerFixes();
+    const doc = makeDoc("if x == 5 {\n}\nif $a & $b {\n}");
+    const actions = quickFixes.provideCodeActions(doc, undefined, { diagnostics: diagnose(doc) });
+    const fixes = actions.filter((/** @type {any} */ a) => a.edit);
+    assert.deepEqual(fixes.map((/** @type {any} */ a) => a.title), ["Insert missing '$'", "Replace '&' with '&&'"]);
+    assert.deepEqual(fixes[0].command, { command: "otterscript.refreshDiagnostics", title: "Refresh OtterScript diagnostics", arguments: [doc.uri] });
+  });
+
+  it("offers to turn off each code once, after the fixes, in the workspace's settings when a folder is open", () => {
+    const { quickFixes } = registerFixes();
+    const doc = makeDoc("if x == 5 {\n}\nif y == 6 {\n}\nLog-Informaton hi;");
+    const diagnostics = diagnose(doc);
+    const titles = () => quickFixes.provideCodeActions(doc, undefined, { diagnostics }).map((/** @type {any} */ a) => a.title);
+    assert.deepEqual(titles(), [
+      "Insert missing '$'",
+      "Insert missing '$'",
+      "Change to 'Log-Information'",
+      "Turn off 'missing-dollar' diagnostics in user settings",
+      "Turn off 'unknown-operation' diagnostics in user settings",
+    ]);
+    const workspace = /** @type {any} */ (stub.workspace);
+    workspace.workspaceFolders = [{}];
+    try {
+      assert.equal(titles().at(-1), "Turn off 'unknown-operation' diagnostics in workspace settings");
+    } finally {
+      workspace.workspaceFolders = undefined;
+    }
+    const [turnOff] = quickFixes.provideCodeActions(doc, undefined, { diagnostics }).filter((/** @type {any} */ a) => !a.edit);
+    assert.deepEqual(turnOff.command.arguments, ["missing-dollar"]);
+    assert.deepEqual(turnOff.diagnostics, [diagnostics[0]]);
+  });
+
+  it("ignores other extensions' diagnostics and codes it has no fix or rule for", () => {
+    const { quickFixes } = registerFixes();
+    const doc = makeDoc("if x == 5 {\n}");
+    const [diagnostic] = diagnose(doc);
+    const range = diagnostic.range;
+    const diagnostics = [
+      Object.assign(new stub.Diagnostic(range, "spelling"), { source: "cSpell", code: "missing-dollar" }),
+      Object.assign(new stub.Diagnostic(range, "other"), { source: "OtterScript", code: "no-such-code" }),
+      // A fix that doesn't apply (the text isn't '&' or '|'): only the "Turn off".
+      Object.assign(new stub.Diagnostic(range, "operator"), { source: "OtterScript", code: "invalid-operator" }),
+    ];
+    assert.deepEqual(
+      quickFixes.provideCodeActions(doc, undefined, { diagnostics }).map((/** @type {any} */ a) => a.title),
+      ["Turn off 'invalid-operator' diagnostics in user settings"]
+    );
+  });
+});
+
+describe("Fix All", () => {
+  afterEach(() => {
+    const window = /** @type {any} */ (stub.window);
+    window.activeTextEditor = undefined;
+    window.showInformationMessage = () => undefined;
+  });
+
+  /**
+   * Runs the Fix All command on `document` as the active editor.
+   *
+   * @param {any} document
+   * @returns {Promise<{ messages: string[], applied: any[], checked: number }>}
+   *   What it said, the edits it applied, and how many times it checked the file
+   */
+  async function runFixAll(document) {
+    const { commands, checked } = registerFixes();
+    const window = /** @type {any} */ (stub.window);
+    const workspace = /** @type {any} */ (stub.workspace);
+    /** @type {string[]} */
+    const messages = [];
+    /** @type {any[]} */
+    const applied = [];
+    window.activeTextEditor = { document };
+    window.showInformationMessage = (/** @type {string} */ message) => messages.push(message);
+    const applyEdit = workspace.applyEdit;
+    workspace.applyEdit = async (/** @type {any} */ edit) => applied.push(edit);
+    try {
+      await commands["otterscript.fixAll"]();
+    } finally {
+      workspace.applyEdit = applyEdit;
+    }
+    return { messages, applied, checked: checked() };
+  }
+
+  it("applies every preferred fix as one edit, from the end of the file, and re-checks", async () => {
+    const doc = makeDoc("if x == 5 {\n}\nif $a & $b {\n}\nLog-Informaton hi;");
+    const { messages, applied, checked } = await runFixAll(doc);
+    assert.equal(applied.length, 1);
+    // The operation name is a guess, left to the lightbulb.
+    assert.deepEqual(describeEdits(applied[0]), ["2:6-7 &&", "0:3-3 $"]);
+    assert.deepEqual(messages, [`Fixed 2 issue(s) in ${doc.fileName}`]);
+    assert.equal(checked, 2, "before, for fresh ranges, and after");
+  });
+
+  it("applies an edit two diagnostics share once, and skips a fix that doesn't apply", () => {
+    const doc = makeDoc("if x == 5 {\n}");
+    const [missing] = diagnose(doc);
+    const operator = Object.assign(new stub.Diagnostic(missing.range, "operator"), { source: "OtterScript", code: "invalid-operator" });
+    const { fixAll } = registerFixes(() => [missing, missing, operator]);
+    const [action] = fixAll.provideCodeActions(doc, undefined, { diagnostics: [], only: stub.CodeActionKind.SourceFixAll });
+    assert.deepEqual(describeEdits(action.edit), ["0:3-3 $"]);
+  });
+
+  it("says when nothing is fixable, or nothing can be fixed without a guess", async () => {
+    const clean = makeDoc("Log-Information hi;");
+    assert.deepEqual((await runFixAll(clean)).messages, [`No fixable OtterScript issues found in ${clean.fileName}`]);
+    const guess = makeDoc("Log-Informaton hi;");
+    const { messages, applied } = await runFixAll(guess);
+    assert.deepEqual(messages, [`No issues in ${guess.fileName} can be fixed automatically; see the lightbulb for the remaining fixes`]);
+    assert.deepEqual(applied, []);
+  });
+
+  it("does nothing without an OtterScript editor", async () => {
+    const { commands, checked } = registerFixes();
+    await commands["otterscript.fixAll"]();
+    /** @type {any} */ (stub.window).activeTextEditor = { document: makeDocument("if x == 5 {\n}", { languageId: "plaintext" }) };
+    await commands["otterscript.fixAll"]();
+    assert.equal(checked(), 0);
+  });
+
+  it("is offered as the source.fixAll action only when that kind is asked for", () => {
+    const { fixAll } = registerFixes();
+    const doc = makeDoc("if x == 5 {\n}");
+    assert.deepEqual(fixAll.provideCodeActions(doc, undefined, { diagnostics: [] }), []);
+    assert.deepEqual(fixAll.provideCodeActions(doc, undefined, { diagnostics: [], only: stub.CodeActionKind.QuickFix }), []);
+    const [action] = fixAll.provideCodeActions(doc, undefined, { diagnostics: [], only: stub.CodeActionKind.SourceFixAll });
+    assert.equal(action.kind.value, "source.fixAll.otterscript");
+    assert.deepEqual(describeEdits(action.edit), ["0:3-3 $"]);
+    assert.deepEqual(fixAll.provideCodeActions(makeDoc("Log-Informaton hi;"), undefined, { diagnostics: [], only: stub.CodeActionKind.SourceFixAll }), []);
+  });
+});
+
+describe("turning a diagnostic off", () => {
+  /**
+   * Runs the command behind "Turn off '<code>'" with the rules already set at
+   * the user and workspace levels.
+   *
+   * @param {unknown} code
+   * @param {{ folderOpen?: boolean }} [options]
+   * @returns {Promise<any[]>} The settings updates it made: `[key, value, target]`
+   */
+  async function turnOff(code, { folderOpen = false } = {}) {
+    const { commands } = registerFixes();
+    const workspace = /** @type {any} */ (stub.workspace);
+    /** @type {any[]} */
+    const updates = [];
+    const getConfiguration = workspace.getConfiguration;
+    workspace.getConfiguration = () => ({
+      inspect: () => ({ globalValue: { "unknown-operation": "warning" }, workspaceValue: { "missing-dollar": "error" } }),
+      update: async (/** @type {any[]} */ ...args) => updates.push(args),
+    });
+    workspace.workspaceFolders = folderOpen ? [{}] : undefined;
+    try {
+      await commands["otterscript.disableDiagnosticRule"](code);
+    } finally {
+      workspace.getConfiguration = getConfiguration;
+      workspace.workspaceFolders = undefined;
+    }
+    return updates;
+  }
+
+  it("adds the code as off to the user's rules, keeping the others", async () => {
+    assert.deepEqual(await turnOff("invalid-operator"), [
+      ["diagnostics.rules", { "unknown-operation": "warning", "invalid-operator": "off" }, stub.ConfigurationTarget.Global],
+    ]);
+  });
+
+  it("writes to the workspace's rules when a folder is open", async () => {
+    assert.deepEqual(await turnOff("invalid-operator", { folderOpen: true }), [
+      ["diagnostics.rules", { "missing-dollar": "error", "invalid-operator": "off" }, stub.ConfigurationTarget.Workspace],
+    ]);
+  });
+
+  it("ignores anything but a known code", async () => {
+    assert.deepEqual(await turnOff("no-such-code"), []);
+    assert.deepEqual(await turnOff(undefined), []);
+  });
+});
+
+describe("refreshing diagnostics", () => {
+  it("re-checks an open OtterScript document, and nothing else", () => {
+    const { commands, checked } = registerFixes();
+    const doc = makeDoc("if x == 5 {\n}");
+    const text = makeDocument("x", { languageId: "plaintext" });
+    const disk = useWorkspace({ open: [doc, text] });
+    try {
+      const refresh = commands["otterscript.refreshDiagnostics"];
+      refresh(doc.uri);
+      assert.equal(checked(), 1);
+      refresh(text.uri);
+      refresh(stub.Uri.parse("file:///closed.otter"));
+      refresh(undefined);
+      assert.equal(checked(), 1);
+    } finally {
+      disk.restore();
+    }
   });
 });

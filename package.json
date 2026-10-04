@@ -557,7 +557,7 @@
     "build": "npm run bundle -- --sourcemap=linked",
     "pretest:integration": "npm run build",
     "test:integration": "vscode-test",
-    "test:cov": "node --test --experimental-test-coverage --test-coverage-include=\"src/**\" --test-coverage-lines=90 --test-coverage-branches=94 --test-coverage-functions=93 \"test/unit/*.test.js\"",
+    "test:cov": "node --test --experimental-test-coverage --test-coverage-include=\"src/**\" --test-coverage-lines=97 --test-coverage-branches=95 --test-coverage-functions=95 \"test/unit/*.test.js\"",
     "check": "npm run lint:ci && npm run check:js && npm run check:lang && npm run check:cards && npm run check:reference && npm test",
     "package": "vsce package --no-yarn",
     "vscode:prepublish": "npm run lint:ci && npm run bundle",
