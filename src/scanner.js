@@ -1141,6 +1141,33 @@ const OUTPUT_CAPTURE_PREFIX_REGEX = /=>\s*$/;
 const ASSIGNMENT_SUFFIX_REGEX = /^\s*=(?!=)/;
 
 /**
+ * How far before the whitespace in front of a token the prefix regexes above
+ * look: their longest word (`foreach`) plus the character before it, for `\b`.
+ */
+const PREFIX_LOOKBACK = 9;
+
+/**
+ * The end of `text[start, end)` that the prefix regexes above can see, to
+ * test them on instead of all of it: the whitespace before `end` and the
+ * {@link PREFIX_LOOKBACK} characters before that. Each regex ends in `\s*$`
+ * after a short word or symbol, so it matches the tail exactly when it
+ * matches the whole text. When the tail doesn't reach `start`, a `\0` goes in
+ * front, so `^` can't match where the tail was cut off. Matching the whole
+ * text before every token made a long line quadratic (100 KB took seconds).
+ *
+ * @param {string} text
+ * @param {number} end
+ * @param {number} [start]
+ * @returns {string}
+ */
+function prefixTail(text, end, start = 0) {
+  let whitespace = end;
+  while (whitespace > start && /\s/.test(text[whitespace - 1])) whitespace--;
+  const from = Math.max(start, whitespace - PREFIX_LOOKBACK);
+  return (from > start ? "\0" : "") + text.slice(from, end);
+}
+
+/**
  * @typedef {{ line: number, character: number, length: number, write: boolean }} VariableOccurrence
  *   `line`/`character` are 0-based and point at the sigil; `length` covers
  *   the whole token (`$name` or `${name}`). `write` is true for a declaration
@@ -1194,15 +1221,16 @@ function indexVariableOccurrences(text) {
       const tokenSigil = match[1];
       const tokenName = match[2] ?? match[3];
       const character = match.index ?? 0;
-      const before = view.slice(0, character);
+      // Only the end of the text before the token (see prefixTail).
+      const before = prefixTail(view, character);
       // Inside a string, `@` / `%` are variables only within `$( ... )`.
       const inString = code[character] === " ";
-      if (inString && tokenSigil !== "$" && !before.endsWith("$(")) continue;
+      if (inString && tokenSigil !== "$" && !view.slice(Math.max(0, character - 2), character).endsWith("$(")) continue;
 
       const after = view.slice(character + match[0].length);
       const isParameter =
         paramStart !== -1 && character >= paramStart && character < paramEnd &&
-        MODULE_PARAMETER_PREFIX_REGEX.test(code.slice(paramStart, character));
+        MODULE_PARAMETER_PREFIX_REGEX.test(prefixTail(code, character, paramStart));
       const write = !inString && (
         isParameter ||
         FOREACH_VARIABLE_PREFIX_REGEX.test(before) ||

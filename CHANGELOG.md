@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- A file with a very long line (such as a minified or generated one), or with deeply nested or unclosed calls or maps, no longer freezes VS Code for seconds while it's checked: the checks for unknown operations, argument counts, operation arguments and duplicate map keys now take time in proportion to the file's length
+- A file with a very long line (such as a minified or generated one), or with deeply nested or unclosed calls or maps, no longer freezes VS Code for seconds while it's checked or while you move the cursor: the checks for unknown operations, argument counts, operation arguments and duplicate map keys, and the variable lookup behind highlighting, completion and rename, now take time in proportion to the file's length
 - Hovering `call MyModule` shows the comment above the module as plain text, not markdown: a link or image in a comment from a workspace file is no longer rendered, so hovering can't load an image from the web
 - OtterScript files larger than 5 MB in the workspace are no longer read when searching it for modules (Go to Symbol in Workspace, and Go to Definition, hover and references for a module in another file), so such a file can't run VS Code out of memory
 

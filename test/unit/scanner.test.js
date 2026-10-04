@@ -878,6 +878,20 @@ describe("findVariableOccurrences", () => {
     // The bare "%p" in literal text is plain output, not an expression.
     assert.deepEqual(find(lines, "%", "p"), ["0:11:w", "1:16:r", "1:42:r"]);
   });
+
+  it("indexes a very long line in time linear in its length", () => {
+    // Whether a variable is assigned was once decided by `...$` regexes
+    // matched against the whole line before it, so one 100 KB line took
+    // seconds -- on every cursor move, for highlighting. The limit leaves
+    // room for a slow CI machine.
+    const text = "set $x = 1; ".repeat(10000);
+    const started = performance.now();
+    const occurrences = findVariableOccurrences(text, "$", "x");
+    const elapsed = performance.now() - started;
+    assert.equal(occurrences.length, 10000);
+    assert.ok(occurrences.every((o) => o.write), "each one assigned");
+    assert.ok(elapsed < 1000, `took ${Math.round(elapsed)} ms`);
+  });
 });
 
 // ============================================================
