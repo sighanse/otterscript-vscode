@@ -629,6 +629,15 @@ describe("maskOutsideTemplateTags", () => {
       assert.equal(mask(line).length, line.length, JSON.stringify(line));
     }
   });
+
+  // Known limitation, to fix: literal text tracks quotes so that a `<%` in a
+  // quoted string isn't a tag, but an apostrophe in prose isn't a quote, and
+  // here it hides every tag after it on the line (with their diagnostics,
+  // hover and completion).
+  it("sees a tag after an apostrophe in prose", { todo: "an apostrophe opens a quoted span in literal text" }, () => {
+    assert.equal(mask("It's <% $x %> today").trim(), "$x");
+    assert.equal(mask("Don't forget: <% Log-Information hi; %>").trim(), "Log-Information hi;");
+  });
 });
 
 // ============================================================
