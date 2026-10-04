@@ -369,6 +369,8 @@ describe("OtterScript files on disk", () => {
     const large = vscode.Uri.joinPath(folder, "large.otter");
     const small = vscode.Uri.joinPath(folder, "small.otter");
     try {
+      // The folder is ignored by git, so it may not exist in a clean checkout.
+      await vscode.workspace.fs.createDirectory(folder);
       await vscode.workspace.fs.writeFile(large, Buffer.from("module LargeOnDisk {\n}\n" + "# padding\n".repeat(600000)));
       await vscode.workspace.fs.writeFile(small, Buffer.from("module SmallOnDisk {\n}\n"));
       await waitFor(async () => (await symbolsNamed("SmallOnDisk")).length === 1, "the small file in the index", 10000);
