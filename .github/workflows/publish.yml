@@ -52,8 +52,11 @@ jobs:
           echo "vsix=otterscript-vscode-$version.vsix" >> "$GITHUB_OUTPUT"
 
       # The tokens are set on the steps that use them only, never for the
-      # whole job (where `npm ci`'s install scripts could read them). A missing
-      # token fails the run rather than skipping a store silently.
+      # whole job (where `npm ci`'s install scripts could read them).
+      # TEMPORARY: while the Marketplace is published to by hand, a missing
+      # VSCE_PAT only warns and skips this step, so a green run doesn't mean
+      # the Marketplace got the release. Once VSCE_PAT is set again, make it
+      # fail the run (`exit 1`) so a store is never skipped silently.
       # --skip-duplicate lets a run that failed half-way be run again.
       - name: Publish to Marketplace
         env:
