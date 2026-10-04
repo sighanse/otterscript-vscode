@@ -85,8 +85,13 @@ jobs:
           node-version-file: .nvmrc
           cache: 'npm'
 
+      # Without the packages' install scripts: this job can request an OIDC
+      # token (id-token: write), which the action trades for the Claude app's
+      # token that can push here, and every step can ask for one -- so could
+      # the install script of a compromised dependency. `npm run check` and
+      # the tests don't need the scripts.
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       - uses: anthropics/claude-code-action@ed670b4cf9de2a5a570d130d2f6197b9e543cd64 # v1.0.240
         env:
