@@ -128,8 +128,9 @@ class FoldingRange {
 }
 
 /**
- * Mirrors the subset of `vscode.MarkdownString` that `buildHoverMarkdown` uses:
- * a growable `value` string plus `appendMarkdown`.
+ * Mirrors `vscode.MarkdownString`: a growable `value`, with `appendText` and
+ * `appendCodeblock` writing exactly what VS Code's do, so a test sees the
+ * markdown VS Code would get.
  */
 class MarkdownString {
   constructor() {
@@ -143,6 +144,44 @@ class MarkdownString {
   appendMarkdown(text) {
     this.value += text;
     return this;
+  }
+
+  /**
+   * Text shown as is: markdown syntax escaped, spaces kept, a line break a
+   * new paragraph (VS Code's `appendText`).
+   *
+   * @param {string} text
+   * @returns {this}
+   */
+  appendText(text) {
+    this.value += text
+      .replace(/[\\`*_{}[\]()#+\-!~]/g, "\\$&")
+      .replace(/([ \t]+)/g, (_match, run) => "&nbsp;".repeat(run.length))
+      .replace(/>/gm, "\\>")
+      .replace(/\n/g, "\n\n");
+    return this;
+  }
+
+  /**
+   * @param {string} code
+   * @param {string} [language]
+   * @returns {this}
+   */
+  appendCodeblock(code, language = "") {
+    this.value += `\n\`\`\`${language}\n${code}\n\`\`\`\n`;
+    return this;
+  }
+}
+
+/** Mirrors `vscode.Hover`: what to show, and the range it's for. */
+class Hover {
+  /**
+   * @param {MarkdownString} contents
+   * @param {Range} [range]
+   */
+  constructor(contents, range) {
+    this.contents = [contents];
+    this.range = range;
   }
 }
 
@@ -257,6 +296,7 @@ const vscode = {
   FoldingRangeKind,
   Location,
   MarkdownString,
+  Hover,
   CompletionItem,
   CompletionItemKind,
   CompletionItemTag: Object.freeze({ Deprecated: 1 }),
@@ -281,6 +321,13 @@ const vscode = {
        */
       get: (_key, fallback) => fallback,
     }),
+    /**
+     * A file's path as VS Code shows it: here, the URI after `file:///`.
+     *
+     * @param {{ toString(): string }} uri
+     * @returns {string}
+     */
+    asRelativePath: (uri) => uri.toString().replace(/^file:\/\/\//, ""),
   },
 };
 
