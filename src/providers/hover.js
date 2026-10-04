@@ -78,9 +78,34 @@ async function hoverModuleCall(document, position, listWorkspaceModules) {
 
   const md = new vscode.MarkdownString();
   md.appendCodeblock(header, "otterscript");
-  if (comment.length) md.appendMarkdown(`${comment.join("  \n")}\n\n`);
-  if (home !== document) md.appendMarkdown(`Declared in \`${vscode.workspace.asRelativePath(home.uri)}\``);
+  // The comment is a workspace file's text, which anyone may have written:
+  // appended as plain text (escaped), so a link or image in it isn't
+  // rendered. An image would be fetched on hover, and a link could pass for
+  // the extension's own. Each line keeps its own line.
+  comment.forEach((line, i) => {
+    if (i > 0) md.appendMarkdown("  \n");
+    md.appendText(line);
+  });
+  if (comment.length) md.appendMarkdown("\n\n");
+  if (home !== document) md.appendMarkdown(`Declared in ${inlineCode(vscode.workspace.asRelativePath(home.uri))}`);
   return new vscode.Hover(md, moduleAt.range);
+}
+
+/**
+ * `text` as a markdown code span, which shows any text literally: fenced by
+ * more backticks than the longest run in it, so a backtick in a file name
+ * can't end the span early.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+function inlineCode(text) {
+  const longest = Math.max(0, ...(text.match(/`+/g) ?? []).map((run) => run.length));
+  const fence = "`".repeat(longest + 1);
+  // A space keeps a backtick at either end apart from the fence (markdown
+  // drops one space on each side).
+  const pad = /^`|`$/.test(text) ? " " : "";
+  return `${fence}${pad}${text}${pad}${fence}`;
 }
 
 /**
@@ -280,4 +305,4 @@ function registerHover(settings, listWorkspaceModules) {
   return [hoverProvider];
 }
 
-module.exports = { registerHover };
+module.exports = { inlineCode, registerHover };

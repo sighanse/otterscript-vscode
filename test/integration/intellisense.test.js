@@ -152,9 +152,22 @@ describe("hover", () => {
     const local = await openContent("# Says hello.\n# Twice.\nmodule Hi<$who> {\n}\ncall Hi(who: x);\n");
     const text = await hoverText(local, positionOf(local, "call Hi", 6));
     assert.match(text, /module Hi<\$who>/);
-    assert.match(text, /Says hello\. {2}\nTwice\./);
+    // Plain text: appendText writes a space as `&nbsp;`; one line each.
+    assert.match(text, /Says&nbsp;hello\. {2}\nTwice\./);
     const elsewhere = await openContent('call Greet(name: "x");\n');
     assert.match(await hoverText(elsewhere, positionOf(elsewhere, "Greet", 2)), /module Greet<\$name>[\s\S]*Declared in `main\.otter`/);
+  });
+
+  it("shows a module's comment as plain text, so a link or image in it isn't rendered", async () => {
+    // The comment comes from a workspace file anyone may have written: as
+    // markdown, an image in it would be fetched on hover (a tracking pixel)
+    // and a link could pass for the extension's own.
+    const source = await openContent("# ![x](https://example.invalid/p.png) [Fix](https://example.invalid/f) *em*\nmodule Hi {\n}\ncall Hi;\n");
+    const text = await hoverText(source, positionOf(source, "call Hi", 6));
+    assert.doesNotMatch(text, /!\[x\]\(/, "no image");
+    assert.doesNotMatch(text, /\[Fix\]\(/, "no link");
+    assert.doesNotMatch(text, /(?<!\\)\*em(?<!\\)\*/, "no emphasis");
+    assert.match(text, /Fix/, "the comment's text is still shown");
   });
 
   it("documents an operation", async () => {
