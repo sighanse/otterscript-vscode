@@ -1,15 +1,22 @@
 name: Actionlint
 
+# Checks the workflows: actionlint for mistakes (syntax, expressions, shell),
+# zizmor for security problems (injection, permissions, credentials left in
+# the checkout, unpinned or impostor actions, cache poisoning). zizmor also
+# reads .github/dependabot.yml.
+
 on:
   push:
     branches: [ main ]
     paths:
       - '.github/workflows/**'
+      - '.github/dependabot.yml'
   workflow_dispatch:
   pull_request:
     types: [ opened, synchronize, reopened ] # Skip closed PRs
     paths:
       - '.github/workflows/**'
+      - '.github/dependabot.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -31,3 +38,28 @@ jobs:
 
       - name: actionlint
         uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2.2.0
+
+  zizmor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write # findings go to the Security tab (code scanning alerts)
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      # From this repository, findings go to the Security tab like Trivy's.
+      # From a fork, whose token can't write alerts, they're annotations on
+      # the pull request instead, and any finding fails the run.
+      - name: zizmor
+        uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
+        with:
+          # Pinned like the actions, so a new zizmor release can't fail a pull
+          # request with audits it adds; raise it by hand.
+          version: v1.30.1
+          advanced-security: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+          annotations: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
