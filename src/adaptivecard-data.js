@@ -109,14 +109,23 @@ const ADAPTIVE_CARD_VALUE_LISTS = new Map([
 ]);
 
 /**
+ * What a property of an Adaptive Card type needs: the card version that
+ * introduced it, the value list it is limited to, or both.
+ * @typedef {{ version?: string, values?: string }} PropertyInfo
+ */
+
+/**
  * Per type, the properties that need a card version above 1.0 (`version`)
  * or accept only the values of one list in {@link ADAPTIVE_CARD_VALUE_LISTS}
  * (`values`). Inherited properties (`spacing`, `isVisible`, ...) are
- * included; properties with nothing to check are left out.
- * @type {ReadonlyMap<string, ReadonlyMap<string, { version?: string, values?: string }>>}
+ * included; properties with nothing to check are left out. Each inner map's
+ * entries are cast to `PropertyInfo`: TypeScript 7 infers a map's value type
+ * from its entries alone, and an entry with only `version` doesn't fit the
+ * type it infers from one with only `values`.
+ * @type {ReadonlyMap<string, ReadonlyMap<string, PropertyInfo>>}
  */
 const ADAPTIVE_CARD_PROPERTIES = new Map([
-  ["Action.Execute", new Map([
+  ["Action.Execute", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["associatedInputs", { values: "AssociatedInputs" }],
     ["fallback", { version: "1.2" }],
     ["iconUrl", { version: "1.1" }],
@@ -125,8 +134,8 @@ const ADAPTIVE_CARD_PROPERTIES = new Map([
     ["requires", { version: "1.2" }],
     ["style", { version: "1.2", values: "ActionStyle" }],
     ["tooltip", { version: "1.5" }],
-  ])],
-  ["Action.OpenUrl", new Map([
+  ]))],
+  ["Action.OpenUrl", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["fallback", { version: "1.2" }],
     ["iconUrl", { version: "1.1" }],
     ["isEnabled", { version: "1.5" }],
@@ -134,8 +143,8 @@ const ADAPTIVE_CARD_PROPERTIES = new Map([
     ["requires", { version: "1.2" }],
     ["style", { version: "1.2", values: "ActionStyle" }],
     ["tooltip", { version: "1.5" }],
-  ])],
-  ["Action.ShowCard", new Map([
+  ]))],
+  ["Action.ShowCard", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["fallback", { version: "1.2" }],
     ["iconUrl", { version: "1.1" }],
     ["isEnabled", { version: "1.5" }],
@@ -143,8 +152,8 @@ const ADAPTIVE_CARD_PROPERTIES = new Map([
     ["requires", { version: "1.2" }],
     ["style", { version: "1.2", values: "ActionStyle" }],
     ["tooltip", { version: "1.5" }],
-  ])],
-  ["Action.Submit", new Map([
+  ]))],
+  ["Action.Submit", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["associatedInputs", { version: "1.3", values: "AssociatedInputs" }],
     ["fallback", { version: "1.2" }],
     ["iconUrl", { version: "1.1" }],
@@ -153,8 +162,8 @@ const ADAPTIVE_CARD_PROPERTIES = new Map([
     ["requires", { version: "1.2" }],
     ["style", { version: "1.2", values: "ActionStyle" }],
     ["tooltip", { version: "1.5" }],
-  ])],
-  ["Action.ToggleVisibility", new Map([
+  ]))],
+  ["Action.ToggleVisibility", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["fallback", { version: "1.2" }],
     ["iconUrl", { version: "1.1" }],
     ["isEnabled", { version: "1.5" }],
@@ -162,15 +171,15 @@ const ADAPTIVE_CARD_PROPERTIES = new Map([
     ["requires", { version: "1.2" }],
     ["style", { version: "1.2", values: "ActionStyle" }],
     ["tooltip", { version: "1.5" }],
-  ])],
-  ["ActionSet", new Map([
+  ]))],
+  ["ActionSet", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["fallback", { version: "1.2" }],
     ["height", { version: "1.1", values: "BlockElementHeight" }],
     ["isVisible", { version: "1.2" }],
     ["requires", { version: "1.2" }],
     ["spacing", { values: "Spacing" }],
-  ])],
-  ["AdaptiveCard", new Map([
+  ]))],
+  ["AdaptiveCard", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["authentication", { version: "1.4" }],
     ["backgroundImage", { version: "1.2" }],
     ["metadata", { version: "1.6" }],
@@ -179,13 +188,13 @@ const ADAPTIVE_CARD_PROPERTIES = new Map([
     ["rtl", { version: "1.5" }],
     ["selectAction", { version: "1.1" }],
     ["verticalContentAlignment", { version: "1.1", values: "VerticalContentAlignment" }],
-  ])],
-  ["BackgroundImage", new Map([
+  ]))],
+  ["BackgroundImage", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["fillMode", { values: "ImageFillMode" }],
     ["horizontalAlignment", { values: "HorizontalAlignment" }],
     ["verticalAlignment", { values: "VerticalAlignment" }],
-  ])],
-  ["Column", new Map([
+  ]))],
+  ["Column", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["backgroundImage", { version: "1.2" }],
     ["bleed", { version: "1.2" }],
     ["fallback", { version: "1.2" }],
@@ -197,8 +206,8 @@ const ADAPTIVE_CARD_PROPERTIES = new Map([
     ["spacing", { values: "Spacing" }],
     ["style", { values: "ContainerStyle" }],
     ["verticalContentAlignment", { version: "1.1", values: "VerticalContentAlignment" }],
-  ])],
-  ["ColumnSet", new Map([
+  ]))],
+  ["ColumnSet", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["bleed", { version: "1.2" }],
     ["fallback", { version: "1.2" }],
     ["height", { version: "1.1", values: "BlockElementHeight" }],
@@ -209,8 +218,8 @@ const ADAPTIVE_CARD_PROPERTIES = new Map([
     ["selectAction", { version: "1.1" }],
     ["spacing", { values: "Spacing" }],
     ["style", { version: "1.2", values: "ContainerStyle" }],
-  ])],
-  ["Container", new Map([
+  ]))],
+  ["Container", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["backgroundImage", { version: "1.2" }],
     ["bleed", { version: "1.2" }],
     ["fallback", { version: "1.2" }],
@@ -223,20 +232,20 @@ const ADAPTIVE_CARD_PROPERTIES = new Map([
     ["spacing", { values: "Spacing" }],
     ["style", { values: "ContainerStyle" }],
     ["verticalContentAlignment", { version: "1.1", values: "VerticalContentAlignment" }],
-  ])],
-  ["Data.Query", new Map([
+  ]))],
+  ["Data.Query", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["count", { version: "1.6" }],
     ["dataset", { version: "1.6" }],
     ["skip", { version: "1.6" }],
-  ])],
-  ["FactSet", new Map([
+  ]))],
+  ["FactSet", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["fallback", { version: "1.2" }],
     ["height", { version: "1.1", values: "BlockElementHeight" }],
     ["isVisible", { version: "1.2" }],
     ["requires", { version: "1.2" }],
     ["spacing", { values: "Spacing" }],
-  ])],
-  ["Image", new Map([
+  ]))],
+  ["Image", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["backgroundColor", { version: "1.1" }],
     ["fallback", { version: "1.2" }],
     ["height", { version: "1.1" }],
@@ -248,16 +257,16 @@ const ADAPTIVE_CARD_PROPERTIES = new Map([
     ["spacing", { values: "Spacing" }],
     ["style", { values: "ImageStyle" }],
     ["width", { version: "1.1" }],
-  ])],
-  ["ImageSet", new Map([
+  ]))],
+  ["ImageSet", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["fallback", { version: "1.2" }],
     ["height", { version: "1.1", values: "BlockElementHeight" }],
     ["imageSize", { values: "ImageSize" }],
     ["isVisible", { version: "1.2" }],
     ["requires", { version: "1.2" }],
     ["spacing", { values: "Spacing" }],
-  ])],
-  ["Input.ChoiceSet", new Map([
+  ]))],
+  ["Input.ChoiceSet", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["errorMessage", { version: "1.3" }],
     ["fallback", { version: "1.2" }],
     ["height", { version: "1.1", values: "BlockElementHeight" }],
@@ -271,8 +280,8 @@ const ADAPTIVE_CARD_PROPERTIES = new Map([
     ["spacing", { values: "Spacing" }],
     ["style", { values: "ChoiceInputStyle" }],
     ["wrap", { version: "1.2" }],
-  ])],
-  ["Input.Date", new Map([
+  ]))],
+  ["Input.Date", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["errorMessage", { version: "1.3" }],
     ["fallback", { version: "1.2" }],
     ["height", { version: "1.1", values: "BlockElementHeight" }],
@@ -284,8 +293,8 @@ const ADAPTIVE_CARD_PROPERTIES = new Map([
     ["labelWidth", { version: "1.6" }],
     ["requires", { version: "1.2" }],
     ["spacing", { values: "Spacing" }],
-  ])],
-  ["Input.Number", new Map([
+  ]))],
+  ["Input.Number", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["errorMessage", { version: "1.3" }],
     ["fallback", { version: "1.2" }],
     ["height", { version: "1.1", values: "BlockElementHeight" }],
@@ -297,8 +306,8 @@ const ADAPTIVE_CARD_PROPERTIES = new Map([
     ["labelWidth", { version: "1.6" }],
     ["requires", { version: "1.2" }],
     ["spacing", { values: "Spacing" }],
-  ])],
-  ["Input.Text", new Map([
+  ]))],
+  ["Input.Text", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["errorMessage", { version: "1.3" }],
     ["fallback", { version: "1.2" }],
     ["height", { version: "1.1", values: "BlockElementHeight" }],
@@ -313,8 +322,8 @@ const ADAPTIVE_CARD_PROPERTIES = new Map([
     ["requires", { version: "1.2" }],
     ["spacing", { values: "Spacing" }],
     ["style", { values: "TextInputStyle" }],
-  ])],
-  ["Input.Time", new Map([
+  ]))],
+  ["Input.Time", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["errorMessage", { version: "1.3" }],
     ["fallback", { version: "1.2" }],
     ["height", { version: "1.1", values: "BlockElementHeight" }],
@@ -326,8 +335,8 @@ const ADAPTIVE_CARD_PROPERTIES = new Map([
     ["labelWidth", { version: "1.6" }],
     ["requires", { version: "1.2" }],
     ["spacing", { values: "Spacing" }],
-  ])],
-  ["Input.Toggle", new Map([
+  ]))],
+  ["Input.Toggle", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["errorMessage", { version: "1.3" }],
     ["fallback", { version: "1.2" }],
     ["height", { version: "1.1", values: "BlockElementHeight" }],
@@ -340,27 +349,27 @@ const ADAPTIVE_CARD_PROPERTIES = new Map([
     ["requires", { version: "1.2" }],
     ["spacing", { values: "Spacing" }],
     ["wrap", { version: "1.2" }],
-  ])],
-  ["Media", new Map([
+  ]))],
+  ["Media", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["captionSources", { version: "1.6" }],
     ["fallback", { version: "1.2" }],
     ["height", { version: "1.1", values: "BlockElementHeight" }],
     ["isVisible", { version: "1.2" }],
     ["requires", { version: "1.2" }],
     ["spacing", { values: "Spacing" }],
-  ])],
-  ["Refresh", new Map([
+  ]))],
+  ["Refresh", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["expires", { version: "1.6" }],
-  ])],
-  ["RichTextBlock", new Map([
+  ]))],
+  ["RichTextBlock", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["fallback", { version: "1.2" }],
     ["height", { version: "1.1", values: "BlockElementHeight" }],
     ["horizontalAlignment", { values: "HorizontalAlignment" }],
     ["isVisible", { version: "1.2" }],
     ["requires", { version: "1.2" }],
     ["spacing", { values: "Spacing" }],
-  ])],
-  ["Table", new Map([
+  ]))],
+  ["Table", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["fallback", { version: "1.2" }],
     ["gridStyle", { values: "ContainerStyle" }],
     ["height", { version: "1.1", values: "BlockElementHeight" }],
@@ -369,8 +378,8 @@ const ADAPTIVE_CARD_PROPERTIES = new Map([
     ["requires", { version: "1.2" }],
     ["spacing", { values: "Spacing" }],
     ["verticalCellContentAlignment", { values: "VerticalAlignment" }],
-  ])],
-  ["TableCell", new Map([
+  ]))],
+  ["TableCell", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["backgroundImage", { version: "1.2" }],
     ["bleed", { version: "1.2" }],
     ["minHeight", { version: "1.2" }],
@@ -378,17 +387,17 @@ const ADAPTIVE_CARD_PROPERTIES = new Map([
     ["selectAction", { version: "1.1" }],
     ["style", { values: "ContainerStyle" }],
     ["verticalContentAlignment", { version: "1.1", values: "VerticalContentAlignment" }],
-  ])],
-  ["TableColumnDefinition", new Map([
+  ]))],
+  ["TableColumnDefinition", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["horizontalCellContentAlignment", { values: "HorizontalAlignment" }],
     ["verticalCellContentAlignment", { values: "VerticalAlignment" }],
-  ])],
-  ["TableRow", new Map([
+  ]))],
+  ["TableRow", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["horizontalCellContentAlignment", { values: "HorizontalAlignment" }],
     ["style", { values: "ContainerStyle" }],
     ["verticalCellContentAlignment", { values: "VerticalAlignment" }],
-  ])],
-  ["TextBlock", new Map([
+  ]))],
+  ["TextBlock", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["color", { values: "Colors" }],
     ["fallback", { version: "1.2" }],
     ["fontType", { version: "1.2", values: "FontType" }],
@@ -400,14 +409,14 @@ const ADAPTIVE_CARD_PROPERTIES = new Map([
     ["spacing", { values: "Spacing" }],
     ["style", { values: "TextBlockStyle" }],
     ["weight", { values: "FontWeight" }],
-  ])],
-  ["TextRun", new Map([
+  ]))],
+  ["TextRun", new Map(/** @type {[string, PropertyInfo][]} */ ([
     ["color", { values: "Colors" }],
     ["fontType", { values: "FontType" }],
     ["size", { values: "FontSize" }],
     ["underline", { version: "1.3" }],
     ["weight", { values: "FontWeight" }],
-  ])],
+  ]))],
 ]);
 
 module.exports = {
