@@ -15,6 +15,7 @@ const assert = require("node:assert/strict");
 const { Position } = require("../vscode-stub");
 const stub = require("../vscode-stub");
 const { makeDocument } = require("./fake-document");
+const { stubProperty } = require("./fake-workspace");
 const { operationDocs } = require("../../src/language-data.js");
 const {
   buildCompletionItem,
@@ -161,35 +162,31 @@ describe("readWorkspaceText", () => {
    * Runs `readWorkspaceText` on a file of `size` bytes, with a stubbed
    * `workspace.fs` that records whether the file was read.
    *
+   * @param {import("node:test").TestContext} t - The test, which the
+   *   stubbed file system lasts for
    * @param {number} size
    * @returns {Promise<{ text: string | undefined, read: boolean }>}
    */
-  async function readFileOf(size) {
-    const workspace = /** @type {any} */ (stub.workspace);
-    const saved = { fs: workspace.fs, asRelativePath: workspace.asRelativePath };
+  async function readFileOf(t, size) {
     let read = false;
-    workspace.fs = {
+    stubProperty(t, stub.workspace, "fs", {
       stat: async () => ({ size }),
       readFile: async () => {
         read = true;
         return new TextEncoder().encode("module M {}");
       },
-    };
-    workspace.asRelativePath = () => "big.otter";
-    try {
-      const text = await readWorkspaceText(/** @type {any} */ ({ toString: () => "file:///big.otter" }));
-      return { text, read };
-    } finally {
-      Object.assign(workspace, saved);
-    }
+    });
+    stubProperty(t, stub.workspace, "asRelativePath", () => "big.otter");
+    const text = await readWorkspaceText(/** @type {any} */ ({ toString: () => "file:///big.otter" }));
+    return { text, read };
   }
 
-  it("reads a file up to the limit", async () => {
-    assert.deepEqual(await readFileOf(MAX_WORKSPACE_FILE_BYTES), { text: "module M {}", read: true });
+  it("reads a file up to the limit", async (t) => {
+    assert.deepEqual(await readFileOf(t, MAX_WORKSPACE_FILE_BYTES), { text: "module M {}", read: true });
   });
 
-  it("doesn't read a larger file at all", async () => {
-    assert.deepEqual(await readFileOf(MAX_WORKSPACE_FILE_BYTES + 1), { text: undefined, read: false });
+  it("doesn't read a larger file at all", async (t) => {
+    assert.deepEqual(await readFileOf(t, MAX_WORKSPACE_FILE_BYTES + 1), { text: undefined, read: false });
   });
 });
 
@@ -420,19 +417,14 @@ describe("loadConfig", () => {
     });
   });
 
-  it("reflects an overridden setting", () => {
-    const original = stub.workspace.getConfiguration;
-    stub.workspace.getConfiguration = () => ({
+  it("reflects an overridden setting", (t) => {
+    stubProperty(t, stub.workspace, "getConfiguration", () => ({
       get: (/** @type {string} */ key, /** @type {unknown} */ fallback) =>
         key === "hover.enable" ? false : fallback,
-    });
-    try {
-      const cfg = loadConfig();
-      assert.equal(cfg.hoverEnabled, false);
-      assert.equal(cfg.completionEnabled, true);
-    } finally {
-      stub.workspace.getConfiguration = original;
-    }
+    }));
+    const cfg = loadConfig();
+    assert.equal(cfg.hoverEnabled, false);
+    assert.equal(cfg.completionEnabled, true);
   });
 });
 

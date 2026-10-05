@@ -2,7 +2,8 @@
 /**
  * @fileoverview A fake VS Code workspace for the unit tests of the
  * cross-file features: files "on disk", the open documents, and what the
- * code under test registered (see `registrations` in vscode-stub.js).
+ * code under test registered (see `registrations` in vscode-stub.js); and
+ * {@link stubProperty}, for replacing one member of the stub in a test.
  */
 
 const stub = require("../vscode-stub");
@@ -71,6 +72,38 @@ function useWorkspace({ files = {}, open = [] } = {}) {
 }
 
 /**
+ * The properties {@link stubProperty} has mocked, per test.
+ * @type {WeakMap<import("node:test").TestContext, Map<object, Set<string>>>}
+ */
+const stubbed = new WeakMap();
+
+/**
+ * Sets `object[key]` to `value` until the test `t` ends, passed or failed
+ * (`t.mock.property`, which restores it). A property is mocked once per
+ * test and set through its mock after that: mocking it a second time makes
+ * Node's mock loop forever (Node 22 to 25). Typed loosely: the Node types
+ * (18, for VS Code's Node) don't know `mock.property`.
+ *
+ * @param {import("node:test").TestContext} t
+ * @param {object} object - Such as `stub.workspace`
+ * @param {string} key
+ * @param {unknown} value
+ * @returns {void}
+ */
+function stubProperty(t, object, key, value) {
+  if (!stubbed.has(t)) stubbed.set(t, new Map());
+  const keys = /** @type {Map<object, Set<string>>} */ (stubbed.get(t));
+  if (!keys.has(object)) keys.set(object, new Set());
+  const mocked = /** @type {Set<string>} */ (keys.get(object));
+  if (mocked.has(key)) {
+    /** @type {any} */ (object)[key] = value;
+    return;
+  }
+  mocked.add(key);
+  /** @type {any} */ (t.mock).property(object, key, value);
+}
+
+/**
  * Clears the stub's registrations and runs `register`, then returns what
  * it registered: the providers by kind (`RenameProvider`, ...; a list where
  * a kind repeats), the arguments after each (`options`, in the same order)
@@ -100,4 +133,4 @@ function captureRegistrations(register) {
   return { providers, options, commands };
 }
 
-module.exports = { captureRegistrations, useWorkspace };
+module.exports = { captureRegistrations, stubProperty, useWorkspace };

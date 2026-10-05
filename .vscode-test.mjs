@@ -11,14 +11,22 @@
 
 import { defineConfig } from "@vscode/test-cli";
 
-/** @type {Omit<import("@vscode/test-cli").TestConfiguration, "label" | "version">} */
+/** @type {Omit<import("@vscode/test-cli").IDesktopTestConfiguration, "label" | "version">} */
 const common = {
   files: "test/integration/**/*.test.js",
   workspaceFolder: "test/integration/workspace",
+  // As VS Code's testing guide suggests: no other installed extension runs,
+  // so only this one's completions, hovers and diagnostics are seen. The
+  // profile under .vscode-test/ has none installed today; this keeps a run
+  // isolated should that change (built-in extensions stay on).
+  launchArgs: ["--disable-extensions"],
   mocha: {
     ui: "bdd",
     // The first test in a run also waits for the extension to activate.
     timeout: 20000,
+    // An `it.only` left in by mistake would quietly skip every other test;
+    // in CI it fails the run instead.
+    forbidOnly: Boolean(process.env.CI),
   },
 };
 

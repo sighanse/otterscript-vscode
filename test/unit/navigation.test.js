@@ -16,7 +16,7 @@ const assert = require("node:assert/strict");
 const stub = require("../vscode-stub");
 const { DocumentHighlightKind, FoldingRangeKind } = stub;
 const { makeDocument } = require("./fake-document");
-const { captureRegistrations, useWorkspace } = require("./fake-workspace");
+const { captureRegistrations, stubProperty, useWorkspace } = require("./fake-workspace");
 const { computeFoldingRanges, registerNavigation } = require("../../src/providers/navigation.js");
 const { registerWorkspaceSymbols } = require("../../src/providers/workspace-symbols.js");
 
@@ -363,15 +363,15 @@ describe("Rename: modules", () => {
     await assert.rejects(RenameProvider.provideRenameEdits(doc, at(doc, "Information"), "New"), /Only a variable or a module/);
   });
 
-  it("finds no uses in a file that can't be read", async () => {
+  it("finds no uses in a file that can't be read", async (t) => {
     const doc = openDocument("module Deploy {\n}", { "file:///caller.otter": "call Deploy;" });
     const workspace = /** @type {any} */ (stub.workspace);
     const { RenameProvider } = registerProviders();
     const stat = workspace.fs.stat;
-    workspace.fs.stat = async (/** @type {any} */ uri) => {
+    stubProperty(t, workspace.fs, "stat", async (/** @type {any} */ uri) => {
       if (uri.toString() === "file:///caller.otter") throw new Error("gone");
       return stat(uri);
-    };
+    });
     const edit = await RenameProvider.provideRenameEdits(doc, at(doc, "Deploy"), "Release");
     assert.deepEqual(edits(edit), ["file:///main.otter 0:7-13 Release"]);
   });

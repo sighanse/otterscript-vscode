@@ -16,7 +16,7 @@ const assert = require("node:assert/strict");
 
 const stub = require("../vscode-stub");
 const { makeDocument } = require("./fake-document");
-const { captureRegistrations, useWorkspace } = require("./fake-workspace");
+const { captureRegistrations, stubProperty, useWorkspace } = require("./fake-workspace");
 const { MAX_WORKSPACE_FILE_BYTES } = require("../../src/helpers.js");
 const { matchesQuery, registerWorkspaceSymbols } = require("../../src/providers/workspace-symbols.js");
 
@@ -149,13 +149,13 @@ describe("Go to Symbol in Workspace", () => {
     assert.deepEqual(names(await query("")), ["Draft @ untitled:Untitled-1", "New @ file:///a.otter"]);
   });
 
-  it("tries again on the next query when building the index failed", async () => {
+  it("tries again on the next query when building the index failed", async (t) => {
     const workspace = /** @type {any} */ (stub.workspace);
     const findFiles = workspace.findFiles;
-    workspace.findFiles = async () => { throw new Error("search failed"); };
+    stubProperty(t, workspace, "findFiles", async () => { throw new Error("search failed"); });
     const { query } = register();
     assert.deepEqual(await query(""), []);
-    workspace.findFiles = findFiles;
+    workspace.findFiles = findFiles; // the search works again
     assert.equal((await query("")).length, 3);
   });
 });
@@ -186,19 +186,14 @@ describe("module index", () => {
     assert.deepEqual(await index.listModules(), []);
   });
 
-  it("indexes a virtual workspace's files, but no other view of a file", async () => {
+  it("indexes a virtual workspace's files, but no other view of a file", async (t) => {
     const { index } = register();
     await index.listModules();
     index.setModuleIndexEntry(uri("git:/a.otter"), "module Old {\n}");
     assert.deepEqual(names(await index.listModules()), ["A @ file:///a.otter"]);
 
-    const workspace = /** @type {any} */ (stub.workspace);
-    workspace.getWorkspaceFolder = (/** @type {any} */ u) => (u.scheme === "vscode-vfs" ? {} : undefined);
-    try {
-      index.setModuleIndexEntry(uri("vscode-vfs://github/repo/b.otter"), "module B {\n}");
-    } finally {
-      workspace.getWorkspaceFolder = () => undefined;
-    }
+    stubProperty(t, stub.workspace, "getWorkspaceFolder", (/** @type {any} */ u) => (u.scheme === "vscode-vfs" ? {} : undefined));
+    index.setModuleIndexEntry(uri("vscode-vfs://github/repo/b.otter"), "module B {\n}");
     assert.deepEqual(names(await index.listModules()), ["A @ file:///a.otter", "B @ vscode-vfs://github/repo/b.otter"]);
   });
 

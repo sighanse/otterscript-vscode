@@ -11,13 +11,13 @@
 
 require("../vscode-stub");
 
-const { afterEach, describe, it } = require("node:test");
+const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
 const { Position } = require("../vscode-stub");
 const stub = require("../vscode-stub");
 const { makeDocument } = require("./fake-document");
-const { captureRegistrations, useWorkspace } = require("./fake-workspace");
+const { captureRegistrations, stubProperty, useWorkspace } = require("./fake-workspace");
 const { updateDiagnostics } = require("../../src/diagnostics.js");
 const {
   createAssignmentInConditionFix,
@@ -340,7 +340,7 @@ describe("quick fixes (lightbulb)", () => {
     assert.deepEqual(fixes[0].command, { command: "otterscript.refreshDiagnostics", title: "Refresh OtterScript diagnostics", arguments: [doc.uri] });
   });
 
-  it("offers to turn off each code once, after the fixes, in the workspace's settings when a folder is open", () => {
+  it("offers to turn off each code once, after the fixes, in the workspace's settings when a folder is open", (t) => {
     const { quickFixes } = registerFixes();
     const doc = makeDoc("if x == 5 {\n}\nif y == 6 {\n}\nLog-Informaton hi;");
     const diagnostics = diagnose(doc);
@@ -352,13 +352,8 @@ describe("quick fixes (lightbulb)", () => {
       "Turn off 'missing-dollar' diagnostics in user settings",
       "Turn off 'unknown-operation' diagnostics in user settings",
     ]);
-    const workspace = /** @type {any} */ (stub.workspace);
-    workspace.workspaceFolders = [{}];
-    try {
-      assert.equal(titles().at(-1), "Turn off 'unknown-operation' diagnostics in workspace settings");
-    } finally {
-      workspace.workspaceFolders = undefined;
-    }
+    stubProperty(t, stub.workspace, "workspaceFolders", [{}]);
+    assert.equal(titles().at(-1), "Turn off 'unknown-operation' diagnostics in workspace settings");
     const [turnOff] = quickFixes.provideCodeActions(doc, undefined, { diagnostics }).filter((/** @type {any} */ a) => !a.edit);
     assert.deepEqual(turnOff.command.arguments, ["missing-dollar"]);
     assert.deepEqual(turnOff.diagnostics, [diagnostics[0]]);
@@ -383,42 +378,31 @@ describe("quick fixes (lightbulb)", () => {
 });
 
 describe("Fix All", () => {
-  afterEach(() => {
-    const window = /** @type {any} */ (stub.window);
-    window.activeTextEditor = undefined;
-    window.showInformationMessage = () => undefined;
-  });
-
   /**
    * Runs the Fix All command on `document` as the active editor.
    *
+   * @param {import("node:test").TestContext} t - The test, which the editor
+   *   and the stubbed VS Code calls last for
    * @param {any} document
    * @returns {Promise<{ messages: string[], applied: any[], checked: number }>}
    *   What it said, the edits it applied, and how many times it checked the file
    */
-  async function runFixAll(document) {
+  async function runFixAll(t, document) {
     const { commands, checked } = registerFixes();
-    const window = /** @type {any} */ (stub.window);
-    const workspace = /** @type {any} */ (stub.workspace);
     /** @type {string[]} */
     const messages = [];
     /** @type {any[]} */
     const applied = [];
-    window.activeTextEditor = { document };
-    window.showInformationMessage = (/** @type {string} */ message) => messages.push(message);
-    const applyEdit = workspace.applyEdit;
-    workspace.applyEdit = async (/** @type {any} */ edit) => applied.push(edit);
-    try {
-      await commands["otterscript.fixAll"]();
-    } finally {
-      workspace.applyEdit = applyEdit;
-    }
+    stubProperty(t, stub.window, "activeTextEditor", { document });
+    stubProperty(t, stub.window, "showInformationMessage", (/** @type {string} */ message) => messages.push(message));
+    stubProperty(t, stub.workspace, "applyEdit", async (/** @type {any} */ edit) => applied.push(edit));
+    await commands["otterscript.fixAll"]();
     return { messages, applied, checked: checked() };
   }
 
-  it("applies every preferred fix as one edit, from the end of the file, and re-checks", async () => {
+  it("applies every preferred fix as one edit, from the end of the file, and re-checks", async (t) => {
     const doc = makeDoc("if x == 5 {\n}\nif $a & $b {\n}\nLog-Informaton hi;");
-    const { messages, applied, checked } = await runFixAll(doc);
+    const { messages, applied, checked } = await runFixAll(t, doc);
     assert.equal(applied.length, 1);
     // The operation name is a guess, left to the lightbulb.
     assert.deepEqual(describeEdits(applied[0]), ["2:6-7 &&", "0:3-3 $"]);
@@ -435,19 +419,19 @@ describe("Fix All", () => {
     assert.deepEqual(describeEdits(action.edit), ["0:3-3 $"]);
   });
 
-  it("says when nothing is fixable, or nothing can be fixed without a guess", async () => {
+  it("says when nothing is fixable, or nothing can be fixed without a guess", async (t) => {
     const clean = makeDoc("Log-Information hi;");
-    assert.deepEqual((await runFixAll(clean)).messages, [`No fixable OtterScript issues found in ${clean.fileName}`]);
+    assert.deepEqual((await runFixAll(t, clean)).messages, [`No fixable OtterScript issues found in ${clean.fileName}`]);
     const guess = makeDoc("Log-Informaton hi;");
-    const { messages, applied } = await runFixAll(guess);
+    const { messages, applied } = await runFixAll(t, guess);
     assert.deepEqual(messages, [`No issues in ${guess.fileName} can be fixed automatically; see the lightbulb for the remaining fixes`]);
     assert.deepEqual(applied, []);
   });
 
-  it("does nothing without an OtterScript editor", async () => {
+  it("does nothing without an OtterScript editor", async (t) => {
     const { commands, checked } = registerFixes();
     await commands["otterscript.fixAll"]();
-    /** @type {any} */ (stub.window).activeTextEditor = { document: makeDocument("if x == 5 {\n}", { languageId: "plaintext" }) };
+    stubProperty(t, stub.window, "activeTextEditor", { document: makeDocument("if x == 5 {\n}", { languageId: "plaintext" }) });
     await commands["otterscript.fixAll"]();
     assert.equal(checked(), 0);
   });
@@ -469,45 +453,40 @@ describe("turning a diagnostic off", () => {
    * Runs the command behind "Turn off '<code>'" with the rules already set at
    * the user and workspace levels.
    *
+   * @param {import("node:test").TestContext} t - The test, which the
+   *   stubbed settings last for
    * @param {unknown} code
    * @param {{ folderOpen?: boolean }} [options]
    * @returns {Promise<any[]>} The settings updates it made: `[key, value, target]`
    */
-  async function turnOff(code, { folderOpen = false } = {}) {
+  async function turnOff(t, code, { folderOpen = false } = {}) {
     const { commands } = registerFixes();
-    const workspace = /** @type {any} */ (stub.workspace);
     /** @type {any[]} */
     const updates = [];
-    const getConfiguration = workspace.getConfiguration;
-    workspace.getConfiguration = () => ({
+    stubProperty(t, stub.workspace, "getConfiguration", () => ({
       inspect: () => ({ globalValue: { "unknown-operation": "warning" }, workspaceValue: { "missing-dollar": "error" } }),
       update: async (/** @type {any[]} */ ...args) => updates.push(args),
-    });
-    workspace.workspaceFolders = folderOpen ? [{}] : undefined;
-    try {
-      await commands["otterscript.disableDiagnosticRule"](code);
-    } finally {
-      workspace.getConfiguration = getConfiguration;
-      workspace.workspaceFolders = undefined;
-    }
+    }));
+    stubProperty(t, stub.workspace, "workspaceFolders", folderOpen ? [{}] : undefined);
+    await commands["otterscript.disableDiagnosticRule"](code);
     return updates;
   }
 
-  it("adds the code as off to the user's rules, keeping the others", async () => {
-    assert.deepEqual(await turnOff("invalid-operator"), [
+  it("adds the code as off to the user's rules, keeping the others", async (t) => {
+    assert.deepEqual(await turnOff(t, "invalid-operator"), [
       ["diagnostics.rules", { "unknown-operation": "warning", "invalid-operator": "off" }, stub.ConfigurationTarget.Global],
     ]);
   });
 
-  it("writes to the workspace's rules when a folder is open", async () => {
-    assert.deepEqual(await turnOff("invalid-operator", { folderOpen: true }), [
+  it("writes to the workspace's rules when a folder is open", async (t) => {
+    assert.deepEqual(await turnOff(t, "invalid-operator", { folderOpen: true }), [
       ["diagnostics.rules", { "missing-dollar": "error", "invalid-operator": "off" }, stub.ConfigurationTarget.Workspace],
     ]);
   });
 
-  it("ignores anything but a known code", async () => {
-    assert.deepEqual(await turnOff("no-such-code"), []);
-    assert.deepEqual(await turnOff(undefined), []);
+  it("ignores anything but a known code", async (t) => {
+    assert.deepEqual(await turnOff(t, "no-such-code"), []);
+    assert.deepEqual(await turnOff(t, undefined), []);
   });
 });
 
