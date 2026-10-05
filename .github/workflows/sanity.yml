@@ -204,8 +204,11 @@ jobs:
       # doesn't run Playwright's own install script (it isn't in package.json's
       # allowScripts), so the browser is installed here, at the version the
       # lockfile pins.
+      # The step timeout ends a hang (such as a browser that can't start)
+      # in minutes instead of using up the job's time.
       - name: Web tests
         id: web
+        timeout-minutes: 5
         run: |
           npx --no-install playwright install --with-deps --only-shell chromium
           npm run test:web
