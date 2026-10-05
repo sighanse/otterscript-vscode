@@ -1,4 +1,4 @@
-// OtterScript snippets: Structural templates only. Functions and operations are provided via completion providers.
+// OtterScript snippets: whole statements and blocks. A plain function or operation call comes from completion instead.
 {
   "For Each Loop": {
     "prefix": "foreach",
@@ -134,13 +134,13 @@
   "Split String to Vector": {
     "prefix": "splitToVector",
     "body": [
-      "@${1:parts} = @Split(\"${2:text}\", \"${3:,}\"${4:, ${5:count}});"
+      "set @${1:parts} = @Split(\"${2:text}\", \"${3:,}\"${4:, ${5:count}});"
     ],
     "description": "Split string into vector using @Split"
   },
   "Join Vector to String": {
     "prefix": "joinIntoString",
-    "body": ["$${1:result} = \\$Join(\"${2:, }\", @${3:vector});"],
+    "body": ["set $${1:result} = \\$Join(\"${2:, }\", @${3:vector});"],
     "description": "Join vector elements into a string"
   },
   "File Exists Check": {
@@ -203,15 +203,13 @@
   },
   "Set Variable": {
     "prefix": "set",
-    "body": [
-      "set ${1|local,global|} $${2:variableName} = ${3:value};"
-    ],
-    "description": "Assign a value to a variable (omit scope for default)"
+    "body": ["set $${1:variableName} = ${2:value};"],
+    "description": "Assign a value to a variable: global, unless a local variable of that name exists"
   },
-  "Global Variable": {
-    "prefix": "global",
-    "body": ["global $${1:variableName} = ${2:value};"],
-    "description": "Declare a global variable"
+  "Set Local Variable": {
+    "prefix": "setlocal",
+    "body": ["set local $${1:variableName} = ${2:value};"],
+    "description": "Assign a variable that exists only in the current block"
   },
   "Throw Error": {
     "prefix": "throw",
@@ -220,13 +218,13 @@
   },
   "For Each Affected Package": {
     "prefix": "foreachaffected",
-    "body": ["foreach %${1:package} in @AffectedPackages {", "    $2", "}"],
-    "description": "Iterate over affected packages"
+    "body": ["foreach %${1:package} in @AffectedPackages {", "    ${2:# loop body}", "}"],
+    "description": "Iterate over the affected packages (ProGet notifiers)"
   },
   "For Each API Key": {
     "prefix": "foreachapikey",
-    "body": ["foreach %${1:apiKey} in @ApiKeys {", "    $2", "}"],
-    "description": "Iterate over API keys"
+    "body": ["foreach %${1:apiKey} in @ApiKeys {", "    ${2:# loop body}", "}"],
+    "description": "Iterate over the API keys (ProGet notifiers)"
   },
   "Region Block": {
     "prefix": "region",

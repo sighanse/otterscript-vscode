@@ -175,4 +175,16 @@ describe("snippets, as inserted", () => {
     }
     assert.deepEqual(found, []);
   });
+
+  it("each snippet assigns a variable with `set`, the only assignment statement", () => {
+    // `@parts = ...` and `global $x = ...` aren't statements; the
+    // diagnostics don't flag them, so this checks the snippets directly.
+    const assignment = /^\s*(?:(?:local|global)\s+)?[$@%][\w{}]+\s*=(?!=)/;
+    const found = Object.entries(SNIPPETS).flatMap(([name, snippet]) =>
+      insertedText([].concat(snippet.body).join("\n")).split("\n")
+        .filter((line) => assignment.test(line))
+        .map((line) => `${name}: ${line.trim()}`)
+    );
+    assert.deepEqual(found, []);
+  });
 });
