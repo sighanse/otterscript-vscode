@@ -911,6 +911,13 @@ describe("findVariableOccurrences", () => {
     assert.deepEqual(how("$g"), ["assignment"]);
   });
 
+  it("treats `set local $x = ...` as an assignment", () => {
+    const index = indexVariableOccurrences("set local $x = 1;\nLog-Information \"$x\";");
+    /** @param {string} key */
+    const how = (key) => index.get(key)?.map((o) => o.assignedBy ?? "read");
+    assert.deepEqual(how("$x"), ["assignment", "read"]);
+  });
+
   it("indexes a very long line in time linear in its length", () => {
     // Whether a variable is assigned was once decided by `...$` regexes
     // matched against the whole line before it, so a long line took seconds
@@ -1155,6 +1162,10 @@ describe("findExecutionDirectives", () => {
   it("reads a header over several lines, and a value from the unmasked text", () => {
     assert.deepEqual(find('with retry=3,\n     credentials="a,b" {\n}').withs, [["retry=3@5", 'credentials="a,b"@19']]);
     assert.deepEqual(find("with retry= {\n}").withs, [["retry=@5"]], "an empty value");
+  });
+
+  it("keeps a braced variable in a value from being read as the block opener", () => {
+    assert.deepEqual(find("with async=${token}, timeout=30 {\n}").withs, [["async=${token}@5", "timeout=30@21"]]);
   });
 
   it("reads `await` with or without a token", () => {

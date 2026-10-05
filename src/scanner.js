@@ -443,7 +443,14 @@ function findExecutionDirectives(maskedText, text) {
     }
 
     let headerEnd = after;
-    while (headerEnd < maskedText.length && !"{;}".includes(maskedText[headerEnd])) headerEnd++;
+    // A `${name}` value's `{` isn't the block opener, so step over its span.
+    while (headerEnd < maskedText.length && !"{;}".includes(maskedText[headerEnd])) {
+      if (maskedText[headerEnd] === "$" && maskedText[headerEnd + 1] === "{") {
+        const close = maskedText.indexOf("}", headerEnd + 2);
+        if (close === -1) break;
+        headerEnd = close + 1;
+      } else headerEnd++;
+    }
     keyword.lastIndex = headerEnd;
     if (maskedText[headerEnd] !== "{") continue;
 
@@ -1230,8 +1237,8 @@ const MODULE_PARAMETER_LIST_OPEN_REGEX = /^\s*module\s+[A-Za-z][\w-]*\s*</i;
  * parameter name (`<$a`, `, $b`, `in $c`, `out $d`) rather than a default value.
  */
 const MODULE_PARAMETER_PREFIX_REGEX = /(?:^|,|\b(?:in|out|ref))\s*$/i;
-/** Text before a token at statement start (optionally after `set` / `global`). */
-const ASSIGNMENT_PREFIX_REGEX = /(?:^|[;{}]|\bset|\bglobal)\s*$/i;
+/** Text before a token at statement start (optionally after `set`, `set local` or `global`). */
+const ASSIGNMENT_PREFIX_REGEX = /(?:^|[;{}]|\bset(?:\s+local)?|\bglobal)\s*$/i;
 /** Text before a token that receives an operation's output (`ResponseBody => $body`). */
 const OUTPUT_CAPTURE_PREFIX_REGEX = /=>\s*$/;
 /** Text after a token that makes it an assignment target (`=` but not `==`). */
