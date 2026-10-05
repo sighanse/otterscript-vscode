@@ -57,6 +57,18 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "vsix=otterscript-vscode-$version.vsix" >> "$GITHUB_OUTPUT"
 
+      # The GitHub release's notes: the version's CHANGELOG.md section. Taken
+      # before publishing, so a missing or undated section stops the run
+      # before either store gets the package.
+      - name: Release notes
+        id: notes
+        env:
+          VERSION: ${{ steps.package.outputs.version }}
+        run: |
+          notes="$RUNNER_TEMP/release-notes.md"
+          node scripts/release-notes.js "$VERSION" > "$notes"
+          echo "file=$notes" >> "$GITHUB_OUTPUT"
+
       # The tokens are set on the steps that use them only, never for the
       # whole job (where `npm ci`'s install scripts could read them).
       # TEMPORARY: while the Marketplace is published to by hand, a missing
@@ -78,17 +90,19 @@ jobs:
         run: |
           npx ovsx publish "$VSIX" --skip-duplicate --trusted-publishing
 
-      # Tags the published commit v<version> and attaches the package; the
-      # notes come from .github/release.yml. Skipped when the release exists.
+      # Tags the published commit v<version> and attaches the package, with
+      # the version's CHANGELOG section as the notes. Skipped when the
+      # release exists.
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           VERSION: ${{ steps.package.outputs.version }}
           VSIX: ${{ steps.package.outputs.vsix }}
+          NOTES: ${{ steps.notes.outputs.file }}
         run: |
           if gh release view "v$VERSION" >/dev/null 2>&1; then
             echo "Release v$VERSION already exists"
           else
-            gh release create "v$VERSION" "$VSIX" --target "$GITHUB_SHA" --title "v$VERSION" --generate-notes
+            gh release create "v$VERSION" "$VSIX" --target "$GITHUB_SHA" --title "v$VERSION" --notes-file "$NOTES"
           fi

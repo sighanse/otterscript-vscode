@@ -20,7 +20,8 @@ in `.nvmrc` (24).
 ```sh
 npm install       # dev dependencies
 npm run check     # ESLint + JSDoc type-check + grammar/language-data sync
-                  # + generated-data checks + unit tests
+                  # + generated-data checks + a CHANGELOG section for the
+                  # version in package.json + unit tests
 npm test          # unit tests only (node:test)
 npm run test:cov  # unit tests with coverage of src/; fails below the line,
                   # branch and function limits in package.json (Sanity runs it)
@@ -105,12 +106,15 @@ and a `CLAUDE_CODE_OAUTH_TOKEN` repository secret (`claude setup-token`).
 ## Releasing
 
 1. Bump `version` in `package.json` (`npm version <patch|minor|major> --no-git-tag-version`)
-   and turn `[Unreleased]` in `CHANGELOG.md` into the version and date.
+   and turn `[Unreleased]` in `CHANGELOG.md` into the version and date
+   (`## [0.7.0] - 2026-10-05`). That section becomes the GitHub release's
+   notes; `npm run check` fails until the version has one.
 2. Merge to `main` through a pull request.
 3. Run the **Publish Extension** workflow on `main`. After approval in the
    `release` environment it checks and packages the extension once, publishes
    that package to the Visual Studio Marketplace and Open VSX, then tags the
-   commit `v<version>` and creates a GitHub release with the package attached.
+   commit `v<version>` and creates a GitHub release with the package attached
+   and the version's CHANGELOG section as its notes.
    A run that failed half-way can be run again: versions already published
    are skipped.
 
