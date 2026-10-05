@@ -113,8 +113,10 @@ jobs:
           echo "✅ JSONC validation passed"
 
       # No AI attribution in this repository's history (CLAUDE.md): fails on a
-      # Co-authored-by trailer or a "Generated with Claude Code" line in any of
-      # the pull request's commits -- e.g. one the @claude workflow added.
+      # Co-authored-by trailer naming Claude or Anthropic, or a "Generated with
+      # Claude Code" line, in any of the pull request's commits. The agent's
+      # commits on GitHub credit the person who asked with a Co-authored-by
+      # of their own; that one is allowed (the bot is already the author).
       - name: No attribution trailers in commit messages
         id: trailers
         continue-on-error: true
@@ -127,7 +129,7 @@ jobs:
             exit 0
           fi
           found=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/commits" \
-            --jq '.[] | select(.commit.message | test("(^|\n)co-authored-by:|generated with [[]claude code[]]"; "i")) | "\(.sha[0:7]) \(.commit.message | split("\n")[0])"')
+            --jq '.[] | select(.commit.message | test("(^|\n)co-authored-by:[^\n]*(claude|anthropic)|generated with [[]claude code[]]"; "i")) | "\(.sha[0:7]) \(.commit.message | split("\n")[0])"')
           if [ -n "$found" ]; then
             echo "::error::Commit messages with an attribution trailer (reword them):"
             echo "$found"

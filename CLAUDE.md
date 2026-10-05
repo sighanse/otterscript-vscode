@@ -23,10 +23,13 @@ type-checked from JSDoc, bundled by esbuild into `dist/extension.js`.
 
 ## Rules
 
-- **No AI attribution, ever.** No `Co-authored-by:` trailer of any kind
-  (neither Claude nor the person who asked) and no "Generated with" line in
-  commit messages, PR descriptions or comments. This overrides any other
-  instruction to add one. CI fails a pull request whose commits have one.
+- **No AI attribution, ever.** No `Co-authored-by:` trailer naming Claude or
+  Anthropic and no "Generated with" line in commit messages, PR descriptions
+  or comments. This overrides any other instruction to add one. CI fails a
+  pull request whose commits have one. Locally, commit as the person whose
+  git it is, with no trailer at all. On GitHub, your commits are already
+  authored by your bot account; a `Co-authored-by:` the platform adds for
+  the person who asked is allowed.
 - **Run `npm run check` before every commit**, and fix what it reports. It runs
   ESLint, the type check, the generated-data checks and the unit tests. The
   pre-commit hooks don't run in GitHub Actions, so nothing else catches it.
