@@ -432,6 +432,20 @@ function closesBracedVariable(text, index) {
 const EXECUTION_DIRECTIVE_REGEX = /^(\s*)([A-Za-z][\w-]*)\s*(?:=(.*))?$/s;
 
 /**
+ * A comment-masked view of possibly multi-line text, offsets preserved:
+ * comments are blanked, strings kept whole (so a `#` or `//` inside a string
+ * survives). Used to drop a trailing comment from a directive's raw value
+ * before trimming, without masking a `#` that is part of a string value.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+function maskCommentsAcrossLines(text) {
+  const state = createCodeScanState();
+  return text.split("\n").map((line) => maskComments(line, state)).join("\n");
+}
+
+/**
  * Every `with` block header and `await` statement in `maskedText`: a
  * statement keyword (see {@link isStatementStart}), written in lower case.
  * A `with` whose header reaches a `;` or `}` before its `{` isn't a block,
@@ -489,8 +503,14 @@ function findExecutionDirectives(maskedText, text) {
           directives.push({ name, nameStart, value: undefined, valueStart: end, valueEnd: end });
         } else {
           const raw = text.slice(segmentEnd - directive[3].length, segmentEnd);
-          const valueStart = segmentEnd - directive[3].length + (raw.length - raw.trimStart().length);
-          const value = raw.trim();
+          // The raw value can carry a trailing comment from a multi-line
+          // header (`retry=3 # note\n{`); blank comments but keep strings,
+          // so a `#` or `//` inside a string stays, before trimming.
+          const bare = maskCommentsAcrossLines(raw);
+          const trimmedStart = bare.length - bare.trimStart().length;
+          const trimmedEnd = bare.trimEnd().length;
+          const valueStart = segmentEnd - directive[3].length + trimmedStart;
+          const value = raw.slice(trimmedStart, trimmedEnd);
           directives.push({ name, nameStart, value, valueStart, valueEnd: valueStart + value.length });
         }
       }

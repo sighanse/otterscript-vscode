@@ -1194,6 +1194,12 @@ describe("findExecutionDirectives", () => {
     assert.deepEqual(find("with async=${token}, timeout=30 {\n}").withs, [["async=${token}@5", "timeout=30@21"]]);
   });
 
+  it("drops a comment at the end of a value, but keeps a `#` inside a string", () => {
+    assert.deepEqual(find("with retry=3 # retry failures\n{\n}").withs, [["retry=3@5"]]);
+    assert.deepEqual(find("with retry=3 // note\n{\n}").withs, [["retry=3@5"]]);
+    assert.deepEqual(find('with note="a # b" {\n}').withs, [['note="a # b"@5']]);
+  });
+
   it("reads `await` with or without a token", () => {
     assert.deepEqual(find("await build;\nawait;\n  await  other ;").awaits, ["build@6", "@18", "other@29"]);
   });

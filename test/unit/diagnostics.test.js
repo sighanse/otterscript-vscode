@@ -1096,6 +1096,11 @@ describe("updateDiagnostics — with directives and await", () => {
     assert.deepEqual(diagnose('with retry=$n, timeout="30", executionPolicy=$policy, async, lock {\n}').map((d) => d.code), []);
   });
 
+  it("does not flag a value with a trailing comment in a multi-line header", () => {
+    assert.deepEqual(diagnose("with retry=3 # retry failures\n{\n}").map((d) => d.code), []);
+    assert.deepEqual(diagnose("with timeout=30 // a note\n{\n}").map((d) => d.code), []);
+  });
+
   it("unknown-await-token: an await whose token no async block in the file starts, as a hint", () => {
     const source = "with async=build {\n}\nawait build;\nawait BUILD;\nawait deploy;\nawait;";
     assert.deepEqual(where(source, "unknown-await-token"), ["4:6-12"]);
