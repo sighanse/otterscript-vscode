@@ -876,6 +876,12 @@ describe("findVariableOccurrences", () => {
     assert.deepEqual(find(["set global $x = 1;"], "$", "x"), ["0:11:w"]);
   });
 
+  it("marks `set local` and `set global` as writes after a `;` or `{` on the same line, however spaced", () => {
+    for (const line of ["x; set global $x = 1;", "if $a { set local $x = 1; }", ";  set   global	$x = 1;"]) {
+      assert.deepEqual(find([line], "$", "x").map((o) => o.slice(-1)), ["w"], JSON.stringify(line));
+    }
+  });
+
   it("does not mark a bare `global $x = ...` (no `set`) as a write", () => {
     assert.deepEqual(find(["global $x = 1;"], "$", "x"), ["0:7:r"]);
   });
@@ -1217,5 +1223,9 @@ describe("findExecutionDirectives", () => {
     const long = assertLinearTime(() => find(`with ${"retry=3, ".repeat(k)}isolation {\n}`), "a long header");
     assert.equal(long.withs[0].length, k + 1);
     assert.deepEqual(assertLinearTime(() => find("with ".repeat(k)), "headers without a block").withs, []);
+    // Whether a `}` closes a block or a braced variable (`${x}`) is decided
+    // without walking back to its `{`.
+    assert.equal(assertLinearTime(() => find(`a{${"}with ".repeat(k)}`), "after many `}`").withs.length, 0);
+    assert.equal(assertLinearTime(() => find(`${"{".repeat(k)}${"}await x;".repeat(k)}`), "after nested `}`").awaits.length, k);
   });
 });
