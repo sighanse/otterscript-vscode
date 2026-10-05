@@ -1054,3 +1054,62 @@ describe("getDiagnosticCode", () => {
     assert.equal(getDiagnosticCode(/** @type {any} */ ({})), "");
   });
 });
+
+// ============================================================
+// with directives and await
+// ============================================================
+
+describe("updateDiagnostics — with directives and await", () => {
+  /**
+   * Each diagnostic of `code` in `source` as `line:start-end`.
+   *
+   * @param {string} source
+   * @param {string} code
+   * @returns {string[]}
+   */
+  const where = (source, code) => only(source, code).map((d) => `${d.range.start.line}:${d.range.start.character}-${d.range.end.character}`);
+
+  it("unknown-with-directive: a name not in the grammar, as a warning", () => {
+    const [d] = only("with retyr=3 {\n}", "unknown-with-directive");
+    assert.equal(d.severity, DiagnosticSeverity.Warning);
+    assert.match(d.message, /^Unknown execution directive 'retyr': a 'with' block takes retry, timeout, executionPolicy, async, lock, isolation, credentials\.$/);
+    assert.deepEqual(where("with retyr=3, timeout=5 {\n}", "unknown-with-directive"), ["0:5-10"]);
+  });
+
+  it("knows every directive of the grammar, in any casing", () => {
+    const source = "with retry=3, timeout=30, executionPolicy=always, async=a, lock=!b, isolation, credentials=c {\n}\nwith RETRY=1, Async, Lock, executionpolicy=ONCHANGE {\n}";
+    assert.deepEqual(diagnose(source).map((d) => d.code), []);
+  });
+
+  it("invalid-with-directive-value: a value the directive doesn't take", () => {
+    assert.deepEqual(where("with executionPolicy=sometimes, retry=many, timeout=1.5 {\n}", "invalid-with-directive-value"), ["0:21-30", "0:38-42", "0:52-55"]);
+    assert.equal(only("with retry=many {\n}", "invalid-with-directive-value")[0].message, "'many' isn't a value 'retry' takes: retry=<integer>.");
+  });
+
+  it("invalid-with-directive-value: a missing value, or one on isolation", () => {
+    assert.deepEqual(where("with retry, timeout= , isolation=yes {\n}", "invalid-with-directive-value"), ["0:5-10", "0:12-19", "0:23-36"]);
+    assert.equal(only("with retry {\n}", "invalid-with-directive-value")[0].message, "'retry' needs a value: retry=<integer>.");
+    assert.equal(only("with isolation=yes {\n}", "invalid-with-directive-value")[0].message, "'isolation' takes no value.");
+  });
+
+  it("accepts a variable, a quoted number, and async or lock without a token", () => {
+    assert.deepEqual(diagnose('with retry=$n, timeout="30", executionPolicy=$policy, async, lock {\n}').map((d) => d.code), []);
+  });
+
+  it("unknown-await-token: an await whose token no async block in the file starts, as a hint", () => {
+    const source = "with async=build {\n}\nawait build;\nawait BUILD;\nawait deploy;\nawait;";
+    assert.deepEqual(where(source, "unknown-await-token"), ["4:6-12"]);
+    const [d] = only(source, "unknown-await-token");
+    assert.equal(d.severity, DiagnosticSeverity.Hint);
+    assert.equal(d.message, "No 'with async=deploy' block in this file: 'await deploy;' waits only for the blocks with that token.");
+  });
+
+  it("checks no await token when an async token is a variable", () => {
+    assert.deepEqual(only("with async=$token {\n}\nawait deploy;", "unknown-await-token"), []);
+  });
+
+  it("checks nothing in strings, comments or a template's literal text", () => {
+    assert.deepEqual(diagnose('# with retyr=3 {\nset $s = "with retyr=3 { }";\nawait # deploy\n;').map((d) => d.code), []);
+    assert.deepEqual(only("<% with retyr=3 { %>\nwith retyr=3 { }\n<% } %>", "unknown-with-directive").length, 1, "only the tag's");
+  });
+});

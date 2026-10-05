@@ -21,12 +21,15 @@ const { captureRegistrations, useWorkspace } = require("./fake-workspace");
 const { updateDiagnostics } = require("../../src/diagnostics.js");
 const {
   createAssignmentInConditionFix,
+  createAwaitTokenFix,
+  createDirectiveValueFix,
   createForToForeachFix,
   createInvalidOperatorFix,
   createMissingArgumentFix,
   createMissingDollarFix,
   createTemplateEndFix,
   createUnknownArgumentFix,
+  createUnknownDirectiveFix,
   createUnknownFunctionFix,
   createUnknownNamespaceFix,
   createUnknownOperationFix,
@@ -525,5 +528,59 @@ describe("refreshing diagnostics", () => {
     } finally {
       disk.restore();
     }
+  });
+});
+
+describe("with directive and await fixes", () => {
+  /**
+   * The fix offered for the first diagnostic of `code` in `text`, by the
+   * real checks, and the line it leaves.
+   *
+   * @param {(doc: any, diagnostic: any) => any} factory
+   * @param {string} text
+   * @param {string} code
+   * @returns {{ fix: any, line: string }}
+   */
+  function fixFirst(factory, text, code) {
+    const doc = makeDoc(text);
+    const diagnostic = diagnose(doc).find((d) => d.code.value === code);
+    assert.ok(diagnostic, `a ${code} diagnostic`);
+    const fix = factory(doc, diagnostic);
+    if (!fix) return { fix, line: "" };
+    const [, , range, newText] = fix.edit.edits[0];
+    const lineText = doc.lineAt(range.start.line).text;
+    return { fix, line: lineText.slice(0, range.start.character) + newText + lineText.slice(range.end.character) };
+  }
+
+  it("changes an unknown directive to the closest one, as a guess Fix All leaves alone", () => {
+    const { fix, line } = fixFirst(createUnknownDirectiveFix, "with retyr=3, timeout=5 {\n}", "unknown-with-directive");
+    assert.equal(fix.title, "Change to 'retry'");
+    assert.equal(fix.isPreferred, false);
+    assert.equal(line, "with retry=3, timeout=5 {");
+    assert.equal(fixFirst(createUnknownDirectiveFix, "with frobnicate {\n}", "unknown-with-directive").fix, null);
+  });
+
+  it("changes an executionPolicy value to the closest allowed one, and fixes no other value", () => {
+    const { fix, line } = fixFirst(createDirectiveValueFix, "with executionPolicy=onchnage {\n}", "invalid-with-directive-value");
+    assert.equal(fix.title, "Change to 'onChange'");
+    assert.equal(line, "with executionPolicy=onChange {");
+    assert.equal(fixFirst(createDirectiveValueFix, "with retry=many {\n}", "invalid-with-directive-value").fix, null);
+    assert.equal(fixFirst(createDirectiveValueFix, "with retry {\n}", "invalid-with-directive-value").fix, null);
+    assert.equal(fixFirst(createDirectiveValueFix, "with executionPolicy=sometimes {\n}", "invalid-with-directive-value").fix, null, "nothing close");
+  });
+
+  it("changes an await's token to the closest one an async block in the file starts", () => {
+    const { fix, line } = fixFirst(createAwaitTokenFix, "with async=build {\n}\nwith async=deploy {\n}\nawait biuld;", "unknown-await-token");
+    assert.equal(fix.title, "Change to 'build'");
+    assert.equal(line, "await build;");
+    assert.equal(fixFirst(createAwaitTokenFix, "await build;", "unknown-await-token").fix, null, "no async block at all");
+  });
+
+  it("offers each fix in the lightbulb, and Fix All applies none of them", async () => {
+    const doc = makeDoc("with retyr=3, executionPolicy=onchnage {\n}\nwith async=build {\n}\nawait biuld;");
+    const { quickFixes, fixAll } = registerFixes();
+    const titles = quickFixes.provideCodeActions(doc, undefined, { diagnostics: diagnose(doc) }).map((/** @type {any} */ a) => a.title);
+    assert.deepEqual(titles.filter((/** @type {string} */ t) => t.startsWith("Change")), ["Change to 'retry'", "Change to 'onChange'", "Change to 'build'"]);
+    assert.deepEqual(fixAll.provideCodeActions(doc, undefined, { diagnostics: [], only: stub.CodeActionKind.SourceFixAll }), []);
   });
 });

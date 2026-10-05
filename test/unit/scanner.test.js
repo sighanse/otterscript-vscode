@@ -17,6 +17,7 @@ const { assertLinearTime } = require("./timing");
 
 const {
   createCodeScanState,
+  findExecutionDirectives,
   createTemplateScanState,
   isUnescapedQuoteAt,
   scanLineState,
@@ -1119,5 +1120,71 @@ describe("isStatementStart", () => {
     for (const before of ["Log ", "${", "@{ ", "%{", "x = "]) {
       assert.equal(isStatementStart(before + "Op", before.length), false, JSON.stringify(before));
     }
+  });
+});
+
+// ============================================================
+// findExecutionDirectives
+// ============================================================
+
+describe("findExecutionDirectives", () => {
+  /**
+   * The `with` headers and `await` statements of `text`, masked as the
+   * diagnostics mask it, each directive as `name=value@nameStart`.
+   *
+   * @param {string} text
+   * @returns {{ withs: string[][], awaits: string[] }}
+   */
+  function find(text) {
+    const state = createCodeScanState();
+    const masked = text.split("\n").map((line) => maskNonCodeSpans(line, state)).join("\n");
+    const { withs, awaits } = findExecutionDirectives(masked, text);
+    return {
+      withs: withs.map((w) => w.directives.map((d) => `${d.name}${d.value === undefined ? "" : `=${d.value}`}@${d.nameStart}`)),
+      awaits: awaits.map((a) => `${a.token ?? ""}@${a.tokenStart}`),
+    };
+  }
+
+  it("reads each directive of a header, with its value and where its name is", () => {
+    assert.deepEqual(find("with retry=3, timeout = 30,executionPolicy=onChange {\n}").withs, [
+      ["retry=3@5", "timeout=30@14", "executionPolicy=onChange@27"],
+    ]);
+    assert.deepEqual(find("with isolation, lock=!db, async {\n}").withs, [["isolation@5", "lock=!db@16", "async@26"]]);
+  });
+
+  it("reads a header over several lines, and a value from the unmasked text", () => {
+    assert.deepEqual(find('with retry=3,\n     credentials="a,b" {\n}').withs, [["retry=3@5", 'credentials="a,b"@19']]);
+    assert.deepEqual(find("with retry= {\n}").withs, [["retry=@5"]], "an empty value");
+  });
+
+  it("reads `await` with or without a token", () => {
+    assert.deepEqual(find("await build;\nawait;\n  await  other ;").awaits, ["build@6", "@18", "other@29"]);
+  });
+
+  it("finds only statements: not in strings, comments or another statement's text", () => {
+    const text = [
+      "# with retry=3 {",
+      'set $s = "with retry=3 { await x;";',
+      "Log-Information done with that;",
+      "Log-Information await this;",
+      "set $with = 1;",
+      "Do-with x { }",
+    ].join("\n");
+    assert.deepEqual(find(text), { withs: [], awaits: [] });
+  });
+
+  it("finds a statement after `;`, `{` or `}`, and leaves out a `with` without its block", () => {
+    assert.deepEqual(find("if $x { with retry=1 { } }; with async=a { }").withs, [["retry=1@13"], ["async=a@33"]]);
+    assert.deepEqual(find("with retry=3;\nwith lock\n}").withs, []);
+    assert.deepEqual(find("with retry=3").withs, [], "the end of the text");
+  });
+
+  it("takes time in proportion to the text's length", () => {
+    const k = 20000;
+    const headers = assertLinearTime(() => find("with retry=3 { }\n".repeat(k)), "many headers");
+    assert.equal(headers.withs.length, k);
+    const long = assertLinearTime(() => find(`with ${"retry=3, ".repeat(k)}isolation {\n}`), "a long header");
+    assert.equal(long.withs[0].length, k + 1);
+    assert.deepEqual(assertLinearTime(() => find("with ".repeat(k)), "headers without a block").withs, []);
   });
 });

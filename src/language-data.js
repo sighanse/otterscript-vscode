@@ -2094,6 +2094,120 @@ force normal;
 };
 
 // ============================================================
+// EXECUTION DIRECTIVES (`with ... { }`)
+// ============================================================
+
+/**
+ * @typedef {DocEntry & {
+ *   value: "integer" | "policy" | "token" | "credentials" | null,
+ *   valueRequired: boolean,
+ *   values?: readonly string[]
+ * }} ExecutionDirectiveDoc
+ *   `value`: what follows `=` (none for `isolation`); `valueRequired`: whether
+ *   the directive needs one (`async` and `lock` work without a token);
+ *   `values`: the only values allowed, when the grammar lists them.
+ */
+
+/**
+ * The directives of a `with` block, as Inedo's formal grammar lists them
+ * (`<execution_directive>`), keyed by name. What each does is from Inedo's
+ * "General Blocks" page. The completion `snippet` inserts the directive
+ * ready to fill in.
+ *
+ * @type {Readonly<Record<string, ExecutionDirectiveDoc>>}
+ */
+const executionDirectiveDocs = Object.freeze({
+  retry: {
+    namespace: null,
+    name: "retry",
+    signature: "retry=<integer>",
+    description: "Runs the block again, up to this many times, when it raises an error.",
+    documentation: `
+If anything in the block (or a block nested in it) raises an error, the
+whole block runs again, up to the given number of times. When a retry
+succeeds, the execution status doesn't change.
+`,
+    snippet: "retry=${1:3}",
+    value: "integer",
+    valueRequired: true,
+  },
+  timeout: {
+    namespace: null,
+    name: "timeout",
+    signature: "timeout=<integer>",
+    description: "Raises an error when the block hasn't finished within this many seconds.",
+    snippet: "timeout=${1:600}",
+    value: "integer",
+    valueRequired: true,
+  },
+  executionPolicy: {
+    namespace: null,
+    name: "executionPolicy",
+    signature: "executionPolicy=(always|onChange)",
+    description: "When the block's operations run: `always`, or `onChange`.",
+    snippet: "executionPolicy=${1|always,onChange|}",
+    value: "policy",
+    valueRequired: true,
+    values: Object.freeze(["always", "onChange"]),
+  },
+  async: {
+    namespace: null,
+    name: "async",
+    signature: "async[=token]",
+    description: "Runs the block in the background: execution continues with the next statement.",
+    documentation: `
+Several long-running blocks can run in parallel this way. \`await;\` waits
+for every background block; \`await token;\` waits only for the blocks with
+that token. The plan waits for any still running at its end.
+
+\`\`\`otterscript
+with async=deploy {
+    # runs in the background
+}
+await deploy;
+\`\`\`
+`,
+    snippet: "async=${1:token}",
+    value: "token",
+    valueRequired: false,
+  },
+  lock: {
+    namespace: null,
+    name: "lock",
+    signature: "lock[=[!]token]",
+    description: "Runs the block exclusively: never at the same time as another block with the same token.",
+    snippet: "lock=${1:token}",
+    value: "token",
+    valueRequired: false,
+  },
+  isolation: {
+    namespace: null,
+    name: "isolation",
+    signature: "isolation",
+    description: "Runs the block's remote operations in a new process, ended when the block is done.",
+    documentation: `
+Available from BuildMaster 6.1.11 and Otter 2.2.5.
+`,
+    snippet: "isolation",
+    value: null,
+    valueRequired: false,
+  },
+  credentials: {
+    namespace: null,
+    name: "credentials",
+    signature: "credentials=<name>",
+    description: "Runs the block's remote operations in a process under these credentials.",
+    documentation: `
+The name of a username-and-password credential, such as one for another
+server or repository.
+`,
+    snippet: "credentials=${1:name}",
+    value: "credentials",
+    valueRequired: true,
+  },
+});
+
+// ============================================================
 // VARIABLE DOCS (ProGet / Execution Context)
 // ============================================================
 
@@ -4185,6 +4299,7 @@ module.exports = {
   operationArguments,
   syntaxDocs,
   keywordDocs,
+  executionDirectiveDocs,
   variableDocs: exportedVariableDocs,
   scalarFunctionDocs: exportedScalarFunctionDocs,
   vectorFunctionDocs: exportedVectorFunctionDocs,

@@ -382,6 +382,99 @@ function isStatementStart(text, end) {
 }
 
 // ============================================================
+// EXECUTION DIRECTIVES AND AWAIT
+// ============================================================
+
+/**
+ * One directive in a `with` header: `retry=3` or `isolation`. Offsets into
+ * the text {@link findExecutionDirectives} was given.
+ *
+ * @typedef {{ name: string, nameStart: number, value: string | undefined, valueStart: number, valueEnd: number }} ExecutionDirective
+ *   `value`: what follows the `=`, trimmed, from the unmasked text (a
+ *   quoted string keeps its quotes); undefined without an `=`.
+ *   `valueStart`/`valueEnd`: where it is (equal when it's empty or missing).
+ */
+
+/**
+ * A `with ... {` block's header.
+ *
+ * @typedef {{ start: number, headerEnd: number, directives: ExecutionDirective[] }} WithHeader
+ *   `start`: the `with`; `headerEnd`: its `{`.
+ */
+
+/**
+ * An `await` statement, with the token it waits for, if any.
+ *
+ * @typedef {{ start: number, token: string | undefined, tokenStart: number }} AwaitStatement
+ */
+
+/** A directive in a `with` header: its name, then an optional `=` and value. */
+const EXECUTION_DIRECTIVE_REGEX = /^(\s*)([A-Za-z][\w-]*)\s*(?:=(.*))?$/s;
+
+/**
+ * Every `with` block header and `await` statement in `maskedText`: a
+ * statement keyword (see {@link isStatementStart}), written in lower case.
+ * A `with` whose header reaches a `;` or `}` before its `{` isn't a block,
+ * so it is left out. One pass: each header is read once.
+ *
+ * @param {string} maskedText - Strings and comments blanked, offsets kept
+ * @param {string} text - The same text unmasked, for the directives' values
+ * @returns {{ withs: WithHeader[], awaits: AwaitStatement[] }}
+ */
+function findExecutionDirectives(maskedText, text) {
+  /** @type {WithHeader[]} */
+  const withs = [];
+  /** @type {AwaitStatement[]} */
+  const awaits = [];
+  const keyword = /\b(with|await)\b/g;
+  for (let match; (match = keyword.exec(maskedText));) {
+    const start = match.index;
+    // Not a word inside another (`$with`, `Do-with`) or a statement's text.
+    if (/[$@%\w-]/.test(maskedText[start - 1] ?? "") || maskedText[start + match[0].length] === "-") continue;
+    if (!isStatementStart(maskedText, start)) continue;
+    const after = start + match[0].length;
+
+    if (match[1] === "await") {
+      const tail = /^\s*([A-Za-z][A-Za-z0-9]*)?\s*;/.exec(maskedText.slice(after, after + 200));
+      if (!tail) continue;
+      const token = tail[1];
+      awaits.push({ start, token, tokenStart: token ? after + tail[0].indexOf(token) : after });
+      continue;
+    }
+
+    let headerEnd = after;
+    while (headerEnd < maskedText.length && !"{;}".includes(maskedText[headerEnd])) headerEnd++;
+    keyword.lastIndex = headerEnd;
+    if (maskedText[headerEnd] !== "{") continue;
+
+    /** @type {ExecutionDirective[]} */
+    const directives = [];
+    // The directives are separated by commas; a comma in a string is masked.
+    let segmentStart = after;
+    for (const segment of maskedText.slice(after, headerEnd).split(",")) {
+      const segmentEnd = segmentStart + segment.length;
+      const directive = EXECUTION_DIRECTIVE_REGEX.exec(segment);
+      if (directive) {
+        const nameStart = segmentStart + directive[1].length;
+        const name = directive[2];
+        if (directive[3] === undefined) {
+          const end = nameStart + name.length;
+          directives.push({ name, nameStart, value: undefined, valueStart: end, valueEnd: end });
+        } else {
+          const raw = text.slice(segmentEnd - directive[3].length, segmentEnd);
+          const valueStart = segmentEnd - directive[3].length + (raw.length - raw.trimStart().length);
+          const value = raw.trim();
+          directives.push({ name, nameStart, value, valueStart, valueEnd: valueStart + value.length });
+        }
+      }
+      segmentStart = segmentEnd + 1;
+    }
+    withs.push({ start, headerEnd, directives });
+  }
+  return { withs, awaits };
+}
+
+// ============================================================
 // CORE LINE SCANNER
 // ============================================================
 
@@ -1490,4 +1583,5 @@ module.exports = {
   // -- Looking back from a word
   namespaceBefore,
   isStatementStart,
+  findExecutionDirectives,
 };

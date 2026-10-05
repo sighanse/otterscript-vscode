@@ -8,6 +8,7 @@
 const vscode = require("vscode");
 const { DIAGNOSTIC_CODES, findArgumentProblems, getDiagnosticCode, parseCallArguments } = require("../diagnostics");
 const {
+  executionDirectiveDocs,
   FUNCTION_TABLES,
   NAMESPACES,
   operationArguments,
@@ -15,7 +16,7 @@ const {
   operationForms,
 } = require("../language-data");
 const { findOperationArgumentContext, maskComments, maskNonCodeSpans, namespaceBefore } = require("../scanner");
-const { codeView, getLineStartScanState, getMaskedTextBefore, MASKED_CONTEXT_MAX_LINES } = require("../document-index");
+const { codeView, getExecutionDirectives, getLineStartScanState, getMaskedTextBefore, MASKED_CONTEXT_MAX_LINES } = require("../document-index");
 const {
   createCardVersionFix,
   createContentTypeFix,
@@ -275,6 +276,53 @@ function createUnknownArgumentFix(document, diagnostic) {
 }
 
 /**
+ * Replaces an unknown `with` directive with the one it's closest to
+ * (`retyr=3` -> `retry=3`).
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Diagnostic} diagnostic - An unknown-with-directive
+ *   diagnostic; its range covers the directive's name
+ * @returns {vscode.CodeAction | null} Code action, or null when nothing is close
+ */
+function createUnknownDirectiveFix(document, diagnostic) {
+  const suggestion = closestMatch(document.getText(diagnostic.range), Object.values(executionDirectiveDocs).map((d) => d.name));
+  return suggestion ? createRenameFix(document, diagnostic, suggestion) : null;
+}
+
+/**
+ * Replaces an `executionPolicy` value with the allowed one it's closest to
+ * (`onchnage` -> `onChange`). The other invalid-with-directive-value
+ * diagnostics (a missing value, `retry=many`) have no fix: the value is the
+ * user's to choose.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Diagnostic} diagnostic - An invalid-with-directive-value
+ *   diagnostic
+ * @returns {vscode.CodeAction | null}
+ */
+function createDirectiveValueFix(document, diagnostic) {
+  const { start } = diagnostic.range;
+  const before = document.lineAt(start.line).text.slice(0, start.character);
+  if (!/\bexecutionPolicy\s*=\s*$/i.test(before.slice(-40))) return null;
+  const suggestion = closestMatch(document.getText(diagnostic.range), executionDirectiveDocs.executionPolicy.values ?? []);
+  return suggestion ? createRenameFix(document, diagnostic, suggestion) : null;
+}
+
+/**
+ * Replaces the token of `await token;` with the closest token a
+ * `with async=` block in the file starts (`await biuld;` -> `build`).
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Diagnostic} diagnostic - An unknown-await-token diagnostic;
+ *   its range covers the token
+ * @returns {vscode.CodeAction | null} Code action, or null when nothing is close
+ */
+function createAwaitTokenFix(document, diagnostic) {
+  const suggestion = closestMatch(document.getText(diagnostic.range), getExecutionDirectives(document).asyncBlocks.map((b) => b.token));
+  return suggestion ? createRenameFix(document, diagnostic, suggestion) : null;
+}
+
+/**
  * Adds the required arguments an operation call leaves out, each as an
  * empty `Name: ` to fill in: after the last argument, on lines of their own
  * when the call puts its `)` on a line of its own. Not preferred, so Fix
@@ -384,6 +432,9 @@ function registerCodeActions(settings, diagnostics, runDiagnostics) {
     "unknown-operation":       (document, diagnostic) => createUnknownOperationFix(document, diagnostic, settings.product),
     "unknown-argument":        createUnknownArgumentFix,
     "missing-required-argument": createMissingArgumentFix,
+    "unknown-with-directive":  createUnknownDirectiveFix,
+    "invalid-with-directive-value": createDirectiveValueFix,
+    "unknown-await-token":     createAwaitTokenFix,
     "template-end-keyword":    createTemplateEndFix,
     "adaptivecard-version-too-low": (document, diagnostic) =>
       createCardVersionFix(document, diagnostic, { maxVersion: settings.adaptiveCardMaxVersion }),
@@ -604,12 +655,15 @@ function registerCodeActions(settings, diagnostics, runDiagnostics) {
 
 module.exports = {
   createAssignmentInConditionFix,
+  createAwaitTokenFix,
+  createDirectiveValueFix,
   createForToForeachFix,
   createInvalidOperatorFix,
   createMissingArgumentFix,
   createMissingDollarFix,
   createTemplateEndFix,
   createUnknownArgumentFix,
+  createUnknownDirectiveFix,
   createUnknownFunctionFix,
   createUnknownNamespaceFix,
   createUnknownOperationFix,

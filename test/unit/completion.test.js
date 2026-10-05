@@ -17,6 +17,7 @@ const { makeDocument } = require("./fake-document");
 const {
   argumentItems,
   callPrefix,
+  executionDirectiveContext,
   keywordItems,
   moduleItems,
   operationItems,
@@ -297,5 +298,83 @@ describe("registerCompletion", () => {
     const card = cursor('<% set $c = %>{ "type": "|');
     assert.deepEqual(labels(cards.provideCompletionItems(card.document, card.position)), labels(provideCardItems(card.document, card.position, /** @type {any} */ (settings))));
     assert.equal(sigils.resolveCompletionItem, operations.resolveCompletionItem, "both resolve documentation the same way");
+  });
+});
+
+// ============================================================
+// with directives and await
+// ============================================================
+
+describe("executionDirectiveContext", () => {
+  it("is at a directive's name after `with` or a `,`, with the names given before", () => {
+    assert.deepEqual(executionDirectiveContext("with "), { kind: "directive", typed: "", given: [] });
+    assert.deepEqual(executionDirectiveContext("if $x { with re"), { kind: "directive", typed: "re", given: [] });
+    assert.deepEqual(executionDirectiveContext("with retry=3,\n  lock, "), { kind: "directive", typed: "", given: ["retry", "lock"] });
+  });
+
+  it("is at a value of executionPolicy, the directive with listed values", () => {
+    const context = /** @type {any} */ (executionDirectiveContext("with retry=3, executionPolicy=on"));
+    assert.equal(context.kind, "value");
+    assert.equal(context.typed, "on");
+    assert.equal(context.directive.name, "executionPolicy");
+    assert.equal(executionDirectiveContext("with retry="), null, "a number is the user's to write");
+  });
+
+  it("is at the token after `await`", () => {
+    assert.deepEqual(executionDirectiveContext("await "), { kind: "await", typed: "" });
+    assert.deepEqual(executionDirectiveContext("Log-Information x; await bu"), { kind: "await", typed: "bu" });
+  });
+
+  it("is nowhere else: the keyword itself, the block, other statements", () => {
+    for (const prefix of ["with", "await", "with retry=3 {\n  Lo", "set $x = 1;", "Log-Information with ", "with retry=3 {\n}\nawait b;"]) {
+      assert.equal(executionDirectiveContext(prefix), null, prefix);
+    }
+  });
+});
+
+describe("directive and await completion", () => {
+  /**
+   * The items offered at the `|`, as typing a `,` or a letter asks for them.
+   *
+   * @param {string} source
+   * @param {number} [triggerKind]
+   * @returns {Promise<any[]>}
+   */
+  async function itemsAt(source, triggerKind = CompletionTriggerKind.Invoke) {
+    const { document, position } = cursor(source);
+    return provideOperationItems(document, position, /** @type {any} */ (triggerKind), settings, listWorkspaceModules);
+  }
+
+  it("offers the directives not given yet, inserted ready to fill in, also on the `,`", async () => {
+    const items = await itemsAt("with retry=3, |", CompletionTriggerKind.TriggerCharacter);
+    assert.deepEqual(items.map(labelOf), ["timeout", "executionPolicy", "async", "lock", "isolation", "credentials"]);
+    const policy = items.find((i) => labelOf(i) === "executionPolicy");
+    assert.equal(policy.insertText.value, "executionPolicy=${1|always,onChange|}");
+    assert.equal(policy.kind, "property");
+    assert.equal(items.find((i) => labelOf(i) === "isolation").insertText.value, "isolation");
+  });
+
+  it("replaces the typed name", async () => {
+    const [item] = await itemsAt("with Retry=1, ti|");
+    assert.equal(labelOf(item), "timeout");
+    assert.deepEqual([item.range.start.character, item.range.end.character], [14, 16]);
+  });
+
+  it("offers executionPolicy's values", async () => {
+    const items = await itemsAt("with executionPolicy=|");
+    assert.deepEqual(items.map(labelOf), ["always", "onChange"]);
+    assert.equal(items[0].detail, "executionPolicy=(always|onChange)");
+  });
+
+  it("offers after `await` each token the file's async blocks start, once, with their lines", async () => {
+    const items = await itemsAt("with async=build {\n}\nwith async=Build, retry=2 {\n}\nwith async=$t {\n}\nwith async=deploy {\n}\nawait |");
+    assert.deepEqual(items.map((i) => `${labelOf(i)}: ${i.detail}`), [
+      "build: with async=build (lines 1, 3)",
+      "deploy: with async=deploy (line 7)",
+    ]);
+  });
+
+  it("still offers operations and keywords inside the block", async () => {
+    assert.ok((await itemsAt("with retry=3 {\n  Log-Inf|")).map(labelOf).includes("Log-Information"));
   });
 });

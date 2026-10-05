@@ -5,6 +5,9 @@
 ### Added
 
 - Hover for the file's own variables (`$version`, `@items`, `%config`, `${my var}`), also inside strings: where the variable gets its value — the lines that assign it, or the module parameter, `foreach` loop or operation output (`ResponseBody => $body`) it comes from — and how often it's used. A variable the file never assigns says so: it may come from the caller, a configuration variable or the runtime
+- `with` blocks: completion of the execution directives (`retry`, `timeout`, `executionPolicy`, `async`, `lock`, `isolation`, `credentials`) after `with` or a `,`, each inserted ready to fill in, and of `executionPolicy`'s values (`always`, `onChange`); hovering a directive shows what it does
+- `unknown-with-directive` diagnostic: a directive Inedo's grammar doesn't have, such as `retyr=3`, with a quick fix to the closest one; and `invalid-with-directive-value`: a value the directive doesn't take (`executionPolicy=sometimes`, `retry=many`), a missing one (`retry` alone), or a value on `isolation`, with a quick fix for an `executionPolicy` typo
+- `await`: completion of the tokens the file's `with async=` blocks start, and hovering the token lists those blocks' lines. `unknown-await-token`, a hint: `await name;` when no `with async=name` block in the file starts that token, with a quick fix to the closest token
 - Snippets for a module declaration (`module`), a module call (`call`), background blocks and waiting for them (`async`, `await`), an exclusive block (`lock`), and blocks that run against a server (`forserver`) or each server in a role (`foreachserver`)
 
 ### Fixed

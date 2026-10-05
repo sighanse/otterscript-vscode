@@ -11,7 +11,7 @@
  */
 
 const vscode = require("vscode");
-const { keywordDocs, mapFunctionDocs, operationDocs, operationForms, scalarFunctionDocs, syntaxDocs, variableDocs, vectorFunctionDocs } = require("../language-data");
+const { executionDirectiveDocs, keywordDocs, mapFunctionDocs, operationDocs, operationForms, scalarFunctionDocs, syntaxDocs, variableDocs, vectorFunctionDocs } = require("../language-data");
 const {
   buildCompletionItem,
   buildSigilCompletionItems,
@@ -20,7 +20,7 @@ const {
   isValidCompletionPosition,
   resolveCompletionDocumentation,
 } = require("../helpers");
-const { findCallArguments, getDocumentVariables, getMaskedTextAfter, getMaskedTextBefore, getModuleDeclarations } = require("../document-index");
+const { findCallArguments, getDocumentVariables, getExecutionDirectives, getMaskedTextAfter, getMaskedTextBefore, getModuleDeclarations } = require("../document-index");
 const { findOperationArgumentContext } = require("../scanner");
 const { findCardCompletions } = require("../adaptivecard");
 
@@ -302,8 +302,100 @@ async function moduleItems(document, range, listWorkspaceModules) {
 }
 
 /**
- * Completion without a sigil: argument names inside a call, module names
- * after `call`, else operations and keywords.
+ * Where the cursor is in a `with` header or an `await` statement, from the
+ * masked code before it:
+ * - `directive`: at a directive's name (`with re`, `with retry=3, `), with
+ *   the names given before it in the header
+ * - `value`: at the value of a directive whose values are listed
+ *   (`executionPolicy=`)
+ * - `await`: at the token of `await `
+ *
+ * @typedef {{ kind: "directive", typed: string, given: string[] }
+ *   | { kind: "value", typed: string, directive: import("../language-data").ExecutionDirectiveDoc }
+ *   | { kind: "await", typed: string }} ExecutionDirectiveContext
+ */
+
+/** The `with` directives by lower-case name. */
+const EXECUTION_DIRECTIVES = new Map(Object.values(executionDirectiveDocs).map((d) => [d.name.toLowerCase(), d]));
+
+/**
+ * The {@link ExecutionDirectiveContext} at the end of `maskedPrefix`, or
+ * null. The statement the cursor is in starts after the last `{`, `;` or
+ * `}`, so a header's `{` ends it.
+ *
+ * @param {string} maskedPrefix - The code before the cursor, masked
+ * @returns {ExecutionDirectiveContext | null}
+ */
+function executionDirectiveContext(maskedPrefix) {
+  const statement = maskedPrefix.slice(Math.max(maskedPrefix.lastIndexOf("{"), maskedPrefix.lastIndexOf(";"), maskedPrefix.lastIndexOf("}")) + 1);
+  const awaitMatch = /^\s*await\s+([A-Za-z][A-Za-z0-9]*)?$/.exec(statement);
+  if (awaitMatch) return { kind: "await", typed: awaitMatch[1] ?? "" };
+  const withMatch = /^\s*with\s([\s\S]*)$/.exec(statement);
+  if (!withMatch) return null;
+
+  const segments = withMatch[1].split(",");
+  const current = /** @type {string} */ (segments.pop());
+  const name = /^\s*([A-Za-z][\w-]*)?$/.exec(current);
+  if (name) {
+    const given = segments.map((s) => /^\s*([A-Za-z][\w-]*)/.exec(s)?.[1]).filter((n) => n !== undefined);
+    return { kind: "directive", typed: name[1] ?? "", given };
+  }
+  const value = /^\s*([A-Za-z][\w-]*)\s*=\s*([A-Za-z]*)$/.exec(current);
+  const directive = value && EXECUTION_DIRECTIVES.get(value[1].toLowerCase());
+  return directive?.values ? { kind: "value", typed: value?.[2] ?? "", directive } : null;
+}
+
+/**
+ * The items for an {@link ExecutionDirectiveContext}: the directives not
+ * given yet, each inserted ready to fill in (`retry=3`); a directive's
+ * values; or after `await`, the tokens of the file's `with async=` blocks.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {ExecutionDirectiveContext} context
+ * @param {vscode.Range} range - The typed word, to replace
+ * @returns {vscode.CompletionItem[]}
+ */
+function executionDirectiveItems(document, context, range) {
+  /** @type {vscode.CompletionItem[]} */
+  const items = [];
+  if (context.kind === "directive") {
+    const given = new Set(context.given.map((n) => n.toLowerCase()));
+    for (const doc of EXECUTION_DIRECTIVES.values()) {
+      if (given.has(doc.name.toLowerCase())) continue;
+      const item = buildCompletionItem(doc, vscode.CompletionItemKind.Property, "0_", new vscode.SnippetString(doc.snippet ?? doc.name), false);
+      item.range = range;
+      items.push(item);
+    }
+  } else if (context.kind === "value") {
+    for (const value of context.directive.values ?? []) {
+      const item = new vscode.CompletionItem({ label: value, description: context.directive.name }, vscode.CompletionItemKind.EnumMember);
+      item.detail = context.directive.signature;
+      item.range = range;
+      items.push(item);
+    }
+  } else {
+    // Each token once (ignoring case), as first written, with its blocks' lines.
+    /** @type {Map<string, { token: string, lines: number[] }>} */
+    const tokens = new Map();
+    for (const { token, line } of getExecutionDirectives(document).asyncBlocks) {
+      const key = token.toLowerCase();
+      if (!tokens.has(key)) tokens.set(key, { token, lines: [] });
+      tokens.get(key)?.lines.push(line + 1);
+    }
+    for (const { token, lines } of tokens.values()) {
+      const item = new vscode.CompletionItem({ label: token, description: "async token" }, vscode.CompletionItemKind.Reference);
+      item.detail = `with async=${token} (line${lines.length === 1 ? "" : "s"} ${lines.join(", ")})`;
+      item.range = range;
+      items.push(item);
+    }
+  }
+  return items;
+}
+
+/**
+ * Completion without a sigil: a `with` block's directives and the tokens
+ * after `await`, argument names inside a call, module names after `call`,
+ * else operations and keywords.
  *
  * @param {vscode.TextDocument} document
  * @param {vscode.Position} position
@@ -314,11 +406,19 @@ async function moduleItems(document, range, listWorkspaceModules) {
  */
 async function provideOperationItems(document, position, triggerKind, settings, listWorkspaceModules) {
   if (!isValidCompletionPosition(document, position, settings.completionEnabled)) return [];
+  const maskedBefore = getMaskedTextBefore(document, position);
+
+  // In a `with` header or after `await` -- also on the `,` between
+  // directives, which triggers this provider.
+  const directiveContext = executionDirectiveContext(maskedBefore);
+  if (directiveContext) {
+    return executionDirectiveItems(document, directiveContext, new vscode.Range(position.translate(0, -directiveContext.typed.length), position));
+  }
 
   // At an argument name inside an operation or module call: its arguments --
   // or nothing when the call can't be resolved (an unknown operation, `call
   // Missing(`): operations and keywords don't belong in an argument list.
-  const argumentContext = findOperationArgumentContext(getMaskedTextBefore(document, position), getMaskedTextAfter(document, position));
+  const argumentContext = findOperationArgumentContext(maskedBefore, getMaskedTextAfter(document, position));
   if (argumentContext) {
     const called = await findCallArguments(document, argumentContext, listWorkspaceModules);
     return called ? argumentItems(called, argumentContext, position) : [];
@@ -429,6 +529,8 @@ module.exports = {
   argumentItems,
   callPrefix,
   documentVariableItems,
+  executionDirectiveContext,
+  executionDirectiveItems,
   keywordItems,
   moduleItems,
   operationItems,

@@ -213,6 +213,12 @@ describe("hover", () => {
     assert.match(await hoverText(document, positionOf(document, "$constructor", 2)), /^`\$constructor` isn't assigned in this file/);
   });
 
+  it("documents a with block's directive, and which blocks an await waits for", async () => {
+    const source = await openContent("with async=build, retry=3 {\n}\nawait build;\n");
+    assert.match(await hoverText(source, positionOf(source, "retry", 1)), /^### retry/);
+    assert.equal(await hoverText(source, positionOf(source, "build;", 1)), "Waits for the `with async=build` block on line 1.");
+  });
+
   it("shows nothing for a function name inside a comment", async () => {
     assert.equal(await hoverText(document, positionOf(document, "mentioning $ToJson", 13)), "");
   });
@@ -248,6 +254,15 @@ describe("completion", () => {
     assert.ok(labels.includes("%FromJson"), "offers %FromJson");
     assert.ok(labels.includes("%ListItem"), "offers %ListItem");
     assert.ok(labels.includes("Map Expression"), "offers the %( ) snippet");
+  });
+
+  it("offers a with block's directives, executionPolicy's values and await's tokens", async () => {
+    const document = await openContent("with async=build, \n{\n}\nwith executionPolicy=\n{\n}\nawait \n");
+    const directives = await completionLabels(document, positionOf(document, "build, ", 7), ",");
+    assert.deepEqual(directives.sort(), ["credentials", "executionPolicy", "isolation", "lock", "retry", "timeout"], "all but async");
+    assert.deepEqual(await completionLabels(document, positionOf(document, "executionPolicy=", 16)), ["always", "onChange"]);
+    // With the snippets, which VS Code offers wherever a word may start.
+    assert.ok((await completionLabels(document, positionOf(document, "await ", 6))).includes("build"));
   });
 
   it("offers operations and keywords by name", async () => {

@@ -321,6 +321,39 @@
               ],
               "markdownDescription": "An operation argument name that looks like a typo of a documented one, such as `Fomr:` in `Copy-Files`. A hint by default: an operation may accept argument names Inedo's reference doesn't list."
             },
+            "unknown-with-directive": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "A `with` block directive that isn't one of `retry`, `timeout`, `executionPolicy`, `async`, `lock`, `isolation` or `credentials`, such as `retyr=3`."
+            },
+            "invalid-with-directive-value": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "A `with` block directive's value it doesn't take, such as `executionPolicy=sometimes` or `retry=many`, a missing one (`retry` alone), or a value on `isolation`, which takes none."
+            },
+            "unknown-await-token": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "`await name;` when no `with async=name` block in the file starts that token. A hint by default: a module the file calls might start it."
+            },
             "too-few-arguments": {
               "type": "string",
               "enum": [

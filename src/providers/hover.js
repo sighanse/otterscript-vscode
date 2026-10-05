@@ -13,10 +13,11 @@
  */
 
 const vscode = require("vscode");
-const { keywordDocs, lookupOperation, mapFunctionDocs, operationForms, scalarFunctionDocs, syntaxDocs, variableDocs, vectorFunctionDocs } = require("../language-data");
+const { executionDirectiveDocs, keywordDocs, lookupOperation, mapFunctionDocs, operationForms, scalarFunctionDocs, syntaxDocs, variableDocs, vectorFunctionDocs } = require("../language-data");
 const { buildArgumentHoverMarkdown, buildHoverMarkdown, lookupOwn } = require("../helpers");
 const {
   findCallArguments,
+  getExecutionDirectives,
   getMaskedTextBefore,
   getModuleDeclarations,
   getModuleNameAt,
@@ -292,6 +293,44 @@ function hoverExpressionDelimiter(document, position, { product }) {
   return new vscode.Hover(buildHoverMarkdown(docs[document.getText(range)], product), range);
 }
 
+/** The `with` directives by lower-case name. */
+const EXECUTION_DIRECTIVES = new Map(Object.values(executionDirectiveDocs).map((d) => [d.name.toLowerCase(), d]));
+
+/**
+ * Whether `position` is in `range`, its ends included; ranges here are on
+ * one line.
+ *
+ * @param {vscode.Range} range
+ * @param {vscode.Position} position
+ * @returns {boolean}
+ */
+function touches(range, position) {
+  return position.line === range.start.line && position.character >= range.start.character && position.character <= range.end.character;
+}
+
+/**
+ * A `with` block's directive (`retry`, `async`, ...): what it does. Or the
+ * token of `await token;`: which `with async=token` blocks it waits for, or
+ * that the file has none.
+ *
+ * @type {HoverResolver}
+ */
+function hoverExecutionDirective(document, position, { product }) {
+  const { directives, asyncBlocks, awaits } = getExecutionDirectives(document);
+  const directive = directives.find((d) => touches(d.range, position));
+  const doc = directive && EXECUTION_DIRECTIVES.get(directive.name.toLowerCase());
+  if (directive && doc) return new vscode.Hover(buildHoverMarkdown(doc, product), directive.range);
+
+  const awaited = awaits.find((a) => touches(a.range, position));
+  if (!awaited) return undefined;
+  const lines = asyncBlocks.filter((b) => b.token.toLowerCase() === awaited.token.toLowerCase()).map((b) => b.line + 1);
+  const block = inlineCode(`with async=${awaited.token}`);
+  const markdown = lines.length
+    ? `Waits for the ${block} block${lines.length === 1 ? "" : "s"} on line${lines.length === 1 ? "" : "s"} ${listLines(lines)}.`
+    : `No ${block} block in this file: waits only for blocks with this token, such as ones a module this file calls starts.`;
+  return new vscode.Hover(new vscode.MarkdownString(markdown), awaited.range);
+}
+
 /**
  * A keyword (`if`, `foreach`, `with`, `set`, ...), also the two-word
  * `force normal`. A single word may contain dashes, never spaces.
@@ -376,6 +415,7 @@ const HOVER_RESOLVERS = Object.freeze([
   stopInStringOrComment,
   hoverArgument,
   hoverModuleCall,
+  hoverExecutionDirective,
   hoverTemplateTag,
   hoverExpressionDelimiter,
   hoverKeyword,
@@ -441,6 +481,7 @@ function registerHover(settings, listWorkspaceModules) {
 module.exports = {
   HOVER_RESOLVERS,
   hoverArgument,
+  hoverExecutionDirective,
   hoverExpressionDelimiter,
   hoverKeyword,
   hoverModuleCall,

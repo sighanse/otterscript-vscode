@@ -20,6 +20,7 @@ const {
   NON_VARIABLE_IDENTIFIERS,
 } = require("./helpers");
 const {
+  executionDirectiveDocs,
   FUNCTION_TABLES,
   NAMESPACES,
   keywordDocs,
@@ -32,6 +33,7 @@ const {
   createCodeScanState,
   createTemplateScanState,
   documentUsesTemplateTags,
+  findExecutionDirectives,
   findTopLevelCommas,
   isStatementStart,
   maskCommentSpans,
@@ -367,6 +369,109 @@ function findDuplicateModuleDiagnostics(document, maskedLines) {
   return issues;
 }
 
+// ============================================================
+// EXECUTION DIRECTIVES AND AWAIT
+// ============================================================
+
+/** The `with` directives by lower-case name: Inedo matches them ignoring case. */
+const EXECUTION_DIRECTIVES = new Map(Object.values(executionDirectiveDocs).map((d) => [d.name.toLowerCase(), d]));
+
+/**
+ * Whether `value` fits a directive that takes `kind`. Only the grammar's own
+ * values are checked: a number for `retry` and `timeout`, `always` or
+ * `onChange` for `executionPolicy` (ignoring case). A variable or
+ * expression (`$n`) may hold anything, so it fits; tokens and credential
+ * names aren't checked.
+ *
+ * @param {import("./language-data").ExecutionDirectiveDoc} directive
+ * @param {string} value - Not empty
+ * @returns {boolean}
+ */
+function fitsDirective(directive, value) {
+  if (value.startsWith("$")) return true;
+  if (directive.value === "integer") return /^(?:\d+|(["'])\d+\1)$/.test(value);
+  if (directive.values) return directive.values.some((v) => v.toLowerCase() === value.toLowerCase());
+  return true;
+}
+
+/**
+ * The `with` directive and `await` checks:
+ * - `unknown-with-directive`: a name that isn't one of the grammar's
+ *   directives (`retyr=3`)
+ * - `invalid-with-directive-value`: a value the directive doesn't take
+ *   (`executionPolicy=sometimes`, `retry=many`), a missing one (`retry`
+ *   alone), or one on `isolation`, which takes none
+ * - `unknown-await-token` (a hint): `await name;` when no `with async=name`
+ *   in the file starts that token. A hint: a module this file calls might
+ *   start it. Not checked when a token is a variable.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {string} maskedText - The document with strings and comments
+ *   blanked, offsets unchanged
+ * @param {string} text - The document's text
+ * @returns {vscode.Diagnostic[]}
+ */
+function findExecutionDirectiveDiagnostics(document, maskedText, text) {
+  /** @type {vscode.Diagnostic[]} */
+  const issues = [];
+  /**
+   * @param {number} start
+   * @param {number} end
+   * @param {string} message
+   * @param {vscode.DiagnosticSeverity} severity
+   * @param {string} code
+   */
+  const report = (start, end, message, severity, code) => {
+    const d = new vscode.Diagnostic(new vscode.Range(document.positionAt(start), document.positionAt(end)), message, severity);
+    d.code = code;
+    d.source = "OtterScript";
+    issues.push(d);
+  };
+
+  const { withs, awaits } = findExecutionDirectives(maskedText, text);
+  /** @type {Set<string>} */
+  const asyncTokens = new Set();
+  let variableToken = false;
+  for (const { directives } of withs) {
+    for (const { name, nameStart, value, valueStart, valueEnd } of directives) {
+      const directive = EXECUTION_DIRECTIVES.get(name.toLowerCase());
+      if (!directive) {
+        report(nameStart, nameStart + name.length,
+          `Unknown execution directive '${name}': a 'with' block takes ${[...EXECUTION_DIRECTIVES.values()].map((d) => d.name).join(", ")}.`,
+          vscode.DiagnosticSeverity.Warning, "unknown-with-directive");
+        continue;
+      }
+      if (directive.name === "async" && value) {
+        if (value.startsWith("$")) variableToken = true;
+        else asyncTokens.add(value.toLowerCase());
+      }
+      if (directive.value === null) {
+        if (value !== undefined) {
+          report(nameStart, valueEnd, `'${directive.name}' takes no value.`, vscode.DiagnosticSeverity.Warning, "invalid-with-directive-value");
+        }
+      } else if (!value) {
+        if (directive.valueRequired) {
+          report(nameStart, nameStart + name.length, `'${directive.name}' needs a value: ${directive.signature}.`,
+            vscode.DiagnosticSeverity.Warning, "invalid-with-directive-value");
+        }
+      } else if (!fitsDirective(directive, value)) {
+        report(valueStart, valueEnd, `'${value}' isn't a value '${directive.name}' takes: ${directive.signature}.`,
+          vscode.DiagnosticSeverity.Warning, "invalid-with-directive-value");
+      }
+    }
+  }
+
+  if (!variableToken) {
+    for (const { token, tokenStart } of awaits) {
+      if (!token || asyncTokens.has(token.toLowerCase())) continue;
+      report(tokenStart, tokenStart + token.length,
+        `No 'with async=${token}' block in this file: 'await ${token};' waits only for the blocks with that token.`,
+        vscode.DiagnosticSeverity.Hint, "unknown-await-token");
+    }
+  }
+  return issues;
+}
+
 /**
  * An operation call with parentheses: optional namespace (group 1), name
  * (group 2), then `(`. Not a function (`$F(`), a dashed variable or a
@@ -593,6 +698,10 @@ const DIAGNOSTIC_CODES = Object.freeze([
   "too-few-arguments",
   "missing-required-argument",
   "unknown-argument",
+  // -- Execution directives (`with ... {`) and `await`
+  "unknown-with-directive",
+  "invalid-with-directive-value",
+  "unknown-await-token",
   // -- Text templates (`<% %>`)
   "template-unexpected-close",
   "template-unclosed",
@@ -1148,6 +1257,7 @@ function updateDiagnostics(document, collection, ctx) {
     issues.push(...findArgumentCountDiagnosticsFromMasked(document, joinedMasked, text));
     issues.push(...findOperationArgumentDiagnosticsFromMasked(document, joinedMasked, text));
     issues.push(...findDuplicateModuleDiagnostics(document, maskedLines));
+    issues.push(...findExecutionDirectiveDiagnostics(document, joinedMasked, text));
     if (templateAware) {
       // Triggered by a literal "type": "AdaptiveCard" in the literal output.
       issues.push(...findAdaptiveCardDiagnostics(document, text, { maxVersion: adaptiveCardMaxVersion }));

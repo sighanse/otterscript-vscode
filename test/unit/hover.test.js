@@ -16,6 +16,7 @@ const assert = require("node:assert/strict");
 const { makeDocument } = require("./fake-document");
 const {
   hoverArgument,
+  hoverExecutionDirective,
   hoverExpressionDelimiter,
   hoverKeyword,
   hoverModuleCall,
@@ -309,6 +310,39 @@ describe("inlineCode", () => {
   it("pads a name that starts or ends with a backtick", () => {
     assert.equal(inlineCode("`x.otter"), "`` `x.otter ``");
     assert.equal(inlineCode("x`"), "`` x` ``");
+  });
+});
+
+describe("hoverExecutionDirective", () => {
+  const text = "with retry=3, Async=build {\n}\nwith async=build {\n}\nawait build;\nawait other;\nwith retyr=2 {\n}";
+
+  it("shows what a directive does, in any casing", async () => {
+    const hover = await run(hoverExecutionDirective, text, "retry", 2);
+    assert.equal(span(hover), "0:5-10");
+    assert.match(String(markdown(hover)), /^### retry\n\n\*\*Signature:\*\* `retry=<integer>`\n\nRuns the block again/);
+    assert.match(String(markdown(await run(hoverExecutionDirective, text, "Async"))), /^### async\n/);
+  });
+
+  it("shows which async blocks an await waits for", async () => {
+    const hover = await run(hoverExecutionDirective, text, "build;");
+    assert.equal(span(hover), "4:6-11");
+    assert.equal(markdown(hover), "Waits for the `with async=build` blocks on lines 1 and 3.");
+    assert.equal(markdown(await run(hoverExecutionDirective, "with async=a {\n}\nawait a;", "a;")), "Waits for the `with async=a` block on line 1.");
+  });
+
+  it("says when no async block in the file has the token", async () => {
+    assert.match(String(markdown(await run(hoverExecutionDirective, text, "other"))), /^No `with async=other` block in this file/);
+  });
+
+  it("passes on an unknown directive, a value, and other code", async () => {
+    for (const marker of ["retyr", "3,", "with retry", "await build"]) {
+      assert.equal(await run(hoverExecutionDirective, text, marker, 1), undefined, marker);
+    }
+  });
+
+  it("comes before the keyword hover in the chain, which still shows `with`", async () => {
+    assert.match(String(markdown(await resolveHover(makeDocument(text), at(text, "retry"), context))), /^### retry/);
+    assert.match(String(markdown(await resolveHover(makeDocument(text), at(text, "with"), context))), /^### with/);
   });
 });
 
