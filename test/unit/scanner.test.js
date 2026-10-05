@@ -821,8 +821,8 @@ describe("findVariableOccurrences", () => {
   });
 
   it("finds reads and writes, ignoring case", () => {
-    assert.deepEqual(find(["set $x = 1;", "$X = $x + 1;", "if $x == 2 {}"], "$", "x"), [
-      "0:4:w", "1:0:w", "1:5:r", "2:3:r",
+    assert.deepEqual(find(["set $x = 1;", "set $X = $x + 1;", "if $x == 2 {}"], "$", "x"), [
+      "0:4:w", "1:4:w", "1:9:r", "2:3:r",
     ]);
   });
 
@@ -872,8 +872,16 @@ describe("findVariableOccurrences", () => {
     assert.deepEqual(find(lines, "$", "x"), ["2:8:w"]);
   });
 
-  it("marks global assignments as writes", () => {
-    assert.deepEqual(find(["global $x = 1;"], "$", "x"), ["0:7:w"]);
+  it("marks `set global` assignments as writes", () => {
+    assert.deepEqual(find(["set global $x = 1;"], "$", "x"), ["0:11:w"]);
+  });
+
+  it("does not mark a bare `global $x = ...` (no `set`) as a write", () => {
+    assert.deepEqual(find(["global $x = 1;"], "$", "x"), ["0:7:r"]);
+  });
+
+  it("does not mark a bare `$x = ...` (no `set`) as a write", () => {
+    assert.deepEqual(find(["$x = 1;"], "$", "x"), ["0:0:r"]);
   });
 
   it("does not treat == as an assignment", () => {
@@ -896,7 +904,7 @@ describe("findVariableOccurrences", () => {
       "  foreach $item in @list { }",
       "  Get-Http(Url: u, ResponseBody => $body);",
       "  set $x = 1;",
-      "  global $g = 2;",
+      "  set global $g = 2;",
       '  Log-Information "$x";',
       "}",
     ].join("\n");
@@ -1126,6 +1134,18 @@ describe("isStatementStart", () => {
   it("is false after other text or a braced variable's `{`", () => {
     for (const before of ["Log ", "${", "@{ ", "%{", "x = "]) {
       assert.equal(isStatementStart(before + "Op", before.length), false, JSON.stringify(before));
+    }
+  });
+
+  it("is false after a braced variable's closing `}`", () => {
+    for (const before of ["Log ${x} ", "@{a-b}", "x %{y} "]) {
+      assert.equal(isStatementStart(before + "Op", before.length), false, JSON.stringify(before));
+    }
+  });
+
+  it("is true after a block's closing `}`", () => {
+    for (const before of ["if $x { } ", "}"]) {
+      assert.equal(isStatementStart(before + "Op", before.length), true, JSON.stringify(before));
     }
   });
 });

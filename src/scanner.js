@@ -365,9 +365,9 @@ function namespaceBefore(text, end) {
 
 /**
  * Whether a statement can start at `end`: only whitespace separates it from
- * the start of `text`, a `;`, a `}`, or a block's `{` (not the `{` of a
- * braced variable such as `${my-var}`). Same result as testing
- * `/(?:^|[;}]|(?<![$@%])\{)\s*$/` against `text.slice(0, end)`.
+ * the start of `text`, a `;`, a block's closing `}`, or a block's opening `{`
+ * — not the braces of a braced variable such as `${my-var}`, whose `{` is
+ * preceded by a `$`, `@`, or `%` sigil and whose `}` closes back to it.
  *
  * @param {string} text
  * @param {number} end
@@ -377,8 +377,31 @@ function isStatementStart(text, end) {
   while (end > 0 && /\s/.test(text[end - 1])) end--;
   if (end === 0) return true;
   const last = text[end - 1];
-  if (last === ";" || last === "}") return true;
+  if (last === ";") return true;
+  if (last === "}") return !closesBracedVariable(text, end - 1);
   return last === "{" && (end < 2 || !/[$@%]/.test(text[end - 2]));
+}
+
+/**
+ * Whether the `}` at `index` closes a braced variable (`${x}`, `@{x}`,
+ * `%{x}`) rather than a block. Walks back to the matching `{`, tracking
+ * nesting, and checks for a `$`, `@`, or `%` sigil right before it.
+ *
+ * @param {string} text
+ * @param {number} index - Index of the `}`
+ * @returns {boolean}
+ */
+function closesBracedVariable(text, index) {
+  let depth = 0;
+  for (let i = index; i >= 0; i--) {
+    const ch = text[i];
+    if (ch === "}") depth++;
+    else if (ch === "{") {
+      depth--;
+      if (depth === 0) return i > 0 && /[$@%]/.test(text[i - 1]);
+    }
+  }
+  return false;
 }
 
 // ============================================================
@@ -1237,8 +1260,13 @@ const MODULE_PARAMETER_LIST_OPEN_REGEX = /^\s*module\s+[A-Za-z][\w-]*\s*</i;
  * parameter name (`<$a`, `, $b`, `in $c`, `out $d`) rather than a default value.
  */
 const MODULE_PARAMETER_PREFIX_REGEX = /(?:^|,|\b(?:in|out|ref))\s*$/i;
-/** Text before a token at statement start (optionally after `set`, `set local` or `global`). */
-const ASSIGNMENT_PREFIX_REGEX = /(?:^|[;{}]|\bset(?:\s+local)?|\bglobal)\s*$/i;
+/**
+ * Text before a token that makes it an assignment target: the `set` keyword
+ * at statement start, with an optional `local` or `global` scope modifier.
+ * Bare `$x = ...` and bare `global $x = ...` are not assignment statements —
+ * `set [local|global] $x = ...` is the only form (see `src/language-data.js`).
+ */
+const ASSIGNMENT_PREFIX_REGEX = /(?:^|[;{}])\s*set(?:\s+(?:local|global))?\s+$/i;
 /** Text before a token that receives an operation's output (`ResponseBody => $body`). */
 const OUTPUT_CAPTURE_PREFIX_REGEX = /=>\s*$/;
 /** Text after a token that makes it an assignment target (`=` but not `==`). */
@@ -1246,9 +1274,10 @@ const ASSIGNMENT_SUFFIX_REGEX = /^\s*=(?!=)/;
 
 /**
  * How far before the whitespace in front of a token the prefix regexes above
- * look: their longest word (`foreach`) plus the character before it, for `\b`.
+ * look: their longest prefix (`; set local`, a boundary and two words with a
+ * single space between), measured from the token's leading whitespace.
  */
-const PREFIX_LOOKBACK = 9;
+const PREFIX_LOOKBACK = 11;
 
 /**
  * The end of `text[start, end)` that the prefix regexes above can see, to
@@ -1256,8 +1285,11 @@ const PREFIX_LOOKBACK = 9;
  * {@link PREFIX_LOOKBACK} characters before that. Each regex ends in `\s*$`
  * after a short word or symbol, so it matches the tail exactly when it
  * matches the whole text. When the tail doesn't reach `start`, a `\0` goes in
- * front, so `^` can't match where the tail was cut off. Matching the whole
- * text before every token made a long line quadratic (100 KB took seconds).
+ * front, so `^` can't match where the tail was cut off — unless only
+ * whitespace (such as a line's indentation) lies between, in which case the
+ * tail is extended to `start` so `^` still marks the statement start.
+ * Matching the whole text before every token made a long line quadratic
+ * (100 KB took seconds).
  *
  * @param {string} text
  * @param {number} end
@@ -1267,7 +1299,11 @@ const PREFIX_LOOKBACK = 9;
 function prefixTail(text, end, start = 0) {
   let whitespace = end;
   while (whitespace > start && /\s/.test(text[whitespace - 1])) whitespace--;
-  const from = Math.max(start, whitespace - PREFIX_LOOKBACK);
+  let from = Math.max(start, whitespace - PREFIX_LOOKBACK);
+  // Only indentation before the tail still means a statement start, so reach
+  // back over it to `start`. Stop at the first non-whitespace so a long line
+  // stays linear overall.
+  while (from > start && /\s/.test(text[from - 1])) from--;
   return (from > start ? "\0" : "") + text.slice(from, end);
 }
 
