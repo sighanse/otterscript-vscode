@@ -21,6 +21,7 @@ module.exports = [
       "node_modules/**",
       // VS Code builds downloaded by the integration tests
       ".vscode-test/**",
+      ".vscode-test-web/**",
       "*.vsix",
       // The bundle `npm run build` writes
       "dist/**"
@@ -173,8 +174,9 @@ module.exports = [
   },
 
   {
-    // Integration tests run under mocha inside VS Code (see .vscode-test.mjs).
-    files: ["test/integration/**/*.js"],
+    // Integration tests run under mocha inside VS Code (see .vscode-test.mjs),
+    // the web tests under its browser build (see test/web/index.js).
+    files: ["test/integration/**/*.js", "test/web/**/*.js"],
     languageOptions: {
       globals: globals.mocha
     }

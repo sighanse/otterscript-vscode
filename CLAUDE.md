@@ -10,8 +10,13 @@ read it before changing code.
 A VS Code extension for Inedo's OtterScript (ProGet, Otter, BuildMaster):
 syntax highlighting, completion, hover, signature help, inlay hints,
 diagnostics with quick fixes, and navigation. Plain JavaScript (CommonJS)
-type-checked from JSDoc, bundled by esbuild into `dist/extension.js`.
+type-checked from JSDoc, bundled by esbuild (`scripts/build.js`) twice:
+`dist/extension.js` for the desktop and `dist/web/extension.js` for VS Code
+for the Web (vscode.dev, github.dev).
 
+- `src/` uses only the `vscode` API: no Node built-ins (`fs`, `path`,
+  `process`, `Buffer`) and no npm packages, as the web bundle runs in a
+  browser. `npm run check` (`check:bundle`) fails otherwise
 - `src/extension.js`: activation, settings, when diagnostics run
 - `src/providers/`: one module per group of language features
 - `src/diagnostics.js`, `src/adaptivecard.js`: the checks

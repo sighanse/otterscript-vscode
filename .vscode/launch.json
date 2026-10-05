@@ -33,6 +33,22 @@
       "preLaunchTask": "npm: build"
     },
     {
+      // Runs the browser bundle (package.json `browser`) in a web worker,
+      // the way vscode.dev and github.dev run it, with Node unavailable.
+      "name": "Run Web Extension",
+      "type": "extensionHost",
+      "debugWebWorkerHost": true,
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "--extensionDevelopmentKind=web",
+        "${workspaceFolder}"
+      ],
+      "outFiles": ["${workspaceFolder}/dist/web/**/*.js"],
+      // The extension runs from the bundle; rebuild it first.
+      "preLaunchTask": "npm: build"
+    },
+    {
       // Runs the integration tests (test/integration/) under the debugger,
       // using the configuration in .vscode-test.mjs. Other extensions are
       // disabled so a debug run matches `npm run test:integration`, which

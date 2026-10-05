@@ -1,12 +1,12 @@
 # Copilot instructions: OtterScript VS Code extension
 
-A VS Code extension for Inedo's OtterScript, in plain CommonJS JavaScript typed with JSDoc (`// @ts-check`), bundled by esbuild into `dist/extension.js`. No runtime dependencies.
+A VS Code extension for Inedo's OtterScript, in plain CommonJS JavaScript typed with JSDoc (`// @ts-check`), bundled by esbuild into `dist/extension.js` (desktop) and `dist/web/extension.js` (VS Code for the Web). No runtime dependencies.
 
 ## Review checklist
 
 Flag a pull request that breaks any of these:
 
-- **Compatibility:** VS Code 1.85 (`engines.vscode`) and Node 18. No `vscode` API newer than 1.85, no Node API newer than 18.
+- **Compatibility:** VS Code 1.85 (`engines.vscode`) and Node 18. No `vscode` API newer than 1.85, no Node API newer than 18. VS Code for the Web: `src/` uses no Node built-ins (`fs`, `path`, `process`, `Buffer`) and no npm packages.
 - **Generated files are never edited by hand:** `src/inedo-reference-data.js`, `src/adaptivecard-data.js` and the name lists in `syntaxes/otterscript.tmLanguage.json`. They change through `scripts/` and `npm run update:*`.
 - **A new diagnostic code** goes in `DIAGNOSTIC_CODES` (`src/diagnostics.js`), the `otterscript.diagnostics.rules` schema in `package.json` and the README table.
 - **Diagnostics never flag valid code:** missing a problem is better. Hint for guesses (operations accept undocumented aliases), Warning for suspicious code, Error only for code that can't run.

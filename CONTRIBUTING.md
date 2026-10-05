@@ -21,17 +21,19 @@ JSDoc lint plugin needs it, and the packaging tool (`@vscode/vsce`) needs
 npm install       # dev dependencies
 npm run check     # ESLint + JSDoc type-check + grammar/language-data sync
                   # + generated-data checks + a CHANGELOG section for the
-                  # version in package.json + unit tests
+                  # version in package.json + bundle contents + unit tests
 npm test          # unit tests only (node:test)
 npm run test:cov  # unit tests with coverage of src/; fails below the line,
                   # branch and function limits in package.json (Sanity runs it)
 npm run lint      # ESLint only
 npm run lint:fix  # ESLint, fixing what it can
-npm run build              # bundle src/ into dist/extension.js, which the
-                           # extension runs from, with a source map (F5 and the
-                           # integration tests build it first; packaging builds
-                           # it without one, `npm run bundle`)
+npm run build              # bundle src/ (scripts/build.js) into
+                           # dist/extension.js for the desktop and
+                           # dist/web/extension.js for the browser, with source
+                           # maps (F5 and the tests build first; packaging
+                           # builds without them, `npm run bundle`)
 npm run test:integration   # integration tests in real VS Code (see below)
+npm run test:web           # web tests in VS Code for the Web (see below)
 npm run package            # build the .vsix, to install and try locally
                            # (Extensions view > ... > Install from VSIX)
 npm run update:cards       # re-download the Adaptive Card schema and regenerate
@@ -47,7 +49,10 @@ npm run update:grammar     # regenerate the grammar's name lists only
 Plain JavaScript (CommonJS), type-checked from its JSDoc, bundled by esbuild
 into `dist/extension.js`.
 
-- `src/extension.js`: activation, settings, and when the diagnostics run
+- `src/extension.js`: activation, settings, and when the diagnostics run.
+  It and everything in `src/` use only the `vscode` API, with no Node
+  built-ins or npm packages, so the same code runs in VS Code for the Web;
+  `npm run check` fails otherwise
 - `src/providers/`: one module per group of language features (completion,
   hover, signature help, inlay hints, navigation, workspace symbols, quick
   fixes)
@@ -59,8 +64,9 @@ into `dist/extension.js`.
 - `src/language-data.js`: the hand-written docs tables, merged with Inedo's
   generated reference (`src/inedo-reference*.js`)
 - `src/helpers.js`: settings, logging and the hover and completion builders
-- `test/unit/`, `test/integration/`: the tests (see below); `scripts/`: the
-  generators and checks `npm run` calls
+- `test/unit/`, `test/integration/`, `test/web/`: the tests (see below);
+  `scripts/`: the build (`build.js`), and the generators and checks
+  `npm run` calls
 
 Some files are generated; `npm run check` fails when one is out of date:
 
@@ -127,6 +133,19 @@ npm run test:integration -- --label minimum   # or: --label stable
 To debug them, pick **Extension Tests** in the Run and Debug view. With the
 [Extension Test Runner](https://marketplace.visualstudio.com/items?itemName=ms-vscode.extension-test-runner)
 extension installed, they also appear in the Testing view.
+
+### Web tests
+
+`npm run test:web` runs `test/web/` in VS Code for the Web (current stable)
+in headless Chromium, with `test/integration/workspace` as the workspace,
+to check that the browser bundle loads and its features work there. They
+cover each kind of feature once; the integration tests cover them in depth.
+The first run downloads VS Code for the Web into `.vscode-test-web/`; the
+browser comes from Playwright: install it once with
+`npx playwright install --only-shell chromium`.
+
+To try the browser bundle by hand, pick **Run Web Extension** in the Run and
+Debug view.
 
 ## Commit messages
 

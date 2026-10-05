@@ -41,6 +41,7 @@
     "@types/vscode": "1.85.0",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.1.0",
+    "@vscode/test-web": "^0.0.81",
     "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.28.2",
     "eslint": "^10.12.0",
@@ -48,6 +49,7 @@
     "eslint-plugin-n": "^18.4.1",
     "globals": "^17.13.0",
     "jsonc-parser": "^3.3.1",
+    "mocha": "^11.8.0",
     "ovsx": "^1.2.0",
     "typescript": "6.0.3"
   },
@@ -70,6 +72,7 @@
     "webhook"
   ],
   "main": "./dist/extension.js",
+  "browser": "./dist/web/extension.js",
   "activationEvents": [
     "workspaceContains:**/*.otter",
     "workspaceContains:**/*.oscript"
@@ -588,12 +591,15 @@
     "update:reference": "node scripts/update-inedo-reference.js --fetch && node scripts/check-language-sync.js --write",
     "update:grammar": "node scripts/check-language-sync.js --write",
     "test": "node --test --test-timeout=30000 \"test/unit/*.test.js\"",
-    "bundle": "esbuild src/extension.js --bundle --platform=node --format=cjs --target=node18 --external:vscode --minify --keep-names --outfile=dist/extension.js",
-    "build": "npm run bundle -- --sourcemap=linked",
+    "bundle": "node scripts/build.js",
+    "build": "node scripts/build.js --dev",
+    "check:bundle": "node scripts/build.js --check",
     "pretest:integration": "npm run build",
     "test:integration": "vscode-test",
+    "pretest:web": "node scripts/build.js --dev --web-tests",
+    "test:web": "vscode-test-web --browser=chromium --quality=stable --extensionDevelopmentPath=. --extensionTestsPath=dist/web/test/index.js test/integration/workspace",
     "test:cov": "node --test --test-timeout=30000 --experimental-test-coverage --test-coverage-include=\"src/**\" --test-coverage-lines=98 --test-coverage-branches=95 --test-coverage-functions=97 \"test/unit/*.test.js\"",
-    "check": "npm run lint:ci && npm run check:js && npm run check:lang && npm run check:cards && npm run check:reference && npm run check:changelog && npm test",
+    "check": "npm run lint:ci && npm run check:js && npm run check:lang && npm run check:cards && npm run check:reference && npm run check:changelog && npm run check:bundle && npm test",
     "package": "vsce package --no-yarn",
     "vscode:prepublish": "npm run lint:ci && npm run bundle",
     "publish:vsce": "vsce publish",

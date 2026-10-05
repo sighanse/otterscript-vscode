@@ -39,7 +39,7 @@ Early-stage and in active development; features may change. Developed and tested
 
 ## Getting Started
 
-Install **OtterScript Language Extension** from the Extensions view (`Ctrl+Shift+X`), then open any `.otter` or `.oscript` file. No configuration is required. Requires VS Code 1.85 or newer; it also works in Restricted Mode and in virtual workspaces, since it never runs your scripts.
+Install **OtterScript Language Extension** from the Extensions view (`Ctrl+Shift+X`), then open any `.otter` or `.oscript` file. No configuration is required. Requires VS Code 1.85 or newer. It also works in VS Code for the Web, such as [vscode.dev](https://vscode.dev) and [github.dev](https://github.dev), and in Restricted Mode and virtual workspaces, since it never runs your scripts.
 
 If hover or completion doesn't appear, check that the language mode in the status bar is OtterScript.
 

@@ -2,11 +2,14 @@
 .github/
 .vscode/
 .vscode-test/
+.vscode-test-web/
 .vscode-test.mjs
 node_modules/
-# The extension ships as one bundle, dist/extension.js (`npm run build`).
+# The extension ships as two bundles of src/ (`npm run build`):
+# dist/extension.js for the desktop, dist/web/extension.js for the browser.
 src/
 test/
+dist/web/test/
 docs/
 .eslintcache
 .gitattributes
@@ -31,5 +34,6 @@ jsconfig.json
 # Always ship the extension's own files. Named by file type, not whole
 # folders: re-including a folder would also bring back stray files in it.
 !dist/extension.js
+!dist/web/extension.js
 !syntaxes/*.json
 !snippets/*.json
