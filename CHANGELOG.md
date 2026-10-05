@@ -5,6 +5,7 @@
 ### Added
 
 - Hover for the file's own variables (`$version`, `@items`, `%config`, `${my var}`), also inside strings: where the variable gets its value — the lines that assign it, or the module parameter, `foreach` loop or operation output (`ResponseBody => $body`) it comes from — and how often it's used. A variable the file never assigns says so: it may come from the caller, a configuration variable or the runtime
+- Snippets for a module declaration (`module`), a module call (`call`), background blocks and waiting for them (`async`, `await`), an exclusive block (`lock`), and blocks that run against a server (`forserver`) or each server in a role (`foreachserver`)
 
 ### Fixed
 

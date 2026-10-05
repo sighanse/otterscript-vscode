@@ -14,7 +14,14 @@
  *   must be written `\}`.
  *
  * Syntax reference: https://code.visualstudio.com/docs/editor/userdefinedsnippets#_grammar
+ *
+ * Then checks that each snippet of snippets/otterscript.json, inserted with
+ * its placeholders' default text, is code the diagnostics accept.
+ *
+ * Requires the vscode stub before diagnostics.js (which pulls in vscode) loads.
  */
+
+require("../vscode-stub");
 
 const fs = require("node:fs");
 const path = require("node:path");
@@ -23,6 +30,12 @@ const assert = require("node:assert/strict");
 const { parse } = require("jsonc-parser");
 
 const data = require("../../src/language-data.js");
+const { DiagnosticSeverity } = require("../vscode-stub");
+const { makeDocument } = require("./fake-document");
+const { updateDiagnostics } = require("../../src/diagnostics.js");
+
+/** snippets/otterscript.json, by snippet name. */
+const SNIPPETS = parse(fs.readFileSync(path.join(__dirname, "..", "..", "snippets", "otterscript.json"), "utf8"));
 
 /** VS Code's built-in snippet variables (matched by name prefix). */
 const KNOWN_VARIABLE_REGEX =
@@ -116,6 +129,49 @@ describe("snippet bodies", () => {
         if (typeof entry?.snippet !== "string") continue;
         found.push(...findSnippetProblems(entry.snippet).map((p) => `${tableName}.${key}: ${p}`));
       }
+    }
+    assert.deepEqual(found, []);
+  });
+});
+
+/**
+ * The text a snippet inserts when each placeholder keeps its default text: a
+ * choice its first option, a bare tab stop nothing, an escaped character
+ * itself.
+ *
+ * @param {string} body
+ * @returns {string}
+ */
+function insertedText(body) {
+  let text = body;
+  // Innermost placeholders first, until none is left.
+  for (let previous = ""; previous !== text;) {
+    previous = text;
+    text = text.replace(/\$\{\d+:((?:\\.|[^{}\\])*)\}/g, "$1");
+  }
+  return text
+    .replace(/\$\{\d+\|([^,|]*)[^}]*\|\}/g, "$1")
+    .replace(/\$\{?\d+\}?/g, "")
+    .replace(/\\(.)/g, "$1");
+}
+
+describe("snippets, as inserted", () => {
+  it("insertedText keeps defaults, the first choice and escaped characters", () => {
+    assert.equal(insertedText("set ${1|local,global|} $${2:name} = \\$Join(${3:x ${4:y}});$0"), "set local $name = $Join(x y);");
+  });
+
+  it("each snippet inserts code with no errors or warnings", () => {
+    /** @type {string[]} */
+    const found = [];
+    for (const [name, snippet] of Object.entries(SNIPPETS)) {
+      const text = insertedText([].concat(snippet.body).join("\n"));
+      updateDiagnostics(makeDocument(text), /** @type {any} */ ({
+        set: (/** @type {unknown} */ _uri, /** @type {any[]} */ issues) => {
+          for (const d of issues) {
+            if (d.severity <= DiagnosticSeverity.Warning) found.push(`${name}: ${d.code.value} -- ${d.message}`);
+          }
+        },
+      }), /** @type {any} */ ({}));
     }
     assert.deepEqual(found, []);
   });

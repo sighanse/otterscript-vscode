@@ -24,7 +24,7 @@ This extension started as a learning project while implementing [custom webhook 
 - Module navigation: hover on `call MyModule` (its declaration and comment), completion and signature help for its arguments, Go to Definition (F12, also to a module declared in another workspace file), Find All References (Shift+F12) and Rename (F2) across workspace files, CodeLens reference counts, Outline and breadcrumbs, and Go to Symbol in Workspace (`Ctrl+T`); completion of module names after `call`, from this file and the rest of the workspace
 - Variables: hover shows where one of the file's own variables gets its value (the assignment lines, or the module parameter, `foreach` or operation output it comes from) and how often it's used; completion of the ones the file uses, Go to Definition (F12) to where they're assigned, Rename (F2) everywhere in the file (strings included), and highlighting all occurrences of a variable (`$x`, `@list`, `%map`, `${my var}`) or module, with declarations and assignments marked as writes
 - Code folding via `#region` / `#endregion` and block structure
-- Snippets for common patterns, including `teamscard`: a complete Teams webhook body with an Adaptive Card
+- Snippets for common patterns: `module`, `call`, `async` / `await`, `lock`, `forserver` and `foreachserver` blocks, and `teamscard`: a complete Teams webhook body with an Adaptive Card
 
 ## Status
 

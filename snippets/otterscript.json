@@ -166,6 +166,41 @@
     "body": ["with ${1:retry=3, timeout=30} {", "    ${2:# operations}", "}"],
     "description": "Execution directive block"
   },
+  "Async Block": {
+    "prefix": "async",
+    "body": ["with async=${1:token} {", "    ${2:# runs in the background}", "}"],
+    "description": "Block that runs in the background; wait for it with 'await token;'"
+  },
+  "Await": {
+    "prefix": "await",
+    "body": ["await ${1:token};"],
+    "description": "Wait for the async blocks with this token (or, without one, for all of them)"
+  },
+  "Lock Block": {
+    "prefix": "lock",
+    "body": ["with lock=${1:token} {", "    ${2:# never runs at the same time as another block with this token}", "}"],
+    "description": "Block that runs exclusively among the blocks with the same lock token"
+  },
+  "Module": {
+    "prefix": "module",
+    "body": ["module ${1:Name}<\\$${2:param}> {", "    ${3:# statements}", "}"],
+    "description": "Module declaration, with a parameter"
+  },
+  "Call Module": {
+    "prefix": "call",
+    "body": ["call ${1:Name}(${2:param}: ${3:value});"],
+    "description": "Module call, with an argument"
+  },
+  "For Server": {
+    "prefix": "forserver",
+    "body": ["for server ${1:name} {", "    ${2:# runs against that server}", "}"],
+    "description": "Block that runs against one server (Otter and BuildMaster)"
+  },
+  "For Each Server": {
+    "prefix": "foreachserver",
+    "body": ["foreach server in @ServersInRole(${1:role}) {", "    ${2:# runs against each server}", "}"],
+    "description": "Block that runs against each server in a role (Otter and BuildMaster)"
+  },
   "Set Variable": {
     "prefix": "set",
     "body": [
