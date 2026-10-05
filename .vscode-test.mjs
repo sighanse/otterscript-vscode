@@ -9,7 +9,16 @@
 // Each run uses its own user-data and extensions folders under .vscode-test/,
 // so an installed copy of the OtterScript extension can't interfere.
 
+import { readFileSync } from "node:fs";
 import { defineConfig } from "@vscode/test-cli";
+
+/**
+ * The oldest VS Code the extension supports: package.json's engines.vscode
+ * (`^1.85.0`) without its range operator, so raising it there moves the
+ * "minimum" run along.
+ */
+const MINIMUM_VERSION = JSON.parse(readFileSync(new URL("package.json", import.meta.url), "utf8"))
+  .engines.vscode.replace(/^[\^~>=\s]+/, "");
 
 /** @type {Omit<import("@vscode/test-cli").IDesktopTestConfiguration, "label" | "version">} */
 const common = {
@@ -31,6 +40,6 @@ const common = {
 };
 
 export default defineConfig([
-  { label: "minimum", version: "1.85.0", ...common },
+  { label: "minimum", version: MINIMUM_VERSION, ...common },
   { label: "stable", version: "stable", ...common },
 ]);

@@ -6,6 +6,10 @@
 #   default_install_hook_types below)
 # Run everything by hand with: pre-commit run --all-files
 # Run the pre-push checks by hand with: pre-commit run --hook-stage pre-push
+#
+# Each hook is pinned to a commit (`rev: <sha>  # frozen: <tag>`), like the
+# workflows' actions, so a moved tag can't change what runs. Update them all
+# with: pre-commit autoupdate --freeze
 # -----------------------------------------------------------------------------
 
 # `pre-push` as a stage name needs pre-commit 3.2+.
@@ -21,7 +25,7 @@ repos:
   # GENERAL FILE CHECKS
   # ---------------------------------------------------------------------------
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
     hooks:
       - id: trailing-whitespace
         # Keep Markdown's two-space hard line breaks.
@@ -50,7 +54,7 @@ repos:
   # ---------------------------------------------------------------------------
   # markdownlint-cli2 finds .markdownlint.jsonc by itself.
   - repo: https://github.com/DavidAnson/markdownlint-cli2
-    rev: v0.23.3
+    rev: 916ad0aaa108c64d294101002066f530ea170b10  # frozen: v0.23.3
     hooks:
       - id: markdownlint-cli2
         name: Markdownlint
@@ -63,9 +67,20 @@ repos:
   # needs installing first: pre-commit uses Go from PATH if present and
   # downloads it otherwise. The first run takes a minute; later runs are cached.
   - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.12
+    rev: 914e7df21a07ef503a81201c76d2b11c789d3fca  # frozen: v1.7.12
     hooks:
       - id: actionlint
+
+  # ---------------------------------------------------------------------------
+  # GITHUB ACTIONS - ZIZMOR (the security audit the Lint workflow runs in CI)
+  # ---------------------------------------------------------------------------
+  # Injection, over-broad permissions, unpinned actions, credentials left in
+  # the checkout, ... in the workflows, dependabot.yml and this file. Keep
+  # the version the same as the zizmor job's in actionlint.yml.
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: fa412071e4f5d44d44f9e365f4676f9df92456a2  # frozen: v1.30.1
+    hooks:
+      - id: zizmor
 
   # ---------------------------------------------------------------------------
   # PROJECT GATES - run the repo's own tooling so pre-commit and CI never diverge

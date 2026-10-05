@@ -2,15 +2,14 @@ const js = require("@eslint/js");
 const globals = require("globals");
 const jsdoc = require("eslint-plugin-jsdoc");
 const stylistic = require("@stylistic/eslint-plugin");
+const nodePlugin = require("eslint-plugin-n");
 
 /**
- * A Node.js built-in required without the `node:` prefix (`require("fs")`):
- * the prefix makes it unmistakably the built-in, never an npm package.
+ * The Node.js the extension runs on in the oldest VS Code it supports
+ * (package.json `engines.vscode`): VS Code 1.85 ships Electron 25, with
+ * Node 18.15. Raise it with the minimum VS Code version.
  */
-const NODE_PROTOCOL_RESTRICTION = {
-  selector: "CallExpression[callee.name='require'][arguments.0.value=/^(assert|child_process|crypto|events|fs|module|os|path|stream|test|url|util|zlib)$/]",
-  message: "Require Node.js built-ins with the node: prefix (require(\"node:fs\")).",
-};
+const EXTENSION_HOST_NODE = "18.15.0";
 
 /** Every file ESLint lints in this repo. */
 const ALL_JS = ["**/*.{js,cjs,mjs}"];
@@ -31,8 +30,10 @@ module.exports = [
   // -- Applies to every linted file (no `files` filter)
   {
     linterOptions: {
-      // Fail on `// eslint-disable*` comments that no longer suppress anything.
-      reportUnusedDisableDirectives: "error"
+      // Fail on `// eslint-disable*` comments that no longer suppress
+      // anything, and on `/* eslint rule: ... */` ones that change nothing.
+      reportUnusedDisableDirectives: "error",
+      reportUnusedInlineConfigs: "error"
     }
   },
 
@@ -61,7 +62,7 @@ module.exports = [
 
   {
     files: ALL_JS,
-    plugins: { "@stylistic": stylistic },
+    plugins: { "@stylistic": stylistic, n: nodePlugin },
 
     rules: {
       "no-unused-vars": [
@@ -120,7 +121,9 @@ module.exports = [
       "prefer-promise-reject-errors": "warn",
       "no-throw-literal": "error",
       "unicode-bom": "error",
-      "no-restricted-syntax": ["error", NODE_PROTOCOL_RESTRICTION],
+      // A built-in required with the `node:` prefix (`require("node:fs")`)
+      // is unmistakably the built-in, never an npm package of that name.
+      "n/prefer-node-protocol": "error",
 
       "no-restricted-globals": ["error",
         { name: "window", message: "Use vscode.window instead." },
@@ -177,6 +180,20 @@ module.exports = [
     }
   },
   {
+    // The extension's own code runs in VS Code's Node, which is older than
+    // the Node of the tests and scripts: no API or syntax newer than the
+    // oldest supported VS Code's (the type check can't tell, as @types/node
+    // doesn't record which version added what).
+    files: ["src/**/*.js"],
+    settings: { node: { version: EXTENSION_HOST_NODE } },
+    rules: {
+      "n/no-unsupported-features/node-builtins": "error",
+      "n/no-unsupported-features/es-builtins": "error",
+      "n/no-unsupported-features/es-syntax": "error",
+      "n/no-deprecated-api": "error",
+    }
+  },
+  {
     files: ["src/language-data.js"],
     rules: {
       "no-useless-escape": "off",
@@ -190,7 +207,7 @@ module.exports = [
       "no-restricted-syntax": ["error", {
         selector: "CallExpression[callee.name='require'][arguments.0.value='vscode']",
         message: "scanner.js must stay vscode-free; put vscode-dependent code in document-index.js, helpers.js or providers/.",
-      }, NODE_PROTOCOL_RESTRICTION],
+      }],
     }
   }
 ];

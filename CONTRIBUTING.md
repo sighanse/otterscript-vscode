@@ -62,10 +62,13 @@ Some files are generated; `npm run check` fails when one is out of date:
   `npm run update:grammar`.
 
 Optionally, install the [pre-commit](https://pre-commit.com) hooks once with
-`pre-commit install`. Each commit then gets the file, Markdown, workflow and
-ESLint checks, and each push runs `npm run check`. The hook tools install
-themselves on first use (the workflow linter, actionlint, is built with Go,
-which pre-commit downloads if it isn't installed), so the first commit is slow.
+`pre-commit install`. Each commit then gets the file, Markdown, workflow
+(actionlint, and zizmor's security audit) and ESLint checks, and each push
+runs `npm run check`. The hook tools install themselves on first use
+(actionlint is built with Go and zizmor installed with Python, which
+pre-commit downloads if they aren't installed), so the first commit is slow.
+The hooks are pinned to commits; update them with
+`pre-commit autoupdate --freeze`.
 
 Press <kbd>F5</kbd> in VS Code to build the bundle and launch an Extension
 Development Host with this repo loaded as the test workspace. The same checks
