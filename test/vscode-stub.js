@@ -509,6 +509,32 @@ function recordProvider(kind) {
   };
 }
 
+/**
+ * A diagnostic collection that keeps what is set on it, by URI.
+ *
+ * @param {string} name
+ * @returns {any}
+ */
+function createDiagnosticCollection(name) {
+  /** @type {Map<string, any[]>} */
+  const entries = new Map();
+  return {
+    name,
+    /**
+     * @param {{ toString(): string }} uri
+     * @param {any[]} diagnostics
+     */
+    set: (uri, diagnostics) => { entries.set(uri.toString(), diagnostics); },
+    /** @param {{ toString(): string }} uri */
+    get: (uri) => entries.get(uri.toString()),
+    /** @param {{ toString(): string }} uri */
+    has: (uri) => entries.has(uri.toString()),
+    /** @param {{ toString(): string }} uri */
+    delete: (uri) => { entries.delete(uri.toString()); },
+    dispose: () => { entries.clear(); },
+  };
+}
+
 /** @type {any[]} Every file system watcher created, newest last. */
 const watchers = [];
 
@@ -558,6 +584,7 @@ const outputChannel = {
   error() {},
   debug() {},
   trace() {},
+  dispose() {},
   name: "OtterScript (stub)",
 };
 /** Mirrors `vscode.CompletionItemKind` (only the members the providers use). */
@@ -619,6 +646,7 @@ const vscode = {
   EndOfLine: Object.freeze({ LF: 1, CRLF: 2 }),
   Uri: Object.freeze({ parse: parseUri }),
   languages: {
+    createDiagnosticCollection,
     registerDefinitionProvider: recordProvider("DefinitionProvider"),
     registerRenameProvider: recordProvider("RenameProvider"),
     registerReferenceProvider: recordProvider("ReferenceProvider"),
@@ -692,6 +720,33 @@ const vscode = {
      */
     onDidChangeConfiguration(listener) {
       this.configurationListeners.push(listener);
+      return { dispose() {} };
+    },
+    /**
+     * The listeners of the document events, by event; a test calls them to
+     * play the event (a change gets `{ document }`, the others the document).
+     *
+     * @type {Record<"open" | "change" | "save" | "close", ((e: any) => void)[]>}
+     */
+    documentListeners: { open: [], change: [], save: [], close: [] },
+    /** @param {(document: any) => void} listener */
+    onDidOpenTextDocument(listener) {
+      this.documentListeners.open.push(listener);
+      return { dispose() {} };
+    },
+    /** @param {(e: { document: any }) => void} listener */
+    onDidChangeTextDocument(listener) {
+      this.documentListeners.change.push(listener);
+      return { dispose() {} };
+    },
+    /** @param {(document: any) => void} listener */
+    onDidSaveTextDocument(listener) {
+      this.documentListeners.save.push(listener);
+      return { dispose() {} };
+    },
+    /** @param {(document: any) => void} listener */
+    onDidCloseTextDocument(listener) {
+      this.documentListeners.close.push(listener);
       return { dispose() {} };
     },
     createFileSystemWatcher,
