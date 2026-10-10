@@ -211,6 +211,11 @@
     "body": ["set local $${1:variableName} = ${2:value};"],
     "description": "Assign a variable that exists only in the current block"
   },
+  "Global Variable": {
+    "prefix": "global",
+    "body": ["global $${1:variableName} = ${2:value};"],
+    "description": "Declare a global variable, at the top of a script before any other statement"
+  },
   "Throw Error": {
     "prefix": "throw",
     "body": ["throw \"${1:error message}\";"],

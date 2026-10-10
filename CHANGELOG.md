@@ -19,10 +19,6 @@
 - The `splitToVector` and `joinIntoString` snippets insert a complete statement, starting with `set`
 - The `set` snippet inserts a plain `set $name = value;`; it no longer makes you pick `local` or `global`. The new `setlocal` snippet inserts `set local $name = value;`
 
-### Removed
-
-- The `global` snippet: `global $x = value;` isn't OtterScript. Write `set global $x = value;`, or use the `set` snippet
-
 ## [0.6.0] - 2026-10-03
 
 ### Added

@@ -1636,14 +1636,19 @@ set local $variable = value;
   "global": {
     namespace: null,
     name: "global",
-    signature: "set global $variable = value;",
-    description: "Modifier on 'set' that forces assignment in the global scope.",
+    signature: "global $variable = value;",
+    description: "Declares a global variable at the top of a script, or, after 'set', assigns in the global scope.",
     documentation: `
-\`global\` is a scope modifier on the \`set\` statement, not a statement of its
-own — there is no bare \`global $x = value;\` form.
+\`global\` has two uses:
+
+- A **global declaration**, \`global $x = value;\`, at the top of a script,
+  before any other statement.
+- A scope modifier on \`set\`, \`set global $x = value;\`, anywhere.
 
 **Syntax:**
 \`\`\`otterscript
+global $var = value;
+
 set global $var = value;
 \`\`\`
 

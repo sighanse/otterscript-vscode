@@ -312,6 +312,11 @@ describe("executionDirectiveContext", () => {
     assert.deepEqual(executionDirectiveContext("with retry=3,\n  lock, "), { kind: "directive", typed: "", given: ["retry", "lock"] });
   });
 
+  it("reads past a braced variable's `}`, which doesn't end the statement", () => {
+    assert.deepEqual(executionDirectiveContext("with async=${token}, "), { kind: "directive", typed: "", given: ["async"] });
+    assert.deepEqual(executionDirectiveContext("with lock=${my lock}, retry=3, ti"), { kind: "directive", typed: "ti", given: ["lock", "retry"] });
+  });
+
   it("is at a value of executionPolicy, the directive with listed values", () => {
     const context = /** @type {any} */ (executionDirectiveContext("with retry=3, executionPolicy=on"));
     assert.equal(context.kind, "value");

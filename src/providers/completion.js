@@ -327,7 +327,9 @@ const EXECUTION_DIRECTIVES = new Map(Object.values(executionDirectiveDocs).map((
  * @returns {ExecutionDirectiveContext | null}
  */
 function executionDirectiveContext(maskedPrefix) {
-  const statement = maskedPrefix.slice(Math.max(maskedPrefix.lastIndexOf("{"), maskedPrefix.lastIndexOf(";"), maskedPrefix.lastIndexOf("}")) + 1);
+  // A braced variable's braces (`async=${token}`) aren't a block's.
+  const text = maskedPrefix.replace(/[$@%]\{[^{}\n]*\}/g, (m) => "_".repeat(m.length));
+  const statement = text.slice(Math.max(text.lastIndexOf("{"), text.lastIndexOf(";"), text.lastIndexOf("}")) + 1);
   const awaitMatch = /^\s*await\s+([A-Za-z][A-Za-z0-9]*)?$/.exec(statement);
   if (awaitMatch) return { kind: "await", typed: awaitMatch[1] ?? "" };
   const withMatch = /^\s*with\s([\s\S]*)$/.exec(statement);

@@ -1310,17 +1310,18 @@ function prefixTail(text, end, start = 0) {
 }
 
 /**
- * Whether the text before `end` makes the token there an assignment target:
- * `set`, optionally `local` or `global`, at a statement start. Bare
- * `$x = ...` and `global $x = ...` aren't statements; `set [local|global]
- * $x = ...` is the only form (see `src/language-data.js`). A backward scan,
- * so any spacing between the words works and a long line stays linear.
+ * Whether the text before `end` makes the token there an assignment target,
+ * at a statement start: `set`, optionally `local` or `global`
+ * (`set local $x = ...`), or a global declaration (`global $x = ...`, which
+ * Inedo's grammar allows at the top of a script). A bare `$x = ...` isn't a
+ * statement. A backward scan, so any spacing between the words works and a
+ * long line stays linear.
  *
  * @param {string} text
  * @param {number} end - Where the token starts
  * @returns {boolean}
  */
-function followsSetKeyword(text, end) {
+function isAssignmentPrefix(text, end) {
   let i = end;
   const skipWhitespace = () => {
     const from = i;
@@ -1332,15 +1333,20 @@ function followsSetKeyword(text, end) {
     while (i > 0 && /[A-Za-z]/.test(text[i - 1])) i--;
     return text.slice(i, to).toLowerCase();
   };
+  const atStatementStart = () => {
+    skipWhitespace();
+    return i === 0 || ";{}".includes(text[i - 1]);
+  };
   if (!skipWhitespace()) return false;
   let keyword = word();
   if (keyword === "local" || keyword === "global") {
+    const afterModifier = i;
+    if (keyword === "global" && atStatementStart()) return true;
+    i = afterModifier;
     if (!skipWhitespace()) return false;
     keyword = word();
   }
-  if (keyword !== "set") return false;
-  skipWhitespace();
-  return i === 0 || ";{}".includes(text[i - 1]);
+  return keyword === "set" && atStatementStart();
 }
 
 /**
@@ -1421,7 +1427,7 @@ function indexVariableOccurrences(text) {
         : isParameter ? "parameter"
           : FOREACH_VARIABLE_PREFIX_REGEX.test(before) ? "foreach"
             : OUTPUT_CAPTURE_PREFIX_REGEX.test(before) ? "output"
-              : followsSetKeyword(view, character) && ASSIGNMENT_SUFFIX_REGEX.test(after) ? "assignment"
+              : isAssignmentPrefix(view, character) && ASSIGNMENT_SUFFIX_REGEX.test(after) ? "assignment"
                 : undefined;
 
       const key = variableKey(tokenSigil, tokenName);

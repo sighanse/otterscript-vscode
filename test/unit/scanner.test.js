@@ -882,8 +882,14 @@ describe("findVariableOccurrences", () => {
     }
   });
 
-  it("does not mark a bare `global $x = ...` (no `set`) as a write", () => {
-    assert.deepEqual(find(["global $x = 1;"], "$", "x"), ["0:7:r"]);
+  it("marks a global declaration, `global $x = ...` at a statement start, as a write", () => {
+    // Inedo's grammar: <global_variable_declaration> ::= global /variable_expression/ = /literal_expression/;
+    assert.deepEqual(find(["global $x = 1;"], "$", "x"), ["0:7:w"]);
+    assert.deepEqual(find(["global $a = 1;", "global   $x = 2;"], "$", "x"), ["1:9:w"]);
+  });
+
+  it("does not mark `global` in the middle of a statement as a declaration", () => {
+    assert.deepEqual(find(["Log-Information global $x = 1;"], "$", "x"), ["0:23:r"]);
   });
 
   it("does not mark a bare `$x = ...` (no `set`) as a write", () => {
