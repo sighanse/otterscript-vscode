@@ -11,6 +11,8 @@ src/
 test/
 dist/web/test/
 docs/
+# README images are loaded from GitHub, not from the package
+images/*.gif
 .eslintcache
 .gitattributes
 .gitignore
