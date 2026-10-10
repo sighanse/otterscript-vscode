@@ -45,7 +45,7 @@
     "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.28.2",
     "eslint": "^10.12.0",
-    "eslint-plugin-jsdoc": "^65.1.0",
+    "eslint-plugin-jsdoc": "^65.2.4",
     "eslint-plugin-n": "^18.4.1",
     "globals": "^17.13.0",
     "jsonc-parser": "^3.3.1",
