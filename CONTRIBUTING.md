@@ -114,6 +114,12 @@ Every change in behavior comes with tests:
   and `test/unit/fake-workspace.js` a workspace with files and open
   documents. Replace a stub member with `stubProperty`, which puts it back
   when the test ends.
+- `test/unit/properties.test.js` runs the checks and every provider on
+  documents [fast-check](https://fast-check.dev/) generates, checking what
+  must hold for any text: no crash, ranges inside the document, Fix All
+  adding no errors, time linear in the length. A failure prints the smallest
+  input it found. The seed is fixed; `FC_SEED=<n> FC_RUNS=<n> node --test
+  test/unit/properties.test.js` tries others.
 - For a bug fix, write the test first and see it fail for the reason
   reported, then fix the code.
 - Sanity fails when the unit tests cover less of `src/` than the limits in

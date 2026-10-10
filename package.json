@@ -47,6 +47,7 @@
     "eslint": "^10.12.0",
     "eslint-plugin-jsdoc": "^65.2.4",
     "eslint-plugin-n": "^18.4.1",
+    "fast-check": "^4.10.2",
     "globals": "^17.13.0",
     "jsonc-parser": "^3.3.1",
     "mocha": "^11.8.0",
