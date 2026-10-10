@@ -15,6 +15,8 @@ const assert = require("node:assert/strict");
 const { Position } = require("../vscode-stub");
 const stub = require("../vscode-stub");
 const { makeDocument } = require("./fake-document");
+const { stubProperty } = require("./fake-workspace");
+const { operationDocs } = require("../../src/language-data.js");
 const {
   buildCompletionItem,
   resolveCompletionDocumentation,
@@ -26,7 +28,9 @@ const {
   isValidCompletionPosition,
   loadConfig,
   lookupOwn,
+  MAX_WORKSPACE_FILE_BYTES,
   mapWithConcurrency,
+  readWorkspaceText,
   productSignatures,
   scheduleTimerForUri,
 } = require("../../src/helpers.js");
@@ -76,6 +80,11 @@ describe("buildHoverMarkdown (otterscript.product and anySigil)", () => {
     assert.doesNotMatch(text(buildHoverMarkdown(doc, "BuildMaster")), /Not in/);
     assert.doesNotMatch(text(buildHoverMarkdown(doc)), /Not in/, "'any' by default");
     assert.doesNotMatch(text(buildHoverMarkdown({ ...doc, products: ["Otter", "BuildMaster"] }, "ProGet")), /Not in/, "core engine");
+  });
+
+  it("says what to write instead of a superseded name", () => {
+    assert.match(text(buildHoverMarkdown(operationDocs.PSCall1)), /^### PSCall1\n\n⚠️ The older operation: write `PSCall` for the current one\.\n\n/);
+    assert.doesNotMatch(text(buildHoverMarkdown(operationDocs.PSCall)), /⚠️/);
   });
 
   it("says when a function works with every sigil", () => {
@@ -147,6 +156,39 @@ describe("productSignatures", () => {
 // ============================================================
 // mapWithConcurrency
 // ============================================================
+
+describe("readWorkspaceText", () => {
+  /**
+   * Runs `readWorkspaceText` on a file of `size` bytes, with a stubbed
+   * `workspace.fs` that records whether the file was read.
+   *
+   * @param {import("node:test").TestContext} t - The test, which the
+   *   stubbed file system lasts for
+   * @param {number} size
+   * @returns {Promise<{ text: string | undefined, read: boolean }>}
+   */
+  async function readFileOf(t, size) {
+    let read = false;
+    stubProperty(t, stub.workspace, "fs", {
+      stat: async () => ({ size }),
+      readFile: async () => {
+        read = true;
+        return new TextEncoder().encode("module M {}");
+      },
+    });
+    stubProperty(t, stub.workspace, "asRelativePath", () => "big.otter");
+    const text = await readWorkspaceText(/** @type {any} */ ({ toString: () => "file:///big.otter" }));
+    return { text, read };
+  }
+
+  it("reads a file up to the limit", async (t) => {
+    assert.deepEqual(await readFileOf(t, MAX_WORKSPACE_FILE_BYTES), { text: "module M {}", read: true });
+  });
+
+  it("doesn't read a larger file at all", async (t) => {
+    assert.deepEqual(await readFileOf(t, MAX_WORKSPACE_FILE_BYTES + 1), { text: undefined, read: false });
+  });
+});
 
 describe("mapWithConcurrency", () => {
   it("visits every item exactly once", async () => {
@@ -375,19 +417,14 @@ describe("loadConfig", () => {
     });
   });
 
-  it("reflects an overridden setting", () => {
-    const original = stub.workspace.getConfiguration;
-    stub.workspace.getConfiguration = () => ({
+  it("reflects an overridden setting", (t) => {
+    stubProperty(t, stub.workspace, "getConfiguration", () => ({
       get: (/** @type {string} */ key, /** @type {unknown} */ fallback) =>
         key === "hover.enable" ? false : fallback,
-    });
-    try {
-      const cfg = loadConfig();
-      assert.equal(cfg.hoverEnabled, false);
-      assert.equal(cfg.completionEnabled, true);
-    } finally {
-      stub.workspace.getConfiguration = original;
-    }
+    }));
+    const cfg = loadConfig();
+    assert.equal(cfg.hoverEnabled, false);
+    assert.equal(cfg.completionEnabled, true);
   });
 });
 

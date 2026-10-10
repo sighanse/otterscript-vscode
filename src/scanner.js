@@ -202,6 +202,326 @@ function isModuleCallContext(lineText, wordStart) {
 }
 
 // ============================================================
+// TOP-LEVEL COMMAS OF MANY CALLS AT ONCE
+// ============================================================
+
+/**
+ * How {@link findTopLevelCommas} counts nesting inside a call:
+ * - `openers`, `closers` -- the brackets that nest (`"([{"` and `")]}"`)
+ * - `clamp` -- whether a closer with nothing open leaves the depth at 0
+ *   (true), or takes it below 0, where no comma is top-level any more (false)
+ *
+ * @typedef {{ openers: string, closers: string, clamp: boolean }} NestingRule
+ */
+
+/**
+ * The top-level commas of a call: those at depth 0 counted by a
+ * {@link NestingRule} from just after its `(`, and whether the depth is
+ * back at 0 at its `)`.
+ *
+ * @typedef {{ close: number, commas: number[], closesAtTop: boolean }} TopLevelCommas
+ */
+
+/**
+ * For each `(` in `opens`, its matching `)` (counting parentheses only) and
+ * its top-level commas, in text masked by {@link maskNonCodeSpans}: the same
+ * result as walking from each `(` to its `)` and counting depth by `rule`,
+ * but in one pass over the text. Walking each call on its own made nested or
+ * unclosed calls quadratic: every call rescanned its inner calls, and an
+ * unclosed one the rest of the document (100 KB took seconds).
+ *
+ * The one pass works on depth counted from the start of the text. A comma
+ * is top-level for a call when the depth there is where it was at the call's
+ * start (`clamp: false`), or, when clamped, when the depth never went lower
+ * in between: when the last position with a lower depth is before the call.
+ *
+ * A comma can be top-level for many calls at once only in malformed text
+ * (`%( %( ] ] , ...`), where the result can grow with the square of the
+ * text. Past a limit linear in the text's length, this gives up and
+ * returns null, so the caller skips its check.
+ *
+ * @param {string} maskedText
+ * @param {number[]} opens - Indexes of `(`, ascending
+ * @param {NestingRule} rule
+ * @returns {Map<number, TopLevelCommas> | null} Keyed by the `(`'s index;
+ *   a `(` without a matching `)` has no entry. Null past the limit.
+ */
+function findTopLevelCommas(maskedText, opens, rule) {
+  /** @type {Map<number, TopLevelCommas>} */
+  const result = new Map();
+  // No requested opens means no entries, so skip the document-wide scans and
+  // typed-array allocations that would only return the empty map.
+  if (!opens.length) return result;
+
+  const n = maskedText.length;
+
+  // Every `(`'s matching `)`, from one stack of parentheses.
+  const closeOf = new Int32Array(n).fill(-1);
+  /** @type {number[]} */
+  const parens = [];
+  for (let i = 0; i < n; i++) {
+    if (maskedText[i] === "(") parens.push(i);
+    else if (maskedText[i] === ")" && parens.length) closeOf[/** @type {number} */ (parens.pop())] = i;
+  }
+
+  // depth[i]: the nesting depth before maskedText[i], from the text's start.
+  const depth = new Int32Array(n + 1);
+  for (let i = 0; i < n; i++) {
+    const ch = maskedText[i];
+    depth[i + 1] = depth[i] + (rule.openers.includes(ch) ? 1 : rule.closers.includes(ch) ? -1 : 0);
+  }
+
+  // Clamped: lowerBefore[i] is the last position before i with a lower
+  // depth, or -1 (a stack of positions of rising depth).
+  const lowerBefore = new Int32Array(n + 1);
+  if (rule.clamp) {
+    /** @type {number[]} */
+    const rising = [];
+    for (let i = 0; i <= n; i++) {
+      while (rising.length && depth[rising[rising.length - 1]] >= depth[i]) rising.pop();
+      lowerBefore[i] = rising.length ? rising[rising.length - 1] : -1;
+      rising.push(i);
+    }
+  }
+  /**
+   * Whether position `i`, inside the call whose `(` is at `open`, is at the
+   * call's top level.
+   *
+   * @param {number} open
+   * @param {number} i
+   * @returns {boolean}
+   */
+  const atTopLevel = (open, i) => (rule.clamp ? lowerBefore[i] < open + 1 : depth[i] === depth[open + 1]);
+
+  const isOpen = new Uint8Array(n);
+  for (const open of opens) if (closeOf[open] !== -1) isOpen[open] = 1;
+
+  // The calls open at the current position, innermost last; unclamped, also
+  // by their starting depth, as a comma counts for exactly those.
+  /** @type {number[]} */
+  const active = [];
+  /** @type {Map<number, number[]>} */
+  const activeByDepth = new Map();
+  let budget = 4 * n + 10000;
+  for (let i = 0; i < n; i++) {
+    const ch = maskedText[i];
+    if (active.length && closeOf[active[active.length - 1]] === i) {
+      const open = /** @type {number} */ (active.pop());
+      /** @type {TopLevelCommas} */ (result.get(open)).closesAtTop = atTopLevel(open, i);
+      if (!rule.clamp) activeByDepth.get(depth[open + 1])?.pop();
+    } else if (ch === ",") {
+      if (rule.clamp) {
+        // The calls whose start is after the last lower depth: a run at the top.
+        for (let k = active.length - 1; k >= 0 && atTopLevel(active[k], i); k--) {
+          /** @type {TopLevelCommas} */ (result.get(active[k])).commas.push(i);
+          if (--budget < 0) return null;
+        }
+      } else {
+        for (const open of activeByDepth.get(depth[i]) ?? []) {
+          /** @type {TopLevelCommas} */ (result.get(open)).commas.push(i);
+          if (--budget < 0) return null;
+        }
+      }
+    } else if (isOpen[i]) {
+      active.push(i);
+      result.set(i, { close: closeOf[i], commas: [], closesAtTop: false });
+      if (!rule.clamp) {
+        const key = depth[i + 1];
+        const list = activeByDepth.get(key);
+        if (list) list.push(i);
+        else activeByDepth.set(key, [i]);
+      }
+    }
+  }
+  return result;
+}
+
+// ============================================================
+// LOOKING BACK FROM A WORD
+// ============================================================
+// These walk back from an index instead of matching a `...$` regex against
+// the text before it: such a regex is tried at every position of that text,
+// so a check run for each word of a line made a long line quadratic (a
+// 100 KB line took seconds).
+
+/**
+ * The namespace written right before `end` (`DotNet` for `DotNet::Build`
+ * with `end` at `B`), or undefined. Same result as matching
+ * `/([A-Za-z][A-Za-z0-9]*)::$/` against `text.slice(0, end)`.
+ *
+ * @param {string} text
+ * @param {number} end - Index right after the `::`
+ * @returns {string | undefined}
+ */
+function namespaceBefore(text, end) {
+  if (end < 2 || text[end - 1] !== ":" || text[end - 2] !== ":") return undefined;
+  const nameEnd = end - 2;
+  let start = nameEnd;
+  while (start > 0 && /[A-Za-z0-9]/.test(text[start - 1])) start--;
+  // A name starts with a letter, so leading digits aren't part of it.
+  while (start < nameEnd && !/[A-Za-z]/.test(text[start])) start++;
+  return start < nameEnd ? text.slice(start, nameEnd) : undefined;
+}
+
+/**
+ * Whether a statement can start at `end`: only whitespace separates it from
+ * the start of `text`, a `;`, a block's closing `}`, or a block's opening `{`
+ * — not the braces of a braced variable such as `${my-var}`, whose `{` is
+ * preceded by a `$`, `@`, or `%` sigil and whose `}` closes back to it.
+ *
+ * @param {string} text
+ * @param {number} end
+ * @returns {boolean}
+ */
+function isStatementStart(text, end) {
+  while (end > 0 && /\s/.test(text[end - 1])) end--;
+  if (end === 0) return true;
+  const last = text[end - 1];
+  if (last === ";") return true;
+  if (last === "}") return !closesBracedVariable(text, end - 1);
+  return last === "{" && (end < 2 || !/[$@%]/.test(text[end - 2]));
+}
+
+/** A character a braced variable's name may contain (see BRACED_NAME_PATTERN). */
+const BRACED_NAME_CHAR_REGEX = /[A-Za-z0-9_ -]/;
+
+/**
+ * Whether the `}` at `index` closes a braced variable (`${x}`, `@{x}`,
+ * `%{x}`) rather than a block: only name characters lie between it and a
+ * `{` right after a sigil. Looking back over the name alone, not to the
+ * matching `{` of a block, keeps a line full of `}` linear.
+ *
+ * @param {string} text
+ * @param {number} index - Index of the `}`
+ * @returns {boolean}
+ */
+function closesBracedVariable(text, index) {
+  let i = index - 1;
+  while (i >= 0 && BRACED_NAME_CHAR_REGEX.test(text[i])) i--;
+  return i > 0 && text[i] === "{" && /[$@%]/.test(text[i - 1]) && /[A-Za-z]/.test(text[i + 1]);
+}
+
+// ============================================================
+// EXECUTION DIRECTIVES AND AWAIT
+// ============================================================
+
+/**
+ * One directive in a `with` header: `retry=3` or `isolation`. Offsets into
+ * the text {@link findExecutionDirectives} was given.
+ *
+ * @typedef {{ name: string, nameStart: number, value: string | undefined, valueStart: number, valueEnd: number }} ExecutionDirective
+ *   `value`: what follows the `=`, trimmed, from the unmasked text (a
+ *   quoted string keeps its quotes); undefined without an `=`.
+ *   `valueStart`/`valueEnd`: where it is (equal when it's empty or missing).
+ */
+
+/**
+ * A `with ... {` block's header.
+ *
+ * @typedef {{ start: number, headerEnd: number, directives: ExecutionDirective[] }} WithHeader
+ *   `start`: the `with`; `headerEnd`: its `{`.
+ */
+
+/**
+ * An `await` statement, with the token it waits for, if any.
+ *
+ * @typedef {{ start: number, token: string | undefined, tokenStart: number }} AwaitStatement
+ */
+
+/** A directive in a `with` header: its name, then an optional `=` and value. */
+const EXECUTION_DIRECTIVE_REGEX = /^(\s*)([A-Za-z][\w-]*)\s*(?:=(.*))?$/s;
+
+/**
+ * A comment-masked view of possibly multi-line text, offsets preserved:
+ * comments are blanked, strings kept whole (so a `#` or `//` inside a string
+ * survives). Used to drop a trailing comment from a directive's raw value
+ * before trimming, without masking a `#` that is part of a string value.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+function maskCommentsAcrossLines(text) {
+  const state = createCodeScanState();
+  return text.split("\n").map((line) => maskComments(line, state)).join("\n");
+}
+
+/**
+ * Every `with` block header and `await` statement in `maskedText`: a
+ * statement keyword (see {@link isStatementStart}), written in lower case.
+ * A `with` whose header reaches a `;` or `}` before its `{` isn't a block,
+ * so it is left out. One pass: each header is read once.
+ *
+ * @param {string} maskedText - Strings and comments blanked, offsets kept
+ * @param {string} text - The same text unmasked, for the directives' values
+ * @returns {{ withs: WithHeader[], awaits: AwaitStatement[] }}
+ */
+function findExecutionDirectives(maskedText, text) {
+  /** @type {WithHeader[]} */
+  const withs = [];
+  /** @type {AwaitStatement[]} */
+  const awaits = [];
+  const keyword = /\b(with|await)\b/g;
+  for (let match; (match = keyword.exec(maskedText));) {
+    const start = match.index;
+    // Not a word inside another (`$with`, `Do-with`) or a statement's text.
+    if (/[$@%\w-]/.test(maskedText[start - 1] ?? "") || maskedText[start + match[0].length] === "-") continue;
+    if (!isStatementStart(maskedText, start)) continue;
+    const after = start + match[0].length;
+
+    if (match[1] === "await") {
+      const tail = /^\s*([A-Za-z][A-Za-z0-9]*)?\s*;/.exec(maskedText.slice(after, after + 200));
+      if (!tail) continue;
+      const token = tail[1];
+      awaits.push({ start, token, tokenStart: token ? after + tail[0].indexOf(token) : after });
+      continue;
+    }
+
+    let headerEnd = after;
+    // A `${name}` value's `{` isn't the block opener, so step over its span.
+    while (headerEnd < maskedText.length && !"{;}".includes(maskedText[headerEnd])) {
+      if (maskedText[headerEnd] === "$" && maskedText[headerEnd + 1] === "{") {
+        const close = maskedText.indexOf("}", headerEnd + 2);
+        if (close === -1) break;
+        headerEnd = close + 1;
+      } else headerEnd++;
+    }
+    keyword.lastIndex = headerEnd;
+    if (maskedText[headerEnd] !== "{") continue;
+
+    /** @type {ExecutionDirective[]} */
+    const directives = [];
+    // The directives are separated by commas; a comma in a string is masked.
+    let segmentStart = after;
+    for (const segment of maskedText.slice(after, headerEnd).split(",")) {
+      const segmentEnd = segmentStart + segment.length;
+      const directive = EXECUTION_DIRECTIVE_REGEX.exec(segment);
+      if (directive) {
+        const nameStart = segmentStart + directive[1].length;
+        const name = directive[2];
+        if (directive[3] === undefined) {
+          const end = nameStart + name.length;
+          directives.push({ name, nameStart, value: undefined, valueStart: end, valueEnd: end });
+        } else {
+          const raw = text.slice(segmentEnd - directive[3].length, segmentEnd);
+          // The raw value can carry a trailing comment from a multi-line
+          // header (`retry=3 # note\n{`); blank comments but keep strings,
+          // so a `#` or `//` inside a string stays, before trimming.
+          const bare = maskCommentsAcrossLines(raw);
+          const trimmedStart = bare.length - bare.trimStart().length;
+          const trimmedEnd = bare.trimEnd().length;
+          const valueStart = segmentEnd - directive[3].length + trimmedStart;
+          const value = raw.slice(trimmedStart, trimmedEnd);
+          directives.push({ name, nameStart, value, valueStart, valueEnd: valueStart + value.length });
+        }
+      }
+      segmentStart = segmentEnd + 1;
+    }
+    withs.push({ start, headerEnd, directives });
+  }
+  return { withs, awaits };
+}
+
+// ============================================================
 // CORE LINE SCANNER
 // ============================================================
 
@@ -957,20 +1277,94 @@ const MODULE_PARAMETER_LIST_OPEN_REGEX = /^\s*module\s+[A-Za-z][\w-]*\s*</i;
  * parameter name (`<$a`, `, $b`, `in $c`, `out $d`) rather than a default value.
  */
 const MODULE_PARAMETER_PREFIX_REGEX = /(?:^|,|\b(?:in|out|ref))\s*$/i;
-/** Text before a token at statement start (optionally after `set` / `global`). */
-const ASSIGNMENT_PREFIX_REGEX = /(?:^|[;{}]|\bset|\bglobal)\s*$/i;
 /** Text before a token that receives an operation's output (`ResponseBody => $body`). */
 const OUTPUT_CAPTURE_PREFIX_REGEX = /=>\s*$/;
 /** Text after a token that makes it an assignment target (`=` but not `==`). */
 const ASSIGNMENT_SUFFIX_REGEX = /^\s*=(?!=)/;
 
 /**
- * @typedef {{ line: number, character: number, length: number, write: boolean }} VariableOccurrence
+ * How far before the whitespace in front of a token the prefix regexes above
+ * look: their longest word (`foreach`) plus the character before it, for `\b`.
+ */
+const PREFIX_LOOKBACK = 9;
+
+/**
+ * The end of `text[start, end)` that the prefix regexes above can see, to
+ * test them on instead of all of it: the whitespace before `end` and the
+ * {@link PREFIX_LOOKBACK} characters before that. Each regex ends in `\s*$`
+ * after a short word or symbol, so it matches the tail exactly when it
+ * matches the whole text. When the tail doesn't reach `start`, a `\0` goes in
+ * front, so `^` can't match where the tail was cut off. Matching the whole
+ * text before every token made a long line quadratic (100 KB took seconds).
+ *
+ * @param {string} text
+ * @param {number} end
+ * @param {number} [start]
+ * @returns {string}
+ */
+function prefixTail(text, end, start = 0) {
+  let whitespace = end;
+  while (whitespace > start && /\s/.test(text[whitespace - 1])) whitespace--;
+  const from = Math.max(start, whitespace - PREFIX_LOOKBACK);
+  return (from > start ? "\0" : "") + text.slice(from, end);
+}
+
+/**
+ * Whether the text before `end` makes the token there an assignment target,
+ * at a statement start: `set`, optionally `local` or `global`
+ * (`set local $x = ...`), or a global declaration (`global $x = ...`, which
+ * Inedo's grammar allows at the top of a script). A bare `$x = ...` isn't a
+ * statement. A backward scan, so any spacing between the words works and a
+ * long line stays linear.
+ *
+ * @param {string} text
+ * @param {number} end - Where the token starts
+ * @returns {boolean}
+ */
+function isAssignmentPrefix(text, end) {
+  let i = end;
+  const skipWhitespace = () => {
+    const from = i;
+    while (i > 0 && /\s/.test(text[i - 1])) i--;
+    return i < from;
+  };
+  const word = () => {
+    const to = i;
+    while (i > 0 && /[A-Za-z]/.test(text[i - 1])) i--;
+    return text.slice(i, to).toLowerCase();
+  };
+  const atStatementStart = () => {
+    skipWhitespace();
+    return i === 0 || ";{}".includes(text[i - 1]);
+  };
+  if (!skipWhitespace()) return false;
+  let keyword = word();
+  if (keyword === "local" || keyword === "global") {
+    const afterModifier = i;
+    if (keyword === "global" && atStatementStart()) return true;
+    i = afterModifier;
+    if (!skipWhitespace()) return false;
+    keyword = word();
+  }
+  return keyword === "set" && atStatementStart();
+}
+
+/**
+ * How an occurrence gives its variable a value: as a module parameter, a
+ * `foreach` loop variable, an operation's output (`Name => $x`), or an
+ * assignment (`set $x = ...`, `$x = ...`, `global $x = ...`).
+ *
+ * @typedef {"parameter" | "foreach" | "output" | "assignment"} AssignedBy
+ */
+
+/**
+ * @typedef {{ line: number, character: number, length: number, write: boolean, assignedBy?: AssignedBy }} VariableOccurrence
  *   `line`/`character` are 0-based and point at the sigil; `length` covers
  *   the whole token (`$name` or `${name}`). `write` is true for a declaration
  *   or assignment target (`set $x = ...`, `$x = ...`, `global $x = ...`,
  *   `foreach %p in ...`, an operation's output capture `Name => $x`, or a
- *   module parameter, whose list may span several lines).
+ *   module parameter, whose list may span several lines); `assignedBy` then
+ *   says which.
  */
 
 /**
@@ -1018,24 +1412,28 @@ function indexVariableOccurrences(text) {
       const tokenSigil = match[1];
       const tokenName = match[2] ?? match[3];
       const character = match.index ?? 0;
-      const before = view.slice(0, character);
+      // Only the end of the text before the token (see prefixTail).
+      const before = prefixTail(view, character);
       // Inside a string, `@` / `%` are variables only within `$( ... )`.
       const inString = code[character] === " ";
-      if (inString && tokenSigil !== "$" && !before.endsWith("$(")) continue;
+      if (inString && tokenSigil !== "$" && !view.slice(Math.max(0, character - 2), character).endsWith("$(")) continue;
 
       const after = view.slice(character + match[0].length);
       const isParameter =
         paramStart !== -1 && character >= paramStart && character < paramEnd &&
-        MODULE_PARAMETER_PREFIX_REGEX.test(code.slice(paramStart, character));
-      const write = !inString && (
-        isParameter ||
-        FOREACH_VARIABLE_PREFIX_REGEX.test(before) ||
-        OUTPUT_CAPTURE_PREFIX_REGEX.test(before) ||
-        (ASSIGNMENT_PREFIX_REGEX.test(before) && ASSIGNMENT_SUFFIX_REGEX.test(after))
-      );
+        MODULE_PARAMETER_PREFIX_REGEX.test(prefixTail(code, character, paramStart));
+      /** @type {AssignedBy | undefined} */
+      const assignedBy = inString ? undefined
+        : isParameter ? "parameter"
+          : FOREACH_VARIABLE_PREFIX_REGEX.test(before) ? "foreach"
+            : OUTPUT_CAPTURE_PREFIX_REGEX.test(before) ? "output"
+              : isAssignmentPrefix(view, character) && ASSIGNMENT_SUFFIX_REGEX.test(after) ? "assignment"
+                : undefined;
 
       const key = variableKey(tokenSigil, tokenName);
-      const occurrence = { line, character, length: match[0].length, write };
+      /** @type {VariableOccurrence} */
+      const occurrence = { line, character, length: match[0].length, write: assignedBy !== undefined };
+      if (assignedBy) occurrence.assignedBy = assignedBy;
       const existing = index.get(key);
       if (existing) existing.push(occurrence);
       else index.set(key, [occurrence]);
@@ -1263,4 +1661,12 @@ module.exports = {
   isModuleDeclarationContext,
   isModuleCallContext,
   findModuleDeclarations,
+
+  // -- Top-level commas of many calls at once
+  findTopLevelCommas,
+
+  // -- Looking back from a word
+  namespaceBefore,
+  isStatementStart,
+  findExecutionDirectives,
 };

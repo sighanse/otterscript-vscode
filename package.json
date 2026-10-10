@@ -20,7 +20,7 @@
   "qna": "https://github.com/sighanse/otterscript-vscode/discussions",
   "markdown": "github",
   "license": "MIT",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "icon": "images/logo.png",
   "engines": {
     "vscode": "^1.85.0"
@@ -41,12 +41,15 @@
     "@types/vscode": "1.85.0",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.1.0",
+    "@vscode/test-web": "^0.0.81",
     "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.28.2",
-    "eslint": "^10.11.0",
-    "eslint-plugin-jsdoc": "^65.0.1",
+    "eslint": "^10.12.0",
+    "eslint-plugin-jsdoc": "^65.1.0",
+    "eslint-plugin-n": "^18.4.1",
     "globals": "^17.13.0",
     "jsonc-parser": "^3.3.1",
+    "mocha": "^11.8.0",
     "ovsx": "^1.2.0",
     "typescript": "6.0.3"
   },
@@ -69,6 +72,7 @@
     "webhook"
   ],
   "main": "./dist/extension.js",
+  "browser": "./dist/web/extension.js",
   "activationEvents": [
     "workspaceContains:**/*.otter",
     "workspaceContains:**/*.oscript"
@@ -321,6 +325,39 @@
               ],
               "markdownDescription": "An operation argument name that looks like a typo of a documented one, such as `Fomr:` in `Copy-Files`. A hint by default: an operation may accept argument names Inedo's reference doesn't list."
             },
+            "unknown-with-directive": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "A `with` block directive that isn't one of `retry`, `timeout`, `executionPolicy`, `async`, `lock`, `isolation` or `credentials`, such as `retyr=3`."
+            },
+            "invalid-with-directive-value": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "A `with` block directive's value it doesn't take, such as `executionPolicy=sometimes` or `retry=many`, a missing one (`retry` alone), or a value on `isolation`, which takes none."
+            },
+            "unknown-await-token": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "`await name;` when no `with async=name` block in the file starts that token. A hint by default: a module the file calls might start it."
+            },
             "too-few-arguments": {
               "type": "string",
               "enum": [
@@ -550,15 +587,19 @@
     "check:cards": "node scripts/update-adaptivecard-data.js --check",
     "update:cards": "node scripts/update-adaptivecard-data.js --fetch",
     "check:reference": "node scripts/update-inedo-reference.js --check",
+    "check:changelog": "node scripts/release-notes.js --check",
     "update:reference": "node scripts/update-inedo-reference.js --fetch && node scripts/check-language-sync.js --write",
     "update:grammar": "node scripts/check-language-sync.js --write",
-    "test": "node --test \"test/unit/*.test.js\"",
-    "bundle": "esbuild src/extension.js --bundle --platform=node --format=cjs --target=node18 --external:vscode --minify --keep-names --outfile=dist/extension.js",
-    "build": "npm run bundle -- --sourcemap=linked",
+    "test": "node --test --test-timeout=30000 \"test/unit/*.test.js\"",
+    "bundle": "node scripts/build.js",
+    "build": "node scripts/build.js --dev",
+    "check:bundle": "node scripts/build.js --check",
     "pretest:integration": "npm run build",
     "test:integration": "vscode-test",
-    "test:cov": "node --test --experimental-test-coverage \"test/unit/*.test.js\"",
-    "check": "npm run lint:ci && npm run check:js && npm run check:lang && npm run check:cards && npm run check:reference && npm test",
+    "pretest:web": "node scripts/build.js --dev --web-tests",
+    "test:web": "vscode-test-web --browser=chromium --headless --quality=stable --extensionDevelopmentPath=. --extensionTestsPath=dist/web/test/index.js test/integration/workspace",
+    "test:cov": "node --test --test-timeout=30000 --experimental-test-coverage --test-coverage-include=\"src/**\" --test-coverage-lines=99 --test-coverage-branches=95 --test-coverage-functions=97 \"test/unit/*.test.js\"",
+    "check": "npm run lint:ci && npm run check:js && npm run check:lang && npm run check:cards && npm run check:reference && npm run check:changelog && npm run check:bundle && npm test",
     "package": "vsce package --no-yarn",
     "vscode:prepublish": "npm run lint:ci && npm run bundle",
     "publish:vsce": "vsce publish",

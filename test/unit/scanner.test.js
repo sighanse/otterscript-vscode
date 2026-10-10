@@ -13,9 +13,11 @@
 
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
+const { assertLinearTime } = require("./timing");
 
 const {
   createCodeScanState,
+  findExecutionDirectives,
   createTemplateScanState,
   isUnescapedQuoteAt,
   scanLineState,
@@ -43,6 +45,9 @@ const {
   isModuleDeclarationContext,
   isModuleCallContext,
   findModuleDeclarations,
+  findTopLevelCommas,
+  namespaceBefore,
+  isStatementStart,
 } = require("../../src/scanner.js");
 
 /**
@@ -626,6 +631,15 @@ describe("maskOutsideTemplateTags", () => {
       assert.equal(mask(line).length, line.length, JSON.stringify(line));
     }
   });
+
+  // Known limitation, to fix: literal text tracks quotes so that a `<%` in a
+  // quoted string isn't a tag, but an apostrophe in prose isn't a quote, and
+  // here it hides every tag after it on the line (with their diagnostics,
+  // hover and completion).
+  it("sees a tag after an apostrophe in prose", { todo: "an apostrophe opens a quoted span in literal text" }, () => {
+    assert.equal(mask("It's <% $x %> today").trim(), "$x");
+    assert.equal(mask("Don't forget: <% Log-Information hi; %>").trim(), "Log-Information hi;");
+  });
 });
 
 // ============================================================
@@ -807,8 +821,8 @@ describe("findVariableOccurrences", () => {
   });
 
   it("finds reads and writes, ignoring case", () => {
-    assert.deepEqual(find(["set $x = 1;", "$X = $x + 1;", "if $x == 2 {}"], "$", "x"), [
-      "0:4:w", "1:0:w", "1:5:r", "2:3:r",
+    assert.deepEqual(find(["set $x = 1;", "set $X = $x + 1;", "if $x == 2 {}"], "$", "x"), [
+      "0:4:w", "1:4:w", "1:9:r", "2:3:r",
     ]);
   });
 
@@ -858,8 +872,28 @@ describe("findVariableOccurrences", () => {
     assert.deepEqual(find(lines, "$", "x"), ["2:8:w"]);
   });
 
-  it("marks global assignments as writes", () => {
+  it("marks `set global` assignments as writes", () => {
+    assert.deepEqual(find(["set global $x = 1;"], "$", "x"), ["0:11:w"]);
+  });
+
+  it("marks `set local` and `set global` as writes after a `;` or `{` on the same line, however spaced", () => {
+    for (const line of ["x; set global $x = 1;", "if $a { set local $x = 1; }", ";  set   global	$x = 1;"]) {
+      assert.deepEqual(find([line], "$", "x").map((o) => o.slice(-1)), ["w"], JSON.stringify(line));
+    }
+  });
+
+  it("marks a global declaration, `global $x = ...` at a statement start, as a write", () => {
+    // Inedo's grammar: <global_variable_declaration> ::= global /variable_expression/ = /literal_expression/;
     assert.deepEqual(find(["global $x = 1;"], "$", "x"), ["0:7:w"]);
+    assert.deepEqual(find(["global $a = 1;", "global   $x = 2;"], "$", "x"), ["1:9:w"]);
+  });
+
+  it("does not mark `global` in the middle of a statement as a declaration", () => {
+    assert.deepEqual(find(["Log-Information global $x = 1;"], "$", "x"), ["0:23:r"]);
+  });
+
+  it("does not mark a bare `$x = ...` (no `set`) as a write", () => {
+    assert.deepEqual(find(["$x = 1;"], "$", "x"), ["0:0:r"]);
   });
 
   it("does not treat == as an assignment", () => {
@@ -874,6 +908,45 @@ describe("findVariableOccurrences", () => {
     ];
     // The bare "%p" in literal text is plain output, not an expression.
     assert.deepEqual(find(lines, "%", "p"), ["0:11:w", "1:16:r", "1:42:r"]);
+  });
+
+  it("says how each assignment gives the variable its value", () => {
+    const text = [
+      "module M<in $p, out @r = @()> {",
+      "  foreach $item in @list { }",
+      "  Get-Http(Url: u, ResponseBody => $body);",
+      "  set $x = 1;",
+      "  set global $g = 2;",
+      '  Log-Information "$x";',
+      "}",
+    ].join("\n");
+    const index = indexVariableOccurrences(text);
+    /** @param {string} key */
+    const how = (key) => index.get(key)?.map((o) => o.assignedBy ?? "read");
+    assert.deepEqual(how("$p"), ["parameter"]);
+    assert.deepEqual(how("@r"), ["parameter"]);
+    assert.deepEqual(how("$item"), ["foreach"]);
+    assert.deepEqual(how("$body"), ["output"]);
+    assert.deepEqual(how("$x"), ["assignment", "read"]);
+    assert.deepEqual(how("$g"), ["assignment"]);
+  });
+
+  it("treats `set local $x = ...` as an assignment", () => {
+    const index = indexVariableOccurrences("set local $x = 1;\nLog-Information \"$x\";");
+    /** @param {string} key */
+    const how = (key) => index.get(key)?.map((o) => o.assignedBy ?? "read");
+    assert.deepEqual(how("$x"), ["assignment", "read"]);
+  });
+
+  it("indexes a very long line in time linear in its length", () => {
+    // Whether a variable is assigned was once decided by `...$` regexes
+    // matched against the whole line before it, so a long line took seconds
+    // -- on every cursor move, for highlighting. This 480 KB one took the
+    // old code about 30 s.
+    const text = "set $x = 1; ".repeat(40000);
+    const occurrences = assertLinearTime(() => findVariableOccurrences(text, "$", "x"));
+    assert.equal(occurrences.length, 40000);
+    assert.ok(occurrences.every((o) => o.write), "each one assigned");
   });
 });
 
@@ -986,5 +1059,185 @@ describe("parseModuleParameters", () => {
   it("keeps the commas of a default value inside it", () => {
     assert.deepEqual(parse("module M<in @tags = @($a, $b), in %m = %(k: $Coalesce($x, $y)), $x> {").map((p) => [p.name, p.optional]),
       [["tags", true], ["m", true], ["x", false]]);
+  });
+});
+
+// ============================================================
+// findTopLevelCommas
+// ============================================================
+
+describe("findTopLevelCommas", () => {
+  const anyBracket = { openers: "([{", closers: ")]}", clamp: true };
+  const callArguments = { openers: "([", closers: ")]", clamp: false };
+  /**
+   * Every `(` of `text` with its commas and whether it closes at its top level.
+   *
+   * @param {string} text
+   * @param {import("../../src/scanner.js").NestingRule} rule
+   * @returns {[number, number, number[], boolean][]}
+   */
+  const all = (text, rule) => {
+    const opens = [...text.matchAll(/\(/g)].map((m) => /** @type {number} */ (m.index));
+    const found = findTopLevelCommas(text, opens, rule);
+    assert.ok(found);
+    return [...found].map(([open, call]) => [open, call.close, call.commas, call.closesAtTop]);
+  };
+
+  it("finds each call's own commas, not its nested calls'", () => {
+    assert.deepEqual(all("f(a, g(b, c), [d, e], {x, y})", anyBracket), [
+      [1, 28, [3, 12, 20], true],
+      [6, 11, [8], true],
+    ]);
+  });
+
+  it("leaves out a `(` without a matching `)`", () => {
+    assert.deepEqual(all("f(a, g(b, c)", anyBracket), [[6, 11, [8], true]]);
+  });
+
+  it("clamped, a stray closer leaves the depth at 0; unclamped, no comma after it counts", () => {
+    assert.deepEqual(all("f(a ], b)", anyBracket), [[1, 8, [5], true]]);
+    assert.deepEqual(all("f(a ], b)", callArguments), [[1, 8, [], false]]);
+  });
+
+  it("clamped, closes off its top level when a bracket inside is still open", () => {
+    assert.deepEqual(all("f(a, [b)", anyBracket), [[1, 7, [3], false]]);
+  });
+
+  it("unclamped, doesn't nest braces, so a comma inside them is top-level", () => {
+    assert.deepEqual(all("f({a, b})", callArguments), [[1, 8, [4], true]]);
+  });
+
+  it("returns an empty map for no requested opens, without scanning", () => {
+    const found = findTopLevelCommas("f(a, b)", [], anyBracket);
+    assert.ok(found);
+    assert.equal(found.size, 0);
+  });
+
+  it("gives up on text where the commas would count for many calls at once", () => {
+    const k = 3000;
+    const text = "%(".repeat(k) + "]".repeat(k) + ",".repeat(k) + ")".repeat(k);
+    const opens = [...text.matchAll(/\(/g)].map((m) => /** @type {number} */ (m.index));
+    assert.equal(findTopLevelCommas(text, opens, anyBracket), null);
+  });
+});
+
+// ============================================================
+// namespaceBefore / isStatementStart
+// ============================================================
+
+describe("namespaceBefore", () => {
+  it("returns the namespace right before an index, or undefined", () => {
+    const text = "x; DotNet::Build";
+    assert.equal(namespaceBefore(text, text.indexOf("Build")), "DotNet");
+    assert.equal(namespaceBefore(text, text.indexOf("DotNet")), undefined);
+    assert.equal(namespaceBefore("::Build", 2), undefined, "no name before the ::");
+    assert.equal(namespaceBefore("9ab::B", 5), "ab", "a name starts with a letter");
+    assert.equal(namespaceBefore("a:b", 2), undefined, "one colon isn't a namespace");
+  });
+});
+
+describe("isStatementStart", () => {
+  it("is true at the start, or after `;`, `}` or a block's `{`, and whitespace", () => {
+    for (const before of ["", "  ", "a; ", "}", "if $x {\t", "\n"]) {
+      assert.equal(isStatementStart(before + "Op", before.length), true, JSON.stringify(before));
+    }
+  });
+
+  it("is false after other text or a braced variable's `{`", () => {
+    for (const before of ["Log ", "${", "@{ ", "%{", "x = "]) {
+      assert.equal(isStatementStart(before + "Op", before.length), false, JSON.stringify(before));
+    }
+  });
+
+  it("is false after a braced variable's closing `}`", () => {
+    for (const before of ["Log ${x} ", "@{a-b}", "x %{y} "]) {
+      assert.equal(isStatementStart(before + "Op", before.length), false, JSON.stringify(before));
+    }
+  });
+
+  it("is true after a block's closing `}`", () => {
+    for (const before of ["if $x { } ", "}"]) {
+      assert.equal(isStatementStart(before + "Op", before.length), true, JSON.stringify(before));
+    }
+  });
+});
+
+// ============================================================
+// findExecutionDirectives
+// ============================================================
+
+describe("findExecutionDirectives", () => {
+  /**
+   * The `with` headers and `await` statements of `text`, masked as the
+   * diagnostics mask it, each directive as `name=value@nameStart`.
+   *
+   * @param {string} text
+   * @returns {{ withs: string[][], awaits: string[] }}
+   */
+  function find(text) {
+    const state = createCodeScanState();
+    const masked = text.split("\n").map((line) => maskNonCodeSpans(line, state)).join("\n");
+    const { withs, awaits } = findExecutionDirectives(masked, text);
+    return {
+      withs: withs.map((w) => w.directives.map((d) => `${d.name}${d.value === undefined ? "" : `=${d.value}`}@${d.nameStart}`)),
+      awaits: awaits.map((a) => `${a.token ?? ""}@${a.tokenStart}`),
+    };
+  }
+
+  it("reads each directive of a header, with its value and where its name is", () => {
+    assert.deepEqual(find("with retry=3, timeout = 30,executionPolicy=onChange {\n}").withs, [
+      ["retry=3@5", "timeout=30@14", "executionPolicy=onChange@27"],
+    ]);
+    assert.deepEqual(find("with isolation, lock=!db, async {\n}").withs, [["isolation@5", "lock=!db@16", "async@26"]]);
+  });
+
+  it("reads a header over several lines, and a value from the unmasked text", () => {
+    assert.deepEqual(find('with retry=3,\n     credentials="a,b" {\n}').withs, [["retry=3@5", 'credentials="a,b"@19']]);
+    assert.deepEqual(find("with retry= {\n}").withs, [["retry=@5"]], "an empty value");
+  });
+
+  it("keeps a braced variable in a value from being read as the block opener", () => {
+    assert.deepEqual(find("with async=${token}, timeout=30 {\n}").withs, [["async=${token}@5", "timeout=30@21"]]);
+  });
+
+  it("drops a comment at the end of a value, but keeps a `#` inside a string", () => {
+    assert.deepEqual(find("with retry=3 # retry failures\n{\n}").withs, [["retry=3@5"]]);
+    assert.deepEqual(find("with retry=3 // note\n{\n}").withs, [["retry=3@5"]]);
+    assert.deepEqual(find('with note="a # b" {\n}').withs, [['note="a # b"@5']]);
+  });
+
+  it("reads `await` with or without a token", () => {
+    assert.deepEqual(find("await build;\nawait;\n  await  other ;").awaits, ["build@6", "@18", "other@29"]);
+  });
+
+  it("finds only statements: not in strings, comments or another statement's text", () => {
+    const text = [
+      "# with retry=3 {",
+      'set $s = "with retry=3 { await x;";',
+      "Log-Information done with that;",
+      "Log-Information await this;",
+      "set $with = 1;",
+      "Do-with x { }",
+    ].join("\n");
+    assert.deepEqual(find(text), { withs: [], awaits: [] });
+  });
+
+  it("finds a statement after `;`, `{` or `}`, and leaves out a `with` without its block", () => {
+    assert.deepEqual(find("if $x { with retry=1 { } }; with async=a { }").withs, [["retry=1@13"], ["async=a@33"]]);
+    assert.deepEqual(find("with retry=3;\nwith lock\n}").withs, []);
+    assert.deepEqual(find("with retry=3").withs, [], "the end of the text");
+  });
+
+  it("takes time in proportion to the text's length", () => {
+    const k = 20000;
+    const headers = assertLinearTime(() => find("with retry=3 { }\n".repeat(k)), "many headers");
+    assert.equal(headers.withs.length, k);
+    const long = assertLinearTime(() => find(`with ${"retry=3, ".repeat(k)}isolation {\n}`), "a long header");
+    assert.equal(long.withs[0].length, k + 1);
+    assert.deepEqual(assertLinearTime(() => find("with ".repeat(k)), "headers without a block").withs, []);
+    // Whether a `}` closes a block or a braced variable (`${x}`) is decided
+    // without walking back to its `{`.
+    assert.equal(assertLinearTime(() => find(`a{${"}with ".repeat(k)}`), "after many `}`").withs.length, 0);
+    assert.equal(assertLinearTime(() => find(`${"{".repeat(k)}${"}await x;".repeat(k)}`), "after nested `}`").awaits.length, k);
   });
 });

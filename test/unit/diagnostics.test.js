@@ -12,6 +12,7 @@ require("../vscode-stub");
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 const { makeDocument } = require("./fake-document");
+const { assertLinearTime } = require("./timing");
 
 const { DiagnosticSeverity } = require("../vscode-stub");
 const {
@@ -276,6 +277,19 @@ describe("updateDiagnostics — too many arguments", () => {
   it("does not flag an unknown function (that check is owned by unknown-scalar-function)", () => {
     assert.deepEqual(only("$r = $Frobnicate($a, $b, $c);", "too-many-arguments"), []);
   });
+
+  it("counts the arguments of deeply nested or unclosed calls in time linear in their length", () => {
+    // Each call was once read to its `)` on its own: nested calls reread
+    // their inner calls, and unclosed ones the rest of the document (each
+    // input took the old code 9 s or more).
+    for (const [source, expected] of /** @type {[string, number][]} */ ([
+      ["$ToJson(".repeat(10000) + "$a, $b" + ")".repeat(10000), 1],
+      ["$ToJson(".repeat(15000), 0],
+    ])) {
+      const found = assertLinearTime(() => only(source, "too-many-arguments"), `${source.slice(0, 10)}...`);
+      assert.equal(found.length, expected, "only the innermost call has two arguments");
+    }
+  });
 });
 
 // ============================================================
@@ -342,6 +356,14 @@ describe("updateDiagnostics — unknown operation", () => {
     assert.deepEqual(only('Log-Information "a"; Bogus-Op "b";', "unknown-operation").map((d) => d.range.start.character), [21]);
     assert.equal(only("if $a { Bogus-Op; }", "unknown-operation").length, 1);
     assert.equal(only("ProGet::Bogus-Op;", "unknown-operation").length, 1);
+  });
+
+  it("checks a very long line in time linear in its length", () => {
+    // Each word's check once matched a `...$` regex against the whole line
+    // before it, so this 100 KB line (minified, generated, or planted in a
+    // repository) blocked the extension host for 9 s.
+    const line = "word ".repeat(20000) + "Bogus-Op;";
+    assert.deepEqual(assertLinearTime(() => only(line, "unknown-operation")), [], "not in operation position");
   });
 });
 
@@ -527,6 +549,22 @@ describe("updateDiagnostics — unknown namespace", () => {
     assert.deepEqual(only('GitHub::Create-Issue(Title: "x");\nDotNet::Build(Project: "a.csproj");\nBuild(Configuration: "Release");', "missing-required-argument"), []);
     assert.equal(only('Jira::Create-Issue(Title: "x");', "missing-required-argument")[0]?.message, "'Create-Issue' is missing its required argument 'Type'.");
     assert.equal(only('DevEnv::Build(Configuration: "Release");', "missing-required-argument")[0]?.message, "'Build' is missing its required argument 'ProjectFile'.");
+  });
+
+  it("checks the arguments of deeply nested or unclosed operation calls in time linear in their length", () => {
+    // As for functions: each call was read to its `)` on its own, and each
+    // positional argument's text again (each input took the old code 10 s
+    // or more).
+    for (const [source, expected] of /** @type {[string, number][]} */ ([
+      // Only the innermost, empty call misses To: the others have a
+      // positional argument, which could be it.
+      ["Copy-Files(".repeat(8000) + ")".repeat(8000), 1],
+      ["Copy-Files(From: ".repeat(8000) + "a" + ")".repeat(8000), 8000],
+      ["Copy-Files(".repeat(12000), 0],
+    ])) {
+      const found = assertLinearTime(() => only(source, "missing-required-argument"), `${source.slice(0, 12)}...`);
+      assert.equal(found.length, expected, source.slice(0, 20));
+    }
   });
 
   it("doesn't check an operation's arguments behind a namespace none of its forms has", () => {
@@ -938,6 +976,23 @@ describe("findDuplicateMapKeyDiagnosticsFromMasked", () => {
     assert.equal(diags[0].range.start.character, src.lastIndexOf("a"));
   });
 
+  it("checks deeply nested or unclosed maps in time linear in their length", () => {
+    // Each `%(` was once scanned to its `)` on its own: nested maps rescanned
+    // their whole body, and unclosed ones the rest of the document (each
+    // input took the old code 6 s or more).
+    for (const src of ["%( a: ".repeat(15000) + ")".repeat(15000), "%(".repeat(50000)]) {
+      assert.deepEqual(assertLinearTime(() => run(src), `${src.slice(0, 10)}...`), []);
+    }
+  });
+
+  it("reports nested maps' duplicates outer map first, and none for an unclosed map", () => {
+    const src = "%( a: %( b: 1, b: 2 ), a: 3 ) %( c: 1, c: 2";
+    assert.deepEqual(run(src).map((d) => [d.message, d.range.start.character]), [
+      ["Duplicate key 'a' in map expression.", src.indexOf("a: 3")],
+      ["Duplicate key 'b' in map expression.", src.lastIndexOf("b")],
+    ]);
+  });
+
   it("reports duplicates independently per map expression", () => {
     const diags = run("x = %( a: 1, a: 2 ); y = %( b: 1, b: 2 )");
     assert.equal(diags.length, 2);
@@ -997,5 +1052,69 @@ describe("getDiagnosticCode", () => {
     assert.equal(getDiagnosticCode(/** @type {any} */ ({ code: 42 })), "42");
     assert.equal(getDiagnosticCode(/** @type {any} */ ({ code: undefined })), "");
     assert.equal(getDiagnosticCode(/** @type {any} */ ({})), "");
+  });
+});
+
+// ============================================================
+// with directives and await
+// ============================================================
+
+describe("updateDiagnostics — with directives and await", () => {
+  /**
+   * Each diagnostic of `code` in `source` as `line:start-end`.
+   *
+   * @param {string} source
+   * @param {string} code
+   * @returns {string[]}
+   */
+  const where = (source, code) => only(source, code).map((d) => `${d.range.start.line}:${d.range.start.character}-${d.range.end.character}`);
+
+  it("unknown-with-directive: a name not in the grammar, as a warning", () => {
+    const [d] = only("with retyr=3 {\n}", "unknown-with-directive");
+    assert.equal(d.severity, DiagnosticSeverity.Warning);
+    assert.match(d.message, /^Unknown execution directive 'retyr': a 'with' block takes retry, timeout, executionPolicy, async, lock, isolation, credentials\.$/);
+    assert.deepEqual(where("with retyr=3, timeout=5 {\n}", "unknown-with-directive"), ["0:5-10"]);
+  });
+
+  it("knows every directive of the grammar, in any casing", () => {
+    const source = "with retry=3, timeout=30, executionPolicy=always, async=a, lock=!b, isolation, credentials=c {\n}\nwith RETRY=1, Async, Lock, executionpolicy=ONCHANGE {\n}";
+    assert.deepEqual(diagnose(source).map((d) => d.code), []);
+  });
+
+  it("invalid-with-directive-value: a value the directive doesn't take", () => {
+    assert.deepEqual(where("with executionPolicy=sometimes, retry=many, timeout=1.5 {\n}", "invalid-with-directive-value"), ["0:21-30", "0:38-42", "0:52-55"]);
+    assert.equal(only("with retry=many {\n}", "invalid-with-directive-value")[0].message, "'many' isn't a value 'retry' takes: retry=<integer>.");
+  });
+
+  it("invalid-with-directive-value: a missing value, or one on isolation", () => {
+    assert.deepEqual(where("with retry, timeout= , isolation=yes {\n}", "invalid-with-directive-value"), ["0:5-10", "0:12-19", "0:23-36"]);
+    assert.equal(only("with retry {\n}", "invalid-with-directive-value")[0].message, "'retry' needs a value: retry=<integer>.");
+    assert.equal(only("with isolation=yes {\n}", "invalid-with-directive-value")[0].message, "'isolation' takes no value.");
+  });
+
+  it("accepts a variable, a quoted number, and async or lock without a token", () => {
+    assert.deepEqual(diagnose('with retry=$n, timeout="30", executionPolicy=$policy, async, lock {\n}').map((d) => d.code), []);
+  });
+
+  it("does not flag a value with a trailing comment in a multi-line header", () => {
+    assert.deepEqual(diagnose("with retry=3 # retry failures\n{\n}").map((d) => d.code), []);
+    assert.deepEqual(diagnose("with timeout=30 // a note\n{\n}").map((d) => d.code), []);
+  });
+
+  it("unknown-await-token: an await whose token no async block in the file starts, as a hint", () => {
+    const source = "with async=build {\n}\nawait build;\nawait BUILD;\nawait deploy;\nawait;";
+    assert.deepEqual(where(source, "unknown-await-token"), ["4:6-12"]);
+    const [d] = only(source, "unknown-await-token");
+    assert.equal(d.severity, DiagnosticSeverity.Hint);
+    assert.equal(d.message, "No 'with async=deploy' block in this file: 'await deploy;' waits only for the blocks with that token.");
+  });
+
+  it("checks no await token when an async token is a variable", () => {
+    assert.deepEqual(only("with async=$token {\n}\nawait deploy;", "unknown-await-token"), []);
+  });
+
+  it("checks nothing in strings, comments or a template's literal text", () => {
+    assert.deepEqual(diagnose('# with retyr=3 {\nset $s = "with retyr=3 { }";\nawait # deploy\n;').map((d) => d.code), []);
+    assert.deepEqual(only("<% with retyr=3 { %>\nwith retyr=3 { }\n<% } %>", "unknown-with-directive").length, 1, "only the tag's");
   });
 });

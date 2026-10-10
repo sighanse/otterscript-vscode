@@ -1,4 +1,4 @@
-// OtterScript snippets: Structural templates only. Functions and operations are provided via completion providers.
+// OtterScript snippets: whole statements and blocks. A plain function or operation call comes from completion instead.
 {
   "For Each Loop": {
     "prefix": "foreach",
@@ -134,13 +134,13 @@
   "Split String to Vector": {
     "prefix": "splitToVector",
     "body": [
-      "@${1:parts} = @Split(\"${2:text}\", \"${3:,}\"${4:, ${5:count}});"
+      "set @${1:parts} = @Split(\"${2:text}\", \"${3:,}\"${4:, ${5:count}});"
     ],
     "description": "Split string into vector using @Split"
   },
   "Join Vector to String": {
     "prefix": "joinIntoString",
-    "body": ["$${1:result} = \\$Join(\"${2:, }\", @${3:vector});"],
+    "body": ["set $${1:result} = \\$Join(\"${2:, }\", @${3:vector});"],
     "description": "Join vector elements into a string"
   },
   "File Exists Check": {
@@ -166,17 +166,55 @@
     "body": ["with ${1:retry=3, timeout=30} {", "    ${2:# operations}", "}"],
     "description": "Execution directive block"
   },
+  "Async Block": {
+    "prefix": "async",
+    "body": ["with async=${1:token} {", "    ${2:# runs in the background}", "}"],
+    "description": "Block that runs in the background; wait for it with 'await token;'"
+  },
+  "Await": {
+    "prefix": "await",
+    "body": ["await ${1:token};"],
+    "description": "Wait for the async blocks with this token (or, without one, for all of them)"
+  },
+  "Lock Block": {
+    "prefix": "lock",
+    "body": ["with lock=${1:token} {", "    ${2:# never runs at the same time as another block with this token}", "}"],
+    "description": "Block that runs exclusively among the blocks with the same lock token"
+  },
+  "Module": {
+    "prefix": "module",
+    "body": ["module ${1:Name}<\\$${2:param}> {", "    ${3:# statements}", "}"],
+    "description": "Module declaration, with a parameter"
+  },
+  "Call Module": {
+    "prefix": "call",
+    "body": ["call ${1:Name}(${2:param}: ${3:value});"],
+    "description": "Module call, with an argument"
+  },
+  "For Server": {
+    "prefix": "forserver",
+    "body": ["for server ${1:name} {", "    ${2:# runs against that server}", "}"],
+    "description": "Block that runs against one server (Otter and BuildMaster)"
+  },
+  "For Each Server": {
+    "prefix": "foreachserver",
+    "body": ["foreach server in @ServersInRole(${1:role}) {", "    ${2:# runs against each server}", "}"],
+    "description": "Block that runs against each server in a role (Otter and BuildMaster)"
+  },
   "Set Variable": {
     "prefix": "set",
-    "body": [
-      "set ${1|local,global|} $${2:variableName} = ${3:value};"
-    ],
-    "description": "Assign a value to a variable (omit scope for default)"
+    "body": ["set $${1:variableName} = ${2:value};"],
+    "description": "Assign a value to a variable: global, unless a local variable of that name exists"
+  },
+  "Set Local Variable": {
+    "prefix": "setlocal",
+    "body": ["set local $${1:variableName} = ${2:value};"],
+    "description": "Assign a variable that exists only in the current block"
   },
   "Global Variable": {
     "prefix": "global",
     "body": ["global $${1:variableName} = ${2:value};"],
-    "description": "Declare a global variable"
+    "description": "Declare a global variable, at the top of a script before any other statement"
   },
   "Throw Error": {
     "prefix": "throw",
@@ -185,13 +223,13 @@
   },
   "For Each Affected Package": {
     "prefix": "foreachaffected",
-    "body": ["foreach %${1:package} in @AffectedPackages {", "    $2", "}"],
-    "description": "Iterate over affected packages"
+    "body": ["foreach %${1:package} in @AffectedPackages {", "    ${2:# loop body}", "}"],
+    "description": "Iterate over the affected packages (ProGet notifiers)"
   },
   "For Each API Key": {
     "prefix": "foreachapikey",
-    "body": ["foreach %${1:apiKey} in @ApiKeys {", "    $2", "}"],
-    "description": "Iterate over API keys"
+    "body": ["foreach %${1:apiKey} in @ApiKeys {", "    ${2:# loop body}", "}"],
+    "description": "Iterate over the API keys (ProGet notifiers)"
   },
   "Region Block": {
     "prefix": "region",

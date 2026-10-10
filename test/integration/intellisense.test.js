@@ -152,9 +152,33 @@ describe("hover", () => {
     const local = await openContent("# Says hello.\n# Twice.\nmodule Hi<$who> {\n}\ncall Hi(who: x);\n");
     const text = await hoverText(local, positionOf(local, "call Hi", 6));
     assert.match(text, /module Hi<\$who>/);
-    assert.match(text, /Says hello\. {2}\nTwice\./);
+    // Plain text: appendText writes a space as `&nbsp;`; one line each.
+    assert.match(text, /Says&nbsp;hello\. {2}\nTwice\./);
     const elsewhere = await openContent('call Greet(name: "x");\n');
     assert.match(await hoverText(elsewhere, positionOf(elsewhere, "Greet", 2)), /module Greet<\$name>[\s\S]*Declared in `main\.otter`/);
+  });
+
+  it("shows where the file's own variable is assigned, also inside a string", async () => {
+    const source = await openContent('set $version = "1.2.3";\nLog-Information "Version $version";\n');
+    const text = await hoverText(source, positionOf(source, "$version\"", 1));
+    assert.match(text, /^`\$version`: variable of this file\n\n```otterscript\nset \$version = "1\.2\.3";\n```\n\nAssigned on line 1 · used once$/);
+  });
+
+  it("shows a module parameter's module", async () => {
+    const source = await openContent("module Deploy<out @result> {\n  set @result = @(1);\n}\n");
+    assert.match(await hoverText(source, positionOf(source, "@result =", 1)), /^`@result`: parameter of module `Deploy` \(out\)/);
+  });
+
+  it("shows a module's comment as plain text, so a link or image in it isn't rendered", async () => {
+    // The comment comes from a workspace file anyone may have written: as
+    // markdown, an image in it would be fetched on hover (a tracking pixel)
+    // and a link could pass for the extension's own.
+    const source = await openContent("# ![x](https://example.invalid/p.png) [Fix](https://example.invalid/f) *em*\nmodule Hi {\n}\ncall Hi;\n");
+    const text = await hoverText(source, positionOf(source, "call Hi", 6));
+    assert.doesNotMatch(text, /!\[x\]\(/, "no image");
+    assert.doesNotMatch(text, /\[Fix\]\(/, "no link");
+    assert.doesNotMatch(text, /(?<!\\)\*em(?<!\\)\*/, "no emphasis");
+    assert.match(text, /Fix/, "the comment's text is still shown");
   });
 
   it("documents an operation", async () => {
@@ -184,8 +208,15 @@ describe("hover", () => {
     }
   });
 
-  it("shows nothing for names that are only inherited Object members", async () => {
-    assert.equal(await hoverText(document, positionOf(document, "$constructor", 2)), "");
+  it("shows no docs for names that are only inherited Object members", async () => {
+    // Not looked up on Object's prototype: just a variable the file uses.
+    assert.match(await hoverText(document, positionOf(document, "$constructor", 2)), /^`\$constructor` isn't assigned in this file/);
+  });
+
+  it("documents a with block's directive, and which blocks an await waits for", async () => {
+    const source = await openContent("with async=build, retry=3 {\n}\nawait build;\n");
+    assert.match(await hoverText(source, positionOf(source, "retry", 1)), /^### retry/);
+    assert.equal(await hoverText(source, positionOf(source, "build;", 1)), "Waits for the `with async=build` block on line 1.");
   });
 
   it("shows nothing for a function name inside a comment", async () => {
@@ -223,6 +254,15 @@ describe("completion", () => {
     assert.ok(labels.includes("%FromJson"), "offers %FromJson");
     assert.ok(labels.includes("%ListItem"), "offers %ListItem");
     assert.ok(labels.includes("Map Expression"), "offers the %( ) snippet");
+  });
+
+  it("offers a with block's directives, executionPolicy's values and await's tokens", async () => {
+    const document = await openContent("with async=build, \n{\n}\nwith executionPolicy=\n{\n}\nawait \n");
+    const directives = await completionLabels(document, positionOf(document, "build, ", 7), ",");
+    assert.deepEqual(directives.sort(), ["credentials", "executionPolicy", "isolation", "lock", "retry", "timeout"], "all but async");
+    assert.deepEqual(await completionLabels(document, positionOf(document, "executionPolicy=", 16)), ["always", "onChange"]);
+    // With the snippets, which VS Code offers wherever a word may start.
+    assert.ok((await completionLabels(document, positionOf(document, "await ", 6))).includes("build"));
   });
 
   it("offers operations and keywords by name", async () => {

@@ -186,7 +186,7 @@ describe("generated Inedo reference, merged into language-data", () => {
 
   describe("every merged table passes validateDocs", () => {
 
-    for (const table of ["scalarFunctionDocs", "vectorFunctionDocs", "mapFunctionDocs", "operationDocs", "variableDocs", "syntaxDocs", "keywordDocs"]) {
+    for (const table of ["scalarFunctionDocs", "vectorFunctionDocs", "mapFunctionDocs", "operationDocs", "variableDocs", "syntaxDocs", "keywordDocs", "executionDirectiveDocs"]) {
       it(table, () => {
         const { errors, warnings } = validateDocs(table, /** @type {any} */ (data)[table]);
         assert.deepEqual([...errors, ...warnings], []);
@@ -214,7 +214,7 @@ describe("generated grammar lists", () => {
 
 describe("exported docs tables", () => {
   it("are frozen, so no consumer can add, remove or replace an entry", () => {
-    for (const name of ["operationDocs", "syntaxDocs", "keywordDocs", "variableDocs", "scalarFunctionDocs", "vectorFunctionDocs", "mapFunctionDocs", "operationVariants", "FUNCTION_TABLES"]) {
+    for (const name of ["operationDocs", "syntaxDocs", "keywordDocs", "executionDirectiveDocs", "variableDocs", "scalarFunctionDocs", "vectorFunctionDocs", "mapFunctionDocs", "operationVariants", "FUNCTION_TABLES"]) {
       assert.ok(Object.isFrozen(/** @type {Record<string, unknown>} */ (/** @type {unknown} */ (data))[name]), name);
     }
   });

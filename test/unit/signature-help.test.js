@@ -2,17 +2,21 @@
 /**
  * @fileoverview Unit tests for src/providers/signature-help.js: finding the
  * call the cursor is in, the active form and parameter, and the parameter
- * label offsets.
+ * label offsets; then the provider, on functions, operations and module
+ * calls (with a fake workspace for modules in other files).
  *
  * Requires the vscode stub before signature-help.js (which pulls in vscode) loads.
  */
 
 require("../vscode-stub");
 
-const { describe, it } = require("node:test");
+const { afterEach, describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
-const { FUNCTION_SIGNATURE_REGEX, OPERATION_SIGNATURE_REGEX, activeParameterIndex, activeSignatureIndex, findSignatureCall, parameterLabels } = require("../../src/providers/signature-help.js");
+const { makeDocument } = require("./fake-document");
+const { captureRegistrations, useWorkspace } = require("./fake-workspace");
+const { FUNCTION_SIGNATURE_REGEX, OPERATION_SIGNATURE_REGEX, activeParameterIndex, activeSignatureIndex, findSignatureCall, parameterLabels, registerSignatureHelp } = require("../../src/providers/signature-help.js");
+const { registerWorkspaceSymbols } = require("../../src/providers/workspace-symbols.js");
 
 // ============================================================
 // signature help: the call the cursor is in
@@ -71,5 +75,98 @@ describe("signature help call regexes", () => {
     // A namespace picks between same-named operations.
     assert.match(findSignatureCall("DotNet::Build(Project: a")?.doc.signature ?? "", /^Build\(Project:/);
     assert.match(findSignatureCall("Build(ProjectFile: a")?.doc.signature ?? "", /^Build\(ProjectFile:/);
+  });
+});
+
+// ============================================================
+// The provider
+// ============================================================
+
+describe("signature help provider", () => {
+  /** @type {ReturnType<typeof useWorkspace> | undefined} */
+  let disk;
+  afterEach(() => {
+    disk?.restore();
+    disk = undefined;
+  });
+
+  /**
+   * The signature help at the end of `text`, with `files` on disk.
+   *
+   * @param {string} text
+   * @param {{ product?: string, signatureHelpEnabled?: boolean, files?: Record<string, string> }} [options]
+   * @returns {Promise<any>}
+   */
+  async function helpAtEnd(text, { files = {}, ...settings } = {}) {
+    const document = makeDocument(text);
+    disk = useWorkspace({ files, open: [document] });
+    const { providers } = captureRegistrations(() => {
+      const index = registerWorkspaceSymbols(/** @type {any} */ ({ workspaceSymbolsEnabled: true }));
+      registerSignatureHelp(/** @type {any} */ ({ signatureHelpEnabled: true, product: "any", ...settings }), index.listModules);
+    });
+    const [provider] = providers.SignatureHelpProvider;
+    return provider.provideSignatureHelp(document, document.positionAt(text.length));
+  }
+
+  /**
+   * Each signature's label, with the active one marked `>` and each one's
+   * active parameter in `«»`, for comparing.
+   *
+   * @param {any} help
+   * @returns {string[]}
+   */
+  const shown = (help) => help.signatures.map((/** @type {any} */ sig, /** @type {number} */ i) => {
+    const active = sig.parameters[sig.activeParameter]?.label;
+    const label = Array.isArray(active) ? `${sig.label.slice(0, active[0])}«${sig.label.slice(...active)}»${sig.label.slice(active[1])}` : sig.label;
+    return `${i === help.activeSignature ? ">" : " "} ${label}`;
+  });
+
+  it("shows a function's signature with the parameter the cursor is on", async () => {
+    const help = await helpAtEnd("set $r = $Substring($Trim($x), ");
+    assert.deepEqual(shown(help), ["> $Substring(Text, «Offset», [Length])"]);
+    assert.equal(help.activeParameter, 1);
+    assert.ok(help.signatures[0].documentation, "with the function's docs");
+  });
+
+  it("finds a call whose arguments span lines, and not one closed already", async () => {
+    assert.deepEqual(shown(await helpAtEnd("set $r = $Substring(\n  $x,\n  1,\n  ")), ["> $Substring(Text, Offset, «[Length]»)"]);
+    assert.equal(await helpAtEnd("set $r = $Substring($x, 1);\nLog-Information $r"), null);
+  });
+
+  it("qualifies an operation's signature with its namespace, and follows a named argument", async () => {
+    const help = await helpAtEnd("ProGet::Create-Directory(Path: a, ApiKey: ");
+    assert.match(shown(help)[0], /^> ProGet::Create-Directory\(Path: <text>, .*«\[ApiKey: <text>\]»/);
+    // A function's namespace isn't written that way.
+    assert.deepEqual(shown(await helpAtEnd("set $r = $SHEval(")), ["> $SHEval(«ScriptText»)"]);
+  });
+
+  it("shows every form of a function for any product, the one that fits active, and only the product's own otherwise", async () => {
+    assert.deepEqual(shown(await helpAtEnd("set $p = $PackageProperty(a, b, ")), [
+      "  $PackageProperty(name, «[default]»)", // its last, as far as it goes
+      "> $PackageProperty(packageName, packageProperty, «[sourceName]»)",
+    ]);
+    assert.deepEqual(shown(await helpAtEnd("set $p = $PackageProperty(", { product: "BuildMaster" })), [
+      "> $PackageProperty(«packageName», packageProperty, [sourceName])",
+    ]);
+  });
+
+  it("builds a module call's signature from its declaration, here or in another file", async () => {
+    const declaration = "module Greet<$name, out $result, $greeting = hi> {\n}";
+    assert.deepEqual(shown(await helpAtEnd(`${declaration}\ncall Greet(name: x, `)), ["> Greet(name, «[out result]», [greeting])"]);
+    assert.deepEqual(
+      shown(await helpAtEnd("call Greet(greeting: ", { files: { "file:///lib.otter": declaration } })),
+      ["> Greet(name, [out result], «[greeting]»)"]
+    );
+  });
+
+  it("shows nothing for a module it can't find, even when an operation has the name", async () => {
+    assert.equal(await helpAtEnd("call Log-Information("), null);
+    assert.equal(await helpAtEnd("module Greet<$name> {\n}\ncall OtherRaft::Greet("), null);
+  });
+
+  it("shows nothing outside a known call, or when turned off", async () => {
+    assert.equal(await helpAtEnd("Log-Information hi;"), null);
+    assert.equal(await helpAtEnd("set $r = $NoSuchFunction("), null);
+    assert.equal(await helpAtEnd("set $r = $Substring(", { signatureHelpEnabled: false }), null);
   });
 });

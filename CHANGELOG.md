@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.7.0] - 2026-10-10
+
+### Added
+
+- Hover for the file's own variables (`$version`, `@items`, `%config`, `${my var}`), also inside strings: where the variable gets its value — the lines that assign it, or the module parameter, `foreach` loop or operation output (`ResponseBody => $body`) it comes from — and how often it's used. A variable the file never assigns says so: it may come from the caller, a configuration variable or the runtime
+- `with` blocks: completion of the execution directives (`retry`, `timeout`, `executionPolicy`, `async`, `lock`, `isolation`, `credentials`) after `with` or a `,`, each inserted ready to fill in, and of `executionPolicy`'s values (`always`, `onChange`); hovering a directive shows what it does
+- `unknown-with-directive` diagnostic: a directive Inedo's grammar doesn't have, such as `retyr=3`, with a quick fix to the closest one; and `invalid-with-directive-value`: a value the directive doesn't take (`executionPolicy=sometimes`, `retry=many`), a missing one (`retry` alone), or a value on `isolation`, with a quick fix for an `executionPolicy` typo
+- `await`: completion of the tokens the file's `with async=` blocks start, and hovering the token lists those blocks' lines. `unknown-await-token`, a hint: `await name;` when no `with async=name` block in the file starts that token, with a quick fix to the closest token
+- Runs in VS Code for the Web, such as vscode.dev and github.dev, with the same features as in the desktop app
+- Snippets for a module declaration (`module`), a module call (`call`), background blocks and waiting for them (`async`, `await`), an exclusive block (`lock`), and blocks that run against a server (`forserver`) or each server in a role (`foreachserver`)
+
+### Fixed
+
+- A file with a very long line (such as a minified or generated one), or with deeply nested or unclosed calls or maps, no longer freezes VS Code for seconds while it's checked or while you move the cursor: the checks for unknown operations, argument counts, operation arguments and duplicate map keys, and the variable lookup behind highlighting, completion and rename, now take time in proportion to the file's length
+- Hovering `call MyModule` shows the comment above the module as plain text, not markdown: a link or image in a comment from a workspace file is no longer rendered, so hovering can't load an image from the web
+- OtterScript files larger than 5 MB in the workspace are no longer read when searching it for modules (Go to Symbol in Workspace, and Go to Definition, hover and references for a module in another file), so such a file can't run VS Code out of memory
+- Go to Definition, Rename and highlighting treat `set local $x = ...` as an assignment, like `set $x = ...` and `set global $x = ...`
+- No more false `unknown-operation` warning on a word after a braced variable, as in `Log-Information ${x} Some-Text;`
+- The `splitToVector` and `joinIntoString` snippets insert a complete statement, starting with `set`
+- The `set` snippet inserts a plain `set $name = value;`; it no longer makes you pick `local` or `global`. The new `setlocal` snippet inserts `set local $name = value;`
+
 ## [0.6.0] - 2026-10-03
 
 ### Added

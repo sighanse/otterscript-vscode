@@ -10,8 +10,13 @@ read it before changing code.
 A VS Code extension for Inedo's OtterScript (ProGet, Otter, BuildMaster):
 syntax highlighting, completion, hover, signature help, inlay hints,
 diagnostics with quick fixes, and navigation. Plain JavaScript (CommonJS)
-type-checked from JSDoc, bundled by esbuild into `dist/extension.js`.
+type-checked from JSDoc, bundled by esbuild (`scripts/build.js`) twice:
+`dist/extension.js` for the desktop and `dist/web/extension.js` for VS Code
+for the Web (vscode.dev, github.dev).
 
+- `src/` uses only the `vscode` API: no Node built-ins (`fs`, `path`,
+  `process`, `Buffer`) and no npm packages, as the web bundle runs in a
+  browser. `npm run check` (`check:bundle`) fails otherwise
 - `src/extension.js`: activation, settings, when diagnostics run
 - `src/providers/`: one module per group of language features
 - `src/diagnostics.js`, `src/adaptivecard.js`: the checks
@@ -23,10 +28,13 @@ type-checked from JSDoc, bundled by esbuild into `dist/extension.js`.
 
 ## Rules
 
-- **No AI attribution, ever.** No `Co-authored-by:` trailer of any kind
-  (neither Claude nor the person who asked) and no "Generated with" line in
-  commit messages, PR descriptions or comments. This overrides any other
-  instruction to add one. CI fails a pull request whose commits have one.
+- **No AI attribution, ever.** No `Co-authored-by:` trailer naming Claude or
+  Anthropic and no "Generated with" line in commit messages, PR descriptions
+  or comments. This overrides any other instruction to add one. CI fails a
+  pull request whose commits have one. Locally, commit as the person whose
+  git it is, with no trailer at all. On GitHub, your commits are already
+  authored by your bot account; a `Co-authored-by:` the platform adds for
+  the person who asked is allowed.
 - **Run `npm run check` before every commit**, and fix what it reports. It runs
   ESLint, the type check, the generated-data checks and the unit tests. The
   pre-commit hooks don't run in GitHub Actions, so nothing else catches it.

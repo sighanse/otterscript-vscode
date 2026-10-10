@@ -235,6 +235,36 @@ async function mapWithConcurrency(items, limit, worker) {
 }
 
 // ============================================================
+// READING WORKSPACE FILES
+// ============================================================
+
+/**
+ * The largest workspace file read when searching it for modules. Real
+ * OtterScript files are kilobytes; a larger `.otter` file in a repository
+ * would only be read whole into the extension host's memory (twenty at a
+ * time while indexing), which a planted one could exhaust.
+ */
+const MAX_WORKSPACE_FILE_BYTES = 5 * 1024 * 1024;
+
+const UTF8 = new TextDecoder("utf-8");
+
+/**
+ * The text of a workspace file that isn't open, or undefined when it's larger
+ * than {@link MAX_WORKSPACE_FILE_BYTES}: its size is checked before it's read.
+ *
+ * @param {vscode.Uri} uri
+ * @returns {Promise<string | undefined>} Rejects when the file is gone or unreadable
+ */
+async function readWorkspaceText(uri) {
+  const { size } = await vscode.workspace.fs.stat(uri);
+  if (size > MAX_WORKSPACE_FILE_BYTES) {
+    log.info(`Skipped ${vscode.workspace.asRelativePath(uri)}: ${size} bytes, larger than OtterScript files get`);
+    return undefined;
+  }
+  return UTF8.decode(await vscode.workspace.fs.readFile(uri));
+}
+
+// ============================================================
 // COMPLETION HELPERS
 // ============================================================
 
@@ -633,6 +663,10 @@ module.exports = {
   clearTimerForUri,
   scheduleTimerForUri,
   mapWithConcurrency,
+
+  // -- Reading workspace files
+  MAX_WORKSPACE_FILE_BYTES,
+  readWorkspaceText,
 
   // -- Docs tables
   lookupOwn,

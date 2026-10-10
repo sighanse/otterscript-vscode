@@ -17,6 +17,7 @@ const {
   createCodeScanState,
   createTemplateScanState,
   documentUsesTemplateTags,
+  findExecutionDirectives,
   findModuleDeclarations,
   indexVariableOccurrences,
   isInStringOrComment,
@@ -58,6 +59,13 @@ const { lookupOperation, operationArguments, operationForms } = require("./langu
  * @type {Map<string, ModuleInfoCacheEntry>}
  */
 const moduleInfoCache = new Map();
+
+/**
+ * Per-document `with` directives and `await` statements
+ * ({@link getExecutionDirectives}), keyed by `uri.toString()`.
+ * @type {Map<string, { version: number, index: ExecutionDirectiveIndex }>}
+ */
+const executionDirectiveCache = new Map();
 
 /**
  * A module declared in a workspace file: its name, file and name range
@@ -296,8 +304,8 @@ function getDocumentVariables(document, sigil) {
 }
 
 /**
- * Clears the per-document caches (module info, variable index and line-start
- * scan states) for a document URI.
+ * Clears the per-document caches (module info, variable index, line-start
+ * scan states and execution directives) for a document URI.
  *
  * @param {import('vscode').Uri} uri
  * @returns {void}
@@ -306,6 +314,7 @@ function clearDocumentCaches(uri) {
   moduleInfoCache.delete(uri.toString());
   variableIndexCache.delete(uri.toString());
   lineStartStateCache.delete(uri.toString());
+  executionDirectiveCache.delete(uri.toString());
 }
 
 /**
@@ -495,6 +504,81 @@ function getMaskedTextAfter(document, position) {
 }
 
 /**
+ * A document's `with` directives and `await` statements, by place.
+ *
+ * @typedef {{
+ *   directives: { name: string, range: vscode.Range, value: string | undefined }[],
+ *   asyncBlocks: { token: string, line: number }[],
+ *   awaits: { token: string, range: vscode.Range }[]
+ * }} ExecutionDirectiveIndex
+ *   `directives`: every directive of every `with` header, at its name;
+ *   `asyncBlocks`: each `with async=token` block's token and line; `awaits`:
+ *   each `await token;` (one without a token isn't listed), at the token.
+ */
+
+/**
+ * The document's `with` directives and `await` statements
+ * ({@link findExecutionDirectives}), cached per version, for completion,
+ * hover and the quick fixes. The diagnostics find them in their own masked
+ * text.
+ *
+ * @param {vscode.TextDocument} document
+ * @returns {ExecutionDirectiveIndex}
+ */
+function getExecutionDirectives(document) {
+  const cacheKey = document.uri.toString();
+  const cached = executionDirectiveCache.get(cacheKey);
+  if (cached && cached.version === document.version) return cached.index;
+
+  const last = document.lineCount - 1;
+  const masked = getMaskedTextBefore(document, new vscode.Position(last, document.lineAt(last).text.length), document.lineCount);
+  /** @type {string[]} */
+  const lines = [];
+  for (let line = 0; line <= last; line++) lines.push(document.lineAt(line).text);
+  const text = lines.join("\n");
+  // The offsets are into `text`, whose lines end in "\n" alone (not the
+  // document's own line endings), so they're mapped to positions here.
+  /** @type {number[]} */
+  const lineStarts = [0];
+  for (let i = 0; i < text.length; i++) if (text[i] === "\n") lineStarts.push(i + 1);
+  /**
+   * @param {number} offset
+   * @returns {vscode.Position}
+   */
+  const positionAt = (offset) => {
+    let low = 0;
+    let high = lineStarts.length - 1;
+    while (low < high) {
+      const mid = (low + high + 1) >> 1;
+      if (lineStarts[mid] <= offset) low = mid;
+      else high = mid - 1;
+    }
+    return new vscode.Position(low, offset - lineStarts[low]);
+  };
+  /**
+   * @param {number} start
+   * @param {number} length
+   * @returns {vscode.Range}
+   */
+  const rangeAt = (start, length) => new vscode.Range(positionAt(start), positionAt(start + length));
+
+  const { withs, awaits } = findExecutionDirectives(masked, text);
+  /** @type {ExecutionDirectiveIndex} */
+  const index = { directives: [], asyncBlocks: [], awaits: [] };
+  for (const { start, directives } of withs) {
+    for (const { name, nameStart, value } of directives) {
+      index.directives.push({ name, range: rangeAt(nameStart, name.length), value });
+      if (name.toLowerCase() === "async" && value && !value.startsWith("$")) index.asyncBlocks.push({ token: value, line: positionAt(start).line });
+    }
+  }
+  for (const { token, tokenStart } of awaits) {
+    if (token) index.awaits.push({ token, range: rangeAt(tokenStart, token.length) });
+  }
+  executionDirectiveCache.set(cacheKey, { version: document.version, index });
+  return index;
+}
+
+/**
  * Where the module a `call` in `document` names is declared: in `document`
  * itself, or else in the one workspace file that declares it (as Go to
  * Definition resolves it). Null when no file or several other files do.
@@ -583,6 +667,7 @@ module.exports = {
   findModuleDeclarationRange,
   findModuleReferences,
   getDocumentVariables,
+  getExecutionDirectives,
   getMaskedTextAfter,
   getMaskedTextBefore,
   getLineStartScanState,

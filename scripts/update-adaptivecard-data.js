@@ -300,14 +300,23 @@ ${valueLists.map(([name, values]) => `  [${q(name)}, [${values.map(q).join(", ")
 ]);
 
 /**
+ * What a property of an Adaptive Card type needs: the card version that
+ * introduced it, the value list it is limited to, or both.
+ * @typedef {{ version?: string, values?: string }} PropertyInfo
+ */
+
+/**
  * Per type, the properties that need a card version above 1.0 (\`version\`)
  * or accept only the values of one list in {@link ADAPTIVE_CARD_VALUE_LISTS}
  * (\`values\`). Inherited properties (\`spacing\`, \`isVisible\`, ...) are
- * included; properties with nothing to check are left out.
- * @type {ReadonlyMap<string, ReadonlyMap<string, { version?: string, values?: string }>>}
+ * included; properties with nothing to check are left out. Each inner map's
+ * entries are cast to \`PropertyInfo\`: TypeScript infers a map's value type
+ * from its entries alone, and an entry with only \`version\` doesn't fit the
+ * type it infers from one with only \`values\`.
+ * @type {ReadonlyMap<string, ReadonlyMap<string, PropertyInfo>>}
  */
 const ADAPTIVE_CARD_PROPERTIES = new Map([
-${properties.map(([type, props]) => `  [${q(type)}, new Map([\n${[...props].map(([p, i]) => `    [${q(p)}, ${info(i)}],`).join("\n")}\n  ])],`).join("\n")}
+${properties.map(([type, props]) => `  [${q(type)}, new Map(/** @type {[string, PropertyInfo][]} */ ([\n${[...props].map(([p, i]) => `    [${q(p)}, ${info(i)}],`).join("\n")}\n  ]))],`).join("\n")}
 ]);
 
 module.exports = {

@@ -91,6 +91,12 @@ describe("diagnostics", () => {
     );
     assert.equal(codeOf(diagnostic), "unknown-operation");
   });
+
+  it("checks a with block's directives and an await's token", async () => {
+    const document = await openContent("with retyr=3, executionPolicy=sometimes {\n}\nawait build;\n");
+    const codes = (await refreshDiagnostics(document)).map(codeOf).sort();
+    assert.deepEqual(codes, ["invalid-with-directive-value", "unknown-await-token", "unknown-with-directive"]);
+  });
 });
 
 describe("otterscript.diagnostics.rules", () => {

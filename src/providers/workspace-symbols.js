@@ -6,11 +6,10 @@
  */
 
 const vscode = require("vscode");
-const { clearTimerForUri, log, mapWithConcurrency, scheduleTimerForUri } = require("../helpers");
+const { clearTimerForUri, log, mapWithConcurrency, readWorkspaceText, scheduleTimerForUri } = require("../helpers");
 const { findModuleDeclarations } = require("../scanner");
 
 /** Decodes the files the index reads (one, reused). */
-const UTF8 = new TextDecoder("utf-8");
 
 /**
  * Whether a Go to Symbol in Workspace query matches a module name: its
@@ -119,7 +118,8 @@ function registerWorkspaceSymbols(settings) {
   }
 
   /**
-   * Reads one file from disk and refreshes (or removes) its module-index entry.
+   * Reads one file from disk and refreshes (or removes) its module-index
+   * entry. A file too large to read (see readWorkspaceText) has none.
    *
    * @param {vscode.Uri} uri
    * @returns {Promise<void>}
@@ -127,8 +127,9 @@ function registerWorkspaceSymbols(settings) {
   async function indexModuleFile(uri) {
     if (!isIndexed(uri)) return;
     try {
-      const bytes = await vscode.workspace.fs.readFile(uri);
-      setModuleIndexEntry(uri, UTF8.decode(bytes));
+      const text = await readWorkspaceText(uri);
+      if (text === undefined) workspaceModuleIndex.delete(uri.toString());
+      else setModuleIndexEntry(uri, text);
     } catch {
       // Gone or unreadable -- drop it.
       workspaceModuleIndex.delete(uri.toString());

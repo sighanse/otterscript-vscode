@@ -67,9 +67,29 @@ jobs:
         run: npm run check:reference
         continue-on-error: true
 
+      # The version in package.json has a dated CHANGELOG section, which
+      # becomes its GitHub release's notes: a bump without one fails here,
+      # not at publish time.
+      - name: CHANGELOG section for the version
+        id: changelog
+        run: npm run check:changelog
+        continue-on-error: true
+
+      # Both bundles (desktop and web) hold only src/ and load only `vscode`:
+      # no npm package, and no Node built-in, which the browser doesn't have.
+      - name: Bundle contents
+        id: bundle
+        run: npm run check:bundle
+        continue-on-error: true
+
+      # With coverage: also fails when the line, branch or function coverage
+      # of src/ falls below the limits in package.json's test:cov. The output
+      # is kept for the coverage table in the summary.
       - name: Unit tests
         id: tests
-        run: npm test
+        run: |
+          npm run test:cov 2>&1 | tee "$RUNNER_TEMP/unit-tests.txt"
+          exit "${PIPESTATUS[0]}"
         continue-on-error: true
 
       - name: npm security audit
@@ -108,8 +128,10 @@ jobs:
           echo "✅ JSONC validation passed"
 
       # No AI attribution in this repository's history (CLAUDE.md): fails on a
-      # Co-authored-by trailer or a "Generated with Claude Code" line in any of
-      # the pull request's commits -- e.g. one the @claude workflow added.
+      # Co-authored-by trailer naming Claude or Anthropic, or a "Generated with
+      # Claude Code" line, in any of the pull request's commits. The agent's
+      # commits on GitHub credit the person who asked with a Co-authored-by
+      # of their own; that one is allowed (the bot is already the author).
       - name: No attribution trailers in commit messages
         id: trailers
         continue-on-error: true
@@ -122,7 +144,7 @@ jobs:
             exit 0
           fi
           found=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/commits" \
-            --jq '.[] | select(.commit.message | test("(^|\n)co-authored-by:|generated with [[]claude code[]]"; "i")) | "\(.sha[0:7]) \(.commit.message | split("\n")[0])"')
+            --jq '.[] | select(.commit.message | test("(^|\n)co-authored-by:[^\n]*(claude|anthropic)|generated with [[]claude code[]]"; "i")) | "\(.sha[0:7]) \(.commit.message | split("\n")[0])"')
           if [ -n "$found" ]; then
             echo "::error::Commit messages with an attribution trailer (reword them):"
             echo "$found"
@@ -176,9 +198,28 @@ jobs:
       # Loads the extension in real VS Code (the minimum supported version and
       # current stable) and drives hover, completion, diagnostics, quick fixes
       # and navigation. xvfb provides the display VS Code needs on Linux.
+      # With coverage of src/ (through the bundle's source maps), for the
+      # summary only: no limits.
       - name: Integration tests
         id: integration
-        run: xvfb-run -a npm run test:integration
+        run: |
+          xvfb-run -a npm run test:integration -- --coverage --coverage-reporter text --coverage-output "$RUNNER_TEMP/integration-coverage" 2>&1 | tee "$RUNNER_TEMP/integration-tests.txt"
+          exit "${PIPESTATUS[0]}"
+        continue-on-error: true
+
+      # Runs the browser bundle (package.json `browser`) in VS Code for the
+      # web, in headless Chromium, as vscode.dev and github.dev would. npm
+      # doesn't run Playwright's own install script (it isn't in package.json's
+      # allowScripts), so the browser is installed here, at the version the
+      # lockfile pins.
+      # The step timeout ends a hang (such as a browser that can't start)
+      # in minutes instead of using up the job's time.
+      - name: Web tests
+        id: web
+        timeout-minutes: 5
+        run: |
+          npx --no-install playwright install --with-deps --only-shell chromium
+          npm run test:web
         continue-on-error: true
 
       - name: Summary
@@ -222,11 +263,25 @@ jobs:
             echo "❌ Inedo reference data: stale (regenerate with node scripts/update-inedo-reference.js)" >> "$GITHUB_STEP_SUMMARY"
           fi
 
+          # CHANGELOG
+          if [ "${{ steps.changelog.outcome }}" == "success" ]; then
+            echo "✅ CHANGELOG: has the version's notes" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ CHANGELOG: no dated section for the version in package.json" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # Bundle contents
+          if [ "${{ steps.bundle.outcome }}" == "success" ]; then
+            echo "✅ Bundle contents: only src/, loads only vscode" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ Bundle contents: an npm package or Node built-in in a bundle" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
           # Unit tests
           if [ "${{ steps.tests.outcome }}" == "success" ]; then
-            echo "✅ Unit tests: passed" >> "$GITHUB_STEP_SUMMARY"
+            echo "✅ Unit tests: passed, coverage within its limits" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "❌ Unit tests: failed" >> "$GITHUB_STEP_SUMMARY"
+            echo "❌ Unit tests: failed, or coverage below its limits" >> "$GITHUB_STEP_SUMMARY"
           fi
 
           # JSON
@@ -271,6 +326,13 @@ jobs:
             echo "❌ Integration tests: failed" >> "$GITHUB_STEP_SUMMARY"
           fi
 
+          # Web tests
+          if [ "${{ steps.web.outcome }}" == "success" ]; then
+            echo "✅ Web tests: passed" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ Web tests: failed" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
           # npm audit (informational only -- does not block the PR)
           if [ "${{ steps.audit.outcome }}" == "success" ]; then
             echo "✅ npm audit: passed (no vulnerabilities)" >> "$GITHUB_STEP_SUMMARY"
@@ -278,6 +340,27 @@ jobs:
             echo "⚠️ npm audit: vulnerability(ies) found (not blocking)" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "⏭️ npm audit: cancelled/skipped" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # The coverage tables the test steps kept, folded under the summary.
+      # A step of its own, to keep the Summary script short.
+      - name: Coverage tables
+        if: always()
+        run: |
+          # $1: the title, then the table on stdin, folded.
+          fold() {
+            printf '\n<details><summary>%s</summary>\n\n```text\n' "$1"
+            cat
+            printf '```\n\n</details>\n'
+          }
+          if [ -f "$RUNNER_TEMP/unit-tests.txt" ]; then
+            sed -n '/start of coverage report/,/end of coverage report/p' "$RUNNER_TEMP/unit-tests.txt" | sed 's/^ℹ //' \
+              | fold "Unit test coverage of src/" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          # The integration table: from its first border line, every line with a column.
+          if [ -f "$RUNNER_TEMP/integration-tests.txt" ] && grep -q '^All files' "$RUNNER_TEMP/integration-tests.txt"; then
+            awk '/^-+[|]/ { table = 1 } table && /[|]/' "$RUNNER_TEMP/integration-tests.txt" \
+              | fold "Integration test coverage of src/ (report only)" >> "$GITHUB_STEP_SUMMARY"
           fi
 
       # Single gate for every blocking check above. A step that did not run
@@ -291,6 +374,8 @@ jobs:
             Grammar-sync=${{ steps.langsync.outcome }}
             Adaptive-Card-data=${{ steps.cards.outcome }}
             Inedo-reference-data=${{ steps.reference.outcome }}
+            CHANGELOG=${{ steps.changelog.outcome }}
+            Bundle-contents=${{ steps.bundle.outcome }}
             Unit-tests=${{ steps.tests.outcome }}
             JSON=${{ steps.json.outcome }}
             JSONC=${{ steps.jsonc.outcome }}
@@ -298,6 +383,7 @@ jobs:
             Commit-messages=${{ steps.trailers.outcome }}
             Package=${{ steps.package.outcome }}
             Integration-tests=${{ steps.integration.outcome }}
+            Web-tests=${{ steps.web.outcome }}
         run: |
           failed=0
           for entry in $OUTCOMES; do

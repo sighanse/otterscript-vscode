@@ -8,14 +8,15 @@
 const vscode = require("vscode");
 const { DIAGNOSTIC_CODES, findArgumentProblems, getDiagnosticCode, parseCallArguments } = require("../diagnostics");
 const {
+  executionDirectiveDocs,
   FUNCTION_TABLES,
   NAMESPACES,
   operationArguments,
   operationDocs,
   operationForms,
 } = require("../language-data");
-const { findOperationArgumentContext, maskComments, maskNonCodeSpans } = require("../scanner");
-const { codeView, getLineStartScanState, getMaskedTextBefore, MASKED_CONTEXT_MAX_LINES } = require("../document-index");
+const { findOperationArgumentContext, maskComments, maskNonCodeSpans, namespaceBefore } = require("../scanner");
+const { codeView, getExecutionDirectives, getLineStartScanState, getMaskedTextBefore, MASKED_CONTEXT_MAX_LINES } = require("../document-index");
 const {
   createCardVersionFix,
   createContentTypeFix,
@@ -249,8 +250,7 @@ function createUnknownFunctionFix(document, diagnostic, product) {
  */
 function createUnknownOperationFix(document, diagnostic, product) {
   const name = document.getText(diagnostic.range);
-  const before = document.lineAt(diagnostic.range.start.line).text.slice(0, diagnostic.range.start.character);
-  const namespace = /([A-Za-z][A-Za-z0-9]*)::$/.exec(before)?.[1]?.toLowerCase();
+  const namespace = namespaceBefore(document.lineAt(diagnostic.range.start.line).text, diagnostic.range.start.character)?.toLowerCase();
   const candidates = Object.keys(operationDocs).filter((key) => operationForms(key).some((doc) =>
     isAvailableIn(doc, product) && (!namespace || (doc.namespace ?? "Core").toLowerCase() === namespace)));
   const suggestion = closestMatch(name, candidates);
@@ -273,6 +273,53 @@ function createUnknownArgumentFix(document, diagnostic) {
   const name = document.getText(diagnostic.range);
   const suggestion = params && closestMatch(name, params.map((p) => p.name));
   return suggestion && suggestion !== name ? createRenameFix(document, diagnostic, suggestion) : null;
+}
+
+/**
+ * Replaces an unknown `with` directive with the one it's closest to
+ * (`retyr=3` -> `retry=3`).
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Diagnostic} diagnostic - An unknown-with-directive
+ *   diagnostic; its range covers the directive's name
+ * @returns {vscode.CodeAction | null} Code action, or null when nothing is close
+ */
+function createUnknownDirectiveFix(document, diagnostic) {
+  const suggestion = closestMatch(document.getText(diagnostic.range), Object.values(executionDirectiveDocs).map((d) => d.name));
+  return suggestion ? createRenameFix(document, diagnostic, suggestion) : null;
+}
+
+/**
+ * Replaces an `executionPolicy` value with the allowed one it's closest to
+ * (`onchnage` -> `onChange`). The other invalid-with-directive-value
+ * diagnostics (a missing value, `retry=many`) have no fix: the value is the
+ * user's to choose.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Diagnostic} diagnostic - An invalid-with-directive-value
+ *   diagnostic
+ * @returns {vscode.CodeAction | null}
+ */
+function createDirectiveValueFix(document, diagnostic) {
+  const { start } = diagnostic.range;
+  const before = document.lineAt(start.line).text.slice(0, start.character);
+  if (!/\bexecutionPolicy\s*=\s*$/i.test(before.slice(-40))) return null;
+  const suggestion = closestMatch(document.getText(diagnostic.range), executionDirectiveDocs.executionPolicy.values ?? []);
+  return suggestion ? createRenameFix(document, diagnostic, suggestion) : null;
+}
+
+/**
+ * Replaces the token of `await token;` with the closest token a
+ * `with async=` block in the file starts (`await biuld;` -> `build`).
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Diagnostic} diagnostic - An unknown-await-token diagnostic;
+ *   its range covers the token
+ * @returns {vscode.CodeAction | null} Code action, or null when nothing is close
+ */
+function createAwaitTokenFix(document, diagnostic) {
+  const suggestion = closestMatch(document.getText(diagnostic.range), getExecutionDirectives(document).asyncBlocks.map((b) => b.token));
+  return suggestion ? createRenameFix(document, diagnostic, suggestion) : null;
 }
 
 /**
@@ -315,7 +362,7 @@ function createMissingArgumentFix(document, diagnostic) {
   const nameEnd = document.offsetAt(diagnostic.range.end) - base;
   const open = /^\s*\(/.exec(masked.slice(nameEnd))?.[0].length;
   if (!open) return null;
-  const namespace = /([A-Za-z][A-Za-z0-9]*)::$/.exec(masked.slice(0, nameStart))?.[1] ?? null;
+  const namespace = namespaceBefore(masked, nameStart) ?? null;
   const call = parseCallArguments(masked, text, nameEnd + open - 1);
   const missing = call && findArgumentProblems(text.slice(nameStart, nameEnd), namespace, call)?.missing;
   if (!call || !missing?.length) return null;
@@ -385,6 +432,9 @@ function registerCodeActions(settings, diagnostics, runDiagnostics) {
     "unknown-operation":       (document, diagnostic) => createUnknownOperationFix(document, diagnostic, settings.product),
     "unknown-argument":        createUnknownArgumentFix,
     "missing-required-argument": createMissingArgumentFix,
+    "unknown-with-directive":  createUnknownDirectiveFix,
+    "invalid-with-directive-value": createDirectiveValueFix,
+    "unknown-await-token":     createAwaitTokenFix,
     "template-end-keyword":    createTemplateEndFix,
     "adaptivecard-version-too-low": (document, diagnostic) =>
       createCardVersionFix(document, diagnostic, { maxVersion: settings.adaptiveCardMaxVersion }),
@@ -605,12 +655,15 @@ function registerCodeActions(settings, diagnostics, runDiagnostics) {
 
 module.exports = {
   createAssignmentInConditionFix,
+  createAwaitTokenFix,
+  createDirectiveValueFix,
   createForToForeachFix,
   createInvalidOperatorFix,
   createMissingArgumentFix,
   createMissingDollarFix,
   createTemplateEndFix,
   createUnknownArgumentFix,
+  createUnknownDirectiveFix,
   createUnknownFunctionFix,
   createUnknownNamespaceFix,
   createUnknownOperationFix,

@@ -31,6 +31,7 @@ const {
   getMaskedTextAfter,
   getMaskedTextBefore,
   isInStringOrCommentDoc,
+  resolveModule,
 } = require("../../src/document-index.js");
 const { advanceScanState, createCodeScanState, isInStringOrComment } = require("../../src/scanner.js");
 const { Position } = require("../vscode-stub");
@@ -235,27 +236,6 @@ describe("getVariableOccurrences", () => {
 });
 
 // ============================================================
-// matchesQuery (Go to Symbol in Workspace)
-// ============================================================
-
-describe("matchesQuery", () => {
-  const { matchesQuery } = require("../../src/providers/workspace-symbols.js");
-
-  it("matches the query's characters in order, ignoring case and spaces", () => {
-    assert.ok(matchesQuery("Deploy-Module", ""));
-    assert.ok(matchesQuery("Deploy-Module", "deploy"));
-    assert.ok(matchesQuery("Deploy-Module", "dpm"));
-    assert.ok(matchesQuery("Deploy-Module", "DM"));
-    assert.ok(matchesQuery("Deploy-Module", "dep mod"));
-  });
-
-  it("rejects characters missing or out of order", () => {
-    assert.ok(!matchesQuery("Deploy-Module", "mdp"));
-    assert.ok(!matchesQuery("Deploy-Module", "deployx"));
-  });
-});
-
-// ============================================================
 // isInStringOrCommentDoc
 // ============================================================
 
@@ -333,5 +313,45 @@ describe("text templates: the literal output around the tags isn't code", () => 
     assert.match(before, /Copy-Files\(To:\s*$/);
     assert.doesNotMatch(before, /Heading|Deployed/);
     assert.equal(getMaskedTextAfter(doc, pos(1, 42)).trim(), "x");
+  });
+});
+
+// ============================================================
+// resolveModule
+// ============================================================
+
+describe("resolveModule", () => {
+  const { useWorkspace } = require("./fake-workspace");
+  const { Uri } = require("../vscode-stub");
+
+  /**
+   * Where `name` resolves from a document that calls it, with `files` on
+   * disk (as the module index lists them).
+   *
+   * @param {string} name
+   * @param {Record<string, string>} files
+   * @param {string[]} [indexed] - The files the index says declare it,
+   *   when not all of `files`
+   * @returns {Promise<string | null>} `"<uri> <line>:<character>"`
+   */
+  async function resolve(name, files, indexed = Object.keys(files)) {
+    const disk = useWorkspace({ files });
+    try {
+      const listModules = async () => indexed.map((uri) => ({ name, uri: Uri.parse(uri), range: /** @type {any} */ (null) }));
+      const found = await resolveModule(makeDoc(`call ${name};`), name, /** @type {any} */ (listModules));
+      return found && `${found.document.uri.toString()} ${found.range.start.line}:${found.range.start.character}`;
+    } finally {
+      disk.restore();
+    }
+  }
+
+  it("finds the one other file that declares the module", async () => {
+    assert.equal(await resolve("Deploy", { "file:///lib.otter": "\nmodule Deploy {\n}" }), "file:///lib.otter 1:7");
+  });
+
+  it("finds nothing when several files declare it, or the one file is gone or no longer declares it", async () => {
+    assert.equal(await resolve("Deploy", { "file:///a.otter": "module Deploy {\n}", "file:///b.otter": "module Deploy {\n}" }), null);
+    assert.equal(await resolve("Deploy", {}, ["file:///gone.otter"]), null);
+    assert.equal(await resolve("Deploy", { "file:///lib.otter": "Log-Information edited;" }), null);
   });
 });

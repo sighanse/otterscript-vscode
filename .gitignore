@@ -5,8 +5,11 @@ dist/
 *.tgz
 .vscode/*
 .vscode-test/
+.vscode-test-web/
 # Settings the integration tests write while they run
 test/integration/workspace/.vscode/
+# Files an integration test writes and deletes again
+test/integration/workspace/generated/
 !.vscode/settings.json
 !.vscode/launch.json
 *.log

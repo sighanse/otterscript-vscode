@@ -20,6 +20,7 @@ const {
   NON_VARIABLE_IDENTIFIERS,
 } = require("./helpers");
 const {
+  executionDirectiveDocs,
   FUNCTION_TABLES,
   NAMESPACES,
   keywordDocs,
@@ -32,10 +33,14 @@ const {
   createCodeScanState,
   createTemplateScanState,
   documentUsesTemplateTags,
+  findExecutionDirectives,
+  findTopLevelCommas,
+  isStatementStart,
   maskCommentSpans,
   maskNonCodeSpans,
   maskOutsideTemplateTags,
   MODULE_DECLARATION_REGEX,
+  namespaceBefore,
   splitSignatureParameters,
 } = require("./scanner");
 const { findAdaptiveCardDiagnostics } = require("./adaptivecard");
@@ -107,24 +112,18 @@ function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
 }
 
 /**
- * Finds the matching ')' for the '(' at `openParenIndex` in text already
- * masked by {@link maskNonCodeSpans} (so no string-awareness is needed).
- * Unlike scanner's `findBalancedParenEnd`, this may cross line breaks.
- *
- * @param {string} maskedText
- * @param {number} openParenIndex - Index of the opening '('
- * @returns {number} Matching ')' index, or -1 when not found
- * @private
+ * How the duplicate-key and argument-count checks count nesting inside a
+ * call or map: every bracket kind, and a stray closer doesn't go below 0.
+ * @type {import("./scanner").NestingRule}
  */
-function findMatchingParen(maskedText, openParenIndex) {
-  let depth = 1;
-  for (let i = openParenIndex + 1; i < maskedText.length; i++) {
-    if (maskedText[i] === "(") depth++;
-    if (maskedText[i] === ")") depth--;
-    if (depth === 0) return i;
-  }
-  return -1;
-}
+const ANY_BRACKET_NESTING = { openers: "([{", closers: ")]}", clamp: true };
+
+/**
+ * How operation arguments are split: only `(` and `[` nest (a `{` is
+ * literal in an argument), and a stray closer goes below 0.
+ * @type {import("./scanner").NestingRule}
+ */
+const OPERATION_ARGUMENT_NESTING = { openers: "([", closers: ")]", clamp: false };
 
 /**
  * Finds duplicate keys inside map expressions and returns diagnostics, given
@@ -148,68 +147,47 @@ function findDuplicateMapKeyDiagnosticsFromMasked(document, maskedText) {
   /** @type {vscode.Diagnostic[]} */
   const issues = [];
 
-  /**
-   * Parses a map expression body and reports duplicate top-level keys.
-   *
-   * @param {number} start - Start index of map body (after '%(')
-   * @param {number} end - End index of map body (at matching ')')
-   * @returns {void}
-   */
-  function scanMapBody(start, end) {
-    let nestingDepth = 0;
-    let segmentStart = start;
-    const seenKeys = new Set();
-
-    for (let i = start; i <= end; i++) {
-      const ch = i === end ? "," : maskedText[i];
-
-      if (ch === "(" || ch === "[" || ch === "{") {
-        nestingDepth++;
-        continue;
-      }
-      if (ch === ")" || ch === "]" || ch === "}") {
-        if (nestingDepth > 0) nestingDepth--;
-        continue;
-      }
-
-      if (ch === "," && nestingDepth === 0) {
-        const segmentText = maskedText.slice(segmentStart, i);
-        const keyMatch = segmentText.match(/^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*:/);
-
-        if (keyMatch) {
-          const key = keyMatch[1];
-          const keyStart = segmentStart + keyMatch[0].indexOf(key);
-
-          if (seenKeys.has(key)) {
-            const diagnostic = new vscode.Diagnostic(
-              new vscode.Range(
-                document.positionAt(keyStart),
-                document.positionAt(keyStart + key.length)
-              ),
-              `Duplicate key '${key}' in map expression.`,
-              vscode.DiagnosticSeverity.Warning
-            );
-            diagnostic.code = "duplicate-map-key";
-            diagnostic.source = "OtterScript";
-            issues.push(diagnostic);
-          } else {
-            seenKeys.add(key);
-          }
-        }
-
-        segmentStart = i + 1;
-      }
-    }
+  // Every `%(` gets its own entries -- also a map nested inside another map,
+  // whose keys aren't the outer map's (they aren't at its top level).
+  /** @type {number[]} */
+  const opens = [];
+  for (let i = 1; i < maskedText.length; i++) {
+    if (maskedText[i] === "(" && maskedText[i - 1] === "%") opens.push(i);
   }
+  // Null only for text malformed enough to make the check quadratic: skip it.
+  const maps = findTopLevelCommas(maskedText, opens, ANY_BRACKET_NESTING);
+  if (!maps) return issues;
 
-  // Every `%(` gets its own scan -- including maps nested inside another map,
-  // whose keys scanMapBody deliberately ignores when scanning the outer one.
-  for (let i = 0; i < maskedText.length - 1; i++) {
-    if (maskedText[i] === "%" && maskedText[i + 1] === "(") {
-      const close = findMatchingParen(maskedText, i + 1);
-      if (close !== -1) {
-        scanMapBody(i + 2, close);
+  for (const open of opens) {
+    const map = maps.get(open);
+    if (!map) continue; // unclosed
+    const seenKeys = new Set();
+    let segmentStart = open + 1;
+    // Each entry ends at a top-level `,`, the last one at the `)` when the
+    // brackets inside the map are closed by then.
+    for (const end of map.closesAtTop ? [...map.commas, map.close] : map.commas) {
+      const keyMatch = maskedText.slice(segmentStart, end).match(/^\s*([A-Za-z_][A-Za-z0-9_-]*)\s*:/);
+      if (keyMatch) {
+        const key = keyMatch[1];
+        const keyStart = segmentStart + keyMatch[0].indexOf(key);
+
+        if (seenKeys.has(key)) {
+          const diagnostic = new vscode.Diagnostic(
+            new vscode.Range(
+              document.positionAt(keyStart),
+              document.positionAt(keyStart + key.length)
+            ),
+            `Duplicate key '${key}' in map expression.`,
+            vscode.DiagnosticSeverity.Warning
+          );
+          diagnostic.code = "duplicate-map-key";
+          diagnostic.source = "OtterScript";
+          issues.push(diagnostic);
+        } else {
+          seenKeys.add(key);
+        }
       }
+      segmentStart = end + 1;
     }
   }
 
@@ -299,36 +277,29 @@ function findArgumentCountDiagnosticsFromMasked(document, maskedText, text = doc
   /** @type {vscode.Diagnostic[]} */
   const issues = [];
 
-  /**
-   * @param {number} start - Index just after the call's '('
-   * @param {number} end - Index of the matching ')'
-   * @returns {number} Number of top-level comma-separated arguments
-   */
-  function countArgs(start, end) {
-    const body = maskedText.slice(start, end);
-    if (body.trim() === "") return hasArgumentText(text, start, end) ? 1 : 0;
-
-    let depth = 0;
-    let count = 1;
-    for (const ch of body) {
-      if (ch === "(" || ch === "[" || ch === "{") depth++;
-      else if (ch === ")" || ch === "]" || ch === "}") { if (depth > 0) depth--; }
-      else if (ch === "," && depth === 0) count++;
-    }
-    return count;
-  }
-
+  // The calls of functions with a known arity, then all their top-level
+  // commas in one pass (null only for text malformed enough to make that
+  // quadratic: skip the check).
+  const calls = [];
   for (const match of maskedText.matchAll(FUNCTION_CALL_REGEX)) {
     const [whole, sigil, name] = match;
     const doc = lookupOwn(FUNCTION_TABLES[/** @type {"$" | "@" | "%"} */ (sigil)], name);
     const arity = doc && arityOf(doc);
-    if (!arity) continue;
+    if (arity) calls.push({ match, sigil, name, arity, open: /** @type {number} */ (match.index) + whole.length - 1 });
+  }
+  const found = findTopLevelCommas(maskedText, calls.map((call) => call.open), ANY_BRACKET_NESTING);
+  if (!found) return issues;
 
-    const openParenIndex = /** @type {number} */ (match.index) + whole.length - 1;
-    const closeParenIndex = findMatchingParen(maskedText, openParenIndex);
-    if (closeParenIndex === -1) continue;
+  for (const { match, sigil, name, arity, open } of calls) {
+    const call = found.get(open);
+    if (!call) continue; // unclosed
 
-    const argCount = countArgs(openParenIndex + 1, closeParenIndex);
+    // Blank once masked: no argument, or one string (masking blanks it).
+    // `\S` stops at the first character that isn't blank, so a nested
+    // call's text isn't read again for each call around it.
+    const argCount = /\S/.test(maskedText.slice(open + 1, call.close))
+      ? call.commas.length + 1
+      : hasArgumentText(text, open + 1, call.close) ? 1 : 0;
     /**
      * @param {number} n
      * @returns {string} `n argument(s)`
@@ -398,6 +369,109 @@ function findDuplicateModuleDiagnostics(document, maskedLines) {
   return issues;
 }
 
+// ============================================================
+// EXECUTION DIRECTIVES AND AWAIT
+// ============================================================
+
+/** The `with` directives by lower-case name: Inedo matches them ignoring case. */
+const EXECUTION_DIRECTIVES = new Map(Object.values(executionDirectiveDocs).map((d) => [d.name.toLowerCase(), d]));
+
+/**
+ * Whether `value` fits a directive that takes `kind`. Only the grammar's own
+ * values are checked: a number for `retry` and `timeout`, `always` or
+ * `onChange` for `executionPolicy` (ignoring case). A variable or
+ * expression (`$n`) may hold anything, so it fits; tokens and credential
+ * names aren't checked.
+ *
+ * @param {import("./language-data").ExecutionDirectiveDoc} directive
+ * @param {string} value - Not empty
+ * @returns {boolean}
+ */
+function fitsDirective(directive, value) {
+  if (value.startsWith("$")) return true;
+  if (directive.value === "integer") return /^(?:\d+|(["'])\d+\1)$/.test(value);
+  if (directive.values) return directive.values.some((v) => v.toLowerCase() === value.toLowerCase());
+  return true;
+}
+
+/**
+ * The `with` directive and `await` checks:
+ * - `unknown-with-directive`: a name that isn't one of the grammar's
+ *   directives (`retyr=3`)
+ * - `invalid-with-directive-value`: a value the directive doesn't take
+ *   (`executionPolicy=sometimes`, `retry=many`), a missing one (`retry`
+ *   alone), or one on `isolation`, which takes none
+ * - `unknown-await-token` (a hint): `await name;` when no `with async=name`
+ *   in the file starts that token. A hint: a module this file calls might
+ *   start it. Not checked when a token is a variable.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {string} maskedText - The document with strings and comments
+ *   blanked, offsets unchanged
+ * @param {string} text - The document's text
+ * @returns {vscode.Diagnostic[]}
+ */
+function findExecutionDirectiveDiagnostics(document, maskedText, text) {
+  /** @type {vscode.Diagnostic[]} */
+  const issues = [];
+  /**
+   * @param {number} start
+   * @param {number} end
+   * @param {string} message
+   * @param {vscode.DiagnosticSeverity} severity
+   * @param {string} code
+   */
+  const report = (start, end, message, severity, code) => {
+    const d = new vscode.Diagnostic(new vscode.Range(document.positionAt(start), document.positionAt(end)), message, severity);
+    d.code = code;
+    d.source = "OtterScript";
+    issues.push(d);
+  };
+
+  const { withs, awaits } = findExecutionDirectives(maskedText, text);
+  /** @type {Set<string>} */
+  const asyncTokens = new Set();
+  let variableToken = false;
+  for (const { directives } of withs) {
+    for (const { name, nameStart, value, valueStart, valueEnd } of directives) {
+      const directive = EXECUTION_DIRECTIVES.get(name.toLowerCase());
+      if (!directive) {
+        report(nameStart, nameStart + name.length,
+          `Unknown execution directive '${name}': a 'with' block takes ${[...EXECUTION_DIRECTIVES.values()].map((d) => d.name).join(", ")}.`,
+          vscode.DiagnosticSeverity.Warning, "unknown-with-directive");
+        continue;
+      }
+      if (directive.name === "async" && value) {
+        if (value.startsWith("$")) variableToken = true;
+        else asyncTokens.add(value.toLowerCase());
+      }
+      if (directive.value === null) {
+        if (value !== undefined) {
+          report(nameStart, valueEnd, `'${directive.name}' takes no value.`, vscode.DiagnosticSeverity.Warning, "invalid-with-directive-value");
+        }
+      } else if (!value) {
+        if (directive.valueRequired) {
+          report(nameStart, nameStart + name.length, `'${directive.name}' needs a value: ${directive.signature}.`,
+            vscode.DiagnosticSeverity.Warning, "invalid-with-directive-value");
+        }
+      } else if (!fitsDirective(directive, value)) {
+        report(valueStart, valueEnd, `'${value}' isn't a value '${directive.name}' takes: ${directive.signature}.`,
+          vscode.DiagnosticSeverity.Warning, "invalid-with-directive-value");
+      }
+    }
+  }
+
+  if (!variableToken) {
+    for (const { token, tokenStart } of awaits) {
+      if (!token || asyncTokens.has(token.toLowerCase())) continue;
+      report(tokenStart, tokenStart + token.length,
+        `No 'with async=${token}' block in this file: 'await ${token};' waits only for the blocks with that token.`,
+        vscode.DiagnosticSeverity.Hint, "unknown-await-token");
+    }
+  }
+  return issues;
+}
+
 /**
  * An operation call with parentheses: optional namespace (group 1), name
  * (group 2), then `(`. Not a function (`$F(`), a dashed variable or a
@@ -413,29 +487,30 @@ const OPERATION_CALL_REGEX = /(?<![$@%\w:-])(?:([A-Za-z][A-Za-z0-9]*)::)?([A-Za-
  * @param {string} maskedText - Masked by {@link maskNonCodeSpans}
  * @param {string} text - The same text unmasked
  * @param {number} open - Index of the `(`
+ * @param {Map<number, import("./scanner").TopLevelCommas> | null} [calls] -
+ *   The top-level commas of this and other calls, from one
+ *   `findTopLevelCommas` pass over `maskedText` with
+ *   {@link OPERATION_ARGUMENT_NESTING}; found for this call alone by default
  * @returns {{ close: number, named: { name: string, start: number }[], positional: boolean } | null}
  */
-function parseCallArguments(maskedText, text, open) {
-  const close = findMatchingParen(maskedText, open);
-  if (close === -1) return null;
+function parseCallArguments(maskedText, text, open, calls = findTopLevelCommas(maskedText, [open], OPERATION_ARGUMENT_NESTING)) {
+  const call = calls?.get(open);
+  if (!call) return null;
   /** @type {{ name: string, start: number }[]} */
   const named = [];
   let positional = false;
-  let depth = 0;
   let segmentStart = open + 1;
-  for (let i = open + 1; i <= close; i++) {
-    const ch = maskedText[i];
-    if (ch === "(" || ch === "[") depth++;
-    else if ((ch === ")" || ch === "]") && i < close) depth--;
-    if (i === close || (ch === "," && depth === 0)) {
-      const segment = maskedText.slice(segmentStart, i);
-      const argument = ARGUMENT_NAME_REGEX.exec(segment);
-      if (argument) named.push({ name: argument[2], start: segmentStart + argument[1].length });
-      else if (hasArgumentText(text, segmentStart, i)) positional = true;
-      segmentStart = i + 1;
-    }
+  for (const end of [...call.commas, call.close]) {
+    const segment = maskedText.slice(segmentStart, end);
+    const argument = ARGUMENT_NAME_REGEX.exec(segment);
+    if (argument) named.push({ name: argument[2], start: segmentStart + argument[1].length });
+    // Text left after masking is code, so only a blank argument needs the
+    // unmasked text (a string argument): reading every argument's text made
+    // nested calls quadratic.
+    else if (/\S/.test(segment) || hasArgumentText(text, segmentStart, end)) positional = true;
+    segmentStart = end + 1;
   }
-  return { close, named, positional };
+  return { close: call.close, named, positional };
 }
 
 /**
@@ -502,6 +577,7 @@ function findOperationArgumentDiagnosticsFromMasked(document, maskedText, text =
     issues.push(diagnostic);
   };
 
+  const operations = [];
   for (const match of maskedText.matchAll(OPERATION_CALL_REGEX)) {
     const [, namespace, name] = match;
     if (!lookupOwn(operationDocs, name)) continue;
@@ -511,8 +587,15 @@ function findOperationArgumentDiagnosticsFromMasked(document, maskedText, text =
     if (/\bcall\s+$/i.test(maskedText.slice(Math.max(0, callStart - 20), callStart))) continue;
     // The name, past any `Namespace::`: where the missing-argument hint goes.
     const start = callStart + (namespace ? namespace.length + 2 : 0);
+    operations.push({ namespace, name, start, open: callStart + match[0].length - 1 });
+  }
+  // All the calls' top-level commas in one pass (null only for text
+  // malformed enough to make that quadratic: skip the check).
+  const calls = findTopLevelCommas(maskedText, operations.map((operation) => operation.open), OPERATION_ARGUMENT_NESTING);
+  if (!calls) return issues;
 
-    const call = parseCallArguments(maskedText, text, callStart + match[0].length - 1);
+  for (const { namespace, name, start, open } of operations) {
+    const call = parseCallArguments(maskedText, text, open, calls);
     const problems = call && findArgumentProblems(name, namespace ?? null, call);
     if (!problems) continue;
     for (const typo of problems.typos) {
@@ -615,6 +698,10 @@ const DIAGNOSTIC_CODES = Object.freeze([
   "too-few-arguments",
   "missing-required-argument",
   "unknown-argument",
+  // -- Execution directives (`with ... {`) and `await`
+  "unknown-with-directive",
+  "invalid-with-directive-value",
+  "unknown-await-token",
   // -- Text templates (`<% %>`)
   "template-unexpected-close",
   "template-unclosed",
@@ -1026,19 +1113,19 @@ function updateDiagnostics(document, collection, ctx) {
     //    string arguments (`Ensure-Thing My-Arg`).
     for (const match of line.matchAll(/\b([A-Za-z][A-Za-z0-9-]*)\b/g)) {
       const name = match[1];
-      const before = line.slice(0, match.index);
+      const index = /** @type {number} */ (match.index);
 
       // When the token is the operation half of `UnknownNs::Do-Thing`, the
       // unknown-namespace check below already flags the real problem -- don't
       // also report the operation name as unknown.
-      const qualifier = before.match(/([A-Za-z][A-Za-z0-9]*)::$/)?.[1];
+      const qualifier = namespaceBefore(line, index);
       if (qualifier && !KNOWN_NAMESPACES.has(qualifier.toLowerCase())) continue;
       // A known namespace whose operations aren't documented: nothing to compare against.
       if (qualifier && !DOCUMENTED_OPERATION_NAMESPACES.has(qualifier.toLowerCase())) continue;
 
-      const statementStart = qualifier ? before.slice(0, -(qualifier.length + 2)) : before;
-      // A `{` right after a sigil opens a braced variable (`${my-var}`), not a block.
-      if (!/(?:^|[;}]|(?<![$@%])\{)\s*$/.test(statementStart)) continue;
+      // Looked up from the index, not by a regex over the text before it,
+      // which made a long line quadratic (see isStatementStart).
+      if (!isStatementStart(line, qualifier ? index - qualifier.length - 2 : index)) continue;
       if (/^\s*(?::|=>)/.test(line.slice(match.index + name.length))) continue;
 
       if (
@@ -1170,6 +1257,7 @@ function updateDiagnostics(document, collection, ctx) {
     issues.push(...findArgumentCountDiagnosticsFromMasked(document, joinedMasked, text));
     issues.push(...findOperationArgumentDiagnosticsFromMasked(document, joinedMasked, text));
     issues.push(...findDuplicateModuleDiagnostics(document, maskedLines));
+    issues.push(...findExecutionDirectiveDiagnostics(document, joinedMasked, text));
     if (templateAware) {
       // Triggered by a literal "type": "AdaptiveCard" in the literal output.
       issues.push(...findAdaptiveCardDiagnostics(document, text, { maxVersion: adaptiveCardMaxVersion }));

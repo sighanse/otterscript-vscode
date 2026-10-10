@@ -5,6 +5,18 @@
 This project is under active development.
 Only the latest published version of the extension is supported for security fixes.
 
+## Verifying a Release
+
+From version 0.7.0, each release package (`.vsix`) has a signed build
+provenance attestation: a record, signed through GitHub, that the file was
+built by this repository's publish workflow from the tagged commit. To check
+a package, downloaded from the GitHub release, with the
+[GitHub CLI](https://cli.github.com):
+
+```sh
+gh attestation verify otterscript-vscode-<version>.vsix --repo sighanse/otterscript-vscode
+```
+
 ## Reporting a Vulnerability
 
 If you believe you have discovered a **security vulnerability** in this extension:
