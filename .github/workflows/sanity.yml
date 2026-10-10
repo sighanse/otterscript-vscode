@@ -67,6 +67,14 @@ jobs:
         run: npm run check:reference
         continue-on-error: true
 
+      # The version in package.json has a dated CHANGELOG section, which
+      # becomes its GitHub release's notes: a bump without one fails here,
+      # not at publish time.
+      - name: CHANGELOG section for the version
+        id: changelog
+        run: npm run check:changelog
+        continue-on-error: true
+
       # Both bundles (desktop and web) hold only src/ and load only `vscode`:
       # no npm package, and no Node built-in, which the browser doesn't have.
       - name: Bundle contents
@@ -255,6 +263,13 @@ jobs:
             echo "❌ Inedo reference data: stale (regenerate with node scripts/update-inedo-reference.js)" >> "$GITHUB_STEP_SUMMARY"
           fi
 
+          # CHANGELOG
+          if [ "${{ steps.changelog.outcome }}" == "success" ]; then
+            echo "✅ CHANGELOG: has the version's notes" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ CHANGELOG: no dated section for the version in package.json" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
           # Bundle contents
           if [ "${{ steps.bundle.outcome }}" == "success" ]; then
             echo "✅ Bundle contents: only src/, loads only vscode" >> "$GITHUB_STEP_SUMMARY"
@@ -359,6 +374,7 @@ jobs:
             Grammar-sync=${{ steps.langsync.outcome }}
             Adaptive-Card-data=${{ steps.cards.outcome }}
             Inedo-reference-data=${{ steps.reference.outcome }}
+            CHANGELOG=${{ steps.changelog.outcome }}
             Bundle-contents=${{ steps.bundle.outcome }}
             Unit-tests=${{ steps.tests.outcome }}
             JSON=${{ steps.json.outcome }}
