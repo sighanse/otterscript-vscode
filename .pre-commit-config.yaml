@@ -36,6 +36,8 @@ repos:
       - id: check-yaml
       - id: check-added-large-files
         args: ['--maxkb=500']
+        # The README's demo recording; it isn't packaged (.vscodeignore).
+        exclude: ^images/.*\.gif$
         stages: [pre-commit]
       - id: check-merge-conflict
       - id: check-case-conflict

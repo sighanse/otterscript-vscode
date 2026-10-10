@@ -6,6 +6,8 @@
 
 Language support for OtterScript, the scripting language of Inedo's Otter, BuildMaster and ProGet: syntax highlighting, completion, hover documentation and signature help, diagnostics with quick fixes, module navigation, snippets, and checks for Adaptive Cards in Teams webhook templates.
 
+![Writing OtterScript: snippets, completion, hover, signature help, and diagnostics fixed with quick fixes](images/demo.gif)
+
 Not affiliated with or endorsed by [Inedo](https://inedo.com/).
 
 [Otter](https://inedo.com/otter), [BuildMaster](https://inedo.com/buildmaster) and [ProGet](https://inedo.com/proget) are trademarks of [Inedo](https://inedo.com/).
