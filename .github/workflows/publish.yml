@@ -16,12 +16,12 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # The publish tokens are secrets of this environment, so only this job can
-    # read them; give the environment a required reviewer to approve each run.
+    # Both stores trust this environment's OIDC token, so only this job can
+    # publish; give the environment a required reviewer to approve each run.
     environment: release
     permissions:
       contents: write # the version tag and GitHub release
-      id-token: write # Open VSX trusted publishing; signing the attestation
+      id-token: write # Open VSX trusted publishing; Marketplace sign-in (Entra ID); signing the attestation
       attestations: write # the package's build provenance
 
     steps:
@@ -80,20 +80,36 @@ jobs:
           node scripts/release-notes.js "$VERSION" > "$notes"
           echo "file=$notes" >> "$GITHUB_OUTPUT"
 
-      # The tokens are set on the steps that use them only, never for the
-      # whole job (where `npm ci`'s install scripts could read them).
-      # TEMPORARY: while the Marketplace is published to by hand, a missing
-      # VSCE_PAT only warns and skips this step, so a green run doesn't mean
-      # the Marketplace got the release. Once VSCE_PAT is set again, make it
-      # fail the run (`exit 1`) so a store is never skipped silently.
+      # The Marketplace takes Microsoft Entra ID instead of a personal access
+      # token (global tokens stop working on 2026-12-01): azure/login signs in
+      # the Azure CLI with this job's OIDC token, and `vsce --azure-credential`
+      # uses that sign-in. No secret is stored. The app's IDs are variables of
+      # the release environment, not secrets; CONTRIBUTING.md has the setup.
+      # TEMPORARY: while the Marketplace is published to by hand, the
+      # variables are unset and both steps are skipped with a warning, so a
+      # green run doesn't mean the Marketplace got the release. Once they are
+      # set, make a missing one fail the run so a store is never skipped
+      # silently.
+      - name: Marketplace sign-in not set up
+        if: vars.AZURE_CLIENT_ID == '' || vars.AZURE_TENANT_ID == ''
+        run: echo "::warning::AZURE_CLIENT_ID or AZURE_TENANT_ID is not set. Skipping the Marketplace"
+
+      - name: Sign in to Microsoft Entra ID
+        if: vars.AZURE_CLIENT_ID != '' && vars.AZURE_TENANT_ID != ''
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          # The app only needs the Marketplace, not an Azure subscription.
+          allow-no-subscriptions: true
+
       # --skip-duplicate lets a run that failed half-way be run again.
       - name: Publish to Marketplace
+        if: vars.AZURE_CLIENT_ID != '' && vars.AZURE_TENANT_ID != ''
         env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
           VSIX: ${{ steps.package.outputs.vsix }}
         run: |
-          if [ -z "$VSCE_PAT" ]; then echo "::warning::VSCE_PAT is not set. Skipping"; exit 0; fi
-          npx vsce publish --packagePath "$VSIX" --skip-duplicate
+          npx vsce publish --packagePath "$VSIX" --skip-duplicate --azure-credential
 
       - name: Publish to Open VSX
         env:

@@ -197,9 +197,22 @@ and a `CLAUDE_CODE_OAUTH_TOKEN` repository secret (`claude setup-token`).
    A run that failed half-way can be run again: versions already published
    are skipped.
 
-   For now the Marketplace is published to by hand: while the `VSCE_PAT`
-   secret isn't set, the workflow skips that step with a warning, so upload
-   the package from the GitHub release to the Marketplace yourself.
+   For now the Marketplace is published to by hand: while the `release`
+   environment's `AZURE_CLIENT_ID` and `AZURE_TENANT_ID` variables aren't set,
+   the workflow skips the Marketplace with a warning, so upload the package
+   from the GitHub release to the Marketplace yourself.
+   To let the workflow publish there, sign it in with Microsoft Entra ID
+   (no stored secret; the Marketplace's personal access tokens stop working
+   on 2026-12-01):
+   1. In Microsoft Entra ID, register an app and add a federated credential:
+      GitHub Actions, this repository, entity type *Environment*, `release`.
+   2. Add the app to the `sighanse` publisher on the
+      [Marketplace's management page](https://marketplace.visualstudio.com/manage)
+      as a **Contributor**; signing in alone doesn't allow publishing.
+   3. Set the app's client ID and the tenant ID as the `AZURE_CLIENT_ID` and
+      `AZURE_TENANT_ID` variables (not secrets) of the `release` environment.
+   4. Optionally, check the sign-in locally after `az login` as that app:
+      `npx vsce verify-pat --azure-credential sighanse`.
 4. Check the release package's build provenance (see
    [SECURITY.md](SECURITY.md)):
    `gh attestation verify otterscript-vscode-<version>.vsix --repo sighanse/otterscript-vscode`.
