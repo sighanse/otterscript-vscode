@@ -177,7 +177,7 @@ function nearestNamespace(token) {
 
 /**
  * Creates a quick-fix that replaces an unknown namespace token with the closest
- * known one (`Frobnicate::Op` -> `Firewall::Op`, `proget::Op` -> `ProGet::Op`).
+ * known one (`Windoze::Op` -> `Windows::Op`, `proget::Op` -> `ProGet::Op`).
  * Preferred -- so Fix All applies it -- only for a casing difference.
  *
  * @param {vscode.TextDocument} document - The document containing the diagnostic

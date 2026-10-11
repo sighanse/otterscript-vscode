@@ -47,7 +47,8 @@ npm run update:grammar     # regenerate the grammar's name lists only
 ### Project layout
 
 Plain JavaScript (CommonJS), type-checked from its JSDoc, bundled by esbuild
-into `dist/extension.js`.
+into `dist/extension.js` (desktop) and `dist/web/extension.js` (VS Code for
+the Web).
 
 - `src/extension.js`: activation, settings, and when the diagnostics run.
   It and everything in `src/` use only the `vscode` API, with no Node

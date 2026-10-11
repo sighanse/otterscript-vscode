@@ -29,6 +29,9 @@
  *   needs the Adaptive Card `contentType`, and `Action.Submit` (unsupported
  *   by incoming webhooks and Workflows) is flagged.
  *
+ * Also here: the completions inside a card's string values
+ * ({@link findCardCompletions}) and the quick fixes for these checks.
+ *
  * @module adaptivecard
  */
 

@@ -1,8 +1,10 @@
 // @ts-check
 /**
- * @fileoverview Hover documentation for OtterScript keywords, operations,
- * functions, variables and syntax (template tags, expression delimiters,
- * swim strings).
+ * @fileoverview Hover documentation for OtterScript keywords, operations and
+ * their arguments, functions, runtime variables, `with` directives and
+ * `await` tokens, and syntax (template tags, expression delimiters, swim
+ * strings); for the file's own variables, where they get their value; and
+ * for a `call`, the module's declaration.
  *
  * The hover is found by a chain of resolvers ({@link HOVER_RESOLVERS}), most
  * specific first. Each looks at the position and returns:
@@ -32,7 +34,8 @@ const { findOperationArgumentContext, namespaceBefore } = require("../scanner");
  * The code before a word (strings and comments masked) when the word is where
  * a statement starts, so it can be an operation: at the start of the line,
  * or after `;`, `}`, a block's `{` (not a braced variable's `${`) or a
- * template tag's `<%`. The rule the `unknown-operation` diagnostic uses.
+ * template tag's `<%`. Close to the `unknown-operation` diagnostic's rule
+ * (`isStatementStart` in scanner.js), which also skips a braced variable's `}`.
  */
 const OPERATION_POSITION_REGEX = /(?:^|[;}]|<%|(?<![$@%])\{)\s*$/;
 
@@ -387,8 +390,8 @@ function hoverOperation(document, position, { product }) {
 /**
  * A documented function or variable after a sigil: `$` a scalar function or
  * runtime variable (functions first), `@` a vector function, `%` a map
- * function. The file's own variables have no docs, so no hover. Last in the
- * chain, as the pattern matches many things.
+ * function. The file's own variables are {@link hoverVariable}'s, earlier in
+ * the chain. Last in the chain, as the pattern matches many things.
  *
  * @type {HoverResolver}
  */
@@ -479,7 +482,6 @@ function registerHover(settings, listWorkspaceModules) {
 }
 
 module.exports = {
-  HOVER_RESOLVERS,
   hoverArgument,
   hoverExecutionDirective,
   hoverExpressionDelimiter,

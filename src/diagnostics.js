@@ -7,8 +7,9 @@
  * `$`, symbol balance, unknown functions, operations and namespaces, `if`
  * condition operators, `for` loops, and (in a text template) the `<% %>` tag
  * checks. Over the whole masked document afterwards: duplicate map keys and
- * modules, argument counts and names, and the Adaptive Card checks
- * (adaptivecard.js). {@link DIAGNOSTIC_CODES} lists every code emitted.
+ * modules, argument counts and names, `with` directives and `await` tokens,
+ * and the Adaptive Card checks (adaptivecard.js). {@link DIAGNOSTIC_CODES}
+ * lists every code emitted.
  */
 
 const vscode = require("vscode");
@@ -1246,8 +1247,9 @@ function updateDiagnostics(document, collection, ctx) {
     ));
   }
 
-  // -- Duplicate map keys and modules, argument checks, and (template-aware documents
-  //    only) content-triggered Adaptive Card checks. Isolated in its own try/catch:
+  // -- Duplicate map keys and modules, argument checks, `with` directives and
+  //    `await` tokens, and (template-aware documents only) content-triggered
+  //    Adaptive Card checks. Isolated in its own try/catch:
   //    these run over the whole joined document rather than per-line like
   //    every check above, so a bug here must not be able to wipe out the
   //    per-line diagnostics already collected above it.

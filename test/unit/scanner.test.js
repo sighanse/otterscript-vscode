@@ -5,10 +5,9 @@
  *
  * These cover the character-classification logic (strings, line/block comments,
  * swim-strings) that has historically regressed, the `<% %>` text-template
- * helpers, plus the small argument/string helpers and module-name matchers. No
+ * helpers, the variable index, the operation-argument and module-name
+ * helpers, the `with` / `await` scan and the backward scans from a word. No
  * `vscode` shim is required: scanner.js has no VS Code dependency.
- *
- * Run via `npm test` (`node --test test/unit`).
  */
 
 const { describe, it } = require("node:test");
@@ -797,7 +796,7 @@ describe("maskCommentSpans", () => {
   });
 });
 
-describe("findVariableOccurrences", () => {
+describe("indexVariableOccurrences", () => {
   /**
    * @param {string[]} lines
    * @param {string} sigil

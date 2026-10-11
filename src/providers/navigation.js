@@ -536,8 +536,7 @@ function computeFoldingRanges(document) {
     }
 
     // -- <% %> template tags (multi-line tags only; brace folding still applies
-    //    inside tags). Delimiter detection is shared with diagnostics via
-    //    scanner.findTemplateTagDelimiters.
+    //    inside tags), found by scanner.findTemplateTagDelimiters.
     for (const delim of findTemplateTagDelimiters(maskedLine)) {
       if (delim.open) {
         templateTagStack.push(lineIndex);

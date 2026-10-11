@@ -4059,8 +4059,10 @@ const mapFunctionDocs = {};
 
 // Freeze the hand-written tables so nothing can add, remove, or replace an
 // entry at runtime. Shallow: the individual DocEntry objects are not frozen.
-// syntaxDocs and keywordDocs are exported as they are; the others are
-// merged with the generated reference below, and those tables frozen too.
+// syntaxDocs, keywordDocs and executionDirectiveDocs are exported as they
+// are; below, the function and operation tables are merged with the
+// generated reference, variableDocs gets its product list, and those copies
+// are frozen too.
 Object.freeze(operationDocs);
 Object.freeze(syntaxDocs);
 Object.freeze(keywordDocs);

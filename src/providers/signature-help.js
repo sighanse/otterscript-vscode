@@ -1,7 +1,8 @@
 // @ts-check
 /**
- * @fileoverview Signature help for OtterScript functions and operations: the
- * documented signature, with the parameter the cursor is on highlighted.
+ * @fileoverview Signature help for OtterScript functions, operations and
+ * module calls: the documented signature (a module's from its declaration),
+ * with the parameter the cursor is on highlighted.
  */
 
 const vscode = require("vscode");
@@ -164,6 +165,7 @@ function registerSignatureHelp(settings, listWorkspaceModules) {
   // Shows parameter hints for:
   //   - Scalar functions: $ToJson(value)
   //   - Vector functions: @Split(text, delimiter)
+  //   - Map functions: %FromJson(json)
   //   - Operations: Post-Http(Url: ..., [options...])
   //   - Module calls: call Greet(name: ...)
 

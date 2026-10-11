@@ -117,12 +117,12 @@
         "otterscript.signatureHelp.enable": {
           "type": "boolean",
           "default": true,
-          "description": "Enable signature help for functions and operations"
+          "description": "Enable signature help for functions, operations and module calls"
         },
         "otterscript.hover.enable": {
           "type": "boolean",
           "default": true,
-          "description": "Enable hover information for functions and operations"
+          "description": "Enable hover documentation"
         },
         "otterscript.codeLens.enable": {
           "type": "boolean",

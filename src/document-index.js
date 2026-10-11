@@ -2,10 +2,11 @@
 /**
  * @fileoverview Per-document indexes over an open OtterScript document, each
  * cached per document version: module declarations and `call` references,
- * variable occurrences, and the scan state at the start of every line (for
- * telling whether a position is in a string or comment). Used by the
- * navigation, completion and hover providers; extension.js drops a document's
- * entries when it closes ({@link clearDocumentCaches}).
+ * variable occurrences, `with` directives and `await` statements, and the
+ * scan state at the start of every line (for telling whether a position is
+ * in a string or comment). Used by the providers and quick fixes;
+ * extension.js drops a document's entries when it closes
+ * ({@link clearDocumentCaches}).
  *
  * @module document-index
  */
@@ -373,9 +374,11 @@ function findModuleReferences(document, moduleName, includeDeclaration) {
 /**
  * Document-aware version of {@link isInStringOrComment}.
  *
- * Scans from the beginning of the document with carried {@link CodeScanState}
- * so that multi-line block comments (`/* ... *\/`) and swim-strings that
- * opened on a previous line are correctly detected.
+ * Starts from the cached scan state at the start of the position's line
+ * ({@link getLineStartScanState}), so that multi-line block comments
+ * (`/* ... *\/`) and swim-strings that opened on a previous line are
+ * correctly detected. In a text template, the literal output around the tags
+ * counts as string text, except its `$` expressions.
  *
  * Use this in providers that have access to a full `TextDocument` object.
  * Fall back to {@link isInStringOrComment} only for isolated single-line

@@ -2,17 +2,18 @@
 /**
  * @fileoverview Pure, dependency-free text scanning primitives for OtterScript.
  *
- * This module is deliberately **free of any `vscode` import** so it can be unit
- * tested with plain Node (`node:test`) and reused outside the extension host
- * (e.g. a future CLI linter).
+ * This module is deliberately **free of any `vscode` import** (ESLint enforces
+ * it) so it can be unit tested with plain Node (`node:test`).
  *
  * It owns the single source of truth for how the extension recognizes non-code
  * spans — quoted strings, line comments, block comments, and swim-strings — plus
  * what builds on that scan: the `<% %>` text-template tag masking, the
  * signature-help helpers (active parameter, parameter splitting), the
  * variable-occurrence index behind highlighting and rename, the module-name
- * regexes, and the operation-argument helpers (the argument context at the
- * cursor, module parameter lists).
+ * regexes, the operation-argument helpers (the argument context at the
+ * cursor, module parameter lists), the `with` directives and `await`
+ * statements, the top-level commas of calls, and the backward scans from a
+ * word (`isStatementStart`, `namespaceBefore`).
  * Everything here operates on plain strings, numbers, and plain state objects
  * ({@link CodeScanState}, {@link TemplateScanState}); nothing here constructs a
  * `vscode.*` value.
@@ -901,8 +902,8 @@ function maskTemplateTagContents(line, state) {
 
 /**
  * Finds `<%` / `%>` template-tag delimiters in one already-masked line, in
- * source order. The single place the "what is a tag delimiter" rule lives, so
- * folding and diagnostics cannot drift on it.
+ * source order, for folding. (The `<% %>` diagnostics walk the masked line
+ * themselves, as they track expressions between the tags too.)
  *
  * @param {string} maskedLine - Output of {@link maskNonCodeSpans} for one line
  *   (so a `<%` inside a string or comment is already gone)
@@ -1352,7 +1353,8 @@ function isAssignmentPrefix(text, end) {
 /**
  * How an occurrence gives its variable a value: as a module parameter, a
  * `foreach` loop variable, an operation's output (`Name => $x`), or an
- * assignment (`set $x = ...`, `$x = ...`, `global $x = ...`).
+ * assignment (`set $x = ...`, `set local $x = ...`, `global $x = ...`; see
+ * {@link isAssignmentPrefix}).
  *
  * @typedef {"parameter" | "foreach" | "output" | "assignment"} AssignedBy
  */
@@ -1361,7 +1363,7 @@ function isAssignmentPrefix(text, end) {
  * @typedef {{ line: number, character: number, length: number, write: boolean, assignedBy?: AssignedBy }} VariableOccurrence
  *   `line`/`character` are 0-based and point at the sigil; `length` covers
  *   the whole token (`$name` or `${name}`). `write` is true for a declaration
- *   or assignment target (`set $x = ...`, `$x = ...`, `global $x = ...`,
+ *   or assignment target (`set $x = ...`, `global $x = ...`,
  *   `foreach %p in ...`, an operation's output capture `Name => $x`, or a
  *   module parameter, whose list may span several lines); `assignedBy` then
  *   says which.

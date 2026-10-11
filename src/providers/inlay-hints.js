@@ -183,4 +183,4 @@ function registerInlayHints(settings) {
   return [inlayHintsProvider, settingListener, changed];
 }
 
-module.exports = { findParameterNameHints, hintedParameterNames, registerInlayHints };
+module.exports = { findParameterNameHints, registerInlayHints };

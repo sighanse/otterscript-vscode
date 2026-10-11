@@ -2,11 +2,13 @@
 /**
  * @fileoverview Minimal `vscode` module stub for unit tests.
  *
- * `helpers.js`, `diagnostics.js`, and `adaptivecard.js` do `require("vscode")` at
- * load time and construct a handful of VS Code value types (`Position`, `Range`,
- * `Diagnostic`, `FoldingRange`, ...) inside the functions under test. The real `vscode` module only exists inside the
- * extension host, so this file provides just enough of that surface and installs
- * itself into the module loader.
+ * Every module in src/ but the plain-text and plain-data ones (scanner.js,
+ * json-view.js, language-data.js and its sources) does `require("vscode")`
+ * at load time, constructs VS Code value types
+ * (`Position`, `Range`, `Diagnostic`, `FoldingRange`, ...) and registers
+ * providers and commands. The real `vscode` module only exists inside the
+ * extension host, so this file provides just enough of that surface and
+ * installs itself into the module loader.
  *
  * Usage — require this **before** requiring anything that pulls in `vscode`:
  *

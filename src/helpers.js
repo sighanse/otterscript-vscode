@@ -654,6 +654,7 @@ module.exports = {
 
   // -- Constants
   NON_VARIABLE_IDENTIFIERS,
+  isReadOnlyView,
 
   // -- Logger
   log,
@@ -674,7 +675,6 @@ module.exports = {
   productSignatures,
 
   // -- Completion & hover
-  isReadOnlyView,
   isValidCompletionPosition,
   getTypedIdentifier,
   buildHoverMarkdown,

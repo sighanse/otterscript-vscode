@@ -7,9 +7,6 @@
  * occurrences, and the string/comment and masked-context views -- in a text
  * template too.
  *
- * Guards the behavior before/after `getModuleInfo` is refactored to reuse
- * `scanner.findModuleDeclarations`.
- *
  * Requires the vscode stub before document-index.js loads.
  */
 

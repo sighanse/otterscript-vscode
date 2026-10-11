@@ -3,7 +3,8 @@
  * @fileoverview Completion for OtterScript: functions and variables after a
  * `$`, `@` or `%` sigil (including the file's own variables), operations and
  * keywords, an operation's argument names inside its call, module names after
- * `call`, and values inside an Adaptive Card in a text template.
+ * `call`, `with` directives and their values, the tokens after `await`, and
+ * values inside an Adaptive Card in a text template.
  *
  * Each provider's work is an exported function ({@link provideSigilItems},
  * {@link provideOperationItems}, {@link provideCardItems}), built from small
@@ -134,10 +135,11 @@ function provideSigilItems(document, position, settings) {
 }
 
 // ============================================================
-// OPERATIONS, KEYWORDS, ARGUMENTS AND MODULES
+// OPERATIONS, KEYWORDS, ARGUMENTS, MODULES AND DIRECTIVES
 // ============================================================
-// Operations and keywords where a statement starts, argument names inside an
-// operation or module call, and module names after `call`.
+// Operations and keywords for the word being typed, argument names inside an
+// operation or module call, module names after `call`, and in a `with`
+// header or after `await`, the directives, their values and the tokens.
 //
 // Unlike the sigil completions above, operations have NO prefix character.
 // Manual invoke (Ctrl+Space) can return every operation and keyword;
@@ -530,9 +532,7 @@ function registerCompletion(settings, listWorkspaceModules) {
 module.exports = {
   argumentItems,
   callPrefix,
-  documentVariableItems,
   executionDirectiveContext,
-  executionDirectiveItems,
   keywordItems,
   moduleItems,
   operationItems,
