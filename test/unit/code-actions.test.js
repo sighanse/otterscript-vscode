@@ -359,6 +359,20 @@ describe("quick fixes (lightbulb)", () => {
     assert.deepEqual(turnOff.diagnostics, [diagnostics[0]]);
   });
 
+  it("offers the fixes that need a setting: a map function's name and an Adaptive Card's version", () => {
+    const { quickFixes } = registerFixes();
+    const fixTitles = (/** @type {string} */ text) => {
+      const doc = makeDoc(text);
+      return quickFixes.provideCodeActions(doc, undefined, { diagnostics: diagnose(doc) })
+        .filter((/** @type {any} */ a) => a.edit).map((/** @type {any} */ a) => a.title);
+    };
+    assert.deepEqual(fixTitles("set %m = %MapAd(%m, k, v);"), ["Change to '%MapAdd'"]);
+    assert.deepEqual(
+      fixTitles('<% set $x = 1; %>{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "Table", "rows": [] } ] }'),
+      ["Change card version to 1.5"]
+    );
+  });
+
   it("ignores other extensions' diagnostics and codes it has no fix or rule for", () => {
     const { quickFixes } = registerFixes();
     const doc = makeDoc("if x == 5 {\n}");

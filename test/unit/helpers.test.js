@@ -105,8 +105,16 @@ describe("buildHoverMarkdown (link to Inedo's documentation)", () => {
     assert.match(text(buildHoverMarkdown(doc, "ProGet")), /\[Inedo's Otter documentation\]/, "a product without a page");
   });
 
+  it("puts the link right after the heading when there is no documentation", () => {
+    assert.equal(
+      text(buildHoverMarkdown({ name: "Copy-Files", docUrls }, "Otter")),
+      "### Copy-Files\n\n[Inedo's Otter documentation](https://docs.inedo.com/docs/otter/x)"
+    );
+  });
+
   it("has no link for an entry without pages", () => {
     assert.doesNotMatch(text(buildHoverMarkdown({ name: "if", documentation: "Docs." })), /documentation\]/);
+    assert.doesNotMatch(text(buildHoverMarkdown({ name: "if", documentation: "Docs.", docUrls: {} })), /documentation\]/, "empty docUrls");
   });
 
   it("links the real entries: the reference's pages, and ProGet's webhook page", () => {
