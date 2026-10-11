@@ -52,7 +52,9 @@ for the Web (vscode.dev, github.dev).
 - Add or update tests with every behavior change: unit tests in `test/unit/`
   (plain Node, a `vscode` stub), integration tests in `test/integration/`.
   A module's unit tests go in the test file named after it
-  (`src/providers/hover.js` -> `test/unit/hover.test.js`).
+  (`src/providers/hover.js` -> `test/unit/hover.test.js`). The one exception,
+  `test/unit/properties.test.js` (fast-check), runs every provider on
+  generated text; a crash or a range outside the document it finds is a bug.
 - **For a bug fix, write the test first**, run it, and see it fail for the
   reason reported before changing the code. A test that can't fail, such as
   one for a review finding that turns out to be wrong, is the sign to say so
@@ -71,6 +73,10 @@ for the Web (vscode.dev, github.dev).
 - An operation's output argument is written `Name => $variable`.
 - Quick fixes: a fix is preferred (so **Fix All** applies it) only when it
   isn't a guess, such as when only the casing differs.
+- Hover links an entry's page on docs.inedo.com (`docUrls`, by product). The
+  generator keeps each page's path from Inedo's reference archives; never
+  build these URLs from names, which don't match the pages
+  (`DotNet::Build` is `dotnet/dotnet-build`).
 
 ## Pull requests and reviews
 
