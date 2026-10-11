@@ -5,6 +5,7 @@
 ### Added
 
 - Hover links to the page in Inedo's documentation for every function and operation in Inedo's Otter and BuildMaster reference, for the product the `otterscript.product` setting names, and to ProGet's custom webhook page for ProGet's notifier variables and functions
+- The OtterScript log (**View → Output → OtterScript**) shows, at the Debug level, how long each file's check took. A check that fails is logged there with the file, and the file keeps its last problems instead of the Problems panel quietly no longer following edits. The README says how to include the log in a bug report
 
 ## [0.7.0] - 2026-10-10
 

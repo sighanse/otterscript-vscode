@@ -1118,3 +1118,50 @@ describe("updateDiagnostics — with directives and await", () => {
     assert.deepEqual(only("<% with retyr=3 { %>\nwith retyr=3 { }\n<% } %>", "unknown-with-directive").length, 1, "only the tag's");
   });
 });
+
+describe("updateDiagnostics — logging", () => {
+  const channel = /** @type {any} */ (require("../vscode-stub").window.createOutputChannel());
+
+  /**
+   * A collection that keeps what was set, by URI.
+   *
+   * @returns {{ collection: any, sets: () => number, current: (uri: any) => any[] | undefined }}
+   */
+  function recordingCollection() {
+    /** @type {Map<string, any[]>} */
+    const byUri = new Map();
+    let count = 0;
+    return {
+      collection: { set: (/** @type {any} */ uri, /** @type {any[]} */ issues) => { count++; byUri.set(uri.toString(), issues); } },
+      sets: () => count,
+      current: (uri) => byUri.get(uri.toString()),
+    };
+  }
+
+  it("logs a check that throws, with the file, and keeps the file's last diagnostics", () => {
+    const document = /** @type {any} */ (makeDocument("if x == 5 {\n}", { uri: "file:///broken.otter" }));
+    const { collection, sets, current } = recordingCollection();
+    updateDiagnostics(document, collection, ctx);
+    const before = current(document.uri);
+    assert.equal(before?.length, 1);
+
+    channel.lines.length = 0;
+    const failure = new Error("a check broke");
+    document.getText = () => { throw failure; };
+    assert.doesNotThrow(() => updateDiagnostics(document, collection, ctx));
+    assert.equal(sets(), 1, "the collection is left as it was");
+    assert.equal(current(document.uri), before);
+    const errors = channel.lines.filter((/** @type {any[]} */ [level]) => level === "error");
+    assert.equal(errors.length, 1);
+    assert.match(errors[0][1], /broken\.otter/);
+    assert.equal(errors[0][2], failure, "the error itself, so the log has its stack");
+  });
+
+  it("logs each run's file, problem count and time at debug level", () => {
+    channel.lines.length = 0;
+    updateDiagnostics(makeDocument("if x == 5 {\n}", { uri: "file:///timed.otter" }), recordingCollection().collection, ctx);
+    const debug = channel.lines.filter((/** @type {any[]} */ [level]) => level === "debug").map((/** @type {any[]} */ [, message]) => message);
+    assert.equal(debug.length, 1);
+    assert.match(debug[0], /^Checked timed\.otter: 1 problem\(s\) in \d+ ms$/);
+  });
+});

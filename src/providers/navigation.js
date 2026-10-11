@@ -9,7 +9,7 @@
  */
 
 const vscode = require("vscode");
-const { mapWithConcurrency, readWorkspaceText } = require("../helpers");
+const { log, mapWithConcurrency, readWorkspaceText } = require("../helpers");
 const {
   findModuleDeclarationRange,
   findModuleReferences,
@@ -90,8 +90,10 @@ function registerNavigation(settings, workspace) {
       // A file too large to read is left out, as from the module index.
       const text = await readWorkspaceText(uri);
       return text?.toLowerCase().includes(moduleKey(name)) ? await vscode.workspace.openTextDocument(uri) : undefined;
-    } catch {
-      return undefined; // gone or unreadable
+    } catch (err) {
+      // Gone or unreadable: not searched for references.
+      log.debug(`Could not read ${vscode.workspace.asRelativePath(uri)}:`, err);
+      return undefined;
     }
   }
 

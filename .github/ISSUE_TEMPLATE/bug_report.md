@@ -30,6 +30,13 @@ labels: bug
 ## Extension version
 <!--- Tell us the extension version -->
 
+## Log (if applicable)
+<!--- View → Output, pick "OtterScript", set the level to Debug with the -->
+<!--- gear, make the problem happen again, and paste what the log shows -->
+
+```text
+```
+
 ## Sample OtterScript (if applicable)
 
 ```otterscript

@@ -121,6 +121,15 @@ when no folder is open).
 | `adaptivecard-content-type` | Teams message attachment without the Adaptive Card `"contentType"` |
 | `adaptivecard-webhook-submit` | `Action.Submit` in a Teams message (webhooks don't support it) |
 
+## Reporting a problem
+
+Open an [issue](https://github.com/sighanse/otterscript-vscode/issues) with
+the steps that show the problem and, if you can, the extension's log: open
+**View → Output**, pick **OtterScript**, set the level to **Debug** with the
+gear (or **Developer: Set Log Level...**), make the problem happen again, and
+copy what the log shows. It says which settings are in effect, how long each
+file's check took, and any error.
+
 ## Contributing
 
 Contributions are welcome — see [CONTRIBUTING.md](https://github.com/sighanse/otterscript-vscode/blob/main/CONTRIBUTING.md).

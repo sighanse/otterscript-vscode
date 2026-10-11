@@ -577,15 +577,31 @@ function parseUri(value) {
   return { toString: () => value, scheme: value.split(":")[0], fsPath: value.replace(/^file:\/\//, "") };
 }
 
-// A log output channel (helpers.js `log`) that drops every line; extend if a
-// future test drives more of the logger.
+/**
+ * Every line the log output channel was given, as `[level, message, ...rest]`.
+ *
+ * @type {[string, string, ...unknown[]][]}
+ */
+const outputLines = [];
+
+/**
+ * A log output channel method that keeps its line in `outputLines`.
+ *
+ * @param {string} level
+ * @returns {(message: string, ...rest: unknown[]) => void}
+ */
+const recordAt = (level) => (message, ...rest) => { outputLines.push([level, message, ...rest]); };
+
+// The log output channel (helpers.js `log`). Tests read what it was given
+// from its `lines`, and empty it with `lines.length = 0`.
 const outputChannel = {
+  lines: outputLines,
   appendLine() {},
-  info() {},
-  warn() {},
-  error() {},
-  debug() {},
-  trace() {},
+  info: recordAt("info"),
+  warn: recordAt("warn"),
+  error: recordAt("error"),
+  debug: recordAt("debug"),
+  trace: recordAt("trace"),
   dispose() {},
   name: "OtterScript (stub)",
 };

@@ -128,8 +128,9 @@ function registerWorkspaceSymbols(settings) {
       const text = await readWorkspaceText(uri);
       if (text === undefined) workspaceModuleIndex.delete(uri.toString());
       else setModuleIndexEntry(uri, text);
-    } catch {
+    } catch (err) {
       // Gone or unreadable -- drop it.
+      log.debug(`Left ${vscode.workspace.asRelativePath(uri)} out of the module index:`, err);
       workspaceModuleIndex.delete(uri.toString());
     }
   }
@@ -140,6 +141,7 @@ function registerWorkspaceSymbols(settings) {
    * @returns {Promise<void>}
    */
   async function rebuildWorkspaceModuleIndex() {
+    const started = performance.now();
     workspaceModuleIndex.clear();
 
     const files = await vscode.workspace.findFiles(
@@ -158,7 +160,7 @@ function registerWorkspaceSymbols(settings) {
     const moduleCount = [...workspaceModuleIndex.values()].reduce((n, e) => n + e.symbols.length, 0);
     log.info(
       `Workspace module index: ${moduleCount} module(s) in ${workspaceModuleIndex.size} file(s) ` +
-      `(${files.length} on disk)`
+      `(${files.length} on disk) in ${Math.round(performance.now() - started)} ms`
     );
   }
 

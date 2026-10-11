@@ -997,6 +997,11 @@ function findIfConditionEnd(line) {
  * Updates diagnostics for an OtterScript document.
  * Performs a full scan of the document and reports all issues.
  *
+ * A check that throws is logged with the file, and the file keeps its last
+ * diagnostics: otherwise the error would reach only VS Code's Extension Host
+ * log, and the Problems panel would quietly stop following the edits. Each
+ * run is logged at debug level, with its time, for reports of a slow file.
+ *
  * @param {vscode.TextDocument} document - Document to analyze
  * @param {vscode.DiagnosticCollection} collection - Target diagnostics collection
  * @param {DiagnosticsContext} ctx - The settings the checks read
@@ -1005,6 +1010,29 @@ function findIfConditionEnd(line) {
 function updateDiagnostics(document, collection, ctx) {
   if (document.languageId !== "otterscript" || isReadOnlyView(document)) return;
 
+  const file = vscode.workspace.asRelativePath(document.uri);
+  const started = performance.now();
+  /** @type {vscode.Diagnostic[]} */
+  let issues;
+  try {
+    issues = findDocumentDiagnostics(document, ctx);
+  } catch (err) {
+    log.error(`Diagnostics failed for ${file}; its last ones are kept:`, err);
+    return;
+  }
+  collection.set(document.uri, issues);
+  log.debug(`Checked ${file}: ${issues.length} problem(s) in ${Math.round(performance.now() - started)} ms`);
+}
+
+/**
+ * Every diagnostic for an OtterScript document, after the
+ * `otterscript.diagnostics.rules` setting.
+ *
+ * @param {vscode.TextDocument} document - Document to analyze
+ * @param {DiagnosticsContext} ctx - The settings the checks read
+ * @returns {vscode.Diagnostic[]}
+ */
+function findDocumentDiagnostics(document, ctx) {
   const text = document.getText();
 
   const { diagnosticRules, adaptiveCardMaxVersion } = ctx;
@@ -1265,10 +1293,10 @@ function updateDiagnostics(document, collection, ctx) {
       issues.push(...findAdaptiveCardDiagnostics(document, text, { maxVersion: adaptiveCardMaxVersion }));
     }
   } catch (err) {
-    log.error(`Cross-line diagnostic scan failed for ${document.uri.toString()}:`, err);
+    log.error(`Cross-line diagnostic scan failed for ${vscode.workspace.asRelativePath(document.uri)}:`, err);
   }
 
-  collection.set(document.uri, linkDiagnosticCodes(applyDiagnosticRules(issues, diagnosticRules)));
+  return linkDiagnosticCodes(applyDiagnosticRules(issues, diagnosticRules));
 }
 
 /**
