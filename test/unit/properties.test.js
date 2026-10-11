@@ -3,9 +3,9 @@
  * @fileoverview Property-based tests (fast-check): the checks and every
  * provider, run on generated documents -- random text, and text built from
  * OtterScript's tokens -- instead of hand-written examples. They catch the
- * input nobody thought of: a crash, a range outside the document, a quick fix
- * that makes things worse, or a scan that slows down with the square of the
- * input's length.
+ * input nobody thought of: a crash, a range outside the document, the same
+ * completion suggested twice, a quick fix that makes things worse, or a scan
+ * that slows down with the square of the input's length.
  *
  * Unlike the other test files, this one isn't about one module: it drives
  * the whole extension through what `activate` registers.
@@ -305,10 +305,16 @@ describe("the position-based providers, anywhere in any text", () => {
       const document = makeDocument(text);
       for (const offset of offsets) {
         const position = document.positionAt(offset);
+        // VS Code shows every provider's items in one list: no name twice
+        // (ignoring case, as OtterScript does) with the same kind.
+        const suggested = new Set();
         for (const provider of providers.CompletionItemProvider) {
           const result = await provider.provideCompletionItems(document, position, undefined, { triggerKind: stub.CompletionTriggerKind.Invoke });
           for (const item of (Array.isArray(result) ? result : result?.items ?? [])) {
             if (item.range && "start" in item.range) assertRangeInDocument(document, item.range, `completion ${item.label}`);
+            const key = `${(typeof item.label === "string" ? item.label : item.label.label).toLowerCase()} (kind ${item.kind})`;
+            assert.ok(!suggested.has(key), `completion suggests ${key} twice`);
+            suggested.add(key);
           }
         }
         const hover = await providers.HoverProvider[0].provideHover(document, position);
