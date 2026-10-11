@@ -16,7 +16,7 @@ const { Position } = require("../vscode-stub");
 const stub = require("../vscode-stub");
 const { makeDocument } = require("./fake-document");
 const { stubProperty } = require("./fake-workspace");
-const { operationDocs } = require("../../src/language-data.js");
+const { operationDocs, scalarFunctionDocs } = require("../../src/language-data.js");
 const {
   buildCompletionItem,
   resolveCompletionDocumentation,
@@ -90,6 +90,29 @@ describe("buildHoverMarkdown (otterscript.product and anySigil)", () => {
   it("says when a function works with every sigil", () => {
     assert.match(text(buildHoverMarkdown({ name: "@FromJson", anySigil: true })), /Works with `\$`, `@` and `%`/);
     assert.doesNotMatch(text(buildHoverMarkdown({ name: "$ToJson" })), /Works with/);
+  });
+});
+
+describe("buildHoverMarkdown (link to Inedo's documentation)", () => {
+  /** @param {any} md */
+  const text = (md) => md.value;
+  const docUrls = { Otter: "https://docs.inedo.com/docs/otter/x", BuildMaster: "https://docs.inedo.com/docs/buildmaster/x" };
+
+  it("ends with the page for the selected product, else the first one", () => {
+    const doc = { name: "Copy-Files", documentation: "Docs.", docUrls };
+    assert.match(text(buildHoverMarkdown(doc, "BuildMaster")), /Docs\.\n\n\[Inedo's BuildMaster documentation\]\(https:\/\/docs\.inedo\.com\/docs\/buildmaster\/x\)$/);
+    assert.match(text(buildHoverMarkdown(doc)), /\[Inedo's Otter documentation\]\(https:\/\/docs\.inedo\.com\/docs\/otter\/x\)$/, "'any'");
+    assert.match(text(buildHoverMarkdown(doc, "ProGet")), /\[Inedo's Otter documentation\]/, "a product without a page");
+  });
+
+  it("has no link for an entry without pages", () => {
+    assert.doesNotMatch(text(buildHoverMarkdown({ name: "if", documentation: "Docs." })), /documentation\]/);
+  });
+
+  it("links the real entries: the reference's pages, and ProGet's webhook page", () => {
+    assert.match(text(buildHoverMarkdown(operationDocs["Copy-Files"], "Otter")), /\(https:\/\/docs\.inedo\.com\/docs\/otter\/reference\/operations\/general\/copy-files\)$/);
+    assert.match(text(buildHoverMarkdown(scalarFunctionDocs.PackageHash, "ProGet")), /\[Inedo's ProGet documentation\]\(https:\/\/docs\.inedo\.com\/docs\/proget\/administration\/proget-notifications-webhooks\/proget-notifications-custom-webhook\)$/);
+    assert.match(text(buildHoverMarkdown(scalarFunctionDocs.PackageHash, "BuildMaster")), /\/buildmaster\/reference\/functions\/packages\/packagehash\)$/);
   });
 });
 

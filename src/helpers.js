@@ -323,7 +323,7 @@ function getTypedIdentifier(document, position, triggerChar) {
  * This creates the formatted tooltip content shown when hovering over
  * symbols, keywords, operations, and syntax elements.
  *
- * @param {Readonly<{ name: string, signature?: string, overloads?: { product: string, signature: string }[], description?: string, documentation?: string, namespace?: string | null, products?: ReadonlyArray<string>, anySigil?: boolean, superseded?: { by: string, note: string }, params?: ReadonlyArray<OperationParam> }>} doc
+ * @param {Readonly<{ name: string, signature?: string, overloads?: { product: string, signature: string }[], description?: string, documentation?: string, namespace?: string | null, products?: ReadonlyArray<string>, anySigil?: boolean, superseded?: { by: string, note: string }, params?: ReadonlyArray<OperationParam>, docUrls?: Readonly<Record<string, string>> }>} doc
  *   - name: Required - Display name (e.g., "$ToJson")
  *   - signature: Optional - Function signature (monospace formatted)
  *   - overloads: Optional - The function's form in other Inedo products, each
@@ -338,6 +338,8 @@ function getTypedIdentifier(document, position, triggerChar) {
  *     `note` is shown right under the name
  *   - params: Optional - An operation's arguments, listed unless
  *     `documentation` has its own **Arguments:** section
+ *   - docUrls: Optional - Its pages on docs.inedo.com by product; the last
+ *     line links one (see {@link docsPage})
  * @param {string} [product] - The `otterscript.product` setting
  * @returns {vscode.MarkdownString} - Formatted hover content
  *
@@ -399,7 +401,28 @@ function buildHoverMarkdown(doc, product = "any") {
     md.appendMarkdown(documentation);
   }
 
+  // The entry's page on docs.inedo.com, for the product the user writes for.
+  const page = docsPage(doc, product);
+  if (page) {
+    md.appendMarkdown(`${documentation ? "\n\n" : ""}[Inedo's ${page.product} documentation](${page.url})`);
+  }
+
   return md;
+}
+
+/**
+ * The docs page {@link buildHoverMarkdown} links to: the one for `product`
+ * when the entry has one, else its first (Otter's before BuildMaster's).
+ * Undefined for an entry without pages (keywords and syntax).
+ *
+ * @param {{ docUrls?: Readonly<Record<string, string>> }} doc
+ * @param {string} product - The `otterscript.product` setting
+ * @returns {{ product: string, url: string } | undefined}
+ */
+function docsPage(doc, product) {
+  if (!doc.docUrls) return undefined;
+  const chosen = Object.hasOwn(doc.docUrls, product) ? product : Object.keys(doc.docUrls)[0];
+  return chosen === undefined ? undefined : { product: chosen, url: doc.docUrls[chosen] };
 }
 
 /**

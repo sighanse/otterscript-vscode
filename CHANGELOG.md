@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Hover links to the page in Inedo's documentation for every function and operation in Inedo's Otter and BuildMaster reference, for the product the `otterscript.product` setting names, and to ProGet's custom webhook page for ProGet's notifier variables and functions
+
 ## [0.7.0] - 2026-10-10
 
 ### Added

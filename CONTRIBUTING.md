@@ -84,7 +84,10 @@ Some files are generated; `npm run check` fails when one is out of date:
   `operationVariants`; look operations up with `lookupOperation(name,
   namespace)` and their arguments with `operationArguments`. Hand-written entries
   in `src/language-data.js` win over generated ones, so better docs or
-  ProGet's meaning go there.
+  ProGet's meaning go there. Each entry keeps its page on docs.inedo.com,
+  which hover links to; after `npm run update:reference`, run
+  `node scripts/update-inedo-reference.js --check-links` to request every
+  linked page (not part of `npm run check`, as it needs Inedo's site).
 - The function and operation name lists in
   `syntaxes/otterscript.tmLanguage.json`, by
   `scripts/check-language-sync.js --write` from the tables in

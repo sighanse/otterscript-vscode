@@ -171,6 +171,29 @@ describe("generated Inedo reference, merged into language-data", () => {
     assert.equal(data.operationDocs["Log-Information"].products, undefined, "every product");
   });
 
+  it("links each entry to its page for every product that has it", () => {
+    const generated = [
+      ...["scalarFunctionDocs", "vectorFunctionDocs", "mapFunctionDocs", "operationDocs"]
+        .flatMap((table) => Object.values(/** @type {any} */ (reference)[table])),
+      ...Object.values(reference.operationVariants).flat(),
+    ];
+    const missing = generated.filter((doc) => doc.products.some((/** @type {string} */ p) => !doc.docUrls[p])).map((doc) => doc.name);
+    assert.deepEqual(missing, []);
+    // The page is the reference's file, not the name: DotNet's two `Build`s.
+    assert.equal(data.operationDocs.Build.docUrls?.BuildMaster, "https://docs.inedo.com/docs/buildmaster/reference/operations/dotnet/build");
+    assert.equal(data.operationVariants.Build[0].docUrls?.BuildMaster, "https://docs.inedo.com/docs/buildmaster/reference/operations/dotnet/dotnet-build");
+    // A page each product files elsewhere.
+    assert.deepEqual(data.operationDocs.PYExec.docUrls, {
+      Otter: "https://docs.inedo.com/docs/otter/reference/operations/general/execute-python-script",
+      BuildMaster: "https://docs.inedo.com/docs/buildmaster/reference/operations/scripting/execute-python-script",
+    });
+    // Hand-written: the reference's pages, and ProGet's webhook page when ProGet has it.
+    assert.match(data.scalarFunctionDocs.Substring.docUrls?.Otter ?? "", /\/otter\/reference\/functions\/strings\/substring$/);
+    assert.match(data.variableDocs.FeedName.docUrls?.ProGet ?? "", /proget-notifications-custom-webhook$/);
+    assert.deepEqual(Object.keys(data.scalarFunctionDocs.PackageHash.docUrls ?? {}), ["BuildMaster", "ProGet"]);
+    assert.equal(data.keywordDocs.if.docUrls, undefined);
+  });
+
   it("isAvailableIn: a product's own entries, core-engine ones for ProGet, everything for 'any'", () => {
     const otterOnly = { products: ["Otter"] };
     const both = { products: ["Otter", "BuildMaster"] };

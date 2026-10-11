@@ -90,6 +90,7 @@ describe("hover", () => {
     const text = await hoverText(reference, positionOf(reference, "Extract-ZipFile", 3));
     assert.match(text, /Extracts a zip file/);
     assert.match(text, /From Inedo's/);
+    assert.match(text, /\[Inedo's Otter documentation\]\(https:\/\/docs\.inedo\.com\/docs\/otter\/reference\/operations\/files\/extract-zipfile\)/);
   });
 
   it("documents the namespace's operation of a shared name, and lists the others without a namespace", async () => {
