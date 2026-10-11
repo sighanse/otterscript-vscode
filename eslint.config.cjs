@@ -1,3 +1,4 @@
+const { defineConfig, globalIgnores } = require("eslint/config");
 const js = require("@eslint/js");
 const globals = require("globals");
 const jsdoc = require("eslint-plugin-jsdoc");
@@ -14,19 +15,15 @@ const EXTENSION_HOST_NODE = "18.15.0";
 /** Every file ESLint lints in this repo. */
 const ALL_JS = ["**/*.{js,cjs,mjs}"];
 
-module.exports = [
-  // -- Global ignores (applies to all configs)
-  {
-    ignores: [
-      "node_modules/**",
-      // VS Code builds downloaded by the integration tests
-      ".vscode-test/**",
-      ".vscode-test-web/**",
-      "*.vsix",
-      // The bundle `npm run build` writes
-      "dist/**"
-    ]
-  },
+module.exports = defineConfig([
+  // -- Ignored everywhere (node_modules/ is ignored by default)
+  globalIgnores([
+    // VS Code builds downloaded by the integration tests
+    ".vscode-test/**",
+    ".vscode-test-web/**",
+    // The bundle `npm run build` writes
+    "dist/**"
+  ]),
 
   // -- Applies to every linted file (no `files` filter)
   {
@@ -44,12 +41,26 @@ module.exports = [
 
   // -- Module systems: CommonJS everywhere except .mjs (e.g. .vscode-test.mjs).
   //    ecmaVersion "latest" also provides the built-in ES globals.
+  //    Tests and scripts run in Node and get its globals.
   {
     files: ["**/*.{js,cjs}"],
+    ignores: ["src/**"],
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "commonjs",
       globals: globals.node
+    }
+  },
+  {
+    // The extension runs in VS Code's Node on the desktop and in a web worker
+    // in VS Code for the Web: only the globals both have, so `process` or
+    // `Buffer` fails here rather than in vscode.dev. (Globals of matching
+    // blocks are merged, hence the `ignores` above instead of an override.)
+    files: ["src/**/*.js"],
+    languageOptions: {
+      ecmaVersion: "latest",
+      sourceType: "commonjs",
+      globals: globals["shared-node-browser"]
     }
   },
   {
@@ -128,7 +139,7 @@ module.exports = [
 
       "no-restricted-globals": ["error",
         { name: "window", message: "Use vscode.window instead." },
-        { name: "document", message: "VS Code extensions run in Node.js, not browsers." },
+        { name: "document", message: "The extension host (Node.js, or a web worker in VS Code for the Web) has no DOM." },
         { name: "alert", message: "Use vscode.window.showInformationMessage()" },
         { name: "confirm", message: "Use vscode.window.showWarningMessage({ modal: true })" },
         { name: "prompt", message: "Use vscode.window.showInputBox()" },
@@ -212,4 +223,4 @@ module.exports = [
       }],
     }
   }
-];
+]);

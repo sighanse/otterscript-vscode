@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "WebWorker"],
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "checkJs": true,
@@ -11,13 +11,12 @@
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
     "maxNodeModuleJsDepth": 0,
-    "types": ["vscode", "node"]
+    "types": ["vscode"]
   },
   "typeAcquisition": {
     "enable": false
   },
   "include": [
-    "src/**/*.js",
-    ".vscode-test.mjs"
+    "src/**/*.js"
   ]
 }

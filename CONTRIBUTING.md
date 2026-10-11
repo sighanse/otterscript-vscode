@@ -53,7 +53,9 @@ the Web).
 - `src/extension.js`: activation, settings, and when the diagnostics run.
   It and everything in `src/` use only the `vscode` API, with no Node
   built-ins or npm packages, so the same code runs in VS Code for the Web;
-  `npm run check` fails otherwise
+  `npm run check` fails otherwise. Its type check (`jsconfig.json`) and lint
+  only know the globals both runtimes have, so `process` or `Buffer` is an
+  error in the editor too
 - `src/providers/`: one module per group of language features (completion,
   hover, signature help, inlay hints, navigation, workspace symbols, quick
   fixes)
