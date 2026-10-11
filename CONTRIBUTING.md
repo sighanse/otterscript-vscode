@@ -100,8 +100,8 @@ Optionally, install the [pre-commit](https://pre-commit.com) hooks once with
 runs `npm run check`. The hook tools install themselves on first use
 (actionlint is built with Go and zizmor installed with Python, which
 pre-commit downloads if they aren't installed), so the first commit is slow.
-The hooks are pinned to commits; update them with
-`pre-commit autoupdate --freeze`.
+The hooks are pinned to commits. Dependabot opens a weekly pull request when
+they have new releases; `pre-commit autoupdate --freeze` updates them by hand.
 
 Press <kbd>F5</kbd> in VS Code to build the bundle and launch an Extension
 Development Host with this repo loaded as the test workspace. The same checks
