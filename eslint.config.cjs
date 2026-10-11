@@ -4,13 +4,8 @@ const globals = require("globals");
 const jsdoc = require("eslint-plugin-jsdoc");
 const stylistic = require("@stylistic/eslint-plugin");
 const nodePlugin = require("eslint-plugin-n");
-
-/**
- * The Node.js the extension runs on in the oldest VS Code it supports
- * (package.json `engines.vscode`): VS Code 1.85 ships Electron 25, with
- * Node 18.15. Raise it with the minimum VS Code version.
- */
-const EXTENSION_HOST_NODE = "18.15.0";
+// The Node.js of the oldest supported VS Code, shared with the desktop bundle.
+const { EXTENSION_HOST_NODE } = require("./scripts/build.js");
 
 /** Every file ESLint lints in this repo. */
 const ALL_JS = ["**/*.{js,cjs,mjs}"];

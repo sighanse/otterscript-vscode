@@ -29,6 +29,16 @@ const esbuild = require("esbuild");
 const ROOT = path.join(__dirname, "..");
 
 /**
+ * The Node.js the desktop extension runs on in the oldest VS Code it supports
+ * (package.json `engines.vscode`): VS Code 1.85 ships Electron 25, with
+ * Node 18.15. The desktop bundle's target and ESLint's Node checks of src/
+ * (eslint.config.cjs) both use it; raise it with the minimum VS Code
+ * version, together with `@types/vscode` and `@types/node` (build.test.js
+ * checks they agree).
+ */
+const EXTENSION_HOST_NODE = "18.15.0";
+
+/**
  * Options both bundles share. `vscode` is provided by VS Code at run time;
  * `keepNames` keeps function names in stack traces after minifying.
  *
@@ -46,28 +56,22 @@ const COMMON = {
 
 /** @type {Record<string, import("esbuild").BuildOptions>} */
 const BUNDLES = {
-  desktop: { ...COMMON, platform: "node", target: "node18", outfile: "dist/extension.js" },
+  desktop: { ...COMMON, platform: "node", target: `node${EXTENSION_HOST_NODE}`, outfile: "dist/extension.js" },
   // VS Code runs a web extension in a web worker; `browser` makes a Node
   // built-in a build error instead of a failure at run time.
   web: { ...COMMON, platform: "browser", target: "es2022", outfile: "dist/web/extension.js" },
 };
 
 /**
- * The web tests (test/web/), bundled into one file the browser's VS Code
- * loads, with Mocha's browser build.
+ * The web tests (test/web/), bundled like the web extension into one file the
+ * browser's VS Code loads, with Mocha's browser build.
  *
  * @type {import("esbuild").BuildOptions}
  */
 const WEB_TESTS = {
-  absWorkingDir: ROOT,
+  ...BUNDLES.web,
   entryPoints: ["test/web/index.js"],
-  bundle: true,
-  format: "cjs",
-  platform: "browser",
-  target: "es2022",
-  external: ["vscode"],
   sourcemap: "inline",
-  logLevel: "warning",
   outfile: "dist/web/test/index.js",
 };
 
@@ -142,4 +146,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { BUNDLES, checkMetafile };
+module.exports = { BUNDLES, EXTENSION_HOST_NODE, checkMetafile };
