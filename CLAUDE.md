@@ -16,7 +16,12 @@ for the Web (vscode.dev, github.dev).
 
 - `src/` uses only the `vscode` API: no Node built-ins (`fs`, `path`,
   `process`, `Buffer`) and no npm packages, as the web bundle runs in a
-  browser. `npm run check` (`check:bundle`) fails otherwise
+  browser. `npm run check` (`check:bundle`) fails otherwise, and its lint and
+  type check only know the globals Node and browsers share
+- The oldest supported VS Code is `engines.vscode` (1.85, Node 18.15):
+  raising it means `@types/vscode`, the `@types/node` major and
+  `EXTENSION_HOST_NODE` in `scripts/build.js`; `build.test.js` checks they
+  agree
 - `src/extension.js`: activation, settings, when diagnostics run
 - `src/providers/`: one module per group of language features
 - `src/diagnostics.js`, `src/adaptivecard.js`: the checks
@@ -49,6 +54,9 @@ for the Web (vscode.dev, github.dev).
   features not yet released.
 - **Comments explain why**, in plain sentences; every function has a JSDoc
   block with `@param` and `@returns`. Match the surrounding code.
+- **Log through `log` (`src/helpers.js`)**, the OtterScript output channel,
+  never `console`: `info` for what a user would want to see, `debug` for
+  what helps with a bug report, `error` with the error itself (its stack).
 - Add or update tests with every behavior change: unit tests in `test/unit/`
   (plain Node, a `vscode` stub), integration tests in `test/integration/`.
   A module's unit tests go in the test file named after it
