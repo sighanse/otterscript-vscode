@@ -901,6 +901,19 @@ function maskTemplateTagContents(line, state) {
 }
 
 /**
+ * A document's literal text: everything a text template outputs as written,
+ * with each `<% %>` tag blanked, delimiters included (same length, same
+ * offsets). Used by the Adaptive Card and JSON checks.
+ *
+ * @param {string} text - Full document text
+ * @returns {string}
+ */
+function maskTemplateTags(text) {
+  const state = createTemplateScanState();
+  return text.split("\n").map((line) => maskTemplateTagContents(line, state)).join("\n");
+}
+
+/**
  * Finds `<%` / `%>` template-tag delimiters in one already-masked line, in
  * source order, for folding. (The `<% %>` diagnostics walk the masked line
  * themselves, as they track expressions between the tags too.)
@@ -1637,6 +1650,7 @@ module.exports = {
   // -- Text-template tags
   maskOutsideTemplateTags,
   maskTemplateTagContents,
+  maskTemplateTags,
   documentUsesTemplateTags,
   findTemplateTagDelimiters,
   findBalancedParenEnd,

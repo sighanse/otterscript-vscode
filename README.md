@@ -20,7 +20,7 @@ This extension started as a learning project while implementing [custom webhook 
 
 - Syntax highlighting, including namespaced operations (`ProGet::`, `Otter::`, `Windows::`)
 - Hover documentation, completion and signature help for every function and operation in Inedo's Otter and BuildMaster reference, ProGet's notifier variables, and map/vector expressions, with a link to the entry's page in Inedo's documentation; inside an operation call, completion and hover for its argument names (`Copy-Files(To: ...)`); parameter names shown before a function call's arguments (`$Substring($x, Offset: 2)`)
-- Diagnostics for common mistakes (see [the list of checks](#turning-individual-diagnostics-off)) — also for `$` expressions in a text template's literal output, such as `$ToJson(...)` in a webhook body
+- Diagnostics for common mistakes (see [the list of checks](#turning-individual-diagnostics-off)) — also for `$` expressions in a text template's literal output, such as `$ToJson(...)` in a webhook body, and for that output's JSON syntax
 - Adaptive Card checks, triggered by a literal `"type": "AdaptiveCard"` object in a template: unknown types, values a property doesn't allow (`"weight": "bold"`), elements or properties newer than the card's `"version"`, `Action.ToggleVisibility` targets with no matching `"id"`, and Teams webhook mistakes such as a wrong `"contentType"` or `Action.Submit`. Completion inside the card offers `"type"` values, a property's allowed values and toggle targets. Based on the Adaptive Card 1.6 schema plus Teams-only elements; best-effort, not a full schema validation
 - Quick fixes, plus a **Fix All Issues** command (`Ctrl+Shift+Alt+F`, `Cmd+Shift+Alt+F` on macOS); fixes that would cause a new problem, or that guess a name, are left to the lightbulb. To apply the same fixes on save, add `"editor.codeActionsOnSave": { "source.fixAll": "explicit" }` to your settings
 - Module navigation: hover on `call MyModule` (its declaration and comment), completion and signature help for its arguments, Go to Definition (F12, also to a module declared in another workspace file), Find All References (Shift+F12) and Rename (F2) across workspace files, CodeLens reference counts, Outline and breadcrumbs, and Go to Symbol in Workspace (`Ctrl+T`); completion of module names after `call`, from this file and the rest of the workspace
@@ -111,6 +111,7 @@ when no folder is open).
 | `template-end-keyword` | `<% end %>` where `<% } %>` is required |
 | `template-missing-brace` | Block tag such as `<% if ... %>` missing its `{` |
 | `template-in-expression` | `<% %>` inside an unclosed OtterScript expression |
+| `template-json-syntax` | A template whose output starts as JSON (a webhook body) but isn't valid JSON, e.g. a missing or extra comma (see below) |
 | `adaptivecard-missing-version` | Adaptive Card without a `"version"` |
 | `adaptivecard-unknown-type` | Unrecognized Adaptive Card `"type"` |
 | `adaptivecard-invalid-value` | Card property value that isn't allowed, e.g. `"weight": "bold"` |
@@ -127,6 +128,14 @@ loop variables and the product's own variables. It checks nothing in a file
 that reads variables by name (`$GetVariableValue`, `$Eval`, ...), runs other
 code that can read them (`Apply-Template`, `PSCall`, `OSExec`, ...), or calls a
 module declared in another file, as that code may read them.
+
+`template-json-syntax` checks what a template writes outside its `<% %>`
+tags when that starts with `{` or `[`. An OtterScript expression such as
+`$ToJson($x)` counts as a value. It shows only the first problem, as a JSON
+parser stops there, and none right after a tag, which may write the text
+that makes it valid (a loop writing a comma before each element). Quick fixes
+remove an extra comma, add a missing one, quote a property name and escape a
+backslash.
 
 ## Reporting a problem
 

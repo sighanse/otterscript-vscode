@@ -17,6 +17,7 @@ const {
 } = require("../language-data");
 const { findOperationArgumentContext, maskComments, maskNonCodeSpans, namespaceBefore } = require("../scanner");
 const { codeView, getExecutionDirectives, getLineStartScanState, getMaskedTextBefore, MASKED_CONTEXT_MAX_LINES } = require("../document-index");
+const { findTemplateJsonProblem } = require("../json-check");
 const {
   createCardVersionFix,
   createContentTypeFix,
@@ -161,6 +162,26 @@ function createForToForeachFix(document, diagnostic) {
 function createTemplateEndFix(document, diagnostic) {
   return createCodeAction("Replace with '}'", diagnostic, (edit) => {
     edit.replace(document.uri, diagnostic.range, "}");
+  });
+}
+
+/**
+ * Creates the quick fix for a `template-json-syntax` diagnostic that has
+ * one: removing a comma before `}` or `]`, adding a missing comma, quoting a
+ * property name or escaping a backslash. Re-checks the document (VS Code
+ * hands back only a diagnostic's public fields), and offers nothing when the
+ * problem found is no longer the one at the diagnostic.
+ *
+ * @param {vscode.TextDocument} document - The document containing the diagnostic
+ * @param {vscode.Diagnostic} diagnostic - The `template-json-syntax` diagnostic
+ * @returns {vscode.CodeAction | null}
+ */
+function createTemplateJsonFix(document, diagnostic) {
+  const problem = findTemplateJsonProblem(document.getText());
+  if (!problem?.fix || problem.start !== document.offsetAt(diagnostic.range.start)) return null;
+  const { start, end, text, title } = problem.fix;
+  return createCodeAction(title, diagnostic, (edit) => {
+    edit.replace(document.uri, new vscode.Range(document.positionAt(start), document.positionAt(end)), text);
   });
 }
 
@@ -436,6 +457,7 @@ function registerCodeActions(settings, diagnostics, runDiagnostics) {
     "invalid-with-directive-value": createDirectiveValueFix,
     "unknown-await-token":     createAwaitTokenFix,
     "template-end-keyword":    createTemplateEndFix,
+    "template-json-syntax":    createTemplateJsonFix,
     "adaptivecard-version-too-low": (document, diagnostic) =>
       createCardVersionFix(document, diagnostic, { maxVersion: settings.adaptiveCardMaxVersion }),
     "adaptivecard-invalid-value":   createInvalidValueFix,

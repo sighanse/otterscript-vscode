@@ -24,7 +24,7 @@ for the Web (vscode.dev, github.dev).
   agree
 - `src/extension.js`: activation, settings, when diagnostics run
 - `src/providers/`: one module per group of language features
-- `src/diagnostics.js`, `src/adaptivecard.js`: the checks
+- `src/diagnostics.js`, `src/adaptivecard.js`, `src/json-check.js`: the checks
 - `src/scanner.js`: text scanning (strings, comments, template tags). It must
   stay free of `vscode` imports (lint enforces it)
 - `src/document-index.js`: per-document caches built on the scanner

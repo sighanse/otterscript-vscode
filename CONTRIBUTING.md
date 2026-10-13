@@ -62,7 +62,8 @@ the Web).
 - `src/providers/`: one module per group of language features (completion,
   hover, signature help, inlay hints, navigation, workspace symbols, quick
   fixes)
-- `src/diagnostics.js` and `src/adaptivecard.js`: the checks
+- `src/diagnostics.js`, `src/adaptivecard.js` and `src/json-check.js` (a
+  template's JSON output): the checks
 - `src/scanner.js`: text scanning (strings, comments, template tags). It must
   stay free of `vscode` imports; ESLint enforces it. `src/json-view.js` is the
   same kind of layer for JSON in templates

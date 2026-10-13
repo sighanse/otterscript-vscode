@@ -280,4 +280,17 @@ describe("quick fixes", () => {
     assert.ok(document.lineAt(2).text.includes('[ "details" ]'));
     assert.equal((await refreshDiagnostics(document)).length, 0);
   });
+
+  it("'Remove the comma' fixes a webhook body's JSON", async () => {
+    const document = await openContent('<% set $title = "Build"; %>\n{\n  "text": $ToJson($title),\n}\n');
+    const [diagnostic] = await refreshDiagnostics(document);
+    assert.equal(codeOf(diagnostic), "template-json-syntax");
+    assert.equal(diagnostic.message, "JSON doesn't allow a comma before '}'.");
+
+    const fix = (await quickFixes(document, diagnostic)).find((a) => a.title === "Remove the comma");
+    assert.ok(fix?.edit, "the fix is offered");
+    await vscode.workspace.applyEdit(fix.edit);
+    assert.equal(document.lineAt(2).text, '  "text": $ToJson($title)');
+    assert.equal((await refreshDiagnostics(document)).length, 0);
+  });
 });

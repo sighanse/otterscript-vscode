@@ -46,6 +46,7 @@ const {
   splitSignatureParameters,
 } = require("./scanner");
 const { findAdaptiveCardDiagnostics } = require("./adaptivecard");
+const { findTemplateJsonProblem } = require("./json-check");
 const { getModuleCallReferencesByName, getModuleDeclarations, getVariableIndex } = require("./document-index");
 
 /**
@@ -796,6 +797,7 @@ const DIAGNOSTIC_CODES = Object.freeze([
   "template-end-keyword",
   "template-missing-brace",
   "template-in-expression",
+  "template-json-syntax",
   // -- Adaptive Cards
   "adaptivecard-missing-version",
   "adaptivecard-unknown-type",
@@ -1379,6 +1381,18 @@ function findDocumentDiagnostics(document, ctx) {
     if (templateAware) {
       // Triggered by a literal "type": "AdaptiveCard" in the literal output.
       issues.push(...findAdaptiveCardDiagnostics(document, text, { maxVersion: adaptiveCardMaxVersion }));
+      // Triggered by literal output that starts with `{` or `[`.
+      const jsonProblem = findTemplateJsonProblem(text);
+      if (jsonProblem) {
+        const diagnostic = new vscode.Diagnostic(
+          new vscode.Range(document.positionAt(jsonProblem.start), document.positionAt(jsonProblem.end)),
+          jsonProblem.message,
+          vscode.DiagnosticSeverity.Warning
+        );
+        diagnostic.code = "template-json-syntax";
+        diagnostic.source = "OtterScript";
+        issues.push(diagnostic);
+      }
     }
   } catch (err) {
     log.error(`Cross-line diagnostic scan failed for ${vscode.workspace.asRelativePath(document.uri)}:`, err);

@@ -36,7 +36,7 @@
  */
 
 const vscode = require("vscode");
-const { createTemplateScanState, maskTemplateTagContents } = require("./scanner");
+const { maskTemplateTags } = require("./scanner");
 const { closestMatch } = require("./helpers");
 const { analyzeJson, findStringProperties, hasOwnKeyProperty, scanJsonPrefix, valueStartAfterKey } = require("./json-view");
 const { ADAPTIVE_CARD_TYPES, ADAPTIVE_CARD_PROPERTIES, ADAPTIVE_CARD_VALUE_LISTS } = require("./adaptivecard-data");
@@ -164,18 +164,6 @@ function parseCardVersion(value) {
  */
 function compareCardVersions(a, b) {
   return a[0] - b[0] || a[1] - b[1];
-}
-
-/**
- * A document's literal text: everything a text template outputs as written,
- * with the contents of its `<% %>` tags blanked (same length, same offsets).
- *
- * @param {string} text - Full document text
- * @returns {string}
- */
-function maskTemplateTags(text) {
-  const state = createTemplateScanState();
-  return text.split("\n").map((line) => maskTemplateTagContents(line, state)).join("\n");
 }
 
 /**

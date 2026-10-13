@@ -855,6 +855,27 @@ describe("updateDiagnostics - Adaptive Card checks", () => {
   });
 });
 
+describe("updateDiagnostics - JSON in a template's literal output", () => {
+  it("warns at the first JSON syntax problem of a template", () => {
+    const [d, ...rest] = only('<% set $x = 1; %>\n{\n  "a": 1\n  "b": $ToJson($x)\n}', "template-json-syntax");
+    assert.equal(rest.length, 0);
+    assert.equal(d.severity, DiagnosticSeverity.Warning);
+    assert.equal(d.message, "Expected ',' or '}' after the property's value.");
+    assert.deepEqual([d.range.start.line, d.range.start.character, d.range.end.line, d.range.end.character], [3, 2, 3, 5]);
+  });
+
+  it("checks only a template, whose literal output starts as JSON", () => {
+    assert.deepEqual(only('{ "a": 1 "b": 2 }', "template-json-syntax"), [], "no tags: OtterScript, not a template");
+    assert.deepEqual(only("<% set $x = 1; %>\nHello $x, { this is prose", "template-json-syntax"), []);
+  });
+
+  it("finds nothing in the webhook sample", () => {
+    const fs = require("node:fs");
+    const text = fs.readFileSync(require("node:path").join(__dirname, "..", "sample-webhook-template.otter"), "utf8");
+    assert.deepEqual(only(text, "template-json-syntax"), []);
+  });
+});
+
 // ============================================================
 // implicit-string juxtaposition inside %( ) / @( ) is VALID -- not a diagnostic
 // ============================================================

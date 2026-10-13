@@ -436,6 +436,17 @@
               ],
               "markdownDescription": "A `<% %>` tag inside an unclosed OtterScript expression."
             },
+            "template-json-syntax": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "A text template whose literal output starts as JSON (a webhook body) but isn't valid JSON: a missing or extra comma, an unquoted property name, single quotes, a string across lines, a backslash that isn't an escape. Only the first problem is shown, and none right after a `<% %>` tag."
+            },
             "adaptivecard-missing-version": {
               "type": "string",
               "enum": [

@@ -252,6 +252,18 @@ describe("the scanner, on any text", () => {
   });
 });
 
+describe("the JSON check, on any valid JSON", () => {
+  it("finds nothing in valid JSON a template writes, with tags between its lines", () => {
+    /** Pretty-printed JSON, with a tag at the start of some of its lines. */
+    const tagged = fc.tuple(fc.jsonValue(), fc.array(fc.boolean(), { maxLength: 200 })).map(([value, tags]) =>
+      JSON.stringify(value, null, 2).split("\n").map((line, i) => (tags[i] ? `<% if $x { %><% } %>${line}` : line)).join("\n"));
+    fc.assert(fc.property(tagged, (body) => {
+      const flagged = diagnose(makeDocument(`<% set $x = 1; %>\n${body}`)).filter((d) => d.code?.value === "template-json-syntax");
+      assert.deepEqual(flagged.map((d) => d.message), [], body);
+    }), RUN);
+  });
+});
+
 describe("the document-wide providers, on any text", () => {
   it("report diagnostics, and their quick fixes, inside the document", () => {
     fc.assert(fc.property(otterText, (text) => {
