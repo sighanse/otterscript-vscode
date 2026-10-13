@@ -24,7 +24,6 @@ const {
   buildArgumentHoverMarkdown,
   buildSigilCompletionItems,
   clearTimerForUri,
-  getTypedIdentifier,
   isValidCompletionPosition,
   loadConfig,
   lookupOwn,
@@ -386,31 +385,6 @@ describe("lookupOwn", () => {
     for (const inherited of ["constructor", "toString", "valueOf", "hasOwnProperty", "__proto__"]) {
       assert.equal(lookupOwn(table, inherited), undefined, inherited);
     }
-  });
-});
-
-// ============================================================
-// getTypedIdentifier
-// ============================================================
-
-describe("getTypedIdentifier", () => {
-  it("extracts the fragment after a '$' / '@' / '%' trigger", () => {
-    assert.equal(getTypedIdentifier(makeDoc("x = $To"), pos(0, 7), "$"), "To");
-    assert.equal(getTypedIdentifier(makeDoc("@Sp"), pos(0, 3), "@"), "Sp");
-    assert.equal(getTypedIdentifier(makeDoc("set %m = %From"), pos(0, 14), "%"), "From");
-  });
-
-  it("takes digits, '_' and '-' in a name, as variable names have", () => {
-    assert.equal(getTypedIdentifier(makeDoc("Log-Information $item2"), pos(0, 22), "$"), "item2");
-    assert.equal(getTypedIdentifier(makeDoc("set @my-li"), pos(0, 10), "@"), "my-li");
-  });
-
-  it("returns '' right after the bare sigil", () => {
-    assert.equal(getTypedIdentifier(makeDoc("$"), pos(0, 1), "$"), "");
-  });
-
-  it("returns null when the sigil is not immediately before the cursor", () => {
-    assert.equal(getTypedIdentifier(makeDoc("xyz"), pos(0, 3), "$"), null);
   });
 });
 

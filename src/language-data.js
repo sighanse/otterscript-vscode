@@ -2217,6 +2217,13 @@ server or repository.
   },
 });
 
+/**
+ * The `with` directives by lower-case name: Inedo matches them ignoring case.
+ *
+ * @type {ReadonlyMap<string, ExecutionDirectiveDoc>}
+ */
+const EXECUTION_DIRECTIVES = new Map(Object.values(executionDirectiveDocs).map((d) => [d.name.toLowerCase(), d]));
+
 // ============================================================
 // VARIABLE DOCS (ProGet / Execution Context)
 // ============================================================
@@ -4346,6 +4353,7 @@ module.exports = {
   syntaxDocs,
   keywordDocs,
   executionDirectiveDocs,
+  EXECUTION_DIRECTIVES,
   variableDocs: exportedVariableDocs,
   scalarFunctionDocs: exportedScalarFunctionDocs,
   vectorFunctionDocs: exportedVectorFunctionDocs,

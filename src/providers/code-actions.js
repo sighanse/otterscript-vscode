@@ -27,45 +27,11 @@ const {
 } = require("../adaptivecard");
 const {
   closestMatch,
+  createQuickFix,
   isAvailableIn,
   log,
   lookupOwn,
 } = require("../helpers");
-
-// ============================================================
-// CODE ACTION FACTORY
-// ============================================================
-
-/**
- * Generic code action factory for creating quick-fix actions.
- *
- * This factory centralizes the creation of VS Code CodeAction objects,
- * reducing duplication across multiple fix providers. The action is
- * preferred (so Fix All applies it); a factory whose fix is a guess sets
- * `isPreferred` back to false.
- *
- * @private
- * @param {string} title - Human-readable action title shown in lightbulb menu
- * @param {vscode.Diagnostic} diagnostic - The diagnostic this action fixes
- * @param {(edit: vscode.WorkspaceEdit) => void} applyFix - Callback that applies the fix to a WorkspaceEdit
- * @returns {vscode.CodeAction} Configured code action ready to be returned to VS Code
- *
- * @example
- * // Create a fix that inserts a character
- * createCodeAction("Insert '$'", diagnostic, (edit) => {
- *   edit.insert(uri, position, "$");
- * });
- *
- */
-function createCodeAction(title, diagnostic, applyFix) {
-  const action = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
-  action.diagnostics = [diagnostic];
-  action.isPreferred = true;
-  const edit = new vscode.WorkspaceEdit();
-  applyFix(edit);
-  action.edit = edit;
-  return action;
-}
 
 /**
  * Creates a quick-fix that inserts a missing '$' at the diagnostic position.
@@ -85,7 +51,7 @@ function createMissingDollarFix(document, diagnostic) {
   const uri = document.uri;
   const start = diagnostic.range.start;
 
-  return createCodeAction("Insert missing '$'", diagnostic, (edit) => {
+  return createQuickFix("Insert missing '$'", diagnostic, (edit) => {
     edit.insert(uri, start, "$");
   });
 }
@@ -109,7 +75,7 @@ function createInvalidOperatorFix(document, diagnostic) {
 
   if (!replacement) return null;
 
-  return createCodeAction(`Replace '${text}' with '${replacement}'`, diagnostic, (edit) => {
+  return createQuickFix(`Replace '${text}' with '${replacement}'`, diagnostic, (edit) => {
     edit.replace(document.uri, diagnostic.range, replacement);
   });
 }
@@ -125,7 +91,7 @@ function createAssignmentInConditionFix(document, diagnostic) {
   const text = document.getText(diagnostic.range);
   if (text !== "=") return null;
 
-  return createCodeAction("Replace '=' with '=='", diagnostic, (edit) => {
+  return createQuickFix("Replace '=' with '=='", diagnostic, (edit) => {
     edit.replace(document.uri, diagnostic.range, "==");
   });
 }
@@ -145,7 +111,7 @@ function createForToForeachFix(document, diagnostic) {
   const line = document.lineAt(diagnostic.range.start.line).text;
   if (!/^\s*for\s+[$@%]?[A-Za-z](?:[\w-]*[A-Za-z0-9])?\s+in\s/i.test(line)) return null;
 
-  return createCodeAction("Replace 'for' with 'foreach'", diagnostic, (edit) => {
+  return createQuickFix("Replace 'for' with 'foreach'", diagnostic, (edit) => {
     edit.replace(document.uri, diagnostic.range, "foreach");
   });
 }
@@ -160,7 +126,7 @@ function createForToForeachFix(document, diagnostic) {
  * @returns {vscode.CodeAction} A code action that replaces the keyword with `}`
  */
 function createTemplateEndFix(document, diagnostic) {
-  return createCodeAction("Replace with '}'", diagnostic, (edit) => {
+  return createQuickFix("Replace with '}'", diagnostic, (edit) => {
     edit.replace(document.uri, diagnostic.range, "}");
   });
 }
@@ -180,7 +146,7 @@ function createTemplateJsonFix(document, diagnostic) {
   const problem = findTemplateJsonProblem(document.getText());
   if (!problem?.fix || problem.start !== document.offsetAt(diagnostic.range.start)) return null;
   const { start, end, text, title } = problem.fix;
-  return createCodeAction(title, diagnostic, (edit) => {
+  return createQuickFix(title, diagnostic, (edit) => {
     edit.replace(document.uri, new vscode.Range(document.positionAt(start), document.positionAt(end)), text);
   });
 }
@@ -211,7 +177,7 @@ function createUnknownNamespaceFix(document, diagnostic) {
   const suggestion = nearestNamespace(token);
   if (!suggestion || suggestion === token) return null;
 
-  const action = createCodeAction(`Change namespace to '${suggestion}'`, diagnostic, (edit) => {
+  const action = createQuickFix(`Change namespace to '${suggestion}'`, diagnostic, (edit) => {
     edit.replace(document.uri, diagnostic.range, suggestion);
   });
   action.isPreferred = suggestion.toLowerCase() === token.toLowerCase();
@@ -230,7 +196,7 @@ function createUnknownNamespaceFix(document, diagnostic) {
  * @returns {vscode.CodeAction}
  */
 function createRenameFix(document, diagnostic, suggestion, label = suggestion) {
-  const action = createCodeAction(`Change to '${label}'`, diagnostic, (edit) => {
+  const action = createQuickFix(`Change to '${label}'`, diagnostic, (edit) => {
     edit.replace(document.uri, diagnostic.range, suggestion);
   });
   action.isPreferred = suggestion.toLowerCase() === document.getText(diagnostic.range).toLowerCase();
@@ -411,7 +377,7 @@ function createMissingArgumentFix(document, diagnostic) {
   }
 
   const title = `Add missing argument${missing.length === 1 ? "" : "s"} ${missing.map((m) => `'${m}'`).join(", ")}`;
-  const action = createCodeAction(title, diagnostic, (edit) => {
+  const action = createQuickFix(title, diagnostic, (edit) => {
     for (const [offset, insertText] of inserts) edit.insert(document.uri, document.positionAt(base + offset), insertText);
   });
   action.isPreferred = false;

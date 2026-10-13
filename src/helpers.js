@@ -2,8 +2,8 @@
 /**
  * @fileoverview Shared helpers for the OtterScript extension: settings, the
  * logger, per-document timers and bounded concurrency, docs-table lookup and
- * product filtering, the hover and completion item builders, and typo
- * suggestions ({@link closestMatch}).
+ * product filtering, the hover, completion, diagnostic and quick-fix
+ * builders, and typo suggestions ({@link closestMatch}).
  *
  * Elsewhere: text scanning in {@link module:scanner}, per-document indexes
  * (modules, variables, string/comment state) in {@link module:document-index},
@@ -278,33 +278,6 @@ async function readWorkspaceText(uri) {
 function isValidCompletionPosition(document, position, completionEnabled) {
   if (!completionEnabled) return false;
   return !isInStringOrCommentDoc(document, position);
-}
-
-/** @type {Readonly<Record<"$" | "@" | "%", RegExp>>} */
-const TYPED_IDENTIFIER_PATTERNS = Object.freeze({
-  "$": /\$((?:[A-Za-z][\w-]*)?)$/,
-  "@": /@((?:[A-Za-z][\w-]*)?)$/,
-  "%": /%((?:[A-Za-z][\w-]*)?)$/,
-});
-
-/**
- * Extracts the currently typed identifier after a trigger character.
- *
- * Examples:
- * - "$To" -> "To"
- * - "@Spl" -> "Spl"
- * - "%From" -> "From"
- *
- * @param {vscode.TextDocument} document
- * @param {vscode.Position} position
- * @param {"$" | "@" | "%"} triggerChar
- * @returns {string | null}
- */
-function getTypedIdentifier(document, position, triggerChar) {
-  const linePrefix = document.lineAt(position.line).text.substring(0, position.character);
-  const pattern = TYPED_IDENTIFIER_PATTERNS[triggerChar];
-  const match = linePrefix.match(pattern);
-  return match ? match[1] : null;
 }
 
 // ============================================================
@@ -602,6 +575,52 @@ function buildSigilCompletionItems(table, typed, sort, product = "any") {
 }
 
 // ============================================================
+// DIAGNOSTIC & QUICK FIX BUILDERS
+// ============================================================
+
+/**
+ * An OtterScript diagnostic: the extension's source, and a plain string code
+ * (diagnostics.js turns it into a link last).
+ *
+ * @param {vscode.Range} range
+ * @param {string} message
+ * @param {vscode.DiagnosticSeverity} severity
+ * @param {string} code - One of diagnostics.js's `DIAGNOSTIC_CODES`
+ * @returns {vscode.Diagnostic}
+ */
+function createDiagnostic(range, message, severity, code) {
+  const diagnostic = new vscode.Diagnostic(range, message, severity);
+  diagnostic.code = code;
+  diagnostic.source = "OtterScript";
+  return diagnostic;
+}
+
+/**
+ * A quick fix for one diagnostic, with the edit `applyFix` builds. Preferred
+ * (so Fix All applies it); a caller whose fix is a guess sets `isPreferred`
+ * back to false.
+ *
+ * @param {string} title - Shown in the lightbulb menu
+ * @param {vscode.Diagnostic} diagnostic - The diagnostic it fixes
+ * @param {(edit: vscode.WorkspaceEdit) => void} applyFix - Adds the fix to the edit
+ * @returns {vscode.CodeAction}
+ *
+ * @example
+ * createQuickFix("Insert '$'", diagnostic, (edit) => {
+ *   edit.insert(uri, position, "$");
+ * });
+ */
+function createQuickFix(title, diagnostic, applyFix) {
+  const action = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
+  action.diagnostics = [diagnostic];
+  action.isPreferred = true;
+  const edit = new vscode.WorkspaceEdit();
+  applyFix(edit);
+  action.edit = edit;
+  return action;
+}
+
+// ============================================================
 // LOOKUP & TEXT UTILITIES
 // ============================================================
 
@@ -699,12 +718,15 @@ module.exports = {
 
   // -- Completion & hover
   isValidCompletionPosition,
-  getTypedIdentifier,
   buildHoverMarkdown,
   buildArgumentHoverMarkdown,
   buildCompletionItem,
   buildSigilCompletionItems,
   resolveCompletionDocumentation,
+
+  // -- Diagnostics & quick fixes
+  createDiagnostic,
+  createQuickFix,
 
   // -- Text utilities
   closestMatch,

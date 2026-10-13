@@ -37,7 +37,7 @@
 
 const vscode = require("vscode");
 const { maskTemplateTags } = require("./scanner");
-const { closestMatch } = require("./helpers");
+const { closestMatch, createDiagnostic, createQuickFix } = require("./helpers");
 const { analyzeJson, findStringProperties, hasOwnKeyProperty, scanJsonPrefix, valueStartAfterKey } = require("./json-view");
 const { ADAPTIVE_CARD_TYPES, ADAPTIVE_CARD_PROPERTIES, ADAPTIVE_CARD_VALUE_LISTS } = require("./adaptivecard-data");
 
@@ -778,13 +778,8 @@ function findAdaptiveCardDiagnostics(document, text, options = {}) {
    * @returns {vscode.Diagnostic}
    */
   const addIssue = (start, end, message, code) => {
-    const diagnostic = new vscode.Diagnostic(
-      new vscode.Range(document.positionAt(objStart + start), document.positionAt(objStart + end)),
-      message,
-      vscode.DiagnosticSeverity.Warning
-    );
-    diagnostic.code = code;
-    diagnostic.source = "OtterScript";
+    const range = new vscode.Range(document.positionAt(objStart + start), document.positionAt(objStart + end));
+    const diagnostic = createDiagnostic(range, message, vscode.DiagnosticSeverity.Warning, code);
     issues.push(diagnostic);
     return diagnostic;
   };
@@ -952,18 +947,12 @@ function createCardVersionFix(document, diagnostic, options = {}) {
     ? `Change card version to ${highestText} (above the host's maximum, ${options.maxVersion?.trim()})`
     : `Change card version to ${highestText}`;
 
-  const action = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
-  action.diagnostics = [diagnostic];
-  action.isPreferred = !aboveMax;
-  action.edit = new vscode.WorkspaceEdit();
-  action.edit.replace(
-    document.uri,
-    new vscode.Range(
-      document.positionAt(located.objStart + versionProperty.valueStart),
-      document.positionAt(located.objStart + versionProperty.valueEnd)
-    ),
-    highestText
+  const versionRange = new vscode.Range(
+    document.positionAt(located.objStart + versionProperty.valueStart),
+    document.positionAt(located.objStart + versionProperty.valueEnd)
   );
+  const action = createQuickFix(title, diagnostic, (edit) => edit.replace(document.uri, versionRange, highestText));
+  action.isPreferred = !aboveMax;
   return action;
 }
 
@@ -988,11 +977,8 @@ function createSuggestionFix(document, diagnostic, findFlagged) {
   const suggestion = findFlagged(located.card).find((v) => v.start === offset)?.suggestion;
   if (!suggestion) return null;
 
-  const action = new vscode.CodeAction(`Change to '${suggestion}'`, vscode.CodeActionKind.QuickFix);
-  action.diagnostics = [diagnostic];
+  const action = createQuickFix(`Change to '${suggestion}'`, diagnostic, (edit) => edit.replace(document.uri, diagnostic.range, suggestion));
   action.isPreferred = suggestion.toLowerCase() === document.getText(diagnostic.range).toLowerCase();
-  action.edit = new vscode.WorkspaceEdit();
-  action.edit.replace(document.uri, diagnostic.range, suggestion);
   return action;
 }
 
@@ -1031,12 +1017,7 @@ function createToggleTargetFix(document, diagnostic) {
  */
 function createTemplatingKeywordFix(document, diagnostic) {
   const keyword = document.getText(diagnostic.range);
-  const action = new vscode.CodeAction(`Escape as '\`${keyword}'`, vscode.CodeActionKind.QuickFix);
-  action.diagnostics = [diagnostic];
-  action.isPreferred = true;
-  action.edit = new vscode.WorkspaceEdit();
-  action.edit.insert(document.uri, diagnostic.range.start, "`");
-  return action;
+  return createQuickFix(`Escape as '\`${keyword}'`, diagnostic, (edit) => edit.insert(document.uri, diagnostic.range.start, "`"));
 }
 
 /**
@@ -1050,18 +1031,15 @@ function createTemplatingKeywordFix(document, diagnostic) {
  * @returns {vscode.CodeAction}
  */
 function createContentTypeFix(document, diagnostic) {
-  const action = new vscode.CodeAction(`Set contentType to '${ADAPTIVE_CARD_CONTENT_TYPE}'`, vscode.CodeActionKind.QuickFix);
-  action.diagnostics = [diagnostic];
-  action.isPreferred = true;
-  action.edit = new vscode.WorkspaceEdit();
-  if (document.getText(diagnostic.range) === "content") {
-    // Before the key's opening quote.
-    const keyQuote = document.positionAt(document.offsetAt(diagnostic.range.start) - 1);
-    action.edit.insert(document.uri, keyQuote, `"contentType": "${ADAPTIVE_CARD_CONTENT_TYPE}", `);
-  } else {
-    action.edit.replace(document.uri, diagnostic.range, ADAPTIVE_CARD_CONTENT_TYPE);
-  }
-  return action;
+  return createQuickFix(`Set contentType to '${ADAPTIVE_CARD_CONTENT_TYPE}'`, diagnostic, (edit) => {
+    if (document.getText(diagnostic.range) === "content") {
+      // Before the key's opening quote.
+      const keyQuote = document.positionAt(document.offsetAt(diagnostic.range.start) - 1);
+      edit.insert(document.uri, keyQuote, `"contentType": "${ADAPTIVE_CARD_CONTENT_TYPE}", `);
+    } else {
+      edit.replace(document.uri, diagnostic.range, ADAPTIVE_CARD_CONTENT_TYPE);
+    }
+  });
 }
 
 module.exports = {

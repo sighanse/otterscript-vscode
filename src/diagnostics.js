@@ -15,13 +15,14 @@
 const vscode = require("vscode");
 const {
   closestMatch,
+  createDiagnostic,
   isReadOnlyView,
   log,
   lookupOwn,
   NON_VARIABLE_IDENTIFIERS,
 } = require("./helpers");
 const {
-  executionDirectiveDocs,
+  EXECUTION_DIRECTIVES,
   FUNCTION_TABLES,
   isDocumentedName,
   NAMESPACES,
@@ -37,6 +38,7 @@ const {
   documentUsesTemplateTags,
   findExecutionDirectives,
   findTopLevelCommas,
+  FUNCTION_CALL_REGEX,
   isStatementStart,
   maskCommentSpans,
   maskNonCodeSpans,
@@ -56,9 +58,6 @@ const { getModuleCallReferencesByName, getModuleDeclarations, getVariableIndex }
  * @type {Readonly<Record<"$" | "@" | "%", string>>}
  */
 const FUNCTION_KINDS = Object.freeze({ "$": "scalar", "@": "vector", "%": "map" });
-
-/** A function call: sigil (group 1) and name (group 2). Not `<%`, nor a `%(` map literal. */
-const FUNCTION_CALL_REGEX = /(?<!<)([$@%])([A-Za-z][A-Za-z0-9_]*)\s*\(/g;
 
 /** Namespaces, lower-cased: Inedo resolves them case-insensitively. */
 const KNOWN_NAMESPACES = new Set([...NAMESPACES].map((n) => n.toLowerCase()));
@@ -102,18 +101,12 @@ function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
 
   // -- Calculate exact position of variable name within the line
   const varNameIndex = /** @type {number} */ (match.index) + match[0].indexOf(varName);
-  const diagnostic = new vscode.Diagnostic(
-    new vscode.Range(
-      new vscode.Position(lineIndex, varNameIndex),
-      new vscode.Position(lineIndex, varNameIndex + varName.length)
-    ),
+  return lineDiagnostic(
+    lineIndex, varNameIndex, varNameIndex + varName.length,
     `Missing '$' before variable: ${varName}. Use $${varName}`,
-    vscode.DiagnosticSeverity.Error
+    vscode.DiagnosticSeverity.Error,
+    "missing-dollar"
   );
-  diagnostic.code = "missing-dollar";
-  diagnostic.source = "OtterScript";
-
-  return diagnostic;
 }
 
 /**
@@ -177,17 +170,12 @@ function findDuplicateMapKeyDiagnosticsFromMasked(document, maskedText) {
         const keyStart = segmentStart + keyMatch[0].indexOf(key);
 
         if (seenKeys.has(key)) {
-          const diagnostic = new vscode.Diagnostic(
-            new vscode.Range(
-              document.positionAt(keyStart),
-              document.positionAt(keyStart + key.length)
-            ),
+          issues.push(offsetDiagnostic(
+            document, keyStart, keyStart + key.length,
             `Duplicate key '${key}' in map expression.`,
-            vscode.DiagnosticSeverity.Warning
-          );
-          diagnostic.code = "duplicate-map-key";
-          diagnostic.source = "OtterScript";
-          issues.push(diagnostic);
+            vscode.DiagnosticSeverity.Warning,
+            "duplicate-map-key"
+          ));
         } else {
           seenKeys.add(key);
         }
@@ -323,14 +311,7 @@ function findArgumentCountDiagnosticsFromMasked(document, maskedText, text = doc
     }
 
     const nameStart = /** @type {number} */ (match.index) + 1;
-    const diagnostic = new vscode.Diagnostic(
-      new vscode.Range(document.positionAt(nameStart), document.positionAt(nameStart + name.length)),
-      message,
-      vscode.DiagnosticSeverity.Warning
-    );
-    diagnostic.code = code;
-    diagnostic.source = "OtterScript";
-    issues.push(diagnostic);
+    issues.push(offsetDiagnostic(document, nameStart, nameStart + name.length, message, vscode.DiagnosticSeverity.Warning, code));
   }
   return issues;
 }
@@ -405,13 +386,12 @@ function findUnusedVariableDiagnostics(document, text) {
     if (isDocumentedName(key[0], variableName(written(occurrences[0])))) continue;
     for (const occurrence of occurrences) {
       const { line, character, length } = occurrence;
-      const diagnostic = new vscode.Diagnostic(
-        new vscode.Range(line, character, line, character + length),
+      const diagnostic = lineDiagnostic(
+        line, character, character + length,
         `'${written(occurrence)}' is assigned but never read.`,
-        vscode.DiagnosticSeverity.Hint
+        vscode.DiagnosticSeverity.Hint,
+        "unused-variable"
       );
-      diagnostic.code = "unused-variable";
-      diagnostic.source = "OtterScript";
       diagnostic.tags = [vscode.DiagnosticTag.Unnecessary];
       issues.push(diagnostic);
     }
@@ -462,9 +442,6 @@ function findDuplicateModuleDiagnostics(document, maskedLines) {
 // EXECUTION DIRECTIVES AND AWAIT
 // ============================================================
 
-/** The `with` directives by lower-case name: Inedo matches them ignoring case. */
-const EXECUTION_DIRECTIVES = new Map(Object.values(executionDirectiveDocs).map((d) => [d.name.toLowerCase(), d]));
-
 /**
  * Whether `value` fits a directive that takes `kind`. Only the grammar's own
  * values are checked: a number for `retry` and `timeout`, `always` or
@@ -511,10 +488,7 @@ function findExecutionDirectiveDiagnostics(document, maskedText, text) {
    * @param {string} code
    */
   const report = (start, end, message, severity, code) => {
-    const d = new vscode.Diagnostic(new vscode.Range(document.positionAt(start), document.positionAt(end)), message, severity);
-    d.code = code;
-    d.source = "OtterScript";
-    issues.push(d);
+    issues.push(offsetDiagnostic(document, start, end, message, severity, code));
   };
 
   const { withs, awaits } = findExecutionDirectives(maskedText, text);
@@ -658,12 +632,7 @@ function findOperationArgumentDiagnosticsFromMasked(document, maskedText, text =
    * @param {string} code
    */
   const hint = (start, length, message, code) => {
-    const diagnostic = new vscode.Diagnostic(
-      new vscode.Range(document.positionAt(start), document.positionAt(start + length)), message, vscode.DiagnosticSeverity.Hint
-    );
-    diagnostic.code = code;
-    diagnostic.source = "OtterScript";
-    issues.push(diagnostic);
+    issues.push(offsetDiagnostic(document, start, start + length, message, vscode.DiagnosticSeverity.Hint, code));
   };
 
   const operations = [];
@@ -740,14 +709,12 @@ function createUnbalancedDiagnostic(count, lastPos, openChar, closeChar, name, d
     ? `Unclosed ${name}(s): ${count} '${openChar}' not closed (first at line ${lineNum}, col ${colNum})`
     : `Unexpected closing ${name}: Extra '${closeChar}' at line ${lineNum}, col ${colNum}`;
 
-  const diagnostic = new vscode.Diagnostic(
+  return createDiagnostic(
     new vscode.Range(pos, document.positionAt(lastPos + 1)),
     message,
-    vscode.DiagnosticSeverity.Error
+    vscode.DiagnosticSeverity.Error,
+    "unbalanced-symbol"
   );
-  diagnostic.code = "unbalanced-symbol";
-  diagnostic.source = "OtterScript";
-  return diagnostic;
 }
 
 /**
@@ -882,14 +849,22 @@ const TEMPLATE_BLOCK_OPENER_REGEX =
  * @returns {vscode.Diagnostic}
  */
 function lineDiagnostic(lineIndex, start, end, message, severity, code) {
-  const d = new vscode.Diagnostic(
-    new vscode.Range(new vscode.Position(lineIndex, start), new vscode.Position(lineIndex, end)),
-    message,
-    severity
-  );
-  d.code = code;
-  d.source = "OtterScript";
-  return d;
+  return createDiagnostic(new vscode.Range(lineIndex, start, lineIndex, end), message, severity, code);
+}
+
+/**
+ * Builds an OtterScript diagnostic spanning the document offsets `[start, end)`.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {number} start
+ * @param {number} end
+ * @param {string} message
+ * @param {vscode.DiagnosticSeverity} severity
+ * @param {string} code - Diagnostic code; one of {@link DIAGNOSTIC_CODES}
+ * @returns {vscode.Diagnostic}
+ */
+function offsetDiagnostic(document, start, end, message, severity, code) {
+  return createDiagnostic(new vscode.Range(document.positionAt(start), document.positionAt(end)), message, severity, code);
 }
 
 /**
@@ -1385,14 +1360,9 @@ function findDocumentDiagnostics(document, ctx) {
       // Triggered by literal output that starts with `{` or `[`.
       const jsonProblem = findTemplateJsonProblem(text);
       if (jsonProblem) {
-        const diagnostic = new vscode.Diagnostic(
-          new vscode.Range(document.positionAt(jsonProblem.start), document.positionAt(jsonProblem.end)),
-          jsonProblem.message,
-          vscode.DiagnosticSeverity.Warning
-        );
-        diagnostic.code = "template-json-syntax";
-        diagnostic.source = "OtterScript";
-        issues.push(diagnostic);
+        issues.push(offsetDiagnostic(
+          document, jsonProblem.start, jsonProblem.end, jsonProblem.message, vscode.DiagnosticSeverity.Warning, "template-json-syntax"
+        ));
       }
     }
   } catch (err) {

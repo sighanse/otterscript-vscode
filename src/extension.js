@@ -11,7 +11,8 @@
  *    and settings change
  *
  * DESIGN PRINCIPLES
- * - language-data.js and scanner.js are vscode-free (plain data / plain text)
+ * - language-data.js, scanner.js, json-check.js and json-view.js are
+ *   vscode-free (plain data / plain text)
  * - Each provider module receives what it needs from here (the live settings,
  *   the workspace module index, a way to re-run diagnostics) instead of
  *   reaching for shared globals; reusable logic that builds vscode objects
@@ -27,6 +28,7 @@
  * @see src/scanner.js - vscode-free text scanning (strings, comments, template tags)
  * @see src/diagnostics.js - Diagnostic checks and rules
  * @see src/adaptivecard.js - Adaptive Card checks for template JSON bodies
+ * @see src/json-check.js - JSON syntax check of a template's output
  * @see package.json - Extension manifest and configuration schema
  * @see syntaxes/otterscript.tmLanguage.json - TextMate grammar (syntax highlighting)
  * @see snippets/otterscript.json - Snippets for structural templates only

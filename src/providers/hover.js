@@ -15,7 +15,7 @@
  */
 
 const vscode = require("vscode");
-const { executionDirectiveDocs, isDocumentedName, keywordDocs, lookupOperation, mapFunctionDocs, operationForms, scalarFunctionDocs, syntaxDocs, variableDocs, vectorFunctionDocs } = require("../language-data");
+const { EXECUTION_DIRECTIVES, isDocumentedName, keywordDocs, lookupOperation, mapFunctionDocs, operationForms, scalarFunctionDocs, syntaxDocs, variableDocs, vectorFunctionDocs } = require("../language-data");
 const { buildArgumentHoverMarkdown, buildHoverMarkdown, lookupOwn } = require("../helpers");
 const {
   findCallArguments,
@@ -282,9 +282,6 @@ function hoverExpressionDelimiter(document, position, { product }) {
   const docs = { "%(": syntaxDocs.mapExpr, "@(": syntaxDocs.vectorExpr, "$(": syntaxDocs.nestedEval };
   return new vscode.Hover(buildHoverMarkdown(docs[document.getText(range)], product), range);
 }
-
-/** The `with` directives by lower-case name. */
-const EXECUTION_DIRECTIVES = new Map(Object.values(executionDirectiveDocs).map((d) => [d.name.toLowerCase(), d]));
 
 /**
  * Whether `position` is in `range`, its ends included; ranges here are on

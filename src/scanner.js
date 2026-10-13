@@ -153,11 +153,12 @@ function findEmbeddedExpressionEnd(line, dollarIndex) {
 }
 
 // ============================================================
-// MODULE-NAME REGEXES
+// MODULE-NAME AND FUNCTION-CALL REGEXES
 // ============================================================
-// Pure regexes describing `module <Name>` declarations and `call [Raft::]<Name>`
-// targets. They live here (next to the scanner) because module discovery runs on
-// scanner-masked text and the context predicates below consume them.
+// Pure regexes describing `module <Name>` declarations, `call [Raft::]<Name>`
+// targets and function calls. They live here (next to the scanner) because
+// they run on scanner-masked text and the context predicates below consume
+// them.
 
 /**
  * Token regex for module names used by word-range lookups.
@@ -173,6 +174,11 @@ const MODULE_DECLARATION_REGEX = /^\s*module\s+([A-Za-z][\w-]*)/;
 const MODULE_CALL_TARGET_REGEX = /\bcall\s+(?:[A-Za-z][\w-]*::)?([A-Za-z][\w-]*)\b/;
 /** Global-flagged sibling of {@link MODULE_CALL_TARGET_REGEX} for `matchAll`. */
 const MODULE_CALL_TARGET_GLOBAL_REGEX = new RegExp(MODULE_CALL_TARGET_REGEX.source, "g");
+/**
+ * A function call, for `matchAll`: sigil (group 1) and name (group 2), up to
+ * its `(`. Not `<%`, nor a `%(` map literal.
+ */
+const FUNCTION_CALL_REGEX = /(?<!<)([$@%])([A-Za-z][A-Za-z0-9_]*)\s*\(/g;
 /** Matches the text left of the cursor when about to type a module declaration name. */
 const MODULE_DECL_PREFIX_REGEX = /^\s*module\s+$/i;
 /** Matches the text left of the cursor when about to type a `call` target name. */
@@ -385,6 +391,18 @@ function isStatementStart(text, end) {
 
 /** A character a braced variable's name may contain (see BRACED_NAME_PATTERN). */
 const BRACED_NAME_CHAR_REGEX = /[A-Za-z0-9_ -]/;
+
+/**
+ * `text` with each braced variable (`${my dir}`, `@{x}`, `%{x}`) on one line
+ * blanked to underscores, offsets unchanged, so its braces aren't taken for
+ * a block's and its spaces don't split it.
+ *
+ * @param {string} text - Masked by {@link maskNonCodeSpans}
+ * @returns {string}
+ */
+function blankBracedVariables(text) {
+  return text.replace(/[$@%]\{[^{}\n]*\}/g, (m) => "_".repeat(m.length));
+}
 
 /**
  * Whether the `}` at `index` closes a braced variable (`${x}`, `@{x}`,
@@ -1519,7 +1537,7 @@ const ARGUMENT_NAME_REGEX = /^(\s*)([A-Za-z][\w-]*)\s*(?::(?!:)|=>)/;
  */
 function findOperationArgumentContext(maskedPrefix, maskedSuffix = "") {
   // A braced variable's `}` (`${my dir}`) isn't a block's.
-  const text = maskedPrefix.replace(/[$@%]\{[^{}\n]*\}/g, (m) => "_".repeat(m.length));
+  const text = blankBracedVariables(maskedPrefix);
 
   // Back to the call's unclosed `(`, noting the last top-level `,`.
   let depth = 0;
@@ -1557,8 +1575,7 @@ function findOperationArgumentContext(maskedPrefix, maskedSuffix = "") {
     if (ch === "(" || ch === "[") depth++;
     else if (ch === ")" || ch === "]") depth--;
     else if (ch === "," && depth === 0) {
-      const name = ARGUMENT_NAME_REGEX.exec(text.slice(segmentStart, i))?.[2];
-      if (name) used.push(name);
+      addUsed(text.slice(segmentStart, i));
       segmentStart = i + 1;
     }
   }
@@ -1566,7 +1583,7 @@ function findOperationArgumentContext(maskedPrefix, maskedSuffix = "") {
   // Arguments given after the cursor: each top-level `Name:` segment up to
   // the call's `)` -- or, while it has none, the end of the statement --
   // past the rest of the name being typed, when the cursor is inside one.
-  const after = maskedSuffix.replace(/[$@%]\{[^{}\n]*\}/g, (m) => "_".repeat(m.length));
+  const after = blankBracedVariables(maskedSuffix);
   let inCurrent = /^\w/.test(after);
   segmentStart = 0;
   depth = 0;
@@ -1688,7 +1705,8 @@ module.exports = {
   splitSignatureParameters,
   blankClosedGroups,
 
-  // -- Module-name regexes & context predicates
+  // -- Module-name and function-call regexes & context predicates
+  FUNCTION_CALL_REGEX,
   MODULE_NAME_TOKEN_REGEX,
   MODULE_DECLARATION_REGEX,
   MODULE_CALL_TARGET_REGEX,
@@ -1701,6 +1719,7 @@ module.exports = {
   findTopLevelCommas,
 
   // -- Looking back from a word
+  blankBracedVariables,
   namespaceBefore,
   isStatementStart,
   findExecutionDirectives,

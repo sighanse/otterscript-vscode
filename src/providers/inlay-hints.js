@@ -10,17 +10,16 @@ const vscode = require("vscode");
 const { FUNCTION_TABLES } = require("../language-data");
 const { lookupOwn, productSignatures } = require("../helpers");
 const {
+  blankBracedVariables,
   createCodeScanState,
   createTemplateScanState,
   documentUsesTemplateTags,
+  FUNCTION_CALL_REGEX,
   maskComments,
   maskNonCodeSpans,
   maskOutsideTemplateTags,
   splitSignatureParameters,
 } = require("../scanner");
-
-/** A function call: sigil (group 1), name (group 2), up to its `(`. Not `<%` or a `%(` literal. */
-const FUNCTION_CALL_REGEX = /(?<!<)([$@%])([A-Za-z][A-Za-z0-9_]*)\s*\(/g;
 
 /**
  * The code of `text` with comments and -- in a text template -- the literal
@@ -91,7 +90,7 @@ function hintedParameterNames(signatures, count) {
  */
 function findParameterNameHints(text, product = "any") {
   // A braced variable's `{ }` (`${my var}`) isn't a block's.
-  const masked = maskCode(text).replace(/[$@%]\{[^{}\n]*\}/g, (m) => `${m[0]}${"_".repeat(m.length - 1)}`);
+  const masked = blankBracedVariables(maskCode(text));
   // The arguments as written, comments blanked: where one starts, and what it is.
   const withStrings = maskCode(text, true);
   /** @type {{ offset: number, label: string }[]} */
