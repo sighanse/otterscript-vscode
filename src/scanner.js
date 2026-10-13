@@ -1401,6 +1401,17 @@ function variableKey(sigil, name) {
 }
 
 /**
+ * A variable token's name, without its sigil or braces: `count` for `$count`,
+ * `my var` for `${my var}`.
+ *
+ * @param {string} token - `$name` or `${name}`, likewise for `@` / `%`
+ * @returns {string}
+ */
+function variableName(token) {
+  return token[1] === "{" ? token.slice(2, -1) : token.slice(1);
+}
+
+/**
  * Finds every variable reference in a document in one pass, grouped by
  * {@link variableKey}. `$x` and `@x` are different variables; `${x}` is the
  * same variable as `$x` (and `@{x}` as `@x`). The whole document is one
@@ -1663,6 +1674,7 @@ module.exports = {
   maskCommentSpans,
   indexVariableOccurrences,
   variableKey,
+  variableName,
   NAME_PATTERN,
   BRACED_NAME_PATTERN,
 

@@ -1189,6 +1189,7 @@ describe("updateDiagnostics — unused variables", () => {
     assert.deepEqual(where("module M<in $p> {\n}"), []);
     assert.deepEqual(where("foreach $item in @list { }"), []);
     assert.deepEqual(where("set $PackageName = 1;"), [], "a runtime variable the product reads");
+    assert.deepEqual(where("set ${PackageName} = 1;"), [], "the same, braced");
   });
 
   it("checks nothing in a file that reads variables by name or runs code that can", () => {

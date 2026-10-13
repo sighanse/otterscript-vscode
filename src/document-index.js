@@ -31,6 +31,7 @@ const {
   NAME_PATTERN,
   parseModuleParameters,
   variableKey,
+  variableName,
 } = require("./scanner");
 const { lookupOperation, operationArguments, operationForms } = require("./language-data");
 
@@ -277,7 +278,7 @@ function getVariableAt(document, position) {
   const range = document.getWordRangeAtPosition(position, VARIABLE_AT_CURSOR_REGEX);
   if (!range) return null;
   const token = document.getText(range);
-  const name = token[1] === "{" ? token.slice(2, -1) : token.slice(1);
+  const name = variableName(token);
   const occurrences = getVariableOccurrences(document, token[0], name);
   const isReference = occurrences.some((o) => o.line === range.start.line && o.character === range.start.character);
   return { sigil: token[0], name, range, isReference, occurrences };
@@ -297,8 +298,7 @@ function getDocumentVariables(document, sigil) {
   for (const [key, occurrences] of getVariableIndex(document)) {
     if (key[0] !== sigil || occurrences.length === 0) continue;
     const first = occurrences.find((o) => o.write) ?? occurrences[0];
-    const token = document.lineAt(first.line).text.slice(first.character, first.character + first.length);
-    const name = token[1] === "{" ? token.slice(2, -1) : token.slice(1);
+    const name = variableName(document.lineAt(first.line).text.slice(first.character, first.character + first.length));
     result.push({ name, assigned: first.write, line: first.line, occurrences });
   }
   return result;

@@ -44,6 +44,7 @@ const {
   MODULE_DECLARATION_REGEX,
   namespaceBefore,
   splitSignatureParameters,
+  variableName,
 } = require("./scanner");
 const { findAdaptiveCardDiagnostics } = require("./adaptivecard");
 const { findTemplateJsonProblem } = require("./json-check");
@@ -401,7 +402,7 @@ function findUnusedVariableDiagnostics(document, text) {
      * @returns {string}
      */
     const written = ({ line, character, length }) => document.lineAt(line).text.slice(character, character + length);
-    if (isDocumentedName(key[0], written(occurrences[0]).slice(1))) continue;
+    if (isDocumentedName(key[0], variableName(written(occurrences[0])))) continue;
     for (const occurrence of occurrences) {
       const { line, character, length } = occurrence;
       const diagnostic = new vscode.Diagnostic(

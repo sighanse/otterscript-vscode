@@ -36,6 +36,7 @@ const {
   parseModuleParameters,
   indexVariableOccurrences,
   variableKey,
+  variableName,
   blankClosedGroups,
   MODULE_NAME_TOKEN_REGEX,
   MODULE_DECLARATION_REGEX,
@@ -793,6 +794,15 @@ describe("maskCommentSpans", () => {
     maskCommentSpans("$t = >>", state);
     assert.equal(maskCommentSpans("hi $x", state), "hi $x");
     assert.equal(maskCommentSpans(">>;", state), "  ;");
+  });
+});
+
+describe("variableName", () => {
+  it("drops the sigil, and a braced name's braces", () => {
+    assert.equal(variableName("$count"), "count");
+    assert.equal(variableName("@my-list"), "my-list");
+    assert.equal(variableName("${my var}"), "my var");
+    assert.equal(variableName("%{map}"), "map");
   });
 });
 
