@@ -227,6 +227,17 @@
               ],
               "markdownDescription": "A `module` whose name another module in the same file already has."
             },
+            "unused-variable": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "A variable the file assigns but never reads (a faded hint). Not checked in a file that reads variables by name, runs other code that can read them, or calls a module declared elsewhere."
+            },
             "duplicate-map-key": {
               "type": "string",
               "enum": [

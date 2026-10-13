@@ -24,7 +24,7 @@ This extension started as a learning project while implementing [custom webhook 
 - Adaptive Card checks, triggered by a literal `"type": "AdaptiveCard"` object in a template: unknown types, values a property doesn't allow (`"weight": "bold"`), elements or properties newer than the card's `"version"`, `Action.ToggleVisibility` targets with no matching `"id"`, and Teams webhook mistakes such as a wrong `"contentType"` or `Action.Submit`. Completion inside the card offers `"type"` values, a property's allowed values and toggle targets. Based on the Adaptive Card 1.6 schema plus Teams-only elements; best-effort, not a full schema validation
 - Quick fixes, plus a **Fix All Issues** command (`Ctrl+Shift+Alt+F`, `Cmd+Shift+Alt+F` on macOS); fixes that would cause a new problem, or that guess a name, are left to the lightbulb. To apply the same fixes on save, add `"editor.codeActionsOnSave": { "source.fixAll": "explicit" }` to your settings
 - Module navigation: hover on `call MyModule` (its declaration and comment), completion and signature help for its arguments, Go to Definition (F12, also to a module declared in another workspace file), Find All References (Shift+F12) and Rename (F2) across workspace files, CodeLens reference counts, Outline and breadcrumbs, and Go to Symbol in Workspace (`Ctrl+T`); completion of module names after `call`, from this file and the rest of the workspace
-- Variables: hover shows where one of the file's own variables gets its value (the assignment lines, or the module parameter, `foreach` or operation output it comes from) and how often it's used; completion of the ones the file uses, Go to Definition (F12) to where they're assigned, Rename (F2) everywhere in the file (strings included), and highlighting all occurrences of a variable (`$x`, `@list`, `%map`, `${my var}`) or module, with declarations and assignments marked as writes
+- Variables: a faded hint on a variable the file assigns but never reads; hover shows where one of the file's own variables gets its value (the assignment lines, or the module parameter, `foreach` or operation output it comes from) and how often it's used; completion of the ones the file uses, Go to Definition (F12) to where they're assigned, Rename (F2) everywhere in the file (strings included), and highlighting all occurrences of a variable (`$x`, `@list`, `%map`, `${my var}`) or module, with declarations and assignments marked as writes
 - `with` blocks and `await`: completion of the directives (`retry`, `timeout`, `executionPolicy`, `async`, `lock`, `isolation`, `credentials`) and of `executionPolicy`'s values, hover on each, and checks for an unknown directive or a value it doesn't take; after `await`, completion of the file's `async` tokens, a hover listing the blocks it waits for, and a hint when no block in the file starts that token
 - Code folding via `#region` / `#endregion` and block structure
 - Snippets for common patterns: `module`, `call`, `async` / `await`, `lock`, `forserver` and `foreachserver` blocks, and `teamscard`: a complete Teams webhook body with an Adaptive Card
@@ -93,6 +93,7 @@ when no folder is open).
 | `incorrect-for-usage` | `for` used as a loop (use `foreach`) |
 | `duplicate-map-key` | The same key twice in a `%(...)` map |
 | `duplicate-module` | Two modules with the same name in one file |
+| `unused-variable` | A variable the file assigns but never reads, shown faded (see below) |
 | `unknown-scalar-function` | Unknown `$Name(...)` function |
 | `unknown-vector-function` | Unknown `@Name(...)` function |
 | `unknown-map-function` | Unknown `%Name(...)` function |
@@ -120,6 +121,12 @@ when no folder is open).
 | `adaptivecard-duplicate-id` | `"id"` that another element in the card already has |
 | `adaptivecard-content-type` | Teams message attachment without the Adaptive Card `"contentType"` |
 | `adaptivecard-webhook-submit` | `Action.Submit` in a Teams message (webhooks don't support it) |
+
+`unused-variable` leaves out global variables, module parameters, `foreach`
+loop variables and the product's own variables. It checks nothing in a file
+that reads variables by name (`$GetVariableValue`, `$Eval`, ...), runs other
+code that can read them (`Apply-Template`, `PSCall`, `OSExec`, ...), or calls a
+module declared in another file, as that code may read them.
 
 ## Reporting a problem
 

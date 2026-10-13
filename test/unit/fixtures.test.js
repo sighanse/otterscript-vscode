@@ -83,7 +83,7 @@ describe("manual-review fixtures", () => {
   it("sample.otter is NOT template-aware and flags exactly its documented tally", () => {
     const source = fs.readFileSync(path.join(__dirname, "..", "sample.otter"), "utf8");
     assert.equal(documentUsesTemplateTags(source), false);
-    assert.equal(diagnoseFixture("sample.otter").length, 18);
+    assert.equal(diagnoseFixture("sample.otter").length, 19);
   });
 
   it("sample-valid.otter is NOT template-aware and stays clean", () => {

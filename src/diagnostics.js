@@ -23,6 +23,7 @@ const {
 const {
   executionDirectiveDocs,
   FUNCTION_TABLES,
+  isDocumentedName,
   NAMESPACES,
   keywordDocs,
   operationArguments,
@@ -45,6 +46,7 @@ const {
   splitSignatureParameters,
 } = require("./scanner");
 const { findAdaptiveCardDiagnostics } = require("./adaptivecard");
+const { getModuleCallReferencesByName, getModuleDeclarations, getVariableIndex } = require("./document-index");
 
 /**
  * The kind of function each call sigil calls, for messages and the
@@ -327,6 +329,90 @@ function findArgumentCountDiagnosticsFromMasked(document, maskedText, text = doc
     diagnostic.code = code;
     diagnostic.source = "OtterScript";
     issues.push(diagnostic);
+  }
+  return issues;
+}
+
+/**
+ * Functions that read a variable whose name is only known when the script
+ * runs (`$GetVariableValue("x")`, `$Eval("$x")`): any variable the file
+ * assigns may be the one read.
+ */
+const VARIABLE_READER_FUNCTION_REGEX = /[$@%](?:GetVariableValue|IsVariableDefined|Eval)\s*\(/i;
+
+/**
+ * Operations that run other code which may read the script's variables
+ * without naming them in the script: a template (`Apply-Template`), an
+ * OtterScript text or raft script, or a script asset whose input variables
+ * come from the script (`PSCall`, `SHCall`, ...), and `Exec` importing the
+ * variables into the process's environment. From Inedo's reference.
+ */
+const VARIABLE_READER_OPERATION_REGEX =
+  /(?<![\w-])(?:Apply-Template|BATCall|OSCall|OSExec|PSCall|PSEnsure|PSVerify|PYCall|PYEnsure|PYExec|PYVerify|SHCall|SHEnsure2|SHExec|SHVerify2)(?![\w-])|\bImportVariables\s*:/i;
+
+/** A `call` of a raft's module (`call MyRaft::Shared`), declared in another script. */
+const RAFT_MODULE_CALL_REGEX = /\bcall\s+[A-Za-z][\w-]*::/;
+
+/**
+ * Whether code the file doesn't contain may read its variables, so that a
+ * variable the file never reads may still be used: the file reads variables
+ * by name, runs other code that can read them, or calls a module declared
+ * elsewhere (a module may read its caller's variables).
+ *
+ * @param {vscode.TextDocument} document
+ * @param {string} text - `document.getText()`
+ * @returns {boolean}
+ */
+function variablesReadElsewhere(document, text) {
+  if (VARIABLE_READER_FUNCTION_REGEX.test(text) || VARIABLE_READER_OPERATION_REGEX.test(text)) return true;
+  if (RAFT_MODULE_CALL_REGEX.test(text)) return true;
+  const declared = new Set(getModuleDeclarations(document).map((m) => m.name.toLowerCase()));
+  return [...getModuleCallReferencesByName(document).keys()].some((name) => !declared.has(name));
+}
+
+/**
+ * Flags each assignment of a variable the file never reads (`unused-variable`),
+ * as a faded Hint. The whole file is one scope, as in the variable index, and
+ * a read anywhere counts, also in a string or a template's literal output.
+ * Left out: global variables, which other scripts can read; module
+ * parameters and what's assigned to them (an `out` parameter is read by the
+ * caller); `foreach` loop variables; runtime variables the product documents;
+ * and every variable of a file whose variables other code may read
+ * ({@link variablesReadElsewhere}). No quick fix: removing the assignment
+ * would also remove a function call in its value.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {string} text - `document.getText()`
+ * @returns {vscode.Diagnostic[]}
+ */
+function findUnusedVariableDiagnostics(document, text) {
+  /** @type {vscode.Diagnostic[]} */
+  const issues = [];
+  const index = getVariableIndex(document);
+  if (index.size === 0 || variablesReadElsewhere(document, text)) return issues;
+
+  for (const [key, occurrences] of index) {
+    if (occurrences.some((o) => !o.write || o.global || o.assignedBy === "parameter" || o.assignedBy === "foreach")) continue;
+    /**
+     * The occurrence as written: `$x`, `${my var}`.
+     *
+     * @param {import("./scanner").VariableOccurrence} occurrence
+     * @returns {string}
+     */
+    const written = ({ line, character, length }) => document.lineAt(line).text.slice(character, character + length);
+    if (isDocumentedName(key[0], written(occurrences[0]).slice(1))) continue;
+    for (const occurrence of occurrences) {
+      const { line, character, length } = occurrence;
+      const diagnostic = new vscode.Diagnostic(
+        new vscode.Range(line, character, line, character + length),
+        `'${written(occurrence)}' is assigned but never read.`,
+        vscode.DiagnosticSeverity.Hint
+      );
+      diagnostic.code = "unused-variable";
+      diagnostic.source = "OtterScript";
+      diagnostic.tags = [vscode.DiagnosticTag.Unnecessary];
+      issues.push(diagnostic);
+    }
   }
   return issues;
 }
@@ -689,6 +775,7 @@ const DIAGNOSTIC_CODES = Object.freeze([
   "incorrect-for-usage",
   "duplicate-map-key",
   "duplicate-module",
+  "unused-variable",
   // -- Unknown names & arity
   "unknown-scalar-function",
   "unknown-vector-function",
@@ -1288,6 +1375,7 @@ function findDocumentDiagnostics(document, ctx) {
     issues.push(...findOperationArgumentDiagnosticsFromMasked(document, joinedMasked, text));
     issues.push(...findDuplicateModuleDiagnostics(document, maskedLines));
     issues.push(...findExecutionDirectiveDiagnostics(document, joinedMasked, text));
+    issues.push(...findUnusedVariableDiagnostics(document, text));
     if (templateAware) {
       // Triggered by a literal "type": "AdaptiveCard" in the literal output.
       issues.push(...findAdaptiveCardDiagnostics(document, text, { maxVersion: adaptiveCardMaxVersion }));

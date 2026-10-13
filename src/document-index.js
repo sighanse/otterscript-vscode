@@ -679,6 +679,7 @@ module.exports = {
   getModuleNameAt,
   getModuleParameters,
   getVariableAt,
+  getVariableIndex,
   getVariableOccurrences,
   isInStringOrCommentDoc,
   MASKED_CONTEXT_MAX_LINES,

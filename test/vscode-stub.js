@@ -117,6 +117,8 @@ class DiagnosticRelatedInformation {
 
 /** Mirrors `vscode.DiagnosticSeverity`. */
 const DiagnosticSeverity = Object.freeze({ Error: 0, Warning: 1, Information: 2, Hint: 3 });
+/** Mirrors `vscode.DiagnosticTag`. */
+const DiagnosticTag = Object.freeze({ Unnecessary: 1, Deprecated: 2 });
 
 class Diagnostic {
   /**
@@ -635,6 +637,7 @@ const vscode = {
   Diagnostic,
   DiagnosticRelatedInformation,
   DiagnosticSeverity,
+  DiagnosticTag,
   FoldingRange,
   FoldingRangeKind,
   Location,

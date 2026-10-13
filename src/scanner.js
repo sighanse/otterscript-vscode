@@ -1320,7 +1320,9 @@ function prefixTail(text, end, start = 0) {
  *
  * @param {string} text
  * @param {number} end - Where the token starts
- * @returns {boolean}
+ * @returns {"global" | "set" | false} `"global"` when the assignment makes
+ *   the variable global (`global $x`, `set global $x`), `"set"` for any
+ *   other assignment, false when the token isn't assigned
  */
 function isAssignmentPrefix(text, end) {
   let i = end;
@@ -1339,15 +1341,17 @@ function isAssignmentPrefix(text, end) {
     return i === 0 || ";{}".includes(text[i - 1]);
   };
   if (!skipWhitespace()) return false;
-  let keyword = word();
-  if (keyword === "local" || keyword === "global") {
+  const modifier = word();
+  let keyword = modifier;
+  if (modifier === "local" || modifier === "global") {
     const afterModifier = i;
-    if (keyword === "global" && atStatementStart()) return true;
+    if (modifier === "global" && atStatementStart()) return "global";
     i = afterModifier;
     if (!skipWhitespace()) return false;
     keyword = word();
   }
-  return keyword === "set" && atStatementStart();
+  if (keyword !== "set" || !atStatementStart()) return false;
+  return modifier === "global" ? "global" : "set";
 }
 
 /**
@@ -1360,13 +1364,14 @@ function isAssignmentPrefix(text, end) {
  */
 
 /**
- * @typedef {{ line: number, character: number, length: number, write: boolean, assignedBy?: AssignedBy }} VariableOccurrence
+ * @typedef {{ line: number, character: number, length: number, write: boolean, assignedBy?: AssignedBy, global?: true }} VariableOccurrence
  *   `line`/`character` are 0-based and point at the sigil; `length` covers
  *   the whole token (`$name` or `${name}`). `write` is true for a declaration
  *   or assignment target (`set $x = ...`, `global $x = ...`,
  *   `foreach %p in ...`, an operation's output capture `Name => $x`, or a
  *   module parameter, whose list may span several lines); `assignedBy` then
- *   says which.
+ *   says which. `global` is set on an assignment that makes the variable
+ *   global (`global $x = ...`, `set global $x = ...`).
  */
 
 /**
@@ -1424,18 +1429,20 @@ function indexVariableOccurrences(text) {
       const isParameter =
         paramStart !== -1 && character >= paramStart && character < paramEnd &&
         MODULE_PARAMETER_PREFIX_REGEX.test(prefixTail(code, character, paramStart));
+      const assignment = !inString && !isParameter && isAssignmentPrefix(view, character);
       /** @type {AssignedBy | undefined} */
       const assignedBy = inString ? undefined
         : isParameter ? "parameter"
           : FOREACH_VARIABLE_PREFIX_REGEX.test(before) ? "foreach"
             : OUTPUT_CAPTURE_PREFIX_REGEX.test(before) ? "output"
-              : isAssignmentPrefix(view, character) && ASSIGNMENT_SUFFIX_REGEX.test(after) ? "assignment"
+              : assignment && ASSIGNMENT_SUFFIX_REGEX.test(after) ? "assignment"
                 : undefined;
 
       const key = variableKey(tokenSigil, tokenName);
       /** @type {VariableOccurrence} */
       const occurrence = { line, character, length: match[0].length, write: assignedBy !== undefined };
       if (assignedBy) occurrence.assignedBy = assignedBy;
+      if (assignedBy === "assignment" && assignment === "global") occurrence.global = true;
       const existing = index.get(key);
       if (existing) existing.push(occurrence);
       else index.set(key, [occurrence]);

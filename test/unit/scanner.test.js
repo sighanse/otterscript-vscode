@@ -930,6 +930,17 @@ describe("indexVariableOccurrences", () => {
     assert.deepEqual(how("$g"), ["assignment"]);
   });
 
+  it("marks the assignments that make a variable global", () => {
+    const text = "global $a = 1;\nset global $b = 2;\nset local $c = 3;\nset $d = 4;";
+    const index = indexVariableOccurrences(text);
+    /** @param {string} key */
+    const global = (key) => index.get(key)?.map((o) => o.global === true);
+    assert.deepEqual(global("$a"), [true]);
+    assert.deepEqual(global("$b"), [true]);
+    assert.deepEqual(global("$c"), [false]);
+    assert.deepEqual(global("$d"), [false]);
+  });
+
   it("treats `set local $x = ...` as an assignment", () => {
     const index = indexVariableOccurrences("set local $x = 1;\nLog-Information \"$x\";");
     /** @param {string} key */

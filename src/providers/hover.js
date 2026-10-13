@@ -15,7 +15,7 @@
  */
 
 const vscode = require("vscode");
-const { executionDirectiveDocs, keywordDocs, lookupOperation, mapFunctionDocs, operationForms, scalarFunctionDocs, syntaxDocs, variableDocs, vectorFunctionDocs } = require("../language-data");
+const { executionDirectiveDocs, isDocumentedName, keywordDocs, lookupOperation, mapFunctionDocs, operationForms, scalarFunctionDocs, syntaxDocs, variableDocs, vectorFunctionDocs } = require("../language-data");
 const { buildArgumentHoverMarkdown, buildHoverMarkdown, lookupOwn } = require("../helpers");
 const {
   findCallArguments,
@@ -80,19 +80,6 @@ function hoverRegion(document, position, { product }) {
 const VARIABLE_HOVER_MAX_LINES = 3;
 /** How much of an assignment line a variable's hover shows. */
 const VARIABLE_HOVER_LINE_LENGTH = 120;
-
-/**
- * Whether a docs table documents this name with this sigil -- a function or
- * runtime variable, which {@link hoverSymbol} shows instead.
- *
- * @param {string} sigil
- * @param {string} name
- * @returns {boolean}
- */
-function isDocumentedName(sigil, name) {
-  if (sigil === "$") return Boolean(lookupOwn(scalarFunctionDocs, name) ?? lookupOwn(variableDocs, name));
-  return Boolean(lookupOwn(sigil === "@" ? vectorFunctionDocs : mapFunctionDocs, name));
-}
 
 /**
  * Line numbers as words: `1`, `1 and 3`, `1, 2 and 3`.

@@ -4322,6 +4322,20 @@ const FUNCTION_TABLES = Object.freeze({
   "%": exportedMapFunctionDocs,
 });
 
+/**
+ * Whether a docs table documents this name with this sigil: a function, or a
+ * runtime variable such as ProGet's `$PackageName`, rather than a variable
+ * of the script's own.
+ *
+ * @param {string} sigil - `$`, `@`, or `%`
+ * @param {string} name - Without its sigil
+ * @returns {boolean}
+ */
+function isDocumentedName(sigil, name) {
+  if (sigil === "$") return Object.hasOwn(exportedScalarFunctionDocs, name) || Object.hasOwn(exportedVariableDocs, name);
+  return Object.hasOwn(sigil === "@" ? exportedVectorFunctionDocs : exportedMapFunctionDocs, name);
+}
+
 module.exports = {
   NAMESPACES,
   operationDocs: mergedOperationDocs,
@@ -4337,4 +4351,5 @@ module.exports = {
   vectorFunctionDocs: exportedVectorFunctionDocs,
   mapFunctionDocs: exportedMapFunctionDocs,
   FUNCTION_TABLES,
+  isDocumentedName,
 };
