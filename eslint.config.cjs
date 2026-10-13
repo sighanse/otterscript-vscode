@@ -208,13 +208,14 @@ module.exports = defineConfig([
     }
   },
   {
-    // scanner.js is the pure, dependency-free text layer -- keep it vscode-free
-    // (see its @fileoverview and test/jsconfig.json). Enforce, don't just document.
-    files: ["src/scanner.js"],
+    // scanner.js is the pure, dependency-free text layer, and json-check.js
+    // and json-view.js are built on it -- keep them vscode-free (see their
+    // @fileoverview). Enforce, don't just document.
+    files: ["src/scanner.js", "src/json-check.js", "src/json-view.js"],
     rules: {
       "no-restricted-syntax": ["error", {
         selector: "CallExpression[callee.name='require'][arguments.0.value='vscode']",
-        message: "scanner.js must stay vscode-free; put vscode-dependent code in document-index.js, helpers.js or providers/.",
+        message: "This module must stay vscode-free; put vscode-dependent code in document-index.js, helpers.js or providers/.",
       }],
     }
   }

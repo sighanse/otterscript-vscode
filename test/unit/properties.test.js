@@ -4,8 +4,9 @@
  * provider, run on generated documents -- random text, and text built from
  * OtterScript's tokens -- instead of hand-written examples. They catch the
  * input nobody thought of: a crash, a range outside the document, the same
- * completion suggested twice, a quick fix that makes things worse, or a scan
- * that slows down with the square of the input's length.
+ * completion suggested twice, a quick fix that makes things worse, valid
+ * JSON reported as broken, or a scan that slows down with the square of the
+ * input's length.
  *
  * Unlike the other test files, this one isn't about one module: it drives
  * the whole extension through what `activate` registers.

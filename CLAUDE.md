@@ -25,8 +25,9 @@ for the Web (vscode.dev, github.dev).
 - `src/extension.js`: activation, settings, when diagnostics run
 - `src/providers/`: one module per group of language features
 - `src/diagnostics.js`, `src/adaptivecard.js`, `src/json-check.js`: the checks
-- `src/scanner.js`: text scanning (strings, comments, template tags). It must
-  stay free of `vscode` imports (lint enforces it)
+- `src/scanner.js`: text scanning (strings, comments, template tags). It,
+  `src/json-check.js` and `src/json-view.js` must stay free of `vscode`
+  imports (lint enforces it)
 - `src/document-index.js`: per-document caches built on the scanner
 - `src/language-data.js`: hand-written docs tables, merged with Inedo's
   generated reference (`src/inedo-reference*.js`)
@@ -62,8 +63,8 @@ for the Web (vscode.dev, github.dev).
   A module's unit tests go in the test file named after it
   (`src/providers/hover.js` -> `test/unit/hover.test.js`). The one exception,
   `test/unit/properties.test.js` (fast-check), runs every provider on
-  generated text; a crash, a range outside the document or a completion
-  suggested twice that it finds is a bug.
+  generated text; a crash, a range outside the document, a completion
+  suggested twice or valid JSON reported as broken that it finds is a bug.
 - **For a bug fix, write the test first**, run it, and see it fail for the
   reason reported before changing the code. A test that can't fail, such as
   one for a review finding that turns out to be wrong, is the sign to say so
@@ -86,6 +87,12 @@ for the Web (vscode.dev, github.dev).
   generator keeps each page's path from Inedo's reference archives; never
   build these URLs from names, which don't match the pages
   (`DotNet::Build` is `dotnet/dotnet-build`).
+- Not yet known (open questions to ProGet): whether a module reads its
+  caller's variables. `unused-variable` therefore checks nothing in a file
+  that calls a module declared elsewhere, reads variables by name or runs
+  other code that can read them.
+- A text template's `<% %>` tag can write anything, so the JSON check
+  (`src/json-check.js`) reports nothing right after one.
 
 ## Pull requests and reviews
 

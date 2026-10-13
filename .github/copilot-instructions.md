@@ -12,7 +12,7 @@ Flag a pull request that breaks any of these:
 - **Diagnostics never flag valid code.** Hint for guesses, Warning for suspicious code, Error only for code that can't run.
 - **Quick fixes** are preferred (applied by Fix All) only when they aren't a guess.
 - **OtterScript:** variable, module and argument names compare case-insensitively; an output argument is `Name => $variable`; operations are looked up with `lookupOperation(name, namespace)`. Docs links (`docUrls`) come from the generator, never from names.
-- **Script text** is read through `maskNonCodeSpans` (`src/scanner.js`), which blanks strings and comments but keeps offsets. `scanner.js` never requires `vscode`.
+- **Script text** is read through `maskNonCodeSpans` (`src/scanner.js`), which blanks strings and comments but keeps offsets. `scanner.js` and `json-check.js` never require `vscode`.
 - **Providers** return `[]` or `null` and never throw, except rename, which refuses with an `Error` whose message VS Code shows. `activate()` stays light; disposables go in `context.subscriptions`.
 - **Tests:** unit tests in `test/unit/<module>.test.js` (`properties.test.js`, fast-check over every provider, is the one cross-module file); behavior in VS Code in `test/integration/`; `test/web/` for what the browser bundle needs. A bug fix comes with a test that fails without it.
 - **CHANGELOG:** user-visible changes only, under `[Unreleased]`. **README** covers new settings, diagnostics and features.
@@ -22,7 +22,7 @@ Flag a pull request that breaks any of these:
 ## Layout
 
 - `src/extension.js`: activation. `src/providers/`: one module per feature group.
-- `src/diagnostics.js`, `src/adaptivecard.js`: the checks.
+- `src/diagnostics.js`, `src/adaptivecard.js`, `src/json-check.js`: the checks.
 - `src/scanner.js`: text scanning. `src/document-index.js`: per-document caches.
 - `src/language-data.js`: hand-written docs, which win over the generated reference (`src/inedo-reference.js`).
 - `src/helpers.js`: settings, logging, hover and completion builders.

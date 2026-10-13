@@ -65,8 +65,9 @@ the Web).
 - `src/diagnostics.js`, `src/adaptivecard.js` and `src/json-check.js` (a
   template's JSON output): the checks
 - `src/scanner.js`: text scanning (strings, comments, template tags). It must
-  stay free of `vscode` imports; ESLint enforces it. `src/json-view.js` is the
-  same kind of layer for JSON in templates
+  stay free of `vscode` imports; ESLint enforces it, also for
+  `src/json-view.js` and `src/json-check.js`, the same kind of layer for JSON
+  in templates
 - `src/document-index.js`: per-document caches built on the scanner
 - `src/language-data.js`: the hand-written docs tables, merged with Inedo's
   generated reference (`src/inedo-reference*.js`)
@@ -128,7 +129,8 @@ Every change in behavior comes with tests:
   documents [fast-check](https://fast-check.dev/) generates, checking what
   must hold for any text: no crash, ranges inside the document, no
   completion suggested twice, Fix All adding no errors, time linear in the
-  length. A failure prints the smallest
+  length, and no JSON problem reported in valid JSON a template writes. A
+  failure prints the smallest
   input it found. The seed is fixed; `FC_SEED=<n> FC_RUNS=<n> node --test
   test/unit/properties.test.js` tries others.
 - For a bug fix, write the test first and see it fail for the reason
@@ -197,8 +199,8 @@ and a `CLAUDE_CODE_OAUTH_TOKEN` repository secret (`claude setup-token`).
    notes; `npm run check` fails until the version has one.
 2. Merge to `main` through a pull request.
 3. Run the **Publish Extension** workflow on `main`. After approval in the
-   `release` environment it checks and packages the extension once, publishes
-   that package to the Visual Studio Marketplace and Open VSX, then tags the
+   `release` environment it checks and packages the extension once, checks
+   the package (`npm run check:vsix`), publishes it to the Visual Studio Marketplace and Open VSX, then tags the
    commit `v<version>` and creates a GitHub release with the package attached
    and the version's CHANGELOG section as its notes.
    A run that failed half-way can be run again: versions already published
