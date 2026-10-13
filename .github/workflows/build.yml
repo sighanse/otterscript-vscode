@@ -41,8 +41,10 @@ jobs:
       - name: Lint, type-check, grammar sync, unit tests
         run: npm run check
 
-      - name: Package extension (validation only)
-        run: npm run package
+      - name: Package extension and check the package
+        run: |
+          npm run package
+          npm run check:vsix
 
       - name: Upload VSIX artifact (opt-in)
         if: ${{ inputs.upload_vsix }}

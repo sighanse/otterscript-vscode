@@ -606,6 +606,7 @@
     "bundle": "node scripts/build.js",
     "build": "node scripts/build.js --dev",
     "check:bundle": "node scripts/build.js --check",
+    "check:vsix": "node scripts/check-vsix.js",
     "pretest:integration": "npm run build",
     "test:integration": "vscode-test",
     "pretest:web": "node scripts/build.js --dev --web-tests",

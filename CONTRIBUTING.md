@@ -36,6 +36,9 @@ npm run test:integration   # integration tests in real VS Code (see below)
 npm run test:web           # web tests in VS Code for the Web (see below)
 npm run package            # build the .vsix, to install and try locally
                            # (Extensions view > ... > Install from VSIX)
+npm run check:vsix         # check the .vsix: exactly the files the
+                           # extension needs, this version, and bundles that
+                           # activate (Sanity and publishing run it too)
 npm run update:cards       # re-download the Adaptive Card schema and regenerate
                            # src/adaptivecard-data.js
 npm run update:reference   # re-download Inedo's function/operation reference,

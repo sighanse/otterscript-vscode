@@ -58,6 +58,14 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "vsix=otterscript-vscode-$version.vsix" >> "$GITHUB_OUTPUT"
 
+      # The package itself, before it's attested or published: exactly the
+      # files the extension needs, this version, and bundles that activate
+      # and register what src/ does (scripts/check-vsix.js).
+      - name: Check the package
+        env:
+          VSIX: ${{ steps.package.outputs.vsix }}
+        run: node scripts/check-vsix.js "$VSIX"
+
       # A signed SLSA build provenance attestation for the package: anyone
       # can check that a .vsix was built by this workflow from this
       # repository (`gh attestation verify <file> --repo <owner>/<repo>`;
