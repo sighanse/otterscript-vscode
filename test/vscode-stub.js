@@ -2,11 +2,13 @@
 /**
  * @fileoverview Minimal `vscode` module stub for unit tests.
  *
- * `helpers.js`, `diagnostics.js`, and `adaptivecard.js` do `require("vscode")` at
- * load time and construct a handful of VS Code value types (`Position`, `Range`,
- * `Diagnostic`, `FoldingRange`, ...) inside the functions under test. The real `vscode` module only exists inside the
- * extension host, so this file provides just enough of that surface and installs
- * itself into the module loader.
+ * Every module in src/ but the plain-text and plain-data ones (scanner.js,
+ * json-view.js, language-data.js and its sources) does `require("vscode")`
+ * at load time, constructs VS Code value types
+ * (`Position`, `Range`, `Diagnostic`, `FoldingRange`, ...) and registers
+ * providers and commands. The real `vscode` module only exists inside the
+ * extension host, so this file provides just enough of that surface and
+ * installs itself into the module loader.
  *
  * Usage — require this **before** requiring anything that pulls in `vscode`:
  *
@@ -115,6 +117,8 @@ class DiagnosticRelatedInformation {
 
 /** Mirrors `vscode.DiagnosticSeverity`. */
 const DiagnosticSeverity = Object.freeze({ Error: 0, Warning: 1, Information: 2, Hint: 3 });
+/** Mirrors `vscode.DiagnosticTag`. */
+const DiagnosticTag = Object.freeze({ Unnecessary: 1, Deprecated: 2 });
 
 class Diagnostic {
   /**
@@ -575,15 +579,31 @@ function parseUri(value) {
   return { toString: () => value, scheme: value.split(":")[0], fsPath: value.replace(/^file:\/\//, "") };
 }
 
-// A log output channel (helpers.js `log`) that drops every line; extend if a
-// future test drives more of the logger.
+/**
+ * Every line the log output channel was given, as `[level, message, ...rest]`.
+ *
+ * @type {[string, string, ...unknown[]][]}
+ */
+const outputLines = [];
+
+/**
+ * A log output channel method that keeps its line in `outputLines`.
+ *
+ * @param {string} level
+ * @returns {(message: string, ...rest: unknown[]) => void}
+ */
+const recordAt = (level) => (message, ...rest) => { outputLines.push([level, message, ...rest]); };
+
+// The log output channel (helpers.js `log`). Tests read what it was given
+// from its `lines`, and empty it with `lines.length = 0`.
 const outputChannel = {
+  lines: outputLines,
   appendLine() {},
-  info() {},
-  warn() {},
-  error() {},
-  debug() {},
-  trace() {},
+  info: recordAt("info"),
+  warn: recordAt("warn"),
+  error: recordAt("error"),
+  debug: recordAt("debug"),
+  trace: recordAt("trace"),
   dispose() {},
   name: "OtterScript (stub)",
 };
@@ -617,6 +637,7 @@ const vscode = {
   Diagnostic,
   DiagnosticRelatedInformation,
   DiagnosticSeverity,
+  DiagnosticTag,
   FoldingRange,
   FoldingRangeKind,
   Location,

@@ -90,6 +90,13 @@ function validateDocs(label, docsTable) {
         doc.overloads.some((/** @type {any} */ o) => typeof o?.product !== "string" || typeof o?.signature !== "string"))) {
       warnings.push(`${label}.${key} 'overloads' must be an array of { product, signature } strings`);
     }
+
+    // Optional Field: 'docUrls' -- its pages on docs.inedo.com, by product
+    if (doc.docUrls !== undefined && (typeof doc.docUrls !== "object" || doc.docUrls === null ||
+        Object.entries(doc.docUrls).some(([product, url]) =>
+          !PRODUCTS.includes(product) || typeof url !== "string" || !url.startsWith("https://docs.inedo.com/docs/")))) {
+      warnings.push(`${label}.${key} 'docUrls' must map ${PRODUCTS.join(", ")} to docs.inedo.com pages`);
+    }
   }
 
   return { errors, warnings };

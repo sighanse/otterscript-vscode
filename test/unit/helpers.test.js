@@ -16,7 +16,7 @@ const { Position } = require("../vscode-stub");
 const stub = require("../vscode-stub");
 const { makeDocument } = require("./fake-document");
 const { stubProperty } = require("./fake-workspace");
-const { operationDocs } = require("../../src/language-data.js");
+const { operationDocs, scalarFunctionDocs } = require("../../src/language-data.js");
 const {
   buildCompletionItem,
   resolveCompletionDocumentation,
@@ -24,7 +24,6 @@ const {
   buildArgumentHoverMarkdown,
   buildSigilCompletionItems,
   clearTimerForUri,
-  getTypedIdentifier,
   isValidCompletionPosition,
   loadConfig,
   lookupOwn,
@@ -90,6 +89,37 @@ describe("buildHoverMarkdown (otterscript.product and anySigil)", () => {
   it("says when a function works with every sigil", () => {
     assert.match(text(buildHoverMarkdown({ name: "@FromJson", anySigil: true })), /Works with `\$`, `@` and `%`/);
     assert.doesNotMatch(text(buildHoverMarkdown({ name: "$ToJson" })), /Works with/);
+  });
+});
+
+describe("buildHoverMarkdown (link to Inedo's documentation)", () => {
+  /** @param {any} md */
+  const text = (md) => md.value;
+  const docUrls = { Otter: "https://docs.inedo.com/docs/otter/x", BuildMaster: "https://docs.inedo.com/docs/buildmaster/x" };
+
+  it("ends with the page for the selected product, else the first one", () => {
+    const doc = { name: "Copy-Files", documentation: "Docs.", docUrls };
+    assert.match(text(buildHoverMarkdown(doc, "BuildMaster")), /Docs\.\n\n\[Inedo's BuildMaster documentation\]\(https:\/\/docs\.inedo\.com\/docs\/buildmaster\/x\)$/);
+    assert.match(text(buildHoverMarkdown(doc)), /\[Inedo's Otter documentation\]\(https:\/\/docs\.inedo\.com\/docs\/otter\/x\)$/, "'any'");
+    assert.match(text(buildHoverMarkdown(doc, "ProGet")), /\[Inedo's Otter documentation\]/, "a product without a page");
+  });
+
+  it("puts the link right after the heading when there is no documentation", () => {
+    assert.equal(
+      text(buildHoverMarkdown({ name: "Copy-Files", docUrls }, "Otter")),
+      "### Copy-Files\n\n[Inedo's Otter documentation](https://docs.inedo.com/docs/otter/x)"
+    );
+  });
+
+  it("has no link for an entry without pages", () => {
+    assert.doesNotMatch(text(buildHoverMarkdown({ name: "if", documentation: "Docs." })), /documentation\]/);
+    assert.doesNotMatch(text(buildHoverMarkdown({ name: "if", documentation: "Docs.", docUrls: {} })), /documentation\]/, "empty docUrls");
+  });
+
+  it("links the real entries: the reference's pages, and ProGet's webhook page", () => {
+    assert.match(text(buildHoverMarkdown(operationDocs["Copy-Files"], "Otter")), /\(https:\/\/docs\.inedo\.com\/docs\/otter\/reference\/operations\/general\/copy-files\)$/);
+    assert.match(text(buildHoverMarkdown(scalarFunctionDocs.PackageHash, "ProGet")), /\[Inedo's ProGet documentation\]\(https:\/\/docs\.inedo\.com\/docs\/proget\/administration\/proget-notifications-webhooks\/proget-notifications-custom-webhook\)$/);
+    assert.match(text(buildHoverMarkdown(scalarFunctionDocs.PackageHash, "BuildMaster")), /\/buildmaster\/reference\/functions\/packages\/packagehash\)$/);
   });
 });
 
@@ -355,31 +385,6 @@ describe("lookupOwn", () => {
     for (const inherited of ["constructor", "toString", "valueOf", "hasOwnProperty", "__proto__"]) {
       assert.equal(lookupOwn(table, inherited), undefined, inherited);
     }
-  });
-});
-
-// ============================================================
-// getTypedIdentifier
-// ============================================================
-
-describe("getTypedIdentifier", () => {
-  it("extracts the fragment after a '$' / '@' / '%' trigger", () => {
-    assert.equal(getTypedIdentifier(makeDoc("x = $To"), pos(0, 7), "$"), "To");
-    assert.equal(getTypedIdentifier(makeDoc("@Sp"), pos(0, 3), "@"), "Sp");
-    assert.equal(getTypedIdentifier(makeDoc("set %m = %From"), pos(0, 14), "%"), "From");
-  });
-
-  it("takes digits, '_' and '-' in a name, as variable names have", () => {
-    assert.equal(getTypedIdentifier(makeDoc("Log-Information $item2"), pos(0, 22), "$"), "item2");
-    assert.equal(getTypedIdentifier(makeDoc("set @my-li"), pos(0, 10), "@"), "my-li");
-  });
-
-  it("returns '' right after the bare sigil", () => {
-    assert.equal(getTypedIdentifier(makeDoc("$"), pos(0, 1), "$"), "");
-  });
-
-  it("returns null when the sigil is not immediately before the cursor", () => {
-    assert.equal(getTypedIdentifier(makeDoc("xyz"), pos(0, 3), "$"), null);
   });
 });
 

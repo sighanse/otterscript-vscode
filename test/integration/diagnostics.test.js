@@ -64,7 +64,7 @@ describe("diagnostics", () => {
   it("publishes the documented number of diagnostics for the sample files", async () => {
     // Same counts as test/unit/fixtures.test.js, but through VS Code itself.
     for (const [file, expected] of [
-      ["sample.otter", 18],
+      ["sample.otter", 19],
       ["sample-valid.otter", 0],
       ["sample-template.otter", 13],
       ["sample-template-valid.otter", 0],
@@ -73,6 +73,15 @@ describe("diagnostics", () => {
       const document = await openFile(path.join(SAMPLES_DIR, /** @type {string} */ (file)));
       assert.equal((await refreshDiagnostics(document)).length, expected, /** @type {string} */ (file));
     }
+  });
+
+  it("shows a variable the file never reads faded, as a hint", async () => {
+    const document = await openContent("set $unused = 1;\n");
+    const [diagnostic, ...rest] = await refreshDiagnostics(document);
+    assert.equal(rest.length, 0);
+    assert.equal(codeOf(diagnostic), "unused-variable");
+    assert.equal(diagnostic.severity, vscode.DiagnosticSeverity.Hint);
+    assert.deepEqual(diagnostic.tags, [vscode.DiagnosticTag.Unnecessary]);
   });
 
   it("updates diagnostics after an edit", async () => {
@@ -200,7 +209,7 @@ describe("quick fixes", () => {
   });
 
   it("'Change to' fixes a misspelt function, operation and argument name", async () => {
-    const document = await openContent('set $s = $Substrng($x, 1);\nCopy-Fils(To: "b");\nCopy-Files(Fomr: "a", To: "b");\n');
+    const document = await openContent('set $s = $Substrng($x, 1);\nCopy-Fils(To: "b");\nCopy-Files(Fomr: "a", To: "b");\nLog-Information $s;\n');
     for (const [code, title] of [
       ["unknown-scalar-function", "Change to '$Substring'"],
       ["unknown-operation", "Change to 'Copy-Files'"],
@@ -212,7 +221,7 @@ describe("quick fixes", () => {
       assert.ok(fix?.edit, `${title} is offered`);
       await vscode.workspace.applyEdit(fix.edit);
     }
-    assert.equal(document.getText(), 'set $s = $Substring($x, 1);\nCopy-Files(To: "b");\nCopy-Files(From: "a", To: "b");\n');
+    assert.equal(document.getText(), 'set $s = $Substring($x, 1);\nCopy-Files(To: "b");\nCopy-Files(From: "a", To: "b");\nLog-Information $s;\n');
     assert.equal((await refreshDiagnostics(document)).length, 0);
   });
 
@@ -269,6 +278,19 @@ describe("quick fixes", () => {
     assert.ok(fix?.edit, "the fix is offered");
     await vscode.workspace.applyEdit(fix.edit);
     assert.ok(document.lineAt(2).text.includes('[ "details" ]'));
+    assert.equal((await refreshDiagnostics(document)).length, 0);
+  });
+
+  it("'Remove the comma' fixes a webhook body's JSON", async () => {
+    const document = await openContent('<% set $title = "Build"; %>\n{\n  "text": $ToJson($title),\n}\n');
+    const [diagnostic] = await refreshDiagnostics(document);
+    assert.equal(codeOf(diagnostic), "template-json-syntax");
+    assert.equal(diagnostic.message, "JSON doesn't allow a comma before '}'.");
+
+    const fix = (await quickFixes(document, diagnostic)).find((a) => a.title === "Remove the comma");
+    assert.ok(fix?.edit, "the fix is offered");
+    await vscode.workspace.applyEdit(fix.edit);
+    assert.equal(document.lineAt(2).text, '  "text": $ToJson($title)');
     assert.equal((await refreshDiagnostics(document)).length, 0);
   });
 });

@@ -2,10 +2,11 @@
 /**
  * @fileoverview Per-document indexes over an open OtterScript document, each
  * cached per document version: module declarations and `call` references,
- * variable occurrences, and the scan state at the start of every line (for
- * telling whether a position is in a string or comment). Used by the
- * navigation, completion and hover providers; extension.js drops a document's
- * entries when it closes ({@link clearDocumentCaches}).
+ * variable occurrences, `with` directives and `await` statements, and the
+ * scan state at the start of every line (for telling whether a position is
+ * in a string or comment). Used by the providers and quick fixes;
+ * extension.js drops a document's entries when it closes
+ * ({@link clearDocumentCaches}).
  *
  * @module document-index
  */
@@ -30,6 +31,7 @@ const {
   NAME_PATTERN,
   parseModuleParameters,
   variableKey,
+  variableName,
 } = require("./scanner");
 const { lookupOperation, operationArguments, operationForms } = require("./language-data");
 
@@ -46,24 +48,44 @@ const { lookupOperation, operationArguments, operationForms } = require("./langu
  */
 
 /**
- * @typedef {{
- *   version: number,
- *   declarations: ModuleDeclaration[],
- *   refsByName: Map<string, vscode.Location[]>
- * }} ModuleInfoCacheEntry
+ * A per-document cache: by `uri.toString()`, what was built for one
+ * `document.version` (see {@link cachedForVersion}). Entries are dropped on
+ * close via {@link clearDocumentCaches}.
+ *
+ * @template T
+ * @typedef {Map<string, { version: number, value: T }>} VersionCache
  */
 
 /**
- * Per-document module analysis, keyed by `uri.toString()` and invalidated by
- * `document.version`. Entries are dropped on close via {@link clearDocumentCaches}.
- * @type {Map<string, ModuleInfoCacheEntry>}
+ * `cache`'s value for the document's current version, built by `build` when
+ * it has none yet or one for another version.
+ *
+ * @template T
+ * @param {VersionCache<T>} cache
+ * @param {vscode.TextDocument} document
+ * @param {() => T} build
+ * @returns {T}
+ */
+function cachedForVersion(cache, document, build) {
+  const key = document.uri.toString();
+  let cached = cache.get(key);
+  if (!cached || cached.version !== document.version) {
+    cached = { version: document.version, value: build() };
+    cache.set(key, cached);
+  }
+  return cached.value;
+}
+
+/**
+ * Per-document module analysis ({@link getModuleInfo}).
+ * @type {VersionCache<{ declarations: ModuleDeclaration[], refsByName: Map<string, vscode.Location[]> }>}
  */
 const moduleInfoCache = new Map();
 
 /**
  * Per-document `with` directives and `await` statements
- * ({@link getExecutionDirectives}), keyed by `uri.toString()`.
- * @type {Map<string, { version: number, index: ExecutionDirectiveIndex }>}
+ * ({@link getExecutionDirectives}).
+ * @type {VersionCache<ExecutionDirectiveIndex>}
  */
 const executionDirectiveCache = new Map();
 
@@ -127,12 +149,17 @@ function getModuleDeclarations(document) {
  *   `refsByName` is keyed by {@link moduleKey}.
  */
 function getModuleInfo(document) {
-  const cacheKey = document.uri.toString();
-  const cached = moduleInfoCache.get(cacheKey);
-  if (cached && cached.version === document.version) {
-    return { declarations: cached.declarations, refsByName: cached.refsByName };
-  }
+  return cachedForVersion(moduleInfoCache, document, () => buildModuleInfo(document));
+}
 
+/**
+ * The module declarations and module call references of a document, built
+ * afresh (see {@link getModuleInfo}).
+ *
+ * @param {vscode.TextDocument} document
+ * @returns {{ declarations: ModuleDeclaration[], refsByName: Map<string, vscode.Location[]> }}
+ */
+function buildModuleInfo(document) {
   // Declarations: reuse the shared pure scanner so the `module <Name>` scan
   // lives in exactly one place (`findModuleDeclarations` in scanner.js).
   /** @type {ModuleDeclaration[]} */
@@ -172,12 +199,6 @@ function getModuleInfo(document) {
     }
   }
 
-  moduleInfoCache.set(cacheKey, {
-    version: document.version,
-    declarations,
-    refsByName
-  });
-
   return { declarations, refsByName };
 }
 
@@ -206,11 +227,9 @@ function getModuleCallReferencesByName(document) {
 }
 
 /**
- * Per-document variable index ({@link indexVariableOccurrences}), keyed by
- * `uri.toString()` and invalidated by `document.version`, so highlighting on
- * every cursor move doesn't rescan an unchanged document. Entries are dropped
- * on close via {@link clearDocumentCaches}.
- * @type {Map<string, { version: number, index: Map<string, import("./scanner").VariableOccurrence[]> }>}
+ * Per-document variable index ({@link indexVariableOccurrences}), so
+ * highlighting on every cursor move doesn't rescan an unchanged document.
+ * @type {VersionCache<Map<string, import("./scanner").VariableOccurrence[]>>}
  */
 const variableIndexCache = new Map();
 
@@ -218,9 +237,8 @@ const variableIndexCache = new Map();
  * Scan states at the start of each line, per document version: `states[i]`
  * is the state on entering line `i`. Filled in lazily, only as far as a
  * request has needed, so hover, completion and highlight on every keystroke
- * don't rescan the document from line 1. Dropped on close via
- * {@link clearDocumentCaches}.
- * @type {Map<string, { version: number, states: LineScanState[] }>}
+ * don't rescan the document from line 1.
+ * @type {VersionCache<LineScanState[]>}
  */
 const lineStartStateCache = new Map();
 
@@ -245,13 +263,7 @@ function getVariableOccurrences(document, sigil, name) {
  * @returns {Map<string, import("./scanner").VariableOccurrence[]>}
  */
 function getVariableIndex(document) {
-  const cacheKey = document.uri.toString();
-  let cached = variableIndexCache.get(cacheKey);
-  if (!cached || cached.version !== document.version) {
-    cached = { version: document.version, index: indexVariableOccurrences(document.getText()) };
-    variableIndexCache.set(cacheKey, cached);
-  }
-  return cached.index;
+  return cachedForVersion(variableIndexCache, document, () => indexVariableOccurrences(document.getText()));
 }
 
 /**
@@ -276,7 +288,7 @@ function getVariableAt(document, position) {
   const range = document.getWordRangeAtPosition(position, VARIABLE_AT_CURSOR_REGEX);
   if (!range) return null;
   const token = document.getText(range);
-  const name = token[1] === "{" ? token.slice(2, -1) : token.slice(1);
+  const name = variableName(token);
   const occurrences = getVariableOccurrences(document, token[0], name);
   const isReference = occurrences.some((o) => o.line === range.start.line && o.character === range.start.character);
   return { sigil: token[0], name, range, isReference, occurrences };
@@ -296,8 +308,7 @@ function getDocumentVariables(document, sigil) {
   for (const [key, occurrences] of getVariableIndex(document)) {
     if (key[0] !== sigil || occurrences.length === 0) continue;
     const first = occurrences.find((o) => o.write) ?? occurrences[0];
-    const token = document.lineAt(first.line).text.slice(first.character, first.character + first.length);
-    const name = token[1] === "{" ? token.slice(2, -1) : token.slice(1);
+    const name = variableName(document.lineAt(first.line).text.slice(first.character, first.character + first.length));
     result.push({ name, assigned: first.write, line: first.line, occurrences });
   }
   return result;
@@ -311,10 +322,9 @@ function getDocumentVariables(document, sigil) {
  * @returns {void}
  */
 function clearDocumentCaches(uri) {
-  moduleInfoCache.delete(uri.toString());
-  variableIndexCache.delete(uri.toString());
-  lineStartStateCache.delete(uri.toString());
-  executionDirectiveCache.delete(uri.toString());
+  for (const cache of [moduleInfoCache, variableIndexCache, lineStartStateCache, executionDirectiveCache]) {
+    cache.delete(uri.toString());
+  }
 }
 
 /**
@@ -349,16 +359,12 @@ function findModuleReferences(document, moduleName, includeDeclaration) {
   /** @type {vscode.Location[]} */
   const locations = [];
 
-  const { declarations, refsByName } = getModuleInfo(document);
-
-  if (includeDeclaration) {
-    const declaration = declarations.find(entry => moduleKey(entry.name) === moduleKey(moduleName));
-    if (declaration) {
-      locations.push(new vscode.Location(document.uri, declaration.range));
-    }
+  const declaration = includeDeclaration && findModuleDeclarationRange(document, moduleName);
+  if (declaration) {
+    locations.push(new vscode.Location(document.uri, declaration));
   }
 
-  const callRefs = refsByName.get(moduleKey(moduleName));
+  const callRefs = getModuleInfo(document).refsByName.get(moduleKey(moduleName));
   if (callRefs) {
     locations.push(...callRefs);
   }
@@ -373,9 +379,11 @@ function findModuleReferences(document, moduleName, includeDeclaration) {
 /**
  * Document-aware version of {@link isInStringOrComment}.
  *
- * Scans from the beginning of the document with carried {@link CodeScanState}
- * so that multi-line block comments (`/* ... *\/`) and swim-strings that
- * opened on a previous line are correctly detected.
+ * Starts from the cached scan state at the start of the position's line
+ * ({@link getLineStartScanState}), so that multi-line block comments
+ * (`/* ... *\/`) and swim-strings that opened on a previous line are
+ * correctly detected. In a text template, the literal output around the tags
+ * counts as string text, except its `$` expressions.
  *
  * Use this in providers that have access to a full `TextDocument` object.
  * Fall back to {@link isInStringOrComment} only for isolated single-line
@@ -436,15 +444,11 @@ function copyLineScanState({ code, tags }) {
  * @returns {LineScanState}
  */
 function getLineStartScanState(document, line) {
-  const cacheKey = document.uri.toString();
-  let cached = lineStartStateCache.get(cacheKey);
-  if (!cached || cached.version !== document.version) {
+  const states = cachedForVersion(lineStartStateCache, document, () => {
     const text = document.getText();
     const template = text.includes("<%") && documentUsesTemplateTags(text);
-    cached = { version: document.version, states: [{ code: createCodeScanState(), tags: template ? createTemplateScanState() : null }] };
-    lineStartStateCache.set(cacheKey, cached);
-  }
-  const { states } = cached;
+    return [{ code: createCodeScanState(), tags: template ? createTemplateScanState() : null }];
+  });
   // Use advanceScanState (not maskNonCodeSpans) for the lines in between: only
   // the state is needed, not the masked text.
   while (states.length <= line) {
@@ -526,10 +530,17 @@ function getMaskedTextAfter(document, position) {
  * @returns {ExecutionDirectiveIndex}
  */
 function getExecutionDirectives(document) {
-  const cacheKey = document.uri.toString();
-  const cached = executionDirectiveCache.get(cacheKey);
-  if (cached && cached.version === document.version) return cached.index;
+  return cachedForVersion(executionDirectiveCache, document, () => buildExecutionDirectives(document));
+}
 
+/**
+ * The document's `with` directives and `await` statements, found afresh
+ * (see {@link getExecutionDirectives}).
+ *
+ * @param {vscode.TextDocument} document
+ * @returns {ExecutionDirectiveIndex}
+ */
+function buildExecutionDirectives(document) {
   const last = document.lineCount - 1;
   const masked = getMaskedTextBefore(document, new vscode.Position(last, document.lineAt(last).text.length), document.lineCount);
   /** @type {string[]} */
@@ -574,7 +585,6 @@ function getExecutionDirectives(document) {
   for (const { token, tokenStart } of awaits) {
     if (token) index.awaits.push({ token, range: rangeAt(tokenStart, token.length) });
   }
-  executionDirectiveCache.set(cacheKey, { version: document.version, index });
   return index;
 }
 
@@ -676,6 +686,7 @@ module.exports = {
   getModuleNameAt,
   getModuleParameters,
   getVariableAt,
+  getVariableIndex,
   getVariableOccurrences,
   isInStringOrCommentDoc,
   MASKED_CONTEXT_MAX_LINES,

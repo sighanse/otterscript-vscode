@@ -24,7 +24,7 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           cache: 'npm'
@@ -172,12 +172,16 @@ jobs:
 
           echo "✅ All source files have LF line endings"
 
-      # Catches manifest / .vscodeignore mistakes before merge rather than in
-      # the post-merge Build workflow. Runs after the file checks so the .vsix
-      # it writes is not scanned by them.
-      - name: Package extension (validation only)
+      # Catches manifest / .vscodeignore mistakes before merge rather than at
+      # publish time: packages the extension and checks the package's files,
+      # version and bundles (scripts/check-vsix.js; publish.yml runs the same
+      # check). Runs after the file checks so the .vsix it writes is not
+      # scanned by them.
+      - name: Package extension and check the package
         id: package
-        run: npm run package
+        run: |
+          npm run package
+          npm run check:vsix
         continue-on-error: true
 
       # The VS Code builds the integration tests download (~130 MB each). The
@@ -314,7 +318,7 @@ jobs:
 
           # Packaging
           if [ "${{ steps.package.outcome }}" == "success" ]; then
-            echo "✅ Package: passed" >> "$GITHUB_STEP_SUMMARY"
+            echo "✅ Package: built and checked" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "❌ Package: failed" >> "$GITHUB_STEP_SUMMARY"
           fi

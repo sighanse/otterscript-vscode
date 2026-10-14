@@ -17,7 +17,7 @@ set $reportPath = $PathCombine($WorkingDirectory, "scan-report.json");
 
 global $scanStartedUtc = $DateUtc("yyyy-MM-ddTHH:mm:ssZ");
 
-Log-Information "Starting vulnerability scan of feed $feed at $scanStartedUtc";
+Log-Information "Starting vulnerability scan of feed $feed at $scanStartedUtc; clean packages go to $releasedFeed";
 
 ###############################################################################
 # COLLECT PACKAGES

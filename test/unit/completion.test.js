@@ -20,13 +20,13 @@ const {
   executionDirectiveContext,
   keywordItems,
   moduleItems,
+  nameAfterSigil,
   operationItems,
   parseOperationPrefix,
   provideCardItems,
   provideOperationItems,
   provideSigilItems,
   registerCompletion,
-  sigilAt,
 } = require("../../src/providers/completion.js");
 
 /** Completion on, every product. */
@@ -73,16 +73,21 @@ async function operationLabels(source, triggerKind = CompletionTriggerKind.Invok
 /** A replace range over nothing, for the helpers that take one. */
 const EMPTY = /** @type {any} */ (new Range(0, 0, 0, 0));
 
-describe("sigilAt", () => {
-  it("finds the sigil of the name being typed", () => {
-    assert.equal(sigilAt("set $x = $To"), "$");
-    assert.equal(sigilAt("foreach @"), "@");
-    assert.equal(sigilAt("set %m = %Map"), "%");
+describe("nameAfterSigil", () => {
+  it("finds the sigil of the name being typed, and what follows it", () => {
+    assert.deepEqual(nameAfterSigil("set $x = $To"), { sigil: "$", typed: "To" });
+    assert.deepEqual(nameAfterSigil("foreach @"), { sigil: "@", typed: "" });
+    assert.deepEqual(nameAfterSigil("set %m = %Map"), { sigil: "%", typed: "Map" });
+  });
+
+  it("takes digits, '_' and '-' in a name, as variable names have", () => {
+    assert.deepEqual(nameAfterSigil("Log-Information $item2"), { sigil: "$", typed: "item2" });
+    assert.deepEqual(nameAfterSigil("set @my-li"), { sigil: "@", typed: "my-li" });
   });
 
   it("is undefined when no sigil starts the word", () => {
-    assert.equal(sigilAt("Log-Information x"), undefined);
-    assert.equal(sigilAt("$x "), undefined);
+    assert.equal(nameAfterSigil("Log-Information x"), undefined);
+    assert.equal(nameAfterSigil("$x "), undefined);
   });
 });
 

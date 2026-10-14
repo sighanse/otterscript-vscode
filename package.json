@@ -45,7 +45,7 @@
     "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.28.2",
     "eslint": "^10.12.0",
-    "eslint-plugin-jsdoc": "^65.2.4",
+    "eslint-plugin-jsdoc": "^65.3.2",
     "eslint-plugin-n": "^18.4.1",
     "fast-check": "^4.10.2",
     "globals": "^17.13.0",
@@ -117,12 +117,12 @@
         "otterscript.signatureHelp.enable": {
           "type": "boolean",
           "default": true,
-          "description": "Enable signature help for functions and operations"
+          "description": "Enable signature help for functions, operations and module calls"
         },
         "otterscript.hover.enable": {
           "type": "boolean",
           "default": true,
-          "description": "Enable hover information for functions and operations"
+          "description": "Enable hover documentation"
         },
         "otterscript.codeLens.enable": {
           "type": "boolean",
@@ -226,6 +226,17 @@
                 "hint"
               ],
               "markdownDescription": "A `module` whose name another module in the same file already has."
+            },
+            "unused-variable": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "A variable the file assigns but never reads (a faded hint). Not checked in a file that reads variables by name, runs other code that can read them, or calls a module declared elsewhere."
             },
             "duplicate-map-key": {
               "type": "string",
@@ -425,6 +436,17 @@
               ],
               "markdownDescription": "A `<% %>` tag inside an unclosed OtterScript expression."
             },
+            "template-json-syntax": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "information",
+                "hint"
+              ],
+              "markdownDescription": "A text template whose literal output starts as JSON (a webhook body) but isn't valid JSON: a missing or extra comma, an unquoted property name, single quotes, a string across lines, a backslash that isn't an escape. Only the first problem is shown, and none right after a `<% %>` tag."
+            },
             "adaptivecard-missing-version": {
               "type": "string",
               "enum": [
@@ -595,6 +617,7 @@
     "bundle": "node scripts/build.js",
     "build": "node scripts/build.js --dev",
     "check:bundle": "node scripts/build.js --check",
+    "check:vsix": "node scripts/check-vsix.js",
     "pretest:integration": "npm run build",
     "test:integration": "vscode-test",
     "pretest:web": "node scripts/build.js --dev --web-tests",

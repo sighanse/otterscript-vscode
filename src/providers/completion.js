@@ -3,7 +3,8 @@
  * @fileoverview Completion for OtterScript: functions and variables after a
  * `$`, `@` or `%` sigil (including the file's own variables), operations and
  * keywords, an operation's argument names inside its call, module names after
- * `call`, and values inside an Adaptive Card in a text template.
+ * `call`, `with` directives and their values, the tokens after `await`, and
+ * values inside an Adaptive Card in a text template.
  *
  * Each provider's work is an exported function ({@link provideSigilItems},
  * {@link provideOperationItems}, {@link provideCardItems}), built from small
@@ -11,17 +12,16 @@
  */
 
 const vscode = require("vscode");
-const { executionDirectiveDocs, keywordDocs, mapFunctionDocs, operationDocs, operationForms, scalarFunctionDocs, syntaxDocs, variableDocs, vectorFunctionDocs } = require("../language-data");
+const { EXECUTION_DIRECTIVES, keywordDocs, mapFunctionDocs, operationDocs, operationForms, scalarFunctionDocs, syntaxDocs, variableDocs, vectorFunctionDocs } = require("../language-data");
 const {
   buildCompletionItem,
   buildSigilCompletionItems,
-  getTypedIdentifier,
   isAvailableIn,
   isValidCompletionPosition,
   resolveCompletionDocumentation,
 } = require("../helpers");
 const { findCallArguments, getDocumentVariables, getExecutionDirectives, getMaskedTextAfter, getMaskedTextBefore, getModuleDeclarations } = require("../document-index");
-const { findOperationArgumentContext } = require("../scanner");
+const { blankBracedVariables, findOperationArgumentContext } = require("../scanner");
 const { findCardCompletions } = require("../adaptivecard");
 
 /**
@@ -70,14 +70,16 @@ const MAP_LITERAL_ITEM = buildCompletionItem(
 );
 
 /**
- * The sigil of the name being typed at the end of `prefix` (the line up to
- * the cursor), or undefined when none is.
+ * The variable or function name being typed at the end of `prefix` (the line
+ * up to the cursor): its sigil, and what follows it so far (`$To` -> `$` and
+ * `To`; empty right after the sigil). Undefined when no sigil starts the word.
  *
  * @param {string} prefix
- * @returns {"$" | "@" | "%" | undefined}
+ * @returns {{ sigil: "$" | "@" | "%", typed: string } | undefined}
  */
-function sigilAt(prefix) {
-  return /** @type {"$" | "@" | "%" | undefined} */ (/([$@%])(?:[A-Za-z][\w-]*)?$/.exec(prefix)?.[1]);
+function nameAfterSigil(prefix) {
+  const match = /([$@%])([A-Za-z][\w-]*)?$/.exec(prefix);
+  return match ? { sigil: /** @type {"$" | "@" | "%"} */ (match[1]), typed: match[2] ?? "" } : undefined;
 }
 
 /**
@@ -121,10 +123,9 @@ function documentVariableItems(document, position, sigil, typed, documented) {
  */
 function provideSigilItems(document, position, settings) {
   if (!isValidCompletionPosition(document, position, settings.completionEnabled)) return [];
-  const sigil = sigilAt(document.lineAt(position.line).text.slice(0, position.character));
-  if (!sigil) return [];
-  const typed = getTypedIdentifier(document, position, sigil);
-  if (typed === null) return [];
+  const typing = nameAfterSigil(document.lineAt(position.line).text.slice(0, position.character));
+  if (!typing) return [];
+  const { sigil, typed } = typing;
   const { tables, sort, documented } = SIGIL_COMPLETIONS[sigil];
   return [
     ...documentVariableItems(document, position, sigil, typed, documented),
@@ -134,10 +135,11 @@ function provideSigilItems(document, position, settings) {
 }
 
 // ============================================================
-// OPERATIONS, KEYWORDS, ARGUMENTS AND MODULES
+// OPERATIONS, KEYWORDS, ARGUMENTS, MODULES AND DIRECTIVES
 // ============================================================
-// Operations and keywords where a statement starts, argument names inside an
-// operation or module call, and module names after `call`.
+// Operations and keywords for the word being typed, argument names inside an
+// operation or module call, module names after `call`, and in a `with`
+// header or after `await`, the directives, their values and the tokens.
 //
 // Unlike the sigil completions above, operations have NO prefix character.
 // Manual invoke (Ctrl+Space) can return every operation and keyword;
@@ -315,9 +317,6 @@ async function moduleItems(document, range, listWorkspaceModules) {
  *   | { kind: "await", typed: string }} ExecutionDirectiveContext
  */
 
-/** The `with` directives by lower-case name. */
-const EXECUTION_DIRECTIVES = new Map(Object.values(executionDirectiveDocs).map((d) => [d.name.toLowerCase(), d]));
-
 /**
  * The {@link ExecutionDirectiveContext} at the end of `maskedPrefix`, or
  * null. The statement the cursor is in starts after the last `{`, `;` or
@@ -328,7 +327,7 @@ const EXECUTION_DIRECTIVES = new Map(Object.values(executionDirectiveDocs).map((
  */
 function executionDirectiveContext(maskedPrefix) {
   // A braced variable's braces (`async=${token}`) aren't a block's.
-  const text = maskedPrefix.replace(/[$@%]\{[^{}\n]*\}/g, (m) => "_".repeat(m.length));
+  const text = blankBracedVariables(maskedPrefix);
   const statement = text.slice(Math.max(text.lastIndexOf("{"), text.lastIndexOf(";"), text.lastIndexOf("}")) + 1);
   const awaitMatch = /^\s*await\s+([A-Za-z][A-Za-z0-9]*)?$/.exec(statement);
   if (awaitMatch) return { kind: "await", typed: awaitMatch[1] ?? "" };
@@ -530,16 +529,14 @@ function registerCompletion(settings, listWorkspaceModules) {
 module.exports = {
   argumentItems,
   callPrefix,
-  documentVariableItems,
   executionDirectiveContext,
-  executionDirectiveItems,
   keywordItems,
   moduleItems,
+  nameAfterSigil,
   operationItems,
   parseOperationPrefix,
   provideCardItems,
   provideOperationItems,
   provideSigilItems,
   registerCompletion,
-  sigilAt,
 };

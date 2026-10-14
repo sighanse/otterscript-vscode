@@ -3,8 +3,9 @@
  * @fileoverview Property-based tests (fast-check): the checks and every
  * provider, run on generated documents -- random text, and text built from
  * OtterScript's tokens -- instead of hand-written examples. They catch the
- * input nobody thought of: a crash, a range outside the document, a quick fix
- * that makes things worse, or a scan that slows down with the square of the
+ * input nobody thought of: a crash, a range outside the document, the same
+ * completion suggested twice, a quick fix that makes things worse, valid
+ * JSON reported as broken, or a scan that slows down with the square of the
  * input's length.
  *
  * Unlike the other test files, this one isn't about one module: it drives
@@ -252,6 +253,18 @@ describe("the scanner, on any text", () => {
   });
 });
 
+describe("the JSON check, on any valid JSON", () => {
+  it("finds nothing in valid JSON a template writes, with tags between its lines", () => {
+    /** Pretty-printed JSON, with a tag at the start of some of its lines. */
+    const tagged = fc.tuple(fc.jsonValue(), fc.array(fc.boolean(), { maxLength: 200 })).map(([value, tags]) =>
+      JSON.stringify(value, null, 2).split("\n").map((line, i) => (tags[i] ? `<% if $x { %><% } %>${line}` : line)).join("\n"));
+    fc.assert(fc.property(tagged, (body) => {
+      const flagged = diagnose(makeDocument(`<% set $x = 1; %>\n${body}`)).filter((d) => d.code?.value === "template-json-syntax");
+      assert.deepEqual(flagged.map((d) => d.message), [], body);
+    }), RUN);
+  });
+});
+
 describe("the document-wide providers, on any text", () => {
   it("report diagnostics, and their quick fixes, inside the document", () => {
     fc.assert(fc.property(otterText, (text) => {
@@ -305,10 +318,16 @@ describe("the position-based providers, anywhere in any text", () => {
       const document = makeDocument(text);
       for (const offset of offsets) {
         const position = document.positionAt(offset);
+        // VS Code shows every provider's items in one list: no name twice
+        // (ignoring case, as OtterScript does) with the same kind.
+        const suggested = new Set();
         for (const provider of providers.CompletionItemProvider) {
           const result = await provider.provideCompletionItems(document, position, undefined, { triggerKind: stub.CompletionTriggerKind.Invoke });
           for (const item of (Array.isArray(result) ? result : result?.items ?? [])) {
             if (item.range && "start" in item.range) assertRangeInDocument(document, item.range, `completion ${item.label}`);
+            const key = `${(typeof item.label === "string" ? item.label : item.label.label).toLowerCase()} (kind ${item.kind})`;
+            assert.ok(!suggested.has(key), `completion suggests ${key} twice`);
+            suggested.add(key);
           }
         }
         const hover = await providers.HoverProvider[0].provideHover(document, position);

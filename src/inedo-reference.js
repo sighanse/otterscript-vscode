@@ -26,8 +26,10 @@
  *   documentation: string,
  *   products: string[],
  *   anySigil?: true,
- *   params?: ReferenceParam[]
+ *   params?: ReferenceParam[],
+ *   docUrls: Record<string, string>
  * }} ReferenceDoc
+ *   `docUrls`: the entry's page on docs.inedo.com, by product.
  */
 
 /**
@@ -42,7 +44,9 @@
  * `n` an operation's namespace (a variant's is in its `Namespace::Name` key,
  * `Core` for none), `o` other products' forms as
  * `[product, signature]` (a function's without its sigil), `s` the signature
- * when the arguments don't give it (a function's without its sigil).
+ * when the arguments don't give it (a function's without its sigil), `u` its
+ * page on docs.inedo.com (see {@link docsUrl}): one path when every product
+ * has it at the same one, else the path by product letter.
  *
  * @typedef {{
  *   p: string,
@@ -50,7 +54,8 @@
  *   r?: (string | number)[][],
  *   n?: string,
  *   o?: [string, string][],
- *   s?: string
+ *   s?: string,
+ *   u: string | Record<string, string>
  * }} CompactEntry
  */
 
@@ -66,6 +71,40 @@
 
 /** The products a compact entry's `p` letters stand for, in order. */
 const PRODUCT_LETTERS = Object.freeze({ O: "Otter", B: "BuildMaster" });
+
+/** Where Inedo publishes its documentation. */
+const DOCS_BASE_URL = "https://docs.inedo.com/docs";
+
+/**
+ * The URL of a reference page: `page` (`general/copy-files`, the path the
+ * generator records) under `product`'s function or operation reference.
+ *
+ * @param {string} product - "Otter" or "BuildMaster"
+ * @param {"function" | "operation"} kind
+ * @param {string} page
+ * @returns {string}
+ */
+function docsUrl(product, kind, page) {
+  return `${DOCS_BASE_URL}/${product.toLowerCase()}/reference/${kind}s/${page}`;
+}
+
+/**
+ * An entry's page URLs by product, from its compact `u`.
+ *
+ * @param {CompactEntry["u"]} pages
+ * @param {string[]} products
+ * @param {"function" | "operation"} kind
+ * @returns {Record<string, string>}
+ */
+function expandDocUrls(pages, products, kind) {
+  /** @type {Record<string, string>} */
+  const urls = {};
+  for (const [letter, product] of Object.entries(PRODUCT_LETTERS)) {
+    if (!products.includes(product)) continue;
+    urls[product] = docsUrl(product, kind, typeof pages === "string" ? pages : pages[letter]);
+  }
+  return urls;
+}
 
 /** The docs table each function sigil goes into. */
 const SIGIL_TABLES = Object.freeze({ "$": "scalarFunctionDocs", "@": "vectorFunctionDocs", "%": "mapFunctionDocs" });
@@ -204,6 +243,7 @@ function expandReference({ functions, operations }) {
         documentation: referenceDocumentation(params, products),
         products,
         ...(sigil ? {} : { anySigil: /** @type {const} */ (true) }),
+        docUrls: expandDocUrls(entry.u, products, "function"),
       };
     }
   }
@@ -225,6 +265,7 @@ function expandReference({ functions, operations }) {
       documentation: referenceDocumentation(null, products),
       products,
       params: params.map(operationParam),
+      docUrls: expandDocUrls(entry.u, products, "operation"),
     };
     if (variantNamespace === undefined) tables.operationDocs[name] = doc;
     else (tables.operationVariants[name] ??= []).push(doc);
@@ -234,6 +275,7 @@ function expandReference({ functions, operations }) {
 
 module.exports = {
   PRODUCT_LETTERS,
+  docsUrl,
   expandReference,
   functionSignature,
   operationParam,

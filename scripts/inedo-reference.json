@@ -1,5 +1,5 @@
 {
- "source": "https://raw.githubusercontent.com/Inedo/inedo-docs/7f8928d3f2e0c9650fee14de659b9c15187961b6/Content/{Otter,BuildMaster}/Reference/{functions,operations}.zip",
+ "source": "https://raw.githubusercontent.com/Inedo/inedo-docs/0862082ba2e6193eea490a66daa9a133695c2294/Content/{Otter,BuildMaster}/Reference/{functions,operations}.zip",
  "entries": [
   {
    "kind": "function",
@@ -8,7 +8,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Servers",
+   "pages": {
+    "Otter": "servers/acquiredservers",
+    "BuildMaster": "servers/acquiredservers"
+   },
    "usage": "@AcquiredServers(Role)",
    "description": "list of all of the servers acquired for a specified role",
    "params": [
@@ -26,7 +29,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Servers",
+   "pages": {
+    "Otter": "servers/allenvironments",
+    "BuildMaster": "servers/allenvironments"
+   },
    "usage": "@AllEnvironments",
    "description": "Returns a list of all environments.",
    "params": []
@@ -38,7 +44,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Servers",
+   "pages": {
+    "Otter": "servers/allroles",
+    "BuildMaster": "servers/allroles"
+   },
    "usage": "@AllRoles",
    "description": "Returns a list of all server roles.",
    "params": []
@@ -50,7 +59,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Servers",
+   "pages": {
+    "Otter": "servers/allservers",
+    "BuildMaster": "servers/allservers"
+   },
    "usage": "@AllServers([IncludeInactive])",
    "description": "Returns a list of all servers.",
    "params": [
@@ -67,7 +79,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Applications",
+   "pages": {
+    "BuildMaster": "applications/applicationsingroup"
+   },
    "usage": "@ApplicationsInGroup(groupName)",
    "description": "list of applications which belong to the specified application group",
    "params": [
@@ -84,7 +98,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Builds",
+   "pages": {
+    "BuildMaster": "builds/artifactsinbuild"
+   },
    "usage": "@ArtifactsInBuild([buildNumber], [releaseNumber], [applicationName])",
    "description": "list of all the artifacts in the current or specified build",
    "params": [
@@ -111,7 +127,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Builds",
+   "pages": {
+    "BuildMaster": "builds/buildsinrelease"
+   },
    "usage": "@BuildsInRelease([ReleaseNumber], [ApplicationName], [Status], [PipelineStage])",
    "description": "Gets a list of builds in a release, optionally filtered by status and pipeline stage.",
    "params": [
@@ -143,7 +161,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Configuration Files",
+   "pages": {
+    "BuildMaster": "configuration-files/configurationfileinstances"
+   },
    "usage": "@ConfigurationFileInstances(configurationFileName, [appName])",
    "description": "list configuration file instances defined for an application",
    "params": [
@@ -165,7 +185,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Configuration Files",
+   "pages": {
+    "BuildMaster": "configuration-files/configurationfiles"
+   },
    "usage": "@ConfigurationFiles([appName])",
    "description": "list configuration files defined for an application",
    "params": [
@@ -182,7 +204,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Containers",
+   "pages": {
+    "BuildMaster": "containers/containersinbuild"
+   },
    "usage": "@ContainersInBuild([repositoryName])",
    "description": "Gets a list of Docker images in the current build. Each returned element is a map: %(Name: SomeName, Tag: 1.2.3, Digest: sha1:3924abbeeea2162, Repository: repositoryName)",
    "params": [
@@ -199,7 +223,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Databases",
+   "pages": {
+    "BuildMaster": "databases/databaseconnectionsinenvironment"
+   },
    "usage": "@DatabaseConnectionsInEnvironment([environmentName])",
    "description": "list of database connections for the current application which belong to the specified environment",
    "params": [
@@ -217,7 +243,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Files",
+   "pages": {
+    "Otter": "files/filesondisk",
+    "BuildMaster": "files/filesondisk"
+   },
    "usage": "@FilesOnDisk(includes, [excludes], [directory])",
    "description": "Returns a list of files matching the mask on the current server.",
    "params": [
@@ -244,7 +273,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Lists",
+   "pages": {
+    "BuildMaster": "lists/listconcat"
+   },
    "usage": "@ListConcat(...)",
    "description": "Creates a list containing the contents of each list in sequence.",
    "params": [
@@ -261,7 +292,9 @@
    "products": [
     "Otter"
    ],
-   "category": "Lists",
+   "pages": {
+    "Otter": "lists/listconcat"
+   },
    "usage": "@ListConcat",
    "description": "Creates a list containing the contents of each list in sequence.",
    "params": []
@@ -273,7 +306,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Lists",
+   "pages": {
+    "Otter": "lists/listinsert",
+    "BuildMaster": "lists/listinsert"
+   },
    "usage": "@ListInsert(List, Item, [Index])",
    "description": "Inserts an item into a list.",
    "params": [
@@ -301,7 +337,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Lists",
+   "pages": {
+    "Otter": "lists/listremove",
+    "BuildMaster": "lists/listremove"
+   },
    "usage": "@ListRemove(List, Index)",
    "description": "Removes an item from a list.",
    "params": [
@@ -324,7 +363,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Lists",
+   "pages": {
+    "Otter": "lists/listset",
+    "BuildMaster": "lists/listset"
+   },
    "usage": "@ListSet(List, Index, Item)",
    "description": "Updates the value at a given position in the list to a new value.",
    "params": [
@@ -352,7 +394,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Maps",
+   "pages": {
+    "Otter": "maps/mapkeys",
+    "BuildMaster": "maps/mapkeys"
+   },
    "usage": "@MapKeys(Map)",
    "description": "Lists the keys of a map.",
    "params": [
@@ -369,7 +414,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Packages",
+   "pages": {
+    "BuildMaster": "packages/packagesinbuild"
+   },
    "usage": "@PackagesInBuild([packageSource])",
    "description": "Gets a list of packages in the current build. Each returned element is a map: %(Name: SomeName, Version: 1.2.3, PackageSource: SourceName)",
    "params": [
@@ -387,7 +434,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/range",
+    "BuildMaster": "general/range"
+   },
    "usage": "@Range(Start, Count)",
    "description": "Returns a range of integers starting from a specified value.",
    "params": [
@@ -410,7 +460,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Strings",
+   "pages": {
+    "Otter": "strings/regexfind",
+    "BuildMaster": "strings/regexfind"
+   },
    "usage": "@RegexFind(Text, MatchExpression, [MatchGroup])",
    "description": "Finds all matches of a regular expression in a string, optionally returning only a matched group.",
    "params": [
@@ -437,7 +490,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Applications",
+   "pages": {
+    "BuildMaster": "applications/releasesinapplication"
+   },
    "usage": "@ReleasesInApplication([ApplicationName], [Status])",
    "description": "Gets a list of release numbers in an application, optionally filtered by status.",
    "params": [
@@ -460,7 +515,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Servers",
+   "pages": {
+    "Otter": "servers/serversinenvironment",
+    "BuildMaster": "servers/serversinenvironment"
+   },
    "usage": "@ServersInEnvironment([EnvironmentName], [IncludeInactive])",
    "description": "Returns a list of all the servers in the specified environment name.",
    "params": [
@@ -483,7 +541,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Servers",
+   "pages": {
+    "Otter": "servers/serversinrole",
+    "BuildMaster": "servers/serversinrole"
+   },
    "usage": "@ServersInRole([RoleName], [IncludeInactive])",
    "description": "Returns a list of servers in the specified role.",
    "params": [
@@ -506,7 +567,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Servers",
+   "pages": {
+    "Otter": "servers/serversinroleandenvironment",
+    "BuildMaster": "servers/serversinroleandenvironment"
+   },
    "usage": "@ServersInRoleAndEnvironment([RoleName], [EnvironmentName], [IncludeInactive])",
    "description": "Returns a list of all the servers in the specified role and environment name.",
    "params": [
@@ -534,7 +598,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Strings",
+   "pages": {
+    "Otter": "strings/split",
+    "BuildMaster": "strings/split"
+   },
    "usage": "@Split(Text, Separator, [Count])",
    "description": "Splits a string into substrings based on a specified separator.",
    "params": [
@@ -562,7 +629,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Math",
+   "pages": {
+    "Otter": "math/abs",
+    "BuildMaster": "math/abs"
+   },
    "usage": "$Abs(value)",
    "description": "Returns the absolute value of a number.",
    "params": [
@@ -579,7 +649,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Applications",
+   "pages": {
+    "BuildMaster": "applications/applicationdescription"
+   },
    "usage": "$ApplicationDescription([appName])",
    "description": "description of the current or specified application",
    "params": [
@@ -596,7 +668,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Applications",
+   "pages": {
+    "BuildMaster": "applications/applicationexists"
+   },
    "usage": "$ApplicationExists(Name, [IncludeInactive])",
    "description": "Returns true if the application with the specified name exists, optionally including inactive applications.",
    "params": [
@@ -618,7 +692,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Applications",
+   "pages": {
+    "BuildMaster": "applications/applicationgitlibrary"
+   },
    "usage": "$ApplicationGitLibrary([appName])",
    "description": "returns \"lilgit\" when thew new git library is configured for the specified application; otherwise \"libgit2\" is returned",
    "params": [
@@ -635,7 +711,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Applications",
+   "pages": {
+    "BuildMaster": "applications/applicationgroupname"
+   },
    "usage": "$ApplicationGroupName",
    "description": "name of the current application group",
    "params": []
@@ -646,7 +724,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Applications",
+   "pages": {
+    "BuildMaster": "applications/applicationid"
+   },
    "usage": "$ApplicationId",
    "description": "ID of the current application",
    "params": []
@@ -657,7 +737,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Applications",
+   "pages": {
+    "BuildMaster": "applications/applicationname"
+   },
    "usage": "$ApplicationName",
    "description": "name of the current application",
    "params": []
@@ -668,7 +750,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Builds",
+   "pages": {
+    "BuildMaster": "builds/artifactpath"
+   },
    "usage": "$ArtifactPath(ArtifactName, [buildNumber], [releaseNumber], [applicationName])",
    "description": "gets the path within the internal disk store for the specified artifact",
    "params": [
@@ -701,7 +785,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "PowerShell",
+   "pages": {
+    "Otter": "powershell/autoterminatepowershellprocess",
+    "BuildMaster": "powershell/autoterminatepowershellprocess"
+   },
    "usage": "$AutoTerminatePowerShellProcess",
    "description": "When true, external processes created to host Windows PowerShell 5.1 scripts will be forcibly terminated after running a script to ensure resources are released. When false, processes may remain active according the PowerShell Core interop implementation.",
    "params": []
@@ -712,7 +799,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Builds",
+   "pages": {
+    "BuildMaster": "builds/branch"
+   },
    "usage": "$Branch([BuildNumber], [ReleaseNumber], [ApplicationName])",
    "description": "Git branch for the current or specified build",
    "params": [
@@ -739,7 +828,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Builds",
+   "pages": {
+    "BuildMaster": "builds/buildmasterid"
+   },
    "usage": "$BuildMasterId(Page, [ApplicationName], [ReleaseNumber], [BuildNumber])",
    "description": "Gets the internal ID of the specified page.",
    "params": [
@@ -771,7 +862,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Builds",
+   "pages": {
+    "BuildMaster": "builds/buildmasterurl"
+   },
    "usage": "$BuildMasterUrl(Page, [ApplicationName], [ReleaseNumber], [BuildNumber])",
    "description": "Gets the URL of the specified page.",
    "params": [
@@ -803,7 +896,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Builds",
+   "pages": {
+    "BuildMaster": "builds/buildnumber"
+   },
    "usage": "$BuildNumber([releaseNum], [furthestOrLatest], [appName])",
    "description": "build number of the current or specified release",
    "params": [
@@ -831,7 +926,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Math",
+   "pages": {
+    "Otter": "math/ceiling",
+    "BuildMaster": "math/ceiling"
+   },
    "usage": "$Ceiling(value)",
    "description": "Returns the value rounded up to the nearest integer.",
    "params": [
@@ -848,7 +946,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Builds",
+   "pages": {
+    "BuildMaster": "builds/cibuild"
+   },
    "usage": "$CIBuild([BuildNumber], [ReleaseNumber], [ApplicationName])",
    "description": "Identifier of the build imported from a CI server for the current or specified BuildMaster build",
    "params": [
@@ -875,7 +975,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Builds",
+   "pages": {
+    "BuildMaster": "builds/cibuildnumber"
+   },
    "usage": "$CIBuildNumber([BuildNumber], [ReleaseNumber], [ApplicationName])",
    "description": "Number of the build imported from a CI server for the current or specified BuildMaster build",
    "params": [
@@ -902,7 +1004,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Builds",
+   "pages": {
+    "BuildMaster": "builds/ciproject"
+   },
    "usage": "$CIProject([BuildNumber], [ReleaseNumber], [ApplicationName])",
    "description": "Name of the CI Project resource imported from a CI server for the current or specified BuildMaster build",
    "params": [
@@ -929,7 +1033,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Builds",
+   "pages": {
+    "BuildMaster": "builds/ciprojectscope"
+   },
    "usage": "$CIProjectScope([BuildNumber], [ReleaseNumber], [ApplicationName])",
    "description": "Name of the CI Project scope (e.g. Jenkins Branch, TeamCity BuildConfiguration) associated with the current or specified build",
    "params": [
@@ -956,7 +1062,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Strings",
+   "pages": {
+    "BuildMaster": "strings/coalesce"
+   },
    "usage": "$Coalesce(...)",
    "description": "Returns the first argument which does not contain only whitespace.",
    "params": [
@@ -973,7 +1081,9 @@
    "products": [
     "Otter"
    ],
-   "category": "Strings",
+   "pages": {
+    "Otter": "strings/coalesce"
+   },
    "usage": "$Coalesce",
    "description": "Returns the first argument which does not contain only whitespace.",
    "params": []
@@ -984,7 +1094,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Builds",
+   "pages": {
+    "BuildMaster": "builds/commit"
+   },
    "usage": "$Commit([BuildNumber], [ReleaseNumber], [ApplicationName])",
    "description": "Git commit hash for the current or specified build",
    "params": [
@@ -1012,7 +1124,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Math",
+   "pages": {
+    "Otter": "math/compare",
+    "BuildMaster": "math/compare"
+   },
    "usage": "$Compare(Arg1, Operator, Arg2, [AsNumber])",
    "description": "Compare two values numerically or as case-sensitive strings.",
    "params": [
@@ -1044,7 +1159,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Releases",
+   "pages": {
+    "BuildMaster": "releases/comparereleasesequence"
+   },
    "usage": "$CompareReleaseSequence(operator, releaseNum1, [releaseNum2])",
    "description": "compares the release number of the current application with a specified release number",
    "params": [
@@ -1071,7 +1188,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Configuration Files",
+   "pages": {
+    "BuildMaster": "configuration-files/configurationfiletext"
+   },
    "usage": "$ConfigurationFileText(instance, [fileName], [releaseNum])",
    "description": "text contents of the specified configuration file instance",
    "params": [
@@ -1098,7 +1217,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Configuration Files",
+   "pages": {
+    "BuildMaster": "configuration-files/configurationfileversion"
+   },
    "usage": "$ConfigurationFileVersion([fileName], [releaseNum])",
    "description": "version number used for deployment of the specified configuration file",
    "params": [
@@ -1120,7 +1241,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Containers",
+   "pages": {
+    "BuildMaster": "containers/containerdigest"
+   },
    "usage": "$ContainerDigest(repositoryName, [tag], [sourceName])",
    "description": "Gets the digest of a Docker image. The digest is from the image associated with the current build.",
    "params": [
@@ -1147,7 +1270,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Containers",
+   "pages": {
+    "BuildMaster": "containers/containertag"
+   },
    "usage": "$ContainerTag(repositoryName, [sourceName])",
    "description": "Gets the tag of the specified Docker image associated with the current build.",
    "params": [
@@ -1170,7 +1295,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/date",
+    "BuildMaster": "general/date"
+   },
    "usage": "$Date([Format])",
    "description": "Returns the current date and time of the local timezone in the specified .NET datetime format string, or ISO 8601 format (yyyy-MM-ddTHH:mm:ss) if no format is specified.",
    "params": [
@@ -1188,7 +1316,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/dateutc",
+    "BuildMaster": "general/dateutc"
+   },
    "usage": "$DateUtc([Format])",
    "description": "Returns the current UTC date and time in the specified .NET datetime format string, or ISO 8601 format (yyyy-MM-ddTHH:mm:ss) if no format is specified.",
    "params": [
@@ -1206,7 +1337,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Math",
+   "pages": {
+    "Otter": "math/decrement",
+    "BuildMaster": "math/decrement"
+   },
    "usage": "$Decrement(value, [amount])",
    "description": "Returns a string that contains the result of decrementing a value.",
    "params": [
@@ -1228,7 +1362,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "DotNet",
+   "pages": {
+    "BuildMaster": "dotnet/devenvpath"
+   },
    "usage": "$DevEnvPath",
    "description": "Full path to devenv.exe. This is usually similar to C:\\Program Files\\Microsoft Visual Studio\\2022\\Enterprise\\Common7\\IDE\\devenv.exeIf no value is supplied, the operation will use vswhere to determine the path to the latest installation of Visual Studio",
    "params": []
@@ -1240,7 +1376,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Files",
+   "pages": {
+    "Otter": "files/directoryexists",
+    "BuildMaster": "files/directoryexists"
+   },
    "usage": "$DirectoryExists(name)",
    "description": "Returns \"true\" if the specified directory exists on the current server.",
    "params": [
@@ -1257,7 +1396,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Builds",
+   "pages": {
+    "BuildMaster": "builds/dockerrepository"
+   },
    "usage": "$DockerRepository([resource])",
    "description": "the repository string of a specified Docker Repository secure resource",
    "params": [
@@ -1274,7 +1415,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Builds",
+   "pages": {
+    "BuildMaster": "builds/dockerrepositoryresource"
+   },
    "usage": "$DockerRepositoryResource([BuildNumber], [ReleaseNumber], [ApplicationName])",
    "description": "Docker Repository Resource for the current or specified build",
    "params": [
@@ -1301,7 +1444,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Builds",
+   "pages": {
+    "BuildMaster": "builds/dockertag"
+   },
    "usage": "$DockerTag([BuildNumber], [ReleaseNumber], [ApplicationName])",
    "description": "Most recently associated Docker tag associated with the Docker Repository on the current or specified build",
    "params": [
@@ -1328,7 +1473,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "DotNet",
+   "pages": {
+    "BuildMaster": "dotnet/dotnetexepath"
+   },
    "usage": "$DotNetExePath",
    "description": "Full path to dotnet.exe. When this value is specified, it will become the default instance of dotnet to use for the server.",
    "params": []
@@ -1339,7 +1486,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Environments",
+   "pages": {
+    "BuildMaster": "environments/environmentname"
+   },
    "usage": "$EnvironmentName",
    "description": "name of the environment in context",
    "params": []
@@ -1350,7 +1499,9 @@
    "products": [
     "Otter"
    ],
-   "category": "Executions",
+   "pages": {
+    "Otter": "executions/environmentname"
+   },
    "usage": "$EnvironmentName",
    "description": "Gets the name of the current environment in context, or attempts to determine a single environment in context based on server, role, and job.",
    "params": []
@@ -1362,7 +1513,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Servers",
+   "pages": {
+    "Otter": "servers/environmentvariable",
+    "BuildMaster": "servers/environmentvariable"
+   },
    "usage": "$EnvironmentVariable(EnvironmentVariableName)",
    "description": "Returns the value of the specified environment variable on the current server.",
    "params": [
@@ -1380,7 +1534,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Executions",
+   "pages": {
+    "Otter": "executions/executionid",
+    "BuildMaster": "executions/executionid"
+   },
    "usage": "$ExecutionId",
    "description": "Returns the current execution ID.",
    "params": []
@@ -1392,7 +1549,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Executions",
+   "pages": {
+    "Otter": "executions/executionstate",
+    "BuildMaster": "executions/executionstate"
+   },
    "usage": "$ExecutionState",
    "description": "Returns the current state of the execution (normal, warning, or error).",
    "params": []
@@ -1403,7 +1563,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Executions",
+   "pages": {
+    "BuildMaster": "executions/executionuser"
+   },
    "usage": "$ExecutionUser",
    "description": "user name that initiated the current execution",
    "params": []
@@ -1415,7 +1577,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Math",
+   "pages": {
+    "Otter": "math/expr",
+    "BuildMaster": "math/expr"
+   },
    "usage": "$Expr(expression)",
    "description": "Evaluates a mathematical expression using +, -, *, /, or % operators.",
    "params": [
@@ -1433,7 +1598,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Files",
+   "pages": {
+    "Otter": "files/filecontents",
+    "BuildMaster": "files/filecontents"
+   },
    "usage": "$FileContents(name, [maxLength])",
    "description": "Returns the contents of a file on the current server.",
    "params": [
@@ -1456,7 +1624,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Files",
+   "pages": {
+    "Otter": "files/fileexists",
+    "BuildMaster": "files/fileexists"
+   },
    "usage": "$FileExists(name)",
    "description": "Returns \"true\" if the specified file exists on the current server.",
    "params": [
@@ -1474,7 +1645,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Math",
+   "pages": {
+    "Otter": "math/floor",
+    "BuildMaster": "math/floor"
+   },
    "usage": "$Floor(value)",
    "description": "Returns the value rounded down to the nearest integer.",
    "params": [
@@ -1492,7 +1666,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Strings",
+   "pages": {
+    "Otter": "strings/htmlencode",
+    "BuildMaster": "strings/htmlencode"
+   },
    "usage": "$HtmlEncode(Text)",
    "description": "Encodes a string for use in HTML.",
    "params": [
@@ -1510,7 +1687,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Math",
+   "pages": {
+    "Otter": "math/increment",
+    "BuildMaster": "math/increment"
+   },
    "usage": "$Increment(value, [amount])",
    "description": "Returns a string that contains the result of incrementing a value.",
    "params": [
@@ -1532,7 +1712,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Releases",
+   "pages": {
+    "BuildMaster": "releases/incrementreleasenumber"
+   },
    "usage": "$IncrementReleaseNumber(lastReleaseNumber, [releaseNumberScheme])",
    "description": "Returns the next release number that would be assigned.",
    "params": [
@@ -1554,7 +1736,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Executions",
+   "pages": {
+    "BuildMaster": "executions/isreexecution"
+   },
    "usage": "$IsReexecution",
    "description": "true if the current execution is a redeployment",
    "params": []
@@ -1565,7 +1749,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Executions",
+   "pages": {
+    "BuildMaster": "executions/isrollback"
+   },
    "usage": "$IsRollback",
    "description": "true if a build from an earlier release is redeployed to a stage",
    "params": []
@@ -1576,7 +1762,9 @@
    "products": [
     "Otter"
    ],
-   "category": "Executions",
+   "pages": {
+    "Otter": "executions/issimulation"
+   },
    "usage": "$IsSimulation",
    "description": "Returns \"true\" if the execution is a simulation; otherwise, returns \"false\".",
    "params": []
@@ -1588,7 +1776,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Executions",
+   "pages": {
+    "Otter": "executions/isvariabledefined",
+    "BuildMaster": "executions/isvariabledefined"
+   },
    "usage": "$IsVariableDefined(VariableName, [VariableType])",
    "description": "Returns true if the specified variable name is available in the current context; otherwise returns false.",
    "params": [
@@ -1611,7 +1802,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Strings",
+   "pages": {
+    "Otter": "strings/join",
+    "BuildMaster": "strings/join"
+   },
    "usage": "$Join(Separator, Values)",
    "description": "Concatenates all elements of a list into a string using a specified separator.",
    "params": [
@@ -1633,7 +1827,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Jira",
+   "pages": {
+    "BuildMaster": "jira/jqlvalue"
+   },
    "usage": "$JqlValue(Value)",
    "description": "(none)",
    "params": [
@@ -1651,7 +1847,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "JSON",
+   "pages": {
+    "Otter": "json/jsencode",
+    "BuildMaster": "json/jsencode"
+   },
    "usage": "$JSEncode(Text)",
    "description": "Encodes a string for use in a JavaScript string literal.",
    "params": [
@@ -1669,7 +1868,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Strings",
+   "pages": {
+    "Otter": "strings/jsencode",
+    "BuildMaster": "strings/jsencode"
+   },
    "usage": "$JSEncode(Text)",
    "description": "Encodes a string for use as a JavaScript literal.",
    "params": [
@@ -1687,7 +1889,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Lists",
+   "pages": {
+    "Otter": "lists/listcount",
+    "BuildMaster": "lists/listcount"
+   },
    "usage": "$ListCount(List)",
    "description": "Count the number of elements in a list.",
    "params": [
@@ -1705,7 +1910,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Lists",
+   "pages": {
+    "Otter": "lists/listindexof",
+    "BuildMaster": "lists/listindexof"
+   },
    "usage": "$ListIndexOf(List, Item)",
    "description": "Finds the index of an item in a list. Finding the first item in a list returns 0, and finding an item not present in the list returns -1.",
    "params": [
@@ -1728,7 +1936,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Strings",
+   "pages": {
+    "Otter": "strings/matchesregex",
+    "BuildMaster": "strings/matchesregex"
+   },
    "usage": "$MatchesRegex(Text, RegexPattern)",
    "description": "Returns true when the specified text matches the specified pattern; otherwise returns false.",
    "params": [
@@ -1750,7 +1961,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "DotNet",
+   "pages": {
+    "BuildMaster": "dotnet/msbuildtoolspath"
+   },
    "usage": "$MSBuildToolsPath",
    "description": "The directory of the MSBuild tools, typically in 'C:\\Program Files (x86)\\MSBuild\\{ToolsVersion}\\Bin'; if empty, the MSBuildToolsPath registry value under SOFTWARE\\Microsoft\\MSBuild\\ToolsVersions will be used.",
    "params": []
@@ -1762,7 +1975,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Strings",
+   "pages": {
+    "Otter": "strings/newline",
+    "BuildMaster": "strings/newline"
+   },
    "usage": "$NewLine([WindowsOrLinux])",
    "description": "newline string for either the operating system of the current server in context or specifically Windows or Linux",
    "params": [
@@ -1779,7 +1995,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Nuget",
+   "pages": {
+    "BuildMaster": "nuget/nugetexepath"
+   },
    "usage": "$NuGetExePath",
    "description": "The path to the nuget.exe client. When not specified, the included nuget.exe client is used.",
    "params": []
@@ -1790,7 +2008,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Packages",
+   "pages": {
+    "BuildMaster": "packages/packagehash"
+   },
    "usage": "$PackageHash(packageName, [sourceName])",
    "description": "Gets the hex-encoded SHA1 hash of a package. The hash is from the version of the package associated with the current build.",
    "params": [
@@ -1812,7 +2032,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Packages",
+   "pages": {
+    "BuildMaster": "packages/packageproperty"
+   },
    "usage": "$PackageProperty(packageName, packageProperty, [sourceName])",
    "description": "Gets a value from the metadata of a package. The property is from the version of the package associated with the current build.",
    "params": [
@@ -1839,7 +2061,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Packages",
+   "pages": {
+    "BuildMaster": "packages/packageversion"
+   },
    "usage": "$PackageVersion(packageName, [part], [sourceName])",
    "description": "Gets the version of the specified package associated with the current build.",
    "params": [
@@ -1867,7 +2091,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Strings",
+   "pages": {
+    "Otter": "strings/padleft",
+    "BuildMaster": "strings/padleft"
+   },
    "usage": "$PadLeft(Text, Length, [PadCharacter])",
    "description": "Returns a new string that right-aligns the characters in this instance by padding them on the left with a specified character, for a specified total length.",
    "params": [
@@ -1895,7 +2122,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Strings",
+   "pages": {
+    "Otter": "strings/padright",
+    "BuildMaster": "strings/padright"
+   },
    "usage": "$PadRight(Text, Length, [PadCharacter])",
    "description": "Returns a new string that left-aligns the characters in this instance by padding them on the left with a specified character, for a specified total length.",
    "params": [
@@ -1923,7 +2153,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Files",
+   "pages": {
+    "Otter": "files/pathcombine",
+    "BuildMaster": "files/pathcombine"
+   },
    "usage": "$PathCombine(Path1, Path2, ...)",
    "description": "Returns a string containing all of the arguments combined into a complete path.",
    "params": [
@@ -1945,7 +2178,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Pipelines",
+   "pages": {
+    "BuildMaster": "pipelines/pipelinename"
+   },
    "usage": "$PipelineName",
    "description": "name of the pipeline in context",
    "params": []
@@ -1956,7 +2191,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Pipelines",
+   "pages": {
+    "BuildMaster": "pipelines/pipelinestagename"
+   },
    "usage": "$PipelineStageName",
    "description": "name of the pipeline stage in context",
    "params": []
@@ -1968,7 +2205,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "PowerShell",
+   "pages": {
+    "Otter": "powershell/preferwindowspowershell",
+    "BuildMaster": "powershell/preferwindowspowershell"
+   },
    "usage": "$PreferWindowsPowerShell",
    "description": "When true, scripts will be run using Windows PowerShell 5.1 where available. When false or on Linux (or on Windows systems without PowerShell 5.1 installed), scripts will be run using PowerShell Core instead.",
    "params": []
@@ -1979,7 +2219,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Releases",
+   "pages": {
+    "BuildMaster": "releases/previousreleasenumber"
+   },
    "usage": "$PreviousReleaseNumber([ReleaseNumber], [ApplicationName])",
    "description": "release number of the last deployed release, relative to the specified or current release",
    "params": [
@@ -2001,7 +2243,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "BuildMaster": "general/promotioncomments"
+   },
    "usage": "$PromotionComments([StageName], [BuildNumber], [ReleaseNumber], [ApplicationName])",
    "description": "Returns the comments for the specified promotion, or the promotion in the current context if values are not specified.",
    "params": [
@@ -2034,7 +2278,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "PowerShell",
+   "pages": {
+    "Otter": "powershell/pscredential",
+    "BuildMaster": "powershell/pscredential"
+   },
    "usage": "$PSCredential(UserName, [Password])",
    "description": "Returns a PSCredential object that can be passed to PowerShell scripts.",
    "params": [
@@ -2056,7 +2303,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Builds",
+   "pages": {
+    "BuildMaster": "builds/pullrequestid"
+   },
    "usage": "$PullRequestId([BuildNumber], [ReleaseNumber], [ApplicationName])",
    "description": "Most recent pull request created for the current or specified build",
    "params": [
@@ -2084,7 +2333,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Python",
+   "pages": {
+    "Otter": "python/pythonpath",
+    "BuildMaster": "python/pythonpath"
+   },
    "usage": "$PythonPath",
    "description": "The path to python/python.exe.",
    "params": []
@@ -2096,7 +2348,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Strings",
+   "pages": {
+    "Otter": "strings/regexreplace",
+    "BuildMaster": "strings/regexreplace"
+   },
    "usage": "$RegexReplace(Text, MatchExpression, ReplaceWith)",
    "description": "Searches for and replaces text in a string using a regular expression.",
    "params": [
@@ -2123,7 +2378,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Releases",
+   "pages": {
+    "BuildMaster": "releases/releasename"
+   },
    "usage": "$ReleaseName([ReleaseNumber], [ApplicationName])",
    "description": "name of the current or specified release",
    "params": [
@@ -2145,7 +2402,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Releases",
+   "pages": {
+    "BuildMaster": "releases/releasenumber"
+   },
    "usage": "$ReleaseNumber",
    "description": "release number of the current release, or \"0.0.0\" if no release number is in context",
    "params": []
@@ -2156,7 +2415,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Releases",
+   "pages": {
+    "BuildMaster": "releases/releasenumberpart"
+   },
    "usage": "$ReleaseNumberPart(Part, [ReleaseNumber])",
    "description": "a part (major, minor, build, revision) of the current or specified release number",
    "params": [
@@ -2179,7 +2440,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Strings",
+   "pages": {
+    "Otter": "strings/replace",
+    "BuildMaster": "strings/replace"
+   },
    "usage": "$Replace(Text, Value, ReplaceWith, [IgnoreCase])",
    "description": "Searches for and replaces text in a string.",
    "params": [
@@ -2211,7 +2475,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Builds",
+   "pages": {
+    "BuildMaster": "builds/repository"
+   },
    "usage": "$Repository([BuildNumber], [ReleaseNumber], [ApplicationName])",
    "description": "Git repository name the current or specified build",
    "params": [
@@ -2239,7 +2505,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Files",
+   "pages": {
+    "Otter": "files/resolvepath",
+    "BuildMaster": "files/resolvepath"
+   },
    "usage": "$ResolvePath(Path)",
    "description": "Provides an absolute path (terminated with directory separator) based on a relative path and the current working directory; this will provide appropriate directory separators, based on the server in context",
    "params": [
@@ -2257,7 +2526,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Servers",
+   "pages": {
+    "Otter": "servers/rolename",
+    "BuildMaster": "servers/rolename"
+   },
    "usage": "$RoleName",
    "description": "name of the current server role in context",
    "params": []
@@ -2269,7 +2541,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/securecredentialproperty",
+    "BuildMaster": "credentials/securecredentialproperty"
+   },
    "usage": "$SecureCredentialProperty(credential, property)",
    "description": "the decrypted plain text value of a specified credentials property",
    "params": [
@@ -2292,7 +2567,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/secureresourceproperty",
+    "BuildMaster": "credentials/secureresourceproperty"
+   },
    "usage": "$SecureResourceProperty(resource, property, [type])",
    "description": "the value of a specified secure resource property",
    "params": [
@@ -2320,7 +2598,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Servers",
+   "pages": {
+    "Otter": "servers/servername",
+    "BuildMaster": "servers/servername"
+   },
    "usage": "$ServerName",
    "description": "name of the current server in context",
    "params": []
@@ -2332,7 +2613,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Linux",
+   "pages": {
+    "Otter": "linux/sheval",
+    "BuildMaster": "linux/sheval"
+   },
    "usage": "$SHEval(ScriptText)",
    "description": "Returns the output of a shell script.",
    "params": [
@@ -2350,7 +2634,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/specialwindowspath",
+    "BuildMaster": "windows/specialwindowspath"
+   },
    "usage": "$SpecialWindowsPath(Name)",
    "description": "Returns the full path of a special directory on a Windows system.",
    "params": [
@@ -2368,7 +2655,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Strings",
+   "pages": {
+    "Otter": "strings/substring",
+    "BuildMaster": "strings/substring"
+   },
    "usage": "$Substring(Text, Offset, [Length])",
    "description": "Returns a segment of another string.",
    "params": [
@@ -2396,7 +2686,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "JSON",
+   "pages": {
+    "Otter": "json/tojson",
+    "BuildMaster": "json/tojson"
+   },
    "usage": "$ToJson(data)",
    "description": "Converts an OtterScript value to JSON.",
    "params": [
@@ -2414,7 +2707,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Strings",
+   "pages": {
+    "Otter": "strings/tolower",
+    "BuildMaster": "strings/tolower"
+   },
    "usage": "$ToLower(Text)",
    "description": "Returns a string with all letters converted to lowercase.",
    "params": [
@@ -2432,7 +2728,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Strings",
+   "pages": {
+    "Otter": "strings/toupper",
+    "BuildMaster": "strings/toupper"
+   },
    "usage": "$ToUpper(Text)",
    "description": "Returns a string with all letters converted to uppercase.",
    "params": [
@@ -2450,7 +2749,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Strings",
+   "pages": {
+    "Otter": "strings/trim",
+    "BuildMaster": "strings/trim"
+   },
    "usage": "$Trim(Text, ...)",
    "description": "Returns a string with all leading and trailing whitespace characters removed, or optionally a set of specified characters.",
    "params": [
@@ -2468,7 +2770,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Strings",
+   "pages": {
+    "Otter": "strings/trimend",
+    "BuildMaster": "strings/trimend"
+   },
    "usage": "$TrimEnd(Text, ...)",
    "description": "Returns a string with all trailing whitespace characters removed, or optionally a set of specified characters.",
    "params": [
@@ -2486,7 +2791,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Strings",
+   "pages": {
+    "Otter": "strings/trimstart",
+    "BuildMaster": "strings/trimstart"
+   },
    "usage": "$TrimStart(Text, ...)",
    "description": "Returns a string with all leading whitespace characters removed, or optionally a set of specified characters.",
    "params": [
@@ -2504,7 +2812,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Strings",
+   "pages": {
+    "Otter": "strings/urlencode",
+    "BuildMaster": "strings/urlencode"
+   },
    "usage": "$UrlEncode(Text)",
    "description": "Escapes a string for use in a URL.",
    "params": [
@@ -2521,7 +2832,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "DotNet",
+   "pages": {
+    "BuildMaster": "dotnet/vstestexepath"
+   },
    "usage": "$VsTestExePath",
    "description": "The full path to vstest.console.exe; if empty will attempt to resolve the path automatically.",
    "params": []
@@ -2533,7 +2846,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Executions",
+   "pages": {
+    "Otter": "executions/workingdirectory",
+    "BuildMaster": "executions/workingdirectory"
+   },
    "usage": "$WorkingDirectory",
    "description": "Returns the current working directory.",
    "params": []
@@ -2545,7 +2861,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "XML",
+   "pages": {
+    "Otter": "xml/xmlencode",
+    "BuildMaster": "xml/xmlencode"
+   },
    "usage": "$XmlEncode(Text)",
    "description": "Encodes a string for use in an XML element.",
    "params": [
@@ -2562,7 +2881,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Builds",
+   "pages": {
+    "BuildMaster": "builds/buildvariable"
+   },
    "usage": "BuildVariable(VariableName, [BuildNumber], [ReleaseNumber], [ApplicationName])",
    "description": "Gets the value of a variable defined on a build.",
    "params": [
@@ -2595,7 +2916,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/eval",
+    "BuildMaster": "general/eval"
+   },
    "usage": "Eval(Text)",
    "description": "Performs variable substitution and function evaluation for arbitrary text.",
    "params": [
@@ -2613,7 +2937,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "JSON",
+   "pages": {
+    "Otter": "json/fromjson",
+    "BuildMaster": "json/fromjson"
+   },
    "usage": "FromJson(json)",
    "description": "Converts JSON to an OtterScript value.",
    "params": [
@@ -2631,7 +2958,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Executions",
+   "pages": {
+    "Otter": "executions/getvariablevalue",
+    "BuildMaster": "executions/getvariablevalue"
+   },
    "usage": "GetVariableValue(VariableName, [VariableType])",
    "description": "Returns the value of a variable if the specified variable name is available in the current context; otherwise returns null.",
    "params": [
@@ -2654,7 +2984,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Lists",
+   "pages": {
+    "Otter": "lists/listitem",
+    "BuildMaster": "lists/listitem"
+   },
    "usage": "ListItem(List, Index)",
    "description": "Gets an item from a list.",
    "params": [
@@ -2677,7 +3010,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Maps",
+   "pages": {
+    "Otter": "maps/mapadd",
+    "BuildMaster": "maps/mapadd"
+   },
    "usage": "MapAdd(Map, Key, Value)",
    "description": "Adds a key-value pair to a map.",
    "params": [
@@ -2705,7 +3041,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Maps",
+   "pages": {
+    "Otter": "maps/mapitem",
+    "BuildMaster": "maps/mapitem"
+   },
    "usage": "MapItem(Map, Key)",
    "description": "Gets an item from a map.",
    "params": [
@@ -2728,7 +3067,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Maps",
+   "pages": {
+    "Otter": "maps/mapremove",
+    "BuildMaster": "maps/mapremove"
+   },
    "usage": "MapRemove(Map, Key)",
    "description": "Removes a key from a map.",
    "params": [
@@ -2751,7 +3093,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Maps",
+   "pages": {
+    "Otter": "maps/mapset",
+    "BuildMaster": "maps/mapset"
+   },
    "usage": "MapSet(Map, Key, Value)",
    "description": "Updates the map element with the given key to a new value. If the existing key does not exist, it is added",
    "params": [
@@ -2779,7 +3124,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "PowerShell",
+   "pages": {
+    "Otter": "powershell/pseval",
+    "BuildMaster": "powershell/pseval"
+   },
    "usage": "PSEval(ScriptText)",
    "description": "Returns the result of a PowerShell script.",
    "params": [
@@ -2796,7 +3144,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Releases",
+   "pages": {
+    "BuildMaster": "releases/releasevariable"
+   },
    "usage": "ReleaseVariable(VariableName, [ReleaseNumber], [ApplicationName])",
    "description": "Gets the value of a variable defined on a release.",
    "params": [
@@ -2823,7 +3173,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Servers",
+   "pages": {
+    "BuildMaster": "servers/acquire-server"
+   },
    "usage": "Acquire-Server(\n\t[Role: <text>],\n\t[ServerName: <text>],\n\t[Verbose: <true/false>],\n\t[DoNotShare: <true/false>]\n);",
    "description": "Acquires a server from a resource pool defined by a server role. This operation is affected by execution priority.",
    "params": [
@@ -2859,7 +3211,9 @@
    "products": [
     "Otter"
    ],
-   "category": "Servers",
+   "pages": {
+    "Otter": "servers/acquire-server"
+   },
    "usage": "Acquire-Server(\n\t[Role: <text>],\n\t[ServerName: <text>],\n\t[Verbose: <true/false>]\n);",
    "description": "Acquires a server from a resource pool defined by a server role.",
    "params": [
@@ -2890,7 +3244,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/apply-template",
+    "BuildMaster": "general/apply-template"
+   },
    "usage": "InedoCore::Apply-Template(\n\t[Asset: <text>],\n\t[OutputVariable: <text>],\n\t[OutputFile: <text>],\n\t[Literal: <text>],\n\t[InputFile: <text>],\n\t[AdditionalVariables: <%(key1: value1, ...)>],\n\t[NewLines: <integer>]\n);",
    "description": "Applies full template transformation on a literal, a file, or a template asset.",
    "params": [
@@ -2944,7 +3301,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "ProGet",
+   "pages": {
+    "BuildMaster": "proget/archive-proget-project-build"
+   },
    "usage": "ProGet::Archive-ProjectBuild(\n\t[ProjectName: <text>],\n\t[Build: <text>],\n\t[To: <text>],\n\t[ProGetUrl: <text>],\n\t[ApiKey: <text>]\n);",
    "description": "Archives a project build in ProGet, so that it doesn't show up as an active build.",
    "params": [
@@ -2986,7 +3345,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "BuildMaster": "general/attach-package"
+   },
    "usage": "Packages::Attach-Package(\n\tName: <text>,\n\t[Version: <text>],\n\t[Source: <text>]\n);",
    "description": "Attaches a package to a build.",
    "params": [
@@ -3016,7 +3377,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "BuildMaster",
+   "pages": {
+    "BuildMaster": "buildmaster/backup-application"
+   },
    "usage": "System::Backup-Application(\n\t[Application: <text>],\n\tPackageSource: <text>\n);",
    "description": "Exports an application to a package source.",
    "params": [
@@ -3040,7 +3403,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Databases",
+   "pages": {
+    "BuildMaster": "databases/backup-database"
+   },
    "usage": "DB::Backup-Database(\n\tConnection: <text>,\n\tName: <text>,\n\tTo: <text>\n);",
    "description": "Uses a Database Connection to back up a database to a file on disk.",
    "params": [
@@ -3071,7 +3436,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Batch",
+   "pages": {
+    "Otter": "batch/batcall",
+    "BuildMaster": "batch/batcall"
+   },
    "usage": "Scripting::BATCall(\n\tScriptName: <text>,\n\t[Arguments: <text>],\n\t[EnvironmentVariables: <%(key1: value1, ...)>],\n\t[Parameters: <%(key1: value1, ...)>]\n);",
    "description": "Executes an OtterScript Script stored in a raft.",
    "params": [
@@ -3107,7 +3475,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "DotNet",
+   "pages": {
+    "BuildMaster": "dotnet/build"
+   },
    "usage": "DevEnv::Build(\n\tProjectFile: <text>,\n\tConfiguration: <text>,\n\t[Arguments: <text>],\n\t[DevEnvPath: <text>]\n);",
    "description": "Runs devenv.exe (Visual Studio) to build the specified project or solution.",
    "params": [
@@ -3143,7 +3513,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "DotNet",
+   "pages": {
+    "BuildMaster": "dotnet/dotnet-build"
+   },
    "usage": "DotNet::Build(\n\tProject: <text>,\n\t[Configuration: <text>],\n\t[PackageSource: <text>],\n\t[Version: <text>],\n\t[Framework: <text>],\n\t[Runtime: <text>],\n\t[Output: <text>],\n\t[UseTemporarySourceForNuGetRestore: <true/false>],\n\t[VSToolsPath: <text>],\n\t[ForceDependencyResolution: <true/false>],\n\t[Verbosity: <integer>],\n\t[ContinuousIntegrationBuild: <true/false>],\n\t[AllowInsecureConnections: <true/false>],\n\t[ImageBasedService: <text>],\n\t[AdditionalArguments: <text>],\n\t[EnsureDotNetInstalled: <text>],\n\t[DotNetPath: <text>]\n);",
    "description": "Builds a .NET Core/Framework/Standard project using dotnet build.",
    "params": [
@@ -3257,7 +3629,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "DotNet",
+   "pages": {
+    "BuildMaster": "dotnet/build-msbuild-project"
+   },
    "usage": "MSBuild::Build-Project(\n\tProjectFile: <text>,\n\t[Configuration: <text>],\n\t[Platform: <text>],\n\t[MSBuildProperties: <@(text)>],\n\t[Arguments: <text>],\n\t[MSBuildToolsPath: <text>],\n\t[To: <text>]\n);",
    "description": "Builds a project or solution using MSBuild.",
    "params": [
@@ -3311,7 +3685,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Git",
+   "pages": {
+    "BuildMaster": "git/checkout-code"
+   },
    "usage": "Git::Checkout-Code(\n\t[BranchOrCommit: <text>],\n\t[To: <text>],\n\t[RecurseSubmodules: <true/false>],\n\t[CommitHash: <text>],\n\t[PreserveLastModified: <true/false>],\n\t[WriteMinimalGitData: <true/false>],\n\t[From: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[RepositoryUrl: <text>],\n\t[IgnoreCertificateCheck: <true/false>],\n\t[GitLibrary: <text>]\n);",
    "description": "Gets source code from a branch or commit on a git repository.",
    "params": [
@@ -3395,7 +3771,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "GitHub",
+   "pages": {
+    "BuildMaster": "github/close-issue"
+   },
    "usage": "GitHub::Close-Issue(\n\tNumber: <integer>,\n\t[From: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[Organization: <text>],\n\t[Repository: <text>],\n\t[ApiUrl: <text>]\n);",
    "description": "Closes an issue on GitHub.",
    "params": [
@@ -3449,7 +3827,9 @@
    "products": [
     "Otter"
    ],
-   "category": "Docker",
+   "pages": {
+    "Otter": "docker/collect-docker-containers"
+   },
    "usage": "Docker::Collect-Containers [DefaultArgument] ();",
    "description": "Collects information about Docker containers on a server.",
    "params": []
@@ -3460,7 +3840,9 @@
    "products": [
     "Otter"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/collect-debian-packages"
+   },
    "usage": "Collect-DebianPackages [DefaultArgument] ();",
    "description": "Collects the names and versions of .deb packages installed on a server.",
    "params": []
@@ -3471,7 +3853,9 @@
    "products": [
     "Otter"
    ],
-   "category": "PowerShell",
+   "pages": {
+    "Otter": "powershell/collect-dsc-modules"
+   },
    "usage": "Collect-DscModules [DefaultArgument] ();",
    "description": "Collects the names and versions of DSC modules installed on a server.",
    "params": []
@@ -3482,7 +3866,9 @@
    "products": [
     "Otter"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/collect-installedpackages"
+   },
    "usage": "ProGet::Collect-InstalledPackages [DefaultArgument] ();",
    "description": "Collect list of installed universal packages",
    "params": []
@@ -3493,7 +3879,9 @@
    "products": [
     "Otter"
    ],
-   "category": "PowerShell",
+   "pages": {
+    "Otter": "powershell/collect-powershell-modules"
+   },
    "usage": "Collect-PsModules [DefaultArgument] ();",
    "description": "Collects the names and versions of PowerShell modules installed on a server.",
    "params": []
@@ -3504,7 +3892,9 @@
    "products": [
     "Otter"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/collect-rpm-packages"
+   },
    "usage": "Collect-RpmPackages [DefaultArgument] ();",
    "description": "Collects the names and versions of .rpm packages installed on a server.",
    "params": []
@@ -3516,7 +3906,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/concatenate-files",
+    "BuildMaster": "general/concatenate-files"
+   },
    "usage": "Concatenate-Files(\n\tFile: <text>,\n\t[Directory: <text>],\n\t[Include: <@(text)>],\n\t[Exclude: <@(text)>],\n\t[Encoding: <text>],\n\t[Separator: <text>]\n);",
    "description": "Concatenates files on a server.",
    "params": [
@@ -3565,7 +3958,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/copy-files",
+    "BuildMaster": "general/copy-files"
+   },
    "usage": "Copy-Files(\n\t[Include: <@(text)>],\n\t[Exclude: <@(text)>],\n\t[From: <text>],\n\tTo: <text>,\n\t[Verbose: <true/false>],\n\t[Overwrite: <true/false>],\n\t[RenameFrom: <text>],\n\t[RenameTo: <text>],\n\t[RenameRegex: <true/false>]\n);",
    "description": "Copies files on a server.",
    "params": [
@@ -3631,7 +4027,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Files",
+   "pages": {
+    "BuildMaster": "files/create-artifact"
+   },
    "usage": "Create-Artifact(\n\t[Name: <text>],\n\t[From: <text>],\n\t[Include: <@(text)>],\n\t[Exclude: <@(text)>],\n\t[Verbose: <true/false>],\n\t[IgnoreEmptyArtifact: <true/false>],\n\t[Overwrite: <true/false>],\n\t[IncludeSystemFiles: <true/false>],\n\t[IncludeHiddenFiles: <true/false>]\n);",
    "description": "Collects files in the specified directory, compresses them in a zip file, and saves it to the artifact library.",
    "params": [
@@ -3697,7 +4095,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "BuildMaster",
+   "pages": {
+    "BuildMaster": "buildmaster/create-build"
+   },
    "usage": "Create-Build(\n\tApplication: <text>,\n\t[ReleaseNumber: <text>],\n\t[Pipeline: <text>],\n\t[Variables: <%(key1: value1, ...)>],\n\t[ForcePromotion: <true/false>],\n\t[Wait: <true/false>],\n\t[FailIfCannotCreate: <true/false>],\n\t[DeployToFirstStage: <true/false>]\n);",
    "description": "Creates a new build in BuildMaster of an application, and optionally waits for it to complete.",
    "params": [
@@ -3758,7 +4158,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/create-directory",
+    "BuildMaster": "general/create-directory"
+   },
    "usage": "ProGet::Create-Directory(\n\tPath: <text>,\n\t[Source: <text>],\n\t[Resource: <text>],\n\t[EndpointUrl: <text>],\n\t[ApiKey: <text>],\n\t[UserName: <text>],\n\t[Password: <text>]\n);",
    "description": "Ensures that a subdirectory exists in a ProGet Asset Directory.",
    "params": [
@@ -3813,7 +4216,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/create-file",
+    "BuildMaster": "general/create-file"
+   },
    "usage": "Create-File(\n\tName: <text>,\n\t[Text: <text>],\n\t[Overwrite: <true/false>],\n\t[FileMode: <text>]\n);",
    "description": "Creates a file on a server.",
    "params": [
@@ -3849,7 +4255,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "GitHub",
+   "pages": {
+    "BuildMaster": "github/create-issue"
+   },
    "usage": "GitHub::Create-Issue(\n\tTitle: <text>,\n\t[Body: <text>],\n\t[Labels: <@(text)>],\n\t[Assignees: <@(text)>],\n\t[Milestone: <text>],\n\t[Number: <integer>],\n\t[From: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[Organization: <text>],\n\t[Repository: <text>],\n\t[ApiUrl: <text>]\n);",
    "description": "Creates an issue on a GitHub repository.",
    "params": [
@@ -3933,7 +4341,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Jira",
+   "pages": {
+    "BuildMaster": "jira/create-issue"
+   },
    "usage": "Jira::Create-Issue(\n\tTitle: <text>,\n\tType: <text>,\n\t[Description: <text>],\n\t[FixFor: <text>],\n\t[JiraIssueId: <text>],\n\t[From: <text>],\n\t[Project: <text>],\n\t[Server: <text>],\n\t[UserName: <text>],\n\t[ApiToken: <text>]\n);",
    "description": "Creates an issue in Jira.",
    "params": [
@@ -4005,7 +4415,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "GitHub",
+   "pages": {
+    "BuildMaster": "github/create-issuecomment"
+   },
    "usage": "GitHub::Create-IssueComment(\n\tNumber: <integer>,\n\tBody: <text>,\n\t[From: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[Organization: <text>],\n\t[Repository: <text>],\n\t[ApiUrl: <text>]\n);",
    "description": "Adds a comment to an issue on GitHub.",
    "params": [
@@ -4065,7 +4477,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "BuildMaster": "general/create-package"
+   },
    "usage": "ProGet::Create-Package(\n\tName: <text>,\n\tVersion: <text>,\n\t[From: <text>],\n\t[PushTo: <text>],\n\t[To: <text>],\n\t[Include: <@(text)>],\n\t[Exclude: <@(text)>],\n\t[Metadata: <%(key1: value1, ...)>],\n\t[Overwrite: <true/false>],\n\t[Feed: <text>],\n\t[EndpointUrl: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[ApiKey: <text>]\n);",
    "description": "Creates a universal package from the specified directory and publishes to a feed.",
    "params": [
@@ -4161,7 +4575,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Nuget",
+   "pages": {
+    "BuildMaster": "nuget/create-nuget-package"
+   },
    "usage": "NuGet::Create-Package(\n\tSourceFile: <text>,\n\t[Verbose: <true/false>],\n\t[Version: <text>],\n\t[Symbols: <true/false>],\n\t[Build: <true/false>],\n\t[Properties: <@(text)>],\n\t[IncludeReferencedProjects: <true/false>],\n\t[OutputDirectory: <text>],\n\t[SourceDirectory: <text>],\n\t[NuGetExePath: <text>],\n\t[Arguments: <text>]\n);",
    "description": "Creates a NuGet package from a project or .nuspec file (requires Windows).",
    "params": [
@@ -4239,7 +4655,9 @@
    "products": [
     "Otter"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/create-package"
+   },
    "usage": "ProGet::Create-Package(\n\tName: <text>,\n\tVersion: <text>,\n\t[From: <text>],\n\t[PushTo: <text>],\n\t[To: <text>],\n\t[Include: <@(text)>],\n\t[Exclude: <@(text)>],\n\t[Metadata: <%(key1: value1, ...)>],\n\t[Overwrite: <true/false>],\n\t[Feed: <text>],\n\t[EndpointUrl: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[ApiKey: <text>],\n\t[Group: <text>],\n\t[FeedUrl: <text>]\n);",
    "description": "Creates a universal package from the specified directory and publishes to a feed.",
    "params": [
@@ -4347,7 +4765,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Git",
+   "pages": {
+    "BuildMaster": "git/create-pull-request"
+   },
    "usage": "Git::Create-PullRequest(\n\tTitle: <text>,\n\t[Source: <text>],\n\tTarget: <text>,\n\t[Description: <text>],\n\t[Id: <text>],\n\t[From: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[Namespace: <text>],\n\t[Repository: <text>]\n);",
    "description": "Creates a pull/merge request in a git repository.",
    "params": [
@@ -4419,7 +4839,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "BuildMaster",
+   "pages": {
+    "BuildMaster": "buildmaster/create-release"
+   },
    "usage": "Create-Release(\n\tApplication: <text>,\n\t[ReleaseNumber: <text>],\n\tPipeline: <text>,\n\t[ReleaseName: <text>],\n\t[Variables: <%(key1: value1, ...)>]\n);",
    "description": "Creates a release in another application.",
    "params": [
@@ -4461,7 +4883,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "BuildMaster",
+   "pages": {
+    "BuildMaster": "buildmaster/create-release-note"
+   },
    "usage": "Create-ReleaseNote(\n\t[Note: <text>],\n\t[Application: <text>],\n\t[Release: <text>],\n\t[Build: <text>]\n);",
    "description": "Attaches a release note to the current release.",
    "params": [
@@ -4498,7 +4922,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/create-zipfile",
+    "BuildMaster": "general/create-zipfile"
+   },
    "usage": "Create-ZipFile(\n\tName: <text>,\n\tDirectory: <text>,\n\t[Overwrite: <true/false>]\n);",
    "description": "Creates a zip file on a server.",
    "params": [
@@ -4529,7 +4956,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/delete-files",
+    "BuildMaster": "general/delete-files"
+   },
    "usage": "Delete-Files(\n\tInclude: <@(text)>,\n\t[Exclude: <@(text)>],\n\t[Directory: <text>],\n\t[Verbose: <true/false>]\n);",
    "description": "Deletes files on a server.",
    "params": [
@@ -4565,7 +4995,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Files",
+   "pages": {
+    "BuildMaster": "files/deploy-artifact"
+   },
    "usage": "Deploy-Artifact(\n\t[Name: <text>],\n\t[To: <text>],\n\t[Application: <text>],\n\t[Release: <text>],\n\t[Build: <text>],\n\t[DeployAsZipFile: <text>],\n\t[TransferAll: <true/false>],\n\t[DoNotClearTarget: <true/false>],\n\t[Verbose: <true/false>],\n\t[OverwriteReadOnly: <true/false>],\n\t[OptimizedFileTransfer: <true/false>]\n);",
    "description": "Retrieves the specified artifact from the artifact library and deploys it to a directory.",
    "params": [
@@ -4643,7 +5075,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "BuildMaster",
+   "pages": {
+    "BuildMaster": "buildmaster/deploy-build"
+   },
    "usage": "Deploy-Build(\n\tApplication: <text>,\n\t[ReleaseNumber: <text>],\n\t[BuildNumber: <text>],\n\t[Variables: <%(key1: value1, ...)>],\n\t[From: <text>],\n\t[To: <text>],\n\t[Force: <true/false>],\n\t[Wait: <true/false>],\n\t[FailIfCannotDeploy: <true/false>]\n);",
    "description": "Deploys a build in BuildMaster of an application, and optionally waits for it to complete.",
    "params": [
@@ -4709,7 +5143,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Configuration Files",
+   "pages": {
+    "BuildMaster": "configuration-files/deploy-configuration-file"
+   },
    "usage": "Deploy-ConfigFile(\n\tConfigFileName: <text>,\n\t[Instance: <text>],\n\t[To: <text>],\n\t[OutputFileName: <text>],\n\t[DoNotRecoderDeployment: <true/false>],\n\t[VersionNumber: <integer>]\n);",
    "description": "Deploys an instance of a configuration file to disk after applying an optional template.",
    "params": [
@@ -4758,7 +5194,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/download-asset",
+    "BuildMaster": "general/download-asset"
+   },
    "usage": "ProGet::Download-Asset(\n\tFrom: <text>,\n\t[To: <text>],\n\t[ProxyData: <true/false>],\n\t[Source: <text>],\n\t[Resource: <text>],\n\t[EndpointUrl: <text>],\n\t[ApiKey: <text>],\n\t[UserName: <text>],\n\t[Password: <text>]\n);",
    "description": "Downloads a file from a ProGet Asset Directory.",
    "params": [
@@ -4825,7 +5264,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/download-http",
+    "BuildMaster": "general/download-http"
+   },
    "usage": "Download-Http(\n\tFileName: <text>,\n\tUrl: <text>,\n\t[LogResponseBody: <true/false>],\n\t[ErrorStatusCodes: <text>],\n\t[ResponseBody: <text>],\n\t[RequestHeaders: <%(key1: value1, ...)>],\n\t[MaxResponseLength: <integer>],\n\t[ProxyRequest: <true/false>],\n\t[Credentials: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[IgnoreSslErrors: <true/false>]\n);",
    "description": "Downloads a file from a specified URL using an HTTP GET.",
    "params": [
@@ -4910,7 +5352,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "IIS",
+   "pages": {
+    "Otter": "iis/ensure-application",
+    "BuildMaster": "iis/ensure-application"
+   },
    "usage": "IIS::Ensure-Application(\n\tSite: <text>,\n\tPath: <text>,\n\t[AppPool: <text>],\n\t[PhysicalPath: <text>],\n\t[LogonMethod: <integer>],\n\t[Credentials: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[Exists: <true/false>]\n);",
    "description": "Ensures the existence of an application within an IIS site.",
    "params": [
@@ -4977,7 +5422,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "IIS",
+   "pages": {
+    "Otter": "iis/ensure-app-pool",
+    "BuildMaster": "iis/ensure-app-pool"
+   },
    "usage": "IIS::Ensure-AppPool(\n\tName: <text>,\n\t[Runtime: <text>],\n\t[Enable32BitAppOnWin64: <true/false>],\n\t[Pipeline: <integer>],\n\t[AutoStart: <true/false>],\n\t[StartMode: <integer>],\n\t[QueueLength: <Int64>],\n\t[State: <integer>],\n\t[IdentityType: <integer>],\n\t[Credentials: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[CpuLimit: <Int64>],\n\t[CpuAction: <integer>],\n\t[CpuResetInterval: <TimeSpan>],\n\t[CpuSmpAffinitized: <true/false>],\n\t[CpuSmpProcessorAffinityMask: <Int64>],\n\t[CpuSmpProcessorAffinityMask2: <Int64>],\n\t[IdleTimeout: <TimeSpan>],\n\t[LoadUserProfile: <true/false>],\n\t[MaxProcesses: <Int64>],\n\t[PingingEnabled: <true/false>],\n\t[PingResponseTime: <TimeSpan>],\n\t[PingInterval: <TimeSpan>],\n\t[ShutdownTimeLimit: <TimeSpan>],\n\t[StartupTimeLimit: <TimeSpan>],\n\t[OrphanWorkerProcess: <true/false>],\n\t[OrphanActionExe: <text>],\n\t[OrphanActionParams: <text>],\n\t[LoadBalancerCapabilities: <integer>],\n\t[RapidFailProtection: <true/false>],\n\t[RapidFailProtectionInterval: <TimeSpan>],\n\t[RapidFailProtectionMaxCrashes: <Int64>],\n\t[AutoShutdownExe: <text>],\n\t[AutoShutdownParams: <text>],\n\t[DisallowOverlappingRotation: <true/false>],\n\t[DisallowRotationOnConfigChange: <true/false>],\n\t[PeriodicRestartPrivateMemory: <Int64>],\n\t[PeriodicRestartTime: <TimeSpan>],\n\t[PeriodicRestartRequests: <Int64>],\n\t[PeriodicRestartSchedule: <@(text)>],\n\t[PeriodicRestartMemory: <Int64>],\n\t[Exists: <true/false>]\n);",
    "description": "Ensures the existence of an application pool on a server.",
    "params": [
@@ -5248,7 +5696,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "DotNet",
+   "pages": {
+    "Otter": "dotnet/ensure-appsetting",
+    "BuildMaster": "dotnet/ensure-appsetting"
+   },
    "usage": "DotNet::Ensure-AppSetting(\n\tFile: <text>,\n\tKey: <text>,\n\tValue: <text>,\n\t[AppSettingsXPath: <text>]\n);",
    "description": "Ensures a .NET application configuration file has the specified appSetting key/value pair.",
    "params": [
@@ -5284,7 +5735,9 @@
    "products": [
     "Otter"
    ],
-   "category": "Files",
+   "pages": {
+    "Otter": "files/ensure-asset"
+   },
    "usage": "Ensure-Asset(\n\tName: <text>,\n\t[Raft: <text>],\n\t[Type: <integer>],\n\t[Exists: <true/false>],\n\tDirectory: <text>,\n\t[FileName: <text>]\n);",
    "description": "Ensures the existence of an asset file on a server.",
    "params": [
@@ -5333,7 +5786,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/ensure-directory",
+    "BuildMaster": "general/ensure-directory"
+   },
    "usage": "Ensure-Directory(\n\tName: <text>,\n\t[Exists: <true/false>]\n);",
    "description": "Ensures the existence of a directory on a server.",
    "params": [
@@ -5358,7 +5814,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "PowerShell",
+   "pages": {
+    "Otter": "powershell/ensure-dsc-resource",
+    "BuildMaster": "powershell/ensure-dsc-resource"
+   },
    "usage": "Ensure-DscResource(\n\t[ConfigurationKey: <text>],\n\tName: <text>,\n\t[Module: <text>],\n\t[Properties: <%(key1: value1, ...)>],\n\t[PreferWindowsPowerShell: <text>]\n);",
    "description": "Ensures the configuration of a specified PowerShell DSC Resource.",
    "params": [
@@ -5401,7 +5860,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/ensure-file",
+    "BuildMaster": "general/ensure-file"
+   },
    "usage": "Ensure-File(\n\t[Text: <text>],\n\t[ReadOnly: <true/false>],\n\tName: <text>,\n\t[Attributes: <integer>],\n\t[Exists: <true/false>],\n\t[Modified: <DateTime>]\n);",
    "description": "Ensures the existence of a file on a server.",
    "params": [
@@ -5450,7 +5912,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/ensure-hostsentry",
+    "BuildMaster": "general/ensure-hostsentry"
+   },
    "usage": "Ensure-HostsEntry(\n\tHost: <text>,\n\tIP: <text>,\n\t[Exists: <true/false>]\n);",
    "description": "Ensures an entry in the hosts file on a server.",
    "params": [
@@ -5481,7 +5946,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/ensure-metadata",
+    "BuildMaster": "general/ensure-metadata"
+   },
    "usage": "ProGet::Ensure-Metadata(\n\tPath: <text>,\n\t[Metadata: <%(key1: value1, ...)>],\n\t[Source: <text>],\n\t[Resource: <text>],\n\t[EndpointUrl: <text>],\n\t[ApiKey: <text>],\n\t[UserName: <text>],\n\t[Password: <text>]\n);",
    "description": "Ensures that metadata exists on an Asset Directory item.",
    "params": [
@@ -5541,7 +6009,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "GitHub",
+   "pages": {
+    "BuildMaster": "github/ensure-milestone"
+   },
    "usage": "GitHub::Ensure-Milestone(\n\t[From: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[Organization: <text>],\n\t[Repository: <text>],\n\t[ApiUrl: <text>],\n\tTitle: <text>,\n\t[DueDate: <text>],\n\t[Description: <text>],\n\t[State: <text>]\n);",
    "description": "Ensures a GitHub milestone exists with the specified properties.",
    "params": [
@@ -5614,7 +6084,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Firewall",
+   "pages": {
+    "Otter": "firewall/ensure-firewall-rule",
+    "BuildMaster": "firewall/ensure-firewall-rule"
+   },
    "usage": "Firewall::Ensure-NetFirewallRule(\n\tName: <text>,\n\tProfiles: <text>,\n\tPort: <text>,\n\tProtocol: <text>,\n\tInbound: <true/false>,\n\tAllow: <true/false>,\n\t[Exists: <true/false>]\n);",
    "description": "Ensures the existence of a firewall rule on a Windows server.",
    "params": [
@@ -5669,7 +6142,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/ensure-package",
+    "BuildMaster": "general/ensure-package"
+   },
    "usage": "ProGet::Ensure-Package(\n\t[PackageSource: <text>],\n\tName: <text>,\n\t[Version: <text>],\n\t[To: <text>],\n\t[ClearTarget: <true/false>],\n\t[Exists: <true/false>],\n\t[LocalRegistry: <integer>],\n\t[LocalCache: <true/false>],\n\t[FileCompare: <integer>],\n\t[Ignore: <@(text)>],\n\t[DirectDownload: <true/false>],\n\t[Feed: <text>],\n\t[EndpointUrl: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[ApiKey: <text>],\n\t[FeedUrl: <text>]\n);",
    "description": "Ensures that the specified universal package is installed in the specified directory.",
    "params": [
@@ -5784,7 +6260,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "PowerShell",
+   "pages": {
+    "Otter": "powershell/ensure-powershell-module",
+    "BuildMaster": "powershell/ensure-powershell-module"
+   },
    "usage": "Ensure-PsModule(\n\tModule: <text>,\n\t[Version: <text>],\n\t[MinimumVersion: <text>],\n\t[Force: <true/false>],\n\t[Repository: <text>],\n\t[Scope: <text>],\n\t[Exists: <true/false>],\n\t[AllowClobber: <true/false>],\n\t[AllowPrerelease: <true/false>],\n\t[AcceptLicense: <true/false>],\n\t[AllVersions: <true/false>],\n\t[Parameters: <%(key1: value1, ...)>],\n\t[Verbose: <true/false>],\n\t[DebugLogging: <true/false>],\n\t[PreferWindowsPowerShell: <text>]\n);",
    "description": "Ensures that the specified PowerShell module is installed.",
    "params": [
@@ -5887,7 +6366,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "PowerShell",
+   "pages": {
+    "Otter": "powershell/ensure-powershell-repository",
+    "BuildMaster": "powershell/ensure-powershell-repository"
+   },
    "usage": "Ensure-PsRepository(\n\tName: <text>,\n\tSourceLocation: <text>,\n\t[InstallationPolicy: <text>],\n\t[Exists: <true/false>],\n\t[PackageManagementProvider: <text>],\n\t[Parameters: <%(key1: value1, ...)>],\n\t[Verbose: <true/false>],\n\t[DebugLogging: <true/false>],\n\t[PreferWindowsPowerShell: <text>]\n);",
    "description": "Ensures that the specified PowerShell Repository is registered.",
    "params": [
@@ -5953,7 +6435,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Registry",
+   "pages": {
+    "BuildMaster": "registry/ensure-registry-key-value"
+   },
    "usage": "Windows::Ensure-RegistryKeyValue(\n\tName: <text>,\n\t[Value: <@(text)>],\n\t[Kind: <integer>],\n\t[Exists: <true/false>],\n\tPath: <text>\n);",
    "description": "Ensures that a registry value exists or does not exist on a specified key.",
    "params": [
@@ -5995,7 +6479,9 @@
    "products": [
     "Otter"
    ],
-   "category": "Registry",
+   "pages": {
+    "Otter": "registry/ensure-registry-key-value"
+   },
    "usage": "Windows::Ensure-RegistryKeyValue(\n\tName: <text>,\n\t[Value: <@(text)>],\n\t[Kind: <integer>],\n\t[Exists: <true/false>],\n\t[Hive: <integer>],\n\t[Key: <text>],\n\tPath: <text>\n);",
    "description": "Ensures that a registry value exists or does not exist on a specified key.",
    "params": [
@@ -6049,7 +6535,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "BuildMaster",
+   "pages": {
+    "BuildMaster": "buildmaster/ensure-release"
+   },
    "usage": "Ensure-Release(\n\t[Application: <text>],\n\t[ReleaseNumber: <text>],\n\t[Pipeline: <text>],\n\t[ReleaseName: <text>],\n\t[Variables: <%(key1: value1, ...)>]\n);",
    "description": "Ensures a release exists in another application.",
    "params": [
@@ -6091,7 +6579,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "GitHub",
+   "pages": {
+    "BuildMaster": "github/ensure-release"
+   },
    "usage": "GitHub::Ensure-Release(\n\t[From: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[Organization: <text>],\n\t[Repository: <text>],\n\t[ApiUrl: <text>],\n\tTag: <text>,\n\t[Target: <text>],\n\t[Title: <text>],\n\t[Description: <text>],\n\t[Draft: <true/false>],\n\t[Prerelease: <true/false>]\n);",
    "description": "Creates or updates a tagged release in a GitHub repository.",
    "params": [
@@ -6175,7 +6665,9 @@
    "products": [
     "Otter"
    ],
-   "category": "Otter",
+   "pages": {
+    "Otter": "otter/ensure-server"
+   },
    "usage": "Ensure-Server(\n\tName: <text>,\n\t[Exists: <true/false>],\n\t[Roles: <@(text)>],\n\t[Environments: <@(text)>],\n\t[RoutineExecutionType: <text>],\n\t[AgentConfigurationXml: <text>]\n);",
    "description": "Ensures that a server exists within Otter.",
    "params": [
@@ -6224,7 +6716,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Services",
+   "pages": {
+    "Otter": "services/ensure-service",
+    "BuildMaster": "services/ensure-service"
+   },
    "usage": "Ensure-Service(\n\tName: <text>,\n\t[DisplayName: <text>],\n\t[Description: <text>],\n\t[Status: <integer>],\n\t[Exists: <true/false>],\n\tPath: <text>,\n\t[Startup: <integer>],\n\t[DelayedStart: <true/false>],\n\t[Credentials: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[FirstFailure: <integer>],\n\t[SecondFailure: <integer>],\n\t[SubsequentFailures: <integer>],\n\t[RestartDelay: <integer>],\n\t[OnFailureProgramPath: <text>],\n\t[RebootMessage: <text>],\n\t[Dependencies: <@(text)>],\n\t[StatusChangeTimeout: <TimeSpan>]\n);",
    "description": "Ensures the configuration of a Windows service on a server.",
    "params": [
@@ -6350,7 +6845,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "IIS",
+   "pages": {
+    "BuildMaster": "iis/ensure-site"
+   },
    "usage": "IIS::Ensure-Site(\n\tName: <text>,\n\t[AppPool: <text>],\n\t[Path: <text>],\n\t[BindingProtocol: <text>],\n\t[BindingAddress: <text>],\n\t[BindingHostName: <text>],\n\t[BindingPort: <integer>],\n\t[BindingCertficiate: <text>],\n\t[BindingCertificateStoreLocation: <integer>],\n\t[BindingCertificateHash: <text>],\n\t[BindingRequireSNI: <true/false>],\n\t[BindingCertificateStore: <text>],\n\t[Bindings: <@(%(key1: value1, ...))>],\n\t[Exists: <true/false>]\n);",
    "description": "Ensures the existence of a site on a server.",
    "params": [
@@ -6446,7 +6943,9 @@
    "products": [
     "Otter"
    ],
-   "category": "IIS",
+   "pages": {
+    "Otter": "iis/ensure-site"
+   },
    "usage": "IIS::Ensure-Site(\n\tName: <text>,\n\t[AppPool: <text>],\n\t[Path: <text>],\n\t[BindingProtocol: <text>],\n\t[BindingAddress: <text>],\n\t[BindingHostName: <text>],\n\t[BindingPort: <integer>],\n\t[BindingCertficiate: <text>],\n\t[BindingCertificateStoreLocation: <integer>],\n\t[BindingCertificateHash: <text>],\n\t[BindingRequireSNI: <true/false>],\n\t[BindingCertificateStore: <text>],\n\t[Binding: <text>],\n\t[Bindings: <@(%(key1: value1, ...))>],\n\t[Exists: <true/false>]\n);",
    "description": "Ensures the existence of a site on a server.",
    "params": [
@@ -6549,7 +7048,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "IIS",
+   "pages": {
+    "Otter": "iis/ensure-site-binding",
+    "BuildMaster": "iis/ensure-site-binding"
+   },
    "usage": "IIS::Ensure-SiteBinding(\n\tSite: <text>,\n\t[Protocol: <text>],\n\t[Address: <text>],\n\t[HostName: <text>],\n\t[Port: <integer>],\n\t[Certficiate: <text>],\n\t[CertificateStoreLocation: <integer>],\n\t[CertificateHash: <text>],\n\t[RequireSNI: <true/false>],\n\t[CertificateStore: <text>],\n\t[Exists: <true/false>]\n);",
    "description": "Ensures the existence of a binding on a site.",
    "params": [
@@ -6627,7 +7129,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Git",
+   "pages": {
+    "BuildMaster": "git/ensure-tag"
+   },
    "usage": "Git::Ensure-Tag(\n\tTag: <text>,\n\t[Commit: <text>],\n\t[Force: <true/false>],\n\t[From: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[RepositoryUrl: <text>],\n\t[IgnoreCertificateCheck: <true/false>],\n\t[GitLibrary: <text>]\n);",
    "description": "Creates and pushes a tag to a git repository.",
    "params": [
@@ -6694,7 +7198,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "IIS",
+   "pages": {
+    "Otter": "iis/ensure-virtual-directory",
+    "BuildMaster": "iis/ensure-virtual-directory"
+   },
    "usage": "IIS::Ensure-VirtualDirectory(\n\tSite: <text>,\n\t[ApplicationPath: <text>],\n\tPath: <text>,\n\t[PhysicalPath: <text>],\n\t[LogonMethod: <integer>],\n\t[Credentials: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[Exists: <true/false>]\n);",
    "description": "Ensures the existence of a virtual directory within an IIS site.",
    "params": [
@@ -6761,7 +7268,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/exec",
+    "BuildMaster": "general/exec"
+   },
    "usage": "InedoCore::Exec(\n\t[FileName: <text>],\n\t[Arguments: <text>],\n\t[WorkingDirectory: <text>],\n\t[OutputLogLevel: <integer>],\n\t[ErrorOutputLogLevel: <integer>],\n\t[SuccessExitCode: <text>],\n\t[ImportVariables: <true/false>],\n\t[WarnRegex: <text>],\n\t[DebugRegex: <text>],\n\t[LogArguments: <true/false>],\n\t[ReportProgressRegex: <text>],\n\t[OutputFilterRegex: <text>]\n);",
    "description": "Executes a process, logs its output, and waits until it exits.",
    "params": [
@@ -6845,7 +7355,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Databases",
+   "pages": {
+    "BuildMaster": "databases/execute-database-change-scripts"
+   },
    "usage": "Execute-ChangeScripts(\n\tConnection: <text>,\n\t[InitializeDatabase: <true/false>],\n\t[Group: <text>]\n);",
    "description": "Executes change scripts associated with the current release and any change scripts from prior releases that have not been run against the database to date.",
    "params": [
@@ -6875,7 +7387,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Databases",
+   "pages": {
+    "BuildMaster": "databases/execute-database-scripts-on-disk"
+   },
    "usage": "Execute-DatabaseScripts(\n\tConnection: <text>,\n\t[Directory: <text>],\n\t[Include: <@(text)>],\n\t[Exclude: <@(text)>]\n);",
    "description": "Finds files matching a search mask and executes those scripts against a database connection.",
    "params": [
@@ -6911,7 +7425,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Databases",
+   "pages": {
+    "BuildMaster": "databases/execute-database-statement"
+   },
    "usage": "Execute-DatabaseStatement(\n\tConnection: <text>,\n\tStatement: <text>,\n\t[LogStatement: <true/false>]\n);",
    "description": "Executes a statement against a database.",
    "params": [
@@ -6942,7 +7458,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "PowerShell",
+   "pages": {
+    "Otter": "powershell/psexec",
+    "BuildMaster": "powershell/psexec"
+   },
    "usage": "Execute-PowerShell(\n\tText: <text>,\n\t[Debug: <true/false>],\n\t[Verbose: <true/false>],\n\t[RunOnSimulation: <true/false>],\n\t[Isolated: <true/false>],\n\t[SuccessExitCode: <text>],\n\t[PreferWindowsPowerShell: <text>]\n);",
    "description": "Executes a specified PowerShell script.",
    "params": [
@@ -6996,7 +7515,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "DotNet",
+   "pages": {
+    "BuildMaster": "dotnet/execute-vstest-tests"
+   },
    "usage": "WindowsSDK::Execute-VSTest(\n\tTestContainer: <text>,\n\t[Group: <text>],\n\t[Arguments: <text>],\n\t[ClearExistingTestResults: <true/false>],\n\t[VsTestPath: <text>]\n);",
    "description": "Runs VSTest unit tests on a specified test project, recommended for tests in VS 2012 and later.",
    "params": [
@@ -7039,7 +7560,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Files",
+   "pages": {
+    "Otter": "files/extract-zipfile",
+    "BuildMaster": "files/extract-zipfile"
+   },
    "usage": "Extract-ZipFile(\n\tName: <text>,\n\t[Directory: <text>],\n\t[ClearTarget: <true/false>],\n\t[Overwrite: <true/false>]\n);",
    "description": "Extracts a zip file on a server.",
    "params": [
@@ -7075,7 +7599,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Files",
+   "pages": {
+    "BuildMaster": "files/generate-release-notes"
+   },
    "usage": "Generate-ReleaseNotes(\n\tName: <text>,\n\t[IncludeReleaseNotes: <true/false>],\n\t[IncludeIssueSummary: <true/false>],\n\t[IncludeIssueDescriptions: <true/false>],\n\t[ClosedIssuesOnly: <true/false>],\n\t[CustomCss: <text>],\n\t[Overwrite: <true/false>]\n);",
    "description": "Generates an HTML file containing the BuildMaster release notes and/or issues from the application's issue tracking provider.",
    "params": [
@@ -7129,7 +7655,9 @@
    "products": [
     "Otter"
    ],
-   "category": "Files",
+   "pages": {
+    "Otter": "files/get-asset"
+   },
    "usage": "Get-Asset(\n\tName: <text>,\n\t[Raft: <text>],\n\t[Type: <integer>],\n\t[Overwrite: <true/false>],\n\t[To: <text>]\n);",
    "description": "Gets the specified asset file and saves it to the current working directory or target path.",
    "params": [
@@ -7171,7 +7699,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "DotNet",
+   "pages": {
+    "BuildMaster": "dotnet/get-nuget-dependencies"
+   },
    "usage": "DotNet::Get-Dependencies(\n\t[ProjectPath: <text>],\n\t[PackageId: <text>],\n\t[Dependencies: <RuntimeValue>]\n);",
    "description": "Inspects a .NET build project/packages.config to return the required versions of NuGet package dependencies.",
    "params": [
@@ -7202,7 +7732,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/get-http",
+    "BuildMaster": "general/get-http"
+   },
    "usage": "Get-Http(\n\t[Method: <integer>],\n\tUrl: <text>,\n\t[LogResponseBody: <true/false>],\n\t[ErrorStatusCodes: <text>],\n\t[ResponseBody: <text>],\n\t[RequestHeaders: <%(key1: value1, ...)>],\n\t[MaxResponseLength: <integer>],\n\t[ProxyRequest: <true/false>],\n\t[Credentials: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[IgnoreSslErrors: <true/false>]\n);",
    "description": "Executes an HTTP GET, DELETE, or HEAD request against a URL, typically used for RESTful operations.",
    "params": [
@@ -7287,7 +7820,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Registry",
+   "pages": {
+    "Otter": "registry/get-registry-value",
+    "BuildMaster": "registry/get-registry-value"
+   },
    "usage": "Windows::Get-RegistryValue(\n\tHive: <integer>,\n\tKey: <text>,\n\tName: <text>,\n\t[Value: <RuntimeValue>],\n\t[FailIfNotFound: <true/false>]\n);",
    "description": "Reads a value from the Windows registry and stores it in a variable.",
    "params": [
@@ -7329,7 +7865,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "BuildMaster": "general/install-package"
+   },
    "usage": "ProGet::Install-Package(\n\t[PackageSource: <text>],\n\tName: <text>,\n\t[Version: <text>],\n\t[To: <text>],\n\t[ClearTarget: <true/false>],\n\t[LocalRegistry: <integer>],\n\t[LocalCache: <true/false>],\n\t[DirectDownload: <true/false>],\n\t[Feed: <text>],\n\t[EndpointUrl: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[ApiKey: <text>]\n);",
    "description": "Installs a universal package to the specified location using a Package Source.",
    "params": [
@@ -7419,7 +7957,9 @@
    "products": [
     "Otter"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/install-package"
+   },
    "usage": "ProGet::Install-Package(\n\t[PackageSource: <text>],\n\tName: <text>,\n\t[Version: <text>],\n\t[To: <text>],\n\t[ClearTarget: <true/false>],\n\t[LocalRegistry: <integer>],\n\t[LocalCache: <true/false>],\n\t[DirectDownload: <true/false>],\n\t[Feed: <text>],\n\t[EndpointUrl: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[ApiKey: <text>],\n\t[FeedUrl: <text>]\n);",
    "description": "Installs a universal package to the specified location using a Package Source.",
    "params": [
@@ -7515,7 +8055,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Git",
+   "pages": {
+    "BuildMaster": "git/merge-git-pull-request"
+   },
    "usage": "Git::Merge-PullRequest(\n\t[Id: <text>],\n\t[Method: <text>],\n\t[Message: <text>],\n\t[Head: <text>],\n\t[From: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[Namespace: <text>],\n\t[Repository: <text>]\n);",
    "description": "Merges a pull/merge request in a git repository.",
    "params": [
@@ -7582,7 +8124,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/oscall",
+    "BuildMaster": "general/oscall"
+   },
    "usage": "OSCall(\n\tName: <text>,\n\t[Parameters: <%(key1: value1, ...)>],\n\t[Variables: <%(key1: value1, ...)>],\n\t[OutputVariables: <@(text)>]\n);",
    "description": "Executes an OtterScript Script stored in a raft.",
    "params": [
@@ -7619,7 +8164,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/osexec",
+    "BuildMaster": "general/osexec"
+   },
    "usage": "OSExec(\n\tScriptText: <text>,\n\t[Variables: <%(key1: value1, ...)>],\n\t[OutputVariables: <@(text)>]\n);",
    "description": "Executes an OtterScript string.",
    "params": [
@@ -7649,7 +8197,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Nuget",
+   "pages": {
+    "BuildMaster": "nuget/dotnet-pack"
+   },
    "usage": "DotNet::Pack(\n\t[Project: <text>],\n\t[Configuration: <text>],\n\t[PackageSource: <text>],\n\t[Output: <text>],\n\t[PackageID: <text>],\n\t[PackageVersion: <text>],\n\t[VersionSuffix: <text>],\n\t[IncludeSymbols: <true/false>],\n\t[IncludeSource: <true/false>],\n\t[Verbosity: <integer>],\n\t[AdditionalArguments: <text>],\n\t[EnsureDotNetInstalled: <text>],\n\t[DotNetPath: <text>]\n);",
    "description": "Creates a NuGet package from a .net project using the dotnet pack command.",
    "params": [
@@ -7739,7 +8289,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "BuildMaster",
+   "pages": {
+    "BuildMaster": "buildmaster/manual-operation"
+   },
    "usage": "Perform-ManualOperation(\n\tName: <text>,\n\t[Description: <text>],\n\tAssignedTo: <text>,\n\t[SendEmail: <true/false>],\n\t[CC: <@(text)>]\n);",
    "description": "Halts the execution until an individual or group completes a specified task.",
    "params": [
@@ -7782,7 +8334,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/post-http",
+    "BuildMaster": "general/post-http"
+   },
    "usage": "Post-Http(\n\t[Method: <integer>],\n\t[ContentType: <text>],\n\t[TextData: <text>],\n\t[FormData: <%(key1: value1, ...)>],\n\t[LogRequestData: <true/false>],\n\tUrl: <text>,\n\t[LogResponseBody: <true/false>],\n\t[ErrorStatusCodes: <text>],\n\t[ResponseBody: <text>],\n\t[RequestHeaders: <%(key1: value1, ...)>],\n\t[MaxResponseLength: <integer>],\n\t[ProxyRequest: <true/false>],\n\t[Credentials: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[IgnoreSslErrors: <true/false>]\n);",
    "description": "Executes an HTTP POST/PUT/PATCH request to a URL, typically used for RESTful operations.",
    "params": [
@@ -7890,7 +8445,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "ProGet",
+   "pages": {
+    "BuildMaster": "proget/promote-package"
+   },
    "usage": "ProGet::Promote(\n\t[PackageSource: <text>],\n\tName: <text>,\n\tVersion: <text>,\n\t[ToFeed: <text>],\n\t[Reason: <text>],\n\t[To: <text>],\n\t[Feed: <text>],\n\t[EndpointUrl: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[ApiKey: <text>]\n);",
    "description": "Promotes a package from one feed to another in a ProGet instance.",
    "params": [
@@ -7968,7 +8525,9 @@
    "products": [
     "Otter"
    ],
-   "category": "ProGet",
+   "pages": {
+    "Otter": "proget/promote-package"
+   },
    "usage": "ProGet::Promote(\n\t[PackageSource: <text>],\n\tName: <text>,\n\tVersion: <text>,\n\t[ToFeed: <text>],\n\t[Reason: <text>],\n\t[To: <text>],\n\t[Feed: <text>],\n\t[EndpointUrl: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[ApiKey: <text>],\n\t[Group: <text>],\n\t[FeedUrl: <text>]\n);",
    "description": "Promotes a package from one feed to another in a ProGet instance.",
    "params": [
@@ -8058,7 +8617,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "ProGet",
+   "pages": {
+    "BuildMaster": "proget/promote-proget-project-build"
+   },
    "usage": "ProGet::Promote-ProjectBuild(\n\t[ProjectName: <text>],\n\t[Release: <text>],\n\t[Stage: <text>],\n\t[To: <text>],\n\t[ProGetUrl: <text>],\n\t[ApiKey: <text>]\n);",
    "description": "Deletes a project build in ProGet",
    "params": [
@@ -8106,7 +8667,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "PowerShell",
+   "pages": {
+    "BuildMaster": "powershell/pscall2"
+   },
    "usage": "PSCall(\n\tName: <text>,\n\t[Parameters: <%(key1: value1, ...)>],\n\t[InputVariables: <%(key1: value1, ...)>],\n\t[OutputVariables: <@(text)>],\n\t[PreferWindowsPowerShell: <text>]\n);",
    "description": "Calls a PowerShell Script that is stored as an asset.",
    "params": [
@@ -8148,7 +8711,9 @@
    "products": [
     "Otter"
    ],
-   "category": "PowerShell",
+   "pages": {
+    "Otter": "powershell/pscall2"
+   },
    "usage": "PSCall(\n\tName: <text>,\n\t[Parameters: <%(key1: value1, ...)>],\n\t[InputVariables: <%(key1: value1, ...)>],\n\t[OutputVariables: <@(text)>],\n\t[PreferWindowsPowerShell: <text>],\n\t[ScriptText: <text>]\n);",
    "description": "Calls a PowerShell Script that is stored as an asset.",
    "params": [
@@ -8197,7 +8762,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "PowerShell",
+   "pages": {
+    "Otter": "powershell/pscall",
+    "BuildMaster": "powershell/pscall"
+   },
    "usage": "PSCall1 [DefaultArgument] (\n\t[Arg1: Arg1Value],\n\t[Arg2: Arg2Value],\n\t[OutputArgument => $CustomVariable]\n);",
    "description": "Calls a PowerShell Script that is stored as an asset.",
    "params": []
@@ -8209,7 +8777,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "PowerShell",
+   "pages": {
+    "Otter": "powershell/psdsc",
+    "BuildMaster": "powershell/psdsc"
+   },
    "usage": "PSDsc(\n\t[ConfigurationKey: <text>],\n\tName: <text>,\n\t[Module: <text>],\n\t[Properties: <%(key1: value1, ...)>],\n\t[PreferWindowsPowerShell: <text>]\n);",
    "description": "Ensures the configuration of a specified PowerShell DSC Resource.",
    "params": [
@@ -8251,7 +8822,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "PowerShell",
+   "pages": {
+    "BuildMaster": "powershell/psensure2"
+   },
    "usage": "PSEnsure(\n\tName: <text>,\n\t[Parameters: <%(key1: value1, ...)>],\n\t[InputVariables: <%(key1: value1, ...)>],\n\t[OutputVariables: <@(text)>],\n\t[PreferWindowsPowerShell: <text>]\n);",
    "description": "Calls a PowerShell Ensure Script that is stored as an asset.",
    "params": [
@@ -8293,7 +8866,9 @@
    "products": [
     "Otter"
    ],
-   "category": "PowerShell",
+   "pages": {
+    "Otter": "powershell/psensure2"
+   },
    "usage": "PSEnsure(\n\tName: <text>,\n\t[Parameters: <%(key1: value1, ...)>],\n\t[InputVariables: <%(key1: value1, ...)>],\n\t[OutputVariables: <@(text)>],\n\t[PreferWindowsPowerShell: <text>],\n\t[ScriptText: <text>]\n);",
    "description": "Calls a PowerShell Ensure Script that is stored as an asset.",
    "params": [
@@ -8342,7 +8917,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "PowerShell",
+   "pages": {
+    "Otter": "powershell/psensure",
+    "BuildMaster": "powershell/psensure"
+   },
    "usage": "PSEnsure1 [DefaultArgument] (\n\t[Arg1: Arg1Value],\n\t[Arg2: Arg2Value],\n\t[OutputArgument => $CustomVariable]\n);",
    "description": "Calls a PowerShell Ensure Script that is stored as an asset.",
    "params": []
@@ -8354,7 +8932,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "PowerShell",
+   "pages": {
+    "Otter": "powershell/psensure-using-scripts",
+    "BuildMaster": "powershell/psensure-using-scripts"
+   },
    "usage": "PSEnsureScripts(\n\tKey: <text>,\n\tValue: <text>,\n\t[Collect: <text>],\n\t[Configure: <text>],\n\t[CollectScript: <text>],\n\t[ConfigureScript: <text>],\n\t[UseExitCode: <true/false>],\n\t[Debug: <true/false>],\n\t[Verbose: <true/false>],\n\t[CollectScriptParams: <%(key1: value1, ...)>],\n\t[ConfigureScriptParams: <%(key1: value1, ...)>]\n);",
    "description": "Uses two PowerShell scripts to Collect, and then Ensure a configuration about a server.",
    "params": [
@@ -8432,7 +9013,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "PowerShell",
+   "pages": {
+    "BuildMaster": "powershell/psverify2"
+   },
    "usage": "PSVerify(\n\tName: <text>,\n\t[Parameters: <%(key1: value1, ...)>],\n\t[InputVariables: <%(key1: value1, ...)>],\n\t[OutputVariables: <@(text)>],\n\t[PreferWindowsPowerShell: <text>]\n);",
    "description": "Uses a PowerShell script to collect configuration about a server.",
    "params": [
@@ -8474,7 +9057,9 @@
    "products": [
     "Otter"
    ],
-   "category": "PowerShell",
+   "pages": {
+    "Otter": "powershell/psverify2"
+   },
    "usage": "PSVerify(\n\tName: <text>,\n\t[Parameters: <%(key1: value1, ...)>],\n\t[InputVariables: <%(key1: value1, ...)>],\n\t[OutputVariables: <@(text)>],\n\t[PreferWindowsPowerShell: <text>],\n\t[ScriptText: <text>]\n);",
    "description": "Uses a PowerShell script to collect configuration about a server.",
    "params": [
@@ -8523,7 +9108,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "PowerShell",
+   "pages": {
+    "Otter": "powershell/psverify",
+    "BuildMaster": "powershell/psverify"
+   },
    "usage": "PSVerify1 [DefaultArgument] (\n\t[Arg1: Arg1Value],\n\t[Arg2: Arg2Value],\n\t[OutputArgument => $CustomVariable]\n);",
    "description": "Uses a PowerShell script to collect configuration about a server.",
    "params": []
@@ -8534,7 +9122,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "DotNet",
+   "pages": {
+    "BuildMaster": "dotnet/dotnet-publish"
+   },
    "usage": "DotNet::Publish(\n\t[SelfContained: <true/false>],\n\tProject: <text>,\n\t[Configuration: <text>],\n\t[PackageSource: <text>],\n\t[Version: <text>],\n\t[Framework: <text>],\n\t[Runtime: <text>],\n\t[Output: <text>],\n\t[UseTemporarySourceForNuGetRestore: <true/false>],\n\t[VSToolsPath: <text>],\n\t[ForceDependencyResolution: <true/false>],\n\t[Verbosity: <integer>],\n\t[ContinuousIntegrationBuild: <true/false>],\n\t[AllowInsecureConnections: <true/false>],\n\t[ImageBasedService: <text>],\n\t[AdditionalArguments: <text>],\n\t[EnsureDotNetInstalled: <text>],\n\t[DotNetPath: <text>]\n);",
    "description": "Publishes a .NET Core/Framework/Standard project using dotnet publish.",
    "params": [
@@ -8654,7 +9244,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Nuget",
+   "pages": {
+    "BuildMaster": "nuget/push-nuget-package"
+   },
    "usage": "NuGet::Push-Package(\n\tFilePath: <text>,\n\t[To: <text>],\n\t[FeedUrl: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[ApiKey: <text>],\n\t[NuGetExePath: <text>],\n\t[PreferNuGetExe: <true/false>],\n\t[AdditionalArguments: <text>],\n\t[EnsureDotNetInstalled: <text>],\n\t[DotNetPath: <text>]\n);",
    "description": "Publishes a NuGet package file to a NuGet package source.",
    "params": [
@@ -8732,7 +9324,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "BuildMaster": "general/push-packagefile"
+   },
    "usage": "ProGet::Push-PackageFile(\n\tFilePath: <text>,\n\t[To: <text>],\n\t[Feed: <text>],\n\t[EndpointUrl: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[ApiKey: <text>]\n);",
    "description": "Uploads a universal package file to a package source.",
    "params": [
@@ -8786,7 +9380,9 @@
    "products": [
     "Otter"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/push-packagefile"
+   },
    "usage": "ProGet::Push-PackageFile(\n\tFilePath: <text>,\n\t[To: <text>],\n\t[Feed: <text>],\n\t[EndpointUrl: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[ApiKey: <text>],\n\t[FeedUrl: <text>]\n);",
    "description": "Uploads a universal package file to a package source.",
    "params": [
@@ -8847,7 +9443,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/pycall",
+    "BuildMaster": "scripting/pycall"
+   },
    "usage": "PYCall(\n\tName: <text>,\n\t[Parameters: <%(key1: value1, ...)>],\n\t[Verbose: <true/false>],\n\t[SuccessExitCode: <text>],\n\t[InputVariables: <%(key1: value1, ...)>],\n\t[OutputVariables: <@(text)>],\n\t[PythonPath: <text>],\n\t[CaptureDebug: <true/false>],\n\t[Arguments: <text>],\n\t[EnvironmentVariables: <%(key1: value1, ...)>]\n);",
    "description": "Calls a Python script that is stored as an asset.",
    "params": [
@@ -8920,7 +9519,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/pyensure",
+    "BuildMaster": "scripting/pyensure"
+   },
    "usage": "PYEnsure(\n\tName: <text>,\n\t[Parameters: <%(key1: value1, ...)>],\n\t[Verbose: <true/false>],\n\t[SuccessExitCode: <text>],\n\t[PythonPath: <text>],\n\t[CaptureDebug: <true/false>],\n\t[InputVariables: <%(key1: value1, ...)>],\n\t[OutputVariables: <@(text)>],\n\t[Arguments: <text>],\n\t[EnvironmentVariables: <%(key1: value1, ...)>]\n);",
    "description": "Uses a Python script asset to Collect, and then Ensure a configuration about a server.",
    "params": [
@@ -8993,7 +9595,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/execute-python-script",
+    "BuildMaster": "scripting/execute-python-script"
+   },
    "usage": "PYExec(\n\tScript: <text>,\n\t[Verbose: <true/false>],\n\t[SuccessExitCode: <text>],\n\t[Variables: <%(key1: value1, ...)>],\n\t[OutVariables: <@(text)>],\n\t[Arguments: <text>],\n\t[EnvironmentVariables: <%(key1: value1, ...)>],\n\t[PythonPath: <text>],\n\t[CaptureDebug: <true/false>]\n);",
    "description": "Executes a specified Python script.",
    "params": [
@@ -9060,7 +9665,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Python",
+   "pages": {
+    "Otter": "python/pyverify",
+    "BuildMaster": "python/pyverify"
+   },
    "usage": "PYVerify(\n\tName: <text>,\n\t[Parameters: <%(key1: value1, ...)>],\n\t[Verbose: <true/false>],\n\t[SuccessExitCode: <text>],\n\t[PythonPath: <text>],\n\t[CaptureDebug: <true/false>],\n\t[InputVariables: <%(key1: value1, ...)>],\n\t[OutputVariables: <@(text)>],\n\t[Arguments: <text>],\n\t[EnvironmentVariables: <%(key1: value1, ...)>]\n);",
    "description": "Uses a Python script to collect configuration about a server.",
    "params": [
@@ -9132,7 +9740,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "BuildMaster": "general/query-package"
+   },
    "usage": "UPack::Query-Package(\n\t[From: <text>],\n\tName: <text>,\n\tVersion: <text>,\n\tNewVersion: <text>,\n\t[Reason: <text>],\n\t[PackageFile: <text>],\n\t[Feed: <text>],\n\t[EndpointUrl: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[ApiKey: <text>],\n\t[Exists: <true/false>],\n\t[Metadata: <%(key1: value1, ...)>]\n);",
    "description": "Tests whether a universal package exists and optionally extracts its metadata.",
    "params": [
@@ -9222,7 +9832,9 @@
    "products": [
     "Otter"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/query-package"
+   },
    "usage": "UPack::Query-Package(\n\t[From: <text>],\n\tName: <text>,\n\tVersion: <text>,\n\tNewVersion: <text>,\n\t[Reason: <text>],\n\t[PackageFile: <text>],\n\t[Feed: <text>],\n\t[EndpointUrl: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[ApiKey: <text>],\n\t[Exists: <true/false>],\n\t[Metadata: <%(key1: value1, ...)>],\n\t[FeedUrl: <text>]\n);",
    "description": "Tests whether a universal package exists and optionally extracts its metadata.",
    "params": [
@@ -9319,7 +9931,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "IIS",
+   "pages": {
+    "Otter": "iis/recycle-app-pool",
+    "BuildMaster": "iis/recycle-app-pool"
+   },
    "usage": "IIS::Recycle-AppPool(\n\t[WaitForStartedStatus: <true/false>],\n\tName: <text>\n);",
    "description": "Recycles an application pool.",
    "params": [
@@ -9343,7 +9958,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "BuildMaster",
+   "pages": {
+    "BuildMaster": "buildmaster/reject-build"
+   },
    "usage": "Reject-Build(\n\t[Application: <text>],\n\t[ReleaseNumber: <text>],\n\tBuildNumber: <text>,\n\t[FailIfAlreadyRejected: <true/false>],\n\t[RejectionNotes: <text>]\n);",
    "description": "Rejects a BuildMaster build.",
    "params": [
@@ -9386,7 +10003,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Servers",
+   "pages": {
+    "Otter": "servers/release-server",
+    "BuildMaster": "servers/release-server"
+   },
    "usage": "Release-Server(\n\tServer: <text>,\n\t[Role: <text>],\n\t[Verbose: <true/false>]\n);",
    "description": "Releases a server from a resource pool if acquired previously in the execution.",
    "params": [
@@ -9416,7 +10036,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "BuildMaster": "general/remediate-drift"
+   },
    "usage": "Otter::Remediate-Drift(\n\t[Credentials: <text>],\n\t[Server: <text>],\n\t[Role: <text>],\n\t[WaitForCompletion: <true/false>],\n\t[Host: <text>],\n\t[ApiKey: <text>]\n);",
    "description": "Checks configuration status and if drifted, triggers a remediation job in Otter.",
    "params": [
@@ -9464,7 +10086,9 @@
    "products": [
     "Otter"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/remediate-drift"
+   },
    "usage": "Otter::Remediate-Drift(\n\t[Credentials: <text>],\n\t[Server: <text>],\n\t[Role: <text>],\n\t[WaitForCompletion: <true/false>],\n\t[Host: <text>],\n\t[ApiKey: <SecureString>]\n);",
    "description": "Checks configuration status and if drifted, triggers a remediation job in Otter.",
    "params": [
@@ -9513,7 +10137,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/rename-file",
+    "BuildMaster": "general/rename-file"
+   },
    "usage": "Rename-File(\n\tFrom: <text>,\n\tTo: <text>,\n\t[Overwrite: <true/false>]\n);",
    "description": "Renames a file on a server.",
    "params": [
@@ -9543,7 +10170,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "BuildMaster": "general/repackage"
+   },
    "usage": "ProGet::Repackage(\n\t[PackageSource: <text>],\n\tName: <text>,\n\t[Version: <text>],\n\tNewVersion: <text>,\n\t[Reason: <text>],\n\t[ToFeed: <text>],\n\t[Feed: <text>],\n\t[EndpointUrl: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[ApiKey: <text>]\n);",
    "description": "Connects to ProGet to repackage an unstable (pre-release) package into a new package with the same contents.",
    "params": [
@@ -9621,7 +10250,9 @@
    "products": [
     "Otter"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/repackage"
+   },
    "usage": "ProGet::Repackage(\n\t[PackageSource: <text>],\n\tName: <text>,\n\t[Version: <text>],\n\tNewVersion: <text>,\n\t[Reason: <text>],\n\t[ToFeed: <text>],\n\t[Feed: <text>],\n\t[EndpointUrl: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[ApiKey: <text>],\n\t[Group: <text>],\n\t[FeedUrl: <text>]\n);",
    "description": "Connects to ProGet to repackage an unstable (pre-release) package into a new package with the same contents.",
    "params": [
@@ -9712,7 +10343,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/replace-text",
+    "BuildMaster": "general/replace-text"
+   },
    "usage": "Replace-Text(\n\t[Include: <@(text)>],\n\t[Exclude: <@(text)>],\n\t[Directory: <text>],\n\tSearchText: <text>,\n\t[ReplaceWith: <text>],\n\t[Regex: <true/false>]\n);",
    "description": "Searches a text file for a specified string and replaces it.",
    "params": [
@@ -9761,7 +10395,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Otter",
+   "pages": {
+    "Otter": "otter/restart-server",
+    "BuildMaster": "servers/restart-server"
+   },
    "usage": "Restart-Server(\n\t[After: <integer>],\n\t[MinimumDelay: <integer>]\n);",
    "description": "Restarts a server and waits for it to become available again.",
    "params": [
@@ -9785,7 +10422,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Databases",
+   "pages": {
+    "BuildMaster": "databases/restore-database"
+   },
    "usage": "Restore-Database(\n\tConnection: <text>,\n\tFrom: <text>,\n\tName: <text>,\n\t[Verbose: <true/false>]\n);",
    "description": "Uses a Database Connection to restore a database from a file on disk.",
    "params": [
@@ -9821,7 +10460,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Nuget",
+   "pages": {
+    "BuildMaster": "nuget/restore-nuget-packages"
+   },
    "usage": "NuGet::Restore-Packages(\n\t[Target: <text>],\n\t[PackagesDirectory: <text>],\n\t[Source: <text>],\n\t[NuGetExePath: <text>],\n\t[PreferNuGetExe: <true/false>],\n\t[AdditionalArguments: <text>],\n\t[EnsureDotNetInstalled: <text>],\n\t[DotNetPath: <text>]\n);",
    "description": "Restores all packages in a specified solution, project, or packages.config file.",
    "params": [
@@ -9881,7 +10522,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "ProGet",
+   "pages": {
+    "BuildMaster": "proget/publish-project-dependencies"
+   },
    "usage": "ProGet::Scan(\n\tProject: <text>,\n\t[To: <text>],\n\t[ProGetUrl: <text>],\n\t[ApiKey: <text>],\n\t[ProjectName: <text>],\n\t[Release: <text>],\n\t[ProjectType: <text>],\n\t[ScanType: <integer>],\n\t[DoNotScanNodeModules: <true/false>]\n);",
    "description": "Scans for NuGet, npm, or PyPI package dependencies of a project and sends information about them to a ProGet instance.",
    "params": [
@@ -9948,7 +10591,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/send-email",
+    "BuildMaster": "general/send-email"
+   },
    "usage": "InedoCore::Send-Email(\n\tTo: <@(text)>,\n\t[Subject: <text>],\n\t[Text: <text>],\n\t[Html: <text>],\n\t[Attachments: <@(text)>],\n\t[AttachmentDirectory: <text>],\n\t[CC: <@(text)>],\n\t[Bcc: <@(text)>]\n);",
    "description": "Sends an email message.",
    "params": [
@@ -10008,7 +10654,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "BuildMaster",
+   "pages": {
+    "BuildMaster": "buildmaster/set-build-number"
+   },
    "usage": "Set-BuildNumber <text>;",
    "description": "Sets (changes) the build number of the currently executing build.",
    "params": [
@@ -10026,7 +10674,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "BuildMaster",
+   "pages": {
+    "BuildMaster": "buildmaster/set-build-variable"
+   },
    "usage": "Set-BuildVariable(\n\tVariable: <text>,\n\tValue: <RuntimeValue>,\n\t[Release: <text>],\n\t[Build: <text>]\n);",
    "description": "Creates or updates a variable on a build.",
    "params": [
@@ -10062,7 +10712,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Git",
+   "pages": {
+    "BuildMaster": "git/set-git-commit-status"
+   },
    "usage": "Git::Set-CommitStatus(\n\t[Commit: <text>],\n\t[Status: <text>],\n\t[AdditionalContext: <text>],\n\t[Description: <text>],\n\t[NormalDescription: <text>],\n\t[WarningDescription: <text>],\n\t[ErrorDescription: <text>],\n\t[From: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[Namespace: <text>],\n\t[Repository: <text>]\n);",
    "description": "Sets a status message on Git server for a commit.",
    "params": [
@@ -10146,7 +10798,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "BuildMaster",
+   "pages": {
+    "BuildMaster": "buildmaster/set-configuration-variable"
+   },
    "usage": "Set-ConfigurationVariable(\n\tVariable: <text>,\n\tValue: <RuntimeValue>,\n\t[Application: <text>],\n\t[ApplicationGroup: <text>],\n\t[Server: <text>],\n\t[ServerRole: <text>],\n\t[Environment: <text>]\n);",
    "description": "Creates or updates a variable in BuildMaster.",
    "params": [
@@ -10201,7 +10855,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/set-fileattributes",
+    "BuildMaster": "general/set-fileattributes"
+   },
    "usage": "Set-FileAttributes(\n\t[Directory: <text>],\n\t[Include: <@(text)>],\n\t[Exclude: <@(text)>],\n\t[ReadOnly: <true/false>],\n\t[Hidden: <true/false>],\n\t[System: <true/false>],\n\t[Verbose: <true/false>]\n);",
    "description": "Sets or clears attributes on matching files.",
    "params": [
@@ -10255,7 +10912,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "DotNet",
+   "pages": {
+    "BuildMaster": "dotnet/set-project-version"
+   },
    "usage": "DotNet::Set-ProjectVersion(\n\t[FromDirectory: <text>],\n\t[Include: <@(text)>],\n\t[Version: <text>],\n\t[AssemblyVersion: <text>],\n\t[FileVersion: <text>],\n\t[PackageVersion: <text>]\n);",
    "description": "Sets the version elements in .NET project files to a specified value.",
    "params": [
@@ -10303,7 +10962,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "BuildMaster",
+   "pages": {
+    "BuildMaster": "buildmaster/set-release-variable"
+   },
    "usage": "Set-ReleaseVariable(\n\tVariable: <text>,\n\tValue: <RuntimeValue>,\n\t[Release: <text>],\n\t[Build: <text>]\n);",
    "description": "Creates or updates a variable on a release or build.",
    "params": [
@@ -10339,7 +11000,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "BuildMaster": "general/set-variable"
+   },
    "usage": "Otter::Set-Variable(\n\t[Credentials: <text>],\n\tName: <text>,\n\tValue: <text>,\n\t[Server: <text>],\n\t[Role: <text>],\n\t[Environment: <text>],\n\t[Sensitive: <true/false>],\n\t[Host: <text>],\n\t[ApiKey: <text>]\n);",
    "description": "Creates or assigns a configuration variable in Otter.",
    "params": [
@@ -10405,7 +11068,9 @@
    "products": [
     "Otter"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/set-variable"
+   },
    "usage": "Otter::Set-Variable(\n\t[Credentials: <text>],\n\tName: <text>,\n\tValue: <text>,\n\t[Server: <text>],\n\t[Role: <text>],\n\t[Environment: <text>],\n\t[Sensitive: <true/false>],\n\t[Host: <text>],\n\t[ApiKey: <SecureString>]\n);",
    "description": "Creates or assigns a configuration variable in Otter.",
    "params": [
@@ -10472,7 +11137,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Shell",
+   "pages": {
+    "Otter": "shell/shcall",
+    "BuildMaster": "shell/shcall"
+   },
    "usage": "SHCall(\n\tName: <text>,\n\t[Arguments: <text>],\n\t[Verbose: <true/false>],\n\t[ExitCode: <integer>],\n\t[SuccessExitCode: <text>],\n\t[OutputLogLevel: <integer>],\n\t[ErrorOutputLogLevel: <integer>],\n\t[Parameters: <%(key1: value1, ...)>],\n\t[InputVariables: <%(key1: value1, ...)>],\n\t[OutputVariables: <@(text)>],\n\t[EnvironmentVariables: <%(key1: value1, ...)>],\n\t[CaptureDebug: <true/false>]\n);",
    "description": "Calls a shell script that is stored as an asset.",
    "params": [
@@ -10557,7 +11225,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/shensure",
+    "BuildMaster": "scripting/shensure"
+   },
    "usage": "SHEnsure(\n\tKey: <text>,\n\tValue: <text>,\n\t[Collect: <text>],\n\t[Configure: <text>],\n\t[CollectScript: <text>],\n\t[ConfigureScript: <text>],\n\t[UseExitCode: <true/false>],\n\t[Verbose: <true/false>],\n\t[CollectScriptArgs: <text>],\n\t[ConfigureScriptArgs: <text>]\n);",
    "description": "Uses two shell scripts to Collect, and then Ensure a configuration about a server.",
    "params": [
@@ -10630,7 +11301,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Shell",
+   "pages": {
+    "Otter": "shell/shensure2",
+    "BuildMaster": "shell/shensure2"
+   },
    "usage": "SHEnsure2(\n\tName: <text>,\n\t[Parameters: <%(key1: value1, ...)>],\n\t[Verbose: <true/false>],\n\t[OutputLogLevel: <integer>],\n\t[ErrorOutputLogLevel: <integer>],\n\t[SuccessExitCode: <text>],\n\t[CaptureDebug: <true/false>],\n\t[InputVariables: <%(key1: value1, ...)>],\n\t[OutputVariables: <@(text)>],\n\t[Arguments: <text>],\n\t[EnvironmentVariables: <%(key1: value1, ...)>]\n);",
    "description": "Uses a Shell script to collect, and then Ensure a configuration about a server.",
    "params": [
@@ -10709,7 +11383,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Shell",
+   "pages": {
+    "Otter": "shell/execute-shell-script",
+    "BuildMaster": "shell/execute-shell-script"
+   },
    "usage": "SHExec(\n\tText: <text>,\n\t[Variables: <%(key1: value1, ...)>],\n\t[OutVariables: <@(text)>],\n\t[EnvironmentVariables: <%(key1: value1, ...)>],\n\t[Arguments: <text>],\n\t[Verbose: <true/false>],\n\t[OutputLogLevel: <integer>],\n\t[ErrorOutputLogLevel: <integer>],\n\t[SuccessExitCode: <text>],\n\t[CaptureDebug: <true/false>]\n);",
    "description": "Executes a specified shell script.",
    "params": [
@@ -10782,7 +11459,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Shell",
+   "pages": {
+    "Otter": "shell/shverify2",
+    "BuildMaster": "shell/shverify2"
+   },
    "usage": "SHVerify2(\n\tName: <text>,\n\t[Parameters: <%(key1: value1, ...)>],\n\t[Verbose: <true/false>],\n\t[OutputLogLevel: <integer>],\n\t[ErrorOutputLogLevel: <integer>],\n\t[SuccessExitCode: <text>],\n\t[CaptureDebug: <true/false>],\n\t[InputVariables: <%(key1: value1, ...)>],\n\t[OutputVariables: <@(text)>],\n\t[EnvironmentVariables: <%(key1: value1, ...)>],\n\t[Arguments: <text>]\n);",
    "description": "Uses a Shell script to collect configuration about a server.",
    "params": [
@@ -10861,7 +11541,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Windows",
+   "pages": {
+    "Otter": "windows/sign-binary",
+    "BuildMaster": "windows/sign-binary"
+   },
    "usage": "Sign-Exe(\n\tSubjectName: <text>,\n\t[TimestampServer: <text>],\n\t[ContentDescription: <text>],\n\t[ContentUrl: <text>],\n\tInclude: <@(text)>,\n\t[Exclude: <@(text)>],\n\t[SignToolPath: <text>],\n\t[SourceDirectory: <text>]\n);",
    "description": "Signs .exe or .dll files using an installed code signing certificate.",
    "params": [
@@ -10922,7 +11605,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/sleep",
+    "BuildMaster": "general/sleep"
+   },
    "usage": "InedoCore::Sleep <integer>;",
    "description": "Halts the execution of operations for the specified number of seconds.",
    "params": [
@@ -10941,7 +11627,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "IIS",
+   "pages": {
+    "Otter": "iis/start-app-pool",
+    "BuildMaster": "iis/start-app-pool"
+   },
    "usage": "IIS::Start-AppPool(\n\t[WaitForStartedStatus: <true/false>],\n\tName: <text>\n);",
    "description": "Starts an IIS app pool.",
    "params": [
@@ -10966,7 +11655,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Services",
+   "pages": {
+    "Otter": "services/start-windows-service",
+    "BuildMaster": "services/start-windows-service"
+   },
    "usage": "Windows::Start-Service(\n\tName: <text>,\n\t[WaitForRunningStatus: <true/false>],\n\t[FailIfServiceDoesNotExist: <true/false>]\n);",
    "description": "Starts an existing Windows service.",
    "params": [
@@ -10997,7 +11689,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "IIS",
+   "pages": {
+    "Otter": "iis/start-site",
+    "BuildMaster": "iis/start-site"
+   },
    "usage": "IIS::Start-Site(\n\t[WaitForStartedStatus: <true/false>],\n\tName: <text>\n);",
    "description": "Starts an IIS Site.",
    "params": [
@@ -11022,7 +11717,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "IIS",
+   "pages": {
+    "Otter": "iis/stop-app-pool",
+    "BuildMaster": "iis/stop-app-pool"
+   },
    "usage": "IIS::Stop-AppPool(\n\t[WaitForStoppedStatus: <true/false>],\n\tName: <text>\n);",
    "description": "Stops an IIS app pool.",
    "params": [
@@ -11047,7 +11745,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "Services",
+   "pages": {
+    "Otter": "services/stop-windows-service",
+    "BuildMaster": "services/stop-windows-service"
+   },
    "usage": "Windows::Stop-Service(\n\tName: <text>,\n\t[WaitForStoppedStatus: <true/false>],\n\t[FailIfServiceDoesNotExist: <true/false>]\n);",
    "description": "Stops an existing Windows service.",
    "params": [
@@ -11078,7 +11779,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "IIS",
+   "pages": {
+    "Otter": "iis/stop-site",
+    "BuildMaster": "iis/stop-site"
+   },
    "usage": "IIS::Stop-Site(\n\t[WaitForStoppedStatus: <true/false>],\n\tName: <text>\n);",
    "description": "Stops an IIS Site.",
    "params": [
@@ -11102,7 +11806,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "DotNet",
+   "pages": {
+    "BuildMaster": "dotnet/dotnet-test"
+   },
    "usage": "DotNet::Test(\n\tProject: <text>,\n\t[Configuration: <text>],\n\t[PackageSource: <text>],\n\t[Group: <text>],\n\t[Framework: <text>],\n\t[AdditionalArguments: <text>],\n\t[EnsureDotNetInstalled: <text>],\n\t[DotNetPath: <text>]\n);",
    "description": "Runs unit tests on a specified test project using the dotnet test command.",
    "params": [
@@ -11162,7 +11868,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "DotNet",
+   "pages": {
+    "BuildMaster": "dotnet/run-dotnet-tool"
+   },
    "usage": "DotNet::Tool(\n\tCommand: <text>,\n\t[Arguments: <text>],\n\t[Global: <true/false>],\n\t[PackageId: <text>],\n\t[Version: <text>],\n\t[PackageSource: <text>],\n\t[AdditionalArguments: <text>],\n\t[EnsureDotNetInstalled: <text>],\n\t[DotNetPath: <text>]\n);",
    "description": "Runs a dotnet tool, optionally ensuring that it is installed.",
    "params": [
@@ -11229,7 +11937,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/transfer-files",
+    "BuildMaster": "general/transfer-files"
+   },
    "usage": "Transfer-Files(\n\t[Include: <@(text)>],\n\t[Exclude: <@(text)>],\n\t[FromDirectory: <text>],\n\t[FromServer: <text>],\n\tToDirectory: <text>,\n\t[ToServer: <text>],\n\t[DeleteTarget: <true/false>],\n\t[SetLastModifiedDate: <true/false>],\n\t[BatchSize: <integer>],\n\t[Verbose: <true/false>]\n);",
    "description": "Copies files from a directory on a source server to a directory on a target server.",
    "params": [
@@ -11301,7 +12012,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "DotNet",
+   "pages": {
+    "BuildMaster": "dotnet/transform-config-file"
+   },
    "usage": "DotNet::Transform-Config(\n\tBaseConfig: <text>,\n\tTransformConfig: <text>,\n\t[Target: <text>],\n\t[ConfigType: <integer>]\n);",
    "description": "Applies a transform to an XML or JSON .NET config file.",
    "params": [
@@ -11337,7 +12050,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "Jira",
+   "pages": {
+    "BuildMaster": "jira/transition-issues"
+   },
    "usage": "Jira::Transition-Issues(\n\t[From: <text>],\n\tTo: <text>,\n\t[FixFor: <text>],\n\t[Id: <text>],\n\t[Comment: <text>],\n\t[From: <text>],\n\t[Project: <text>],\n\t[Server: <text>],\n\t[UserName: <text>],\n\t[ApiToken: <text>]\n);",
    "description": "Transitions issues in JIRA.",
    "params": [
@@ -11410,7 +12125,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/upload-assets",
+    "BuildMaster": "general/upload-assets"
+   },
    "usage": "ProGet::Upload-Assets(\n\t[To: <text>],\n\t[Include: <@(text)>],\n\t[Exclude: <@(text)>],\n\t[From: <text>],\n\t[ProxyData: <true/false>],\n\t[Source: <text>],\n\t[Resource: <text>],\n\t[EndpointUrl: <text>],\n\t[ApiKey: <text>],\n\t[UserName: <text>],\n\t[Password: <text>]\n);",
    "description": "Uploads files to a ProGet Asset Directory.",
    "params": [
@@ -11489,7 +12207,10 @@
     "Otter",
     "BuildMaster"
    ],
-   "category": "General",
+   "pages": {
+    "Otter": "general/upload-http",
+    "BuildMaster": "general/upload-http"
+   },
    "usage": "Upload-Http(\n\t[Method: <integer>],\n\tFileName: <text>,\n\tUrl: <text>,\n\t[LogResponseBody: <true/false>],\n\t[ErrorStatusCodes: <text>],\n\t[ResponseBody: <text>],\n\t[RequestHeaders: <%(key1: value1, ...)>],\n\t[MaxResponseLength: <integer>],\n\t[ProxyRequest: <true/false>],\n\t[Credentials: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[IgnoreSslErrors: <true/false>]\n);",
    "description": "Uploads a file to a specified URL using an HTTP POST or PUT.",
    "params": [
@@ -11579,7 +12300,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "GitHub",
+   "pages": {
+    "BuildMaster": "github/upload-releaseassets"
+   },
    "usage": "GitHub::Upload-ReleaseAssets(\n\tTag: <text>,\n\t[Include: <@(text)>],\n\t[Exclude: <@(text)>],\n\t[Directory: <text>],\n\t[ContentType: <text>],\n\t[From: <text>],\n\t[UserName: <text>],\n\t[Password: <text>],\n\t[Organization: <text>],\n\t[Repository: <text>],\n\t[ApiUrl: <text>]\n);",
    "description": "Uploads files as attachments to a GitHub release.",
    "params": [
@@ -11657,7 +12380,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "BuildMaster",
+   "pages": {
+    "BuildMaster": "buildmaster/wait-for-deployments"
+   },
    "usage": "WaitFor-Deployments(\n\tApplication: <text>,\n\tPipelineStage: <text>,\n\t[ReleaseNumber: <text>],\n\t[BuildNumber: <text>]\n);",
    "description": "Waits for deployments to a pipeline stage to complete.",
    "params": [
@@ -11693,7 +12418,9 @@
    "products": [
     "BuildMaster"
    ],
-   "category": "DotNet",
+   "pages": {
+    "BuildMaster": "dotnet/write-assembly-versions"
+   },
    "usage": "DotNet::Write-AssemblyVersion(\n\t[AssemblyVersion: <text>],\n\t[FileVersion: <text>],\n\t[InformationalVersion: <text>],\n\t[FromDirectory: <text>],\n\t[Include: <@(text)>],\n\t[Exclude: <@(text)>]\n);",
    "description": "Updates AssemblyVersion, AssemblyFileVersion, and AssemblyInformationalVersion Attributes (in AssemblyInfo source files).",
    "params": [

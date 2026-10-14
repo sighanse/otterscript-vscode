@@ -24,6 +24,26 @@ updates:
           - minor
           - patch
 
+  # The hooks in .pre-commit-config.yaml, pinned to commits like the actions.
+  # Dependabot updates the `rev` and its `# frozen:` comment; `local` hooks
+  # are skipped.
+  - package-ecosystem: "pre-commit"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      time: "08:00"
+      timezone: "Europe/Oslo"
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "chore(ci)"
+    labels:
+      - dependencies
+    groups:
+      pre-commit-hooks:
+        patterns:
+          - "*"
+
   - package-ecosystem: "npm"
     open-pull-requests-limit: 10
     directory: "/"

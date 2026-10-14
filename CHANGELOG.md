@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Hover links to the page in Inedo's documentation for every function and operation in Inedo's Otter and BuildMaster reference, for the product the `otterscript.product` setting names, and to ProGet's custom webhook page for ProGet's notifier variables and functions
+- The OtterScript log (**View → Output → OtterScript**) shows, at the Debug level, how long each file's check took. A check that fails is logged there with the file, and the file keeps its last problems instead of the Problems panel quietly no longer following edits. The README says how to include the log in a bug report
+- `unused-variable`: a variable the file assigns but never reads is shown faded, with a hint. Global variables, module parameters, `foreach` loop variables and the product's own variables are left out, and so is every variable of a file that reads variables by name, runs other code that can read them (`Apply-Template`, `PSCall`, ...) or calls a module declared in another file
+- `template-json-syntax`: a text template whose output starts as JSON, such as a webhook body, is checked for JSON syntax: a missing or extra comma, an unquoted property name, single quotes, a string across lines, a backslash that isn't an escape, an unclosed bracket. `$ToJson(...)` and other expressions count as values, and nothing is reported right after a `<% %>` tag, which may write the missing text. Quick fixes remove an extra comma, add a missing one, quote a property name and escape a backslash
+
 ## [0.7.0] - 2026-10-10
 
 ### Added

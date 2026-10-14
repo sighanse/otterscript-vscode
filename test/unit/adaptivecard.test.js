@@ -1,7 +1,9 @@
 // @ts-check
 /**
  * @fileoverview Unit tests for src/adaptivecard.js — the content-triggered, best-effort
- * Adaptive Card checks: types, versions and property values.
+ * Adaptive Card checks (types, versions, property values, templating keys,
+ * toggle targets and ids, the Teams message around the card), their quick
+ * fixes, and the completions inside a card.
  *
  * Requires the vscode stub before adaptivecard.js (which pulls in vscode) loads.
  */

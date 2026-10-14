@@ -2,8 +2,8 @@
 /**
  * @fileoverview Shared helpers for the OtterScript extension: settings, the
  * logger, per-document timers and bounded concurrency, docs-table lookup and
- * product filtering, the hover and completion item builders, and typo
- * suggestions ({@link closestMatch}).
+ * product filtering, the hover, completion, diagnostic and quick-fix
+ * builders, and typo suggestions ({@link closestMatch}).
  *
  * Elsewhere: text scanning in {@link module:scanner}, per-document indexes
  * (modules, variables, string/comment state) in {@link module:document-index},
@@ -280,33 +280,6 @@ function isValidCompletionPosition(document, position, completionEnabled) {
   return !isInStringOrCommentDoc(document, position);
 }
 
-/** @type {Readonly<Record<"$" | "@" | "%", RegExp>>} */
-const TYPED_IDENTIFIER_PATTERNS = Object.freeze({
-  "$": /\$((?:[A-Za-z][\w-]*)?)$/,
-  "@": /@((?:[A-Za-z][\w-]*)?)$/,
-  "%": /%((?:[A-Za-z][\w-]*)?)$/,
-});
-
-/**
- * Extracts the currently typed identifier after a trigger character.
- *
- * Examples:
- * - "$To" -> "To"
- * - "@Spl" -> "Spl"
- * - "%From" -> "From"
- *
- * @param {vscode.TextDocument} document
- * @param {vscode.Position} position
- * @param {"$" | "@" | "%"} triggerChar
- * @returns {string | null}
- */
-function getTypedIdentifier(document, position, triggerChar) {
-  const linePrefix = document.lineAt(position.line).text.substring(0, position.character);
-  const pattern = TYPED_IDENTIFIER_PATTERNS[triggerChar];
-  const match = linePrefix.match(pattern);
-  return match ? match[1] : null;
-}
-
 // ============================================================
 // HOVER & COMPLETION BUILDERS
 // ============================================================
@@ -323,7 +296,7 @@ function getTypedIdentifier(document, position, triggerChar) {
  * This creates the formatted tooltip content shown when hovering over
  * symbols, keywords, operations, and syntax elements.
  *
- * @param {Readonly<{ name: string, signature?: string, overloads?: { product: string, signature: string }[], description?: string, documentation?: string, namespace?: string | null, products?: ReadonlyArray<string>, anySigil?: boolean, superseded?: { by: string, note: string }, params?: ReadonlyArray<OperationParam> }>} doc
+ * @param {Readonly<{ name: string, signature?: string, overloads?: { product: string, signature: string }[], description?: string, documentation?: string, namespace?: string | null, products?: ReadonlyArray<string>, anySigil?: boolean, superseded?: { by: string, note: string }, params?: ReadonlyArray<OperationParam>, docUrls?: Readonly<Record<string, string>> }>} doc
  *   - name: Required - Display name (e.g., "$ToJson")
  *   - signature: Optional - Function signature (monospace formatted)
  *   - overloads: Optional - The function's form in other Inedo products, each
@@ -338,6 +311,8 @@ function getTypedIdentifier(document, position, triggerChar) {
  *     `note` is shown right under the name
  *   - params: Optional - An operation's arguments, listed unless
  *     `documentation` has its own **Arguments:** section
+ *   - docUrls: Optional - Its pages on docs.inedo.com by product; the last
+ *     line links one (see {@link docsPage})
  * @param {string} [product] - The `otterscript.product` setting
  * @returns {vscode.MarkdownString} - Formatted hover content
  *
@@ -399,7 +374,28 @@ function buildHoverMarkdown(doc, product = "any") {
     md.appendMarkdown(documentation);
   }
 
+  // The entry's page on docs.inedo.com, for the product the user writes for.
+  const page = docsPage(doc, product);
+  if (page) {
+    md.appendMarkdown(`${documentation ? "\n\n" : ""}[Inedo's ${page.product} documentation](${page.url})`);
+  }
+
   return md;
+}
+
+/**
+ * The docs page {@link buildHoverMarkdown} links to: the one for `product`
+ * when the entry has one, else its first (Otter's before BuildMaster's).
+ * Undefined for an entry without pages (keywords and syntax).
+ *
+ * @param {{ docUrls?: Readonly<Record<string, string>> }} doc
+ * @param {string} product - The `otterscript.product` setting
+ * @returns {{ product: string, url: string } | undefined}
+ */
+function docsPage(doc, product) {
+  if (!doc.docUrls) return undefined;
+  const chosen = Object.hasOwn(doc.docUrls, product) ? product : Object.keys(doc.docUrls)[0];
+  return chosen === undefined ? undefined : { product: chosen, url: doc.docUrls[chosen] };
 }
 
 /**
@@ -579,6 +575,52 @@ function buildSigilCompletionItems(table, typed, sort, product = "any") {
 }
 
 // ============================================================
+// DIAGNOSTIC & QUICK FIX BUILDERS
+// ============================================================
+
+/**
+ * An OtterScript diagnostic: the extension's source, and a plain string code
+ * (diagnostics.js turns it into a link last).
+ *
+ * @param {vscode.Range} range
+ * @param {string} message
+ * @param {vscode.DiagnosticSeverity} severity
+ * @param {string} code - One of diagnostics.js's `DIAGNOSTIC_CODES`
+ * @returns {vscode.Diagnostic}
+ */
+function createDiagnostic(range, message, severity, code) {
+  const diagnostic = new vscode.Diagnostic(range, message, severity);
+  diagnostic.code = code;
+  diagnostic.source = "OtterScript";
+  return diagnostic;
+}
+
+/**
+ * A quick fix for one diagnostic, with the edit `applyFix` builds. Preferred
+ * (so Fix All applies it); a caller whose fix is a guess sets `isPreferred`
+ * back to false.
+ *
+ * @param {string} title - Shown in the lightbulb menu
+ * @param {vscode.Diagnostic} diagnostic - The diagnostic it fixes
+ * @param {(edit: vscode.WorkspaceEdit) => void} applyFix - Adds the fix to the edit
+ * @returns {vscode.CodeAction}
+ *
+ * @example
+ * createQuickFix("Insert '$'", diagnostic, (edit) => {
+ *   edit.insert(uri, position, "$");
+ * });
+ */
+function createQuickFix(title, diagnostic, applyFix) {
+  const action = new vscode.CodeAction(title, vscode.CodeActionKind.QuickFix);
+  action.diagnostics = [diagnostic];
+  action.isPreferred = true;
+  const edit = new vscode.WorkspaceEdit();
+  applyFix(edit);
+  action.edit = edit;
+  return action;
+}
+
+// ============================================================
 // LOOKUP & TEXT UTILITIES
 // ============================================================
 
@@ -654,6 +696,7 @@ module.exports = {
 
   // -- Constants
   NON_VARIABLE_IDENTIFIERS,
+  isReadOnlyView,
 
   // -- Logger
   log,
@@ -674,14 +717,16 @@ module.exports = {
   productSignatures,
 
   // -- Completion & hover
-  isReadOnlyView,
   isValidCompletionPosition,
-  getTypedIdentifier,
   buildHoverMarkdown,
   buildArgumentHoverMarkdown,
   buildCompletionItem,
   buildSigilCompletionItems,
   resolveCompletionDocumentation,
+
+  // -- Diagnostics & quick fixes
+  createDiagnostic,
+  createQuickFix,
 
   // -- Text utilities
   closestMatch,

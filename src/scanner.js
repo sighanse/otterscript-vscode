@@ -2,17 +2,18 @@
 /**
  * @fileoverview Pure, dependency-free text scanning primitives for OtterScript.
  *
- * This module is deliberately **free of any `vscode` import** so it can be unit
- * tested with plain Node (`node:test`) and reused outside the extension host
- * (e.g. a future CLI linter).
+ * This module is deliberately **free of any `vscode` import** (ESLint enforces
+ * it) so it can be unit tested with plain Node (`node:test`).
  *
  * It owns the single source of truth for how the extension recognizes non-code
  * spans — quoted strings, line comments, block comments, and swim-strings — plus
  * what builds on that scan: the `<% %>` text-template tag masking, the
  * signature-help helpers (active parameter, parameter splitting), the
  * variable-occurrence index behind highlighting and rename, the module-name
- * regexes, and the operation-argument helpers (the argument context at the
- * cursor, module parameter lists).
+ * regexes, the operation-argument helpers (the argument context at the
+ * cursor, module parameter lists), the `with` directives and `await`
+ * statements, the top-level commas of calls, and the backward scans from a
+ * word (`isStatementStart`, `namespaceBefore`).
  * Everything here operates on plain strings, numbers, and plain state objects
  * ({@link CodeScanState}, {@link TemplateScanState}); nothing here constructs a
  * `vscode.*` value.
@@ -152,11 +153,12 @@ function findEmbeddedExpressionEnd(line, dollarIndex) {
 }
 
 // ============================================================
-// MODULE-NAME REGEXES
+// MODULE-NAME AND FUNCTION-CALL REGEXES
 // ============================================================
-// Pure regexes describing `module <Name>` declarations and `call [Raft::]<Name>`
-// targets. They live here (next to the scanner) because module discovery runs on
-// scanner-masked text and the context predicates below consume them.
+// Pure regexes describing `module <Name>` declarations, `call [Raft::]<Name>`
+// targets and function calls. They live here (next to the scanner) because
+// they run on scanner-masked text and the context predicates below consume
+// them.
 
 /**
  * Token regex for module names used by word-range lookups.
@@ -172,6 +174,11 @@ const MODULE_DECLARATION_REGEX = /^\s*module\s+([A-Za-z][\w-]*)/;
 const MODULE_CALL_TARGET_REGEX = /\bcall\s+(?:[A-Za-z][\w-]*::)?([A-Za-z][\w-]*)\b/;
 /** Global-flagged sibling of {@link MODULE_CALL_TARGET_REGEX} for `matchAll`. */
 const MODULE_CALL_TARGET_GLOBAL_REGEX = new RegExp(MODULE_CALL_TARGET_REGEX.source, "g");
+/**
+ * A function call, for `matchAll`: sigil (group 1) and name (group 2), up to
+ * its `(`. Not `<%`, nor a `%(` map literal.
+ */
+const FUNCTION_CALL_REGEX = /(?<!<)([$@%])([A-Za-z][A-Za-z0-9_]*)\s*\(/g;
 /** Matches the text left of the cursor when about to type a module declaration name. */
 const MODULE_DECL_PREFIX_REGEX = /^\s*module\s+$/i;
 /** Matches the text left of the cursor when about to type a `call` target name. */
@@ -384,6 +391,18 @@ function isStatementStart(text, end) {
 
 /** A character a braced variable's name may contain (see BRACED_NAME_PATTERN). */
 const BRACED_NAME_CHAR_REGEX = /[A-Za-z0-9_ -]/;
+
+/**
+ * `text` with each braced variable (`${my dir}`, `@{x}`, `%{x}`) on one line
+ * blanked to underscores, offsets unchanged, so its braces aren't taken for
+ * a block's and its spaces don't split it.
+ *
+ * @param {string} text - Masked by {@link maskNonCodeSpans}
+ * @returns {string}
+ */
+function blankBracedVariables(text) {
+  return text.replace(/[$@%]\{[^{}\n]*\}/g, (m) => "_".repeat(m.length));
+}
 
 /**
  * Whether the `}` at `index` closes a braced variable (`${x}`, `@{x}`,
@@ -900,9 +919,22 @@ function maskTemplateTagContents(line, state) {
 }
 
 /**
+ * A document's literal text: everything a text template outputs as written,
+ * with each `<% %>` tag blanked, delimiters included (same length, same
+ * offsets). Used by the Adaptive Card and JSON checks.
+ *
+ * @param {string} text - Full document text
+ * @returns {string}
+ */
+function maskTemplateTags(text) {
+  const state = createTemplateScanState();
+  return text.split("\n").map((line) => maskTemplateTagContents(line, state)).join("\n");
+}
+
+/**
  * Finds `<%` / `%>` template-tag delimiters in one already-masked line, in
- * source order. The single place the "what is a tag delimiter" rule lives, so
- * folding and diagnostics cannot drift on it.
+ * source order, for folding. (The `<% %>` diagnostics walk the masked line
+ * themselves, as they track expressions between the tags too.)
  *
  * @param {string} maskedLine - Output of {@link maskNonCodeSpans} for one line
  *   (so a `<%` inside a string or comment is already gone)
@@ -1319,7 +1351,9 @@ function prefixTail(text, end, start = 0) {
  *
  * @param {string} text
  * @param {number} end - Where the token starts
- * @returns {boolean}
+ * @returns {"global" | "set" | false} `"global"` when the assignment makes
+ *   the variable global (`global $x`, `set global $x`), `"set"` for any
+ *   other assignment, false when the token isn't assigned
  */
 function isAssignmentPrefix(text, end) {
   let i = end;
@@ -1338,33 +1372,37 @@ function isAssignmentPrefix(text, end) {
     return i === 0 || ";{}".includes(text[i - 1]);
   };
   if (!skipWhitespace()) return false;
-  let keyword = word();
-  if (keyword === "local" || keyword === "global") {
+  const modifier = word();
+  let keyword = modifier;
+  if (modifier === "local" || modifier === "global") {
     const afterModifier = i;
-    if (keyword === "global" && atStatementStart()) return true;
+    if (modifier === "global" && atStatementStart()) return "global";
     i = afterModifier;
     if (!skipWhitespace()) return false;
     keyword = word();
   }
-  return keyword === "set" && atStatementStart();
+  if (keyword !== "set" || !atStatementStart()) return false;
+  return modifier === "global" ? "global" : "set";
 }
 
 /**
  * How an occurrence gives its variable a value: as a module parameter, a
  * `foreach` loop variable, an operation's output (`Name => $x`), or an
- * assignment (`set $x = ...`, `$x = ...`, `global $x = ...`).
+ * assignment (`set $x = ...`, `set local $x = ...`, `global $x = ...`; see
+ * {@link isAssignmentPrefix}).
  *
  * @typedef {"parameter" | "foreach" | "output" | "assignment"} AssignedBy
  */
 
 /**
- * @typedef {{ line: number, character: number, length: number, write: boolean, assignedBy?: AssignedBy }} VariableOccurrence
+ * @typedef {{ line: number, character: number, length: number, write: boolean, assignedBy?: AssignedBy, global?: true }} VariableOccurrence
  *   `line`/`character` are 0-based and point at the sigil; `length` covers
  *   the whole token (`$name` or `${name}`). `write` is true for a declaration
- *   or assignment target (`set $x = ...`, `$x = ...`, `global $x = ...`,
+ *   or assignment target (`set $x = ...`, `global $x = ...`,
  *   `foreach %p in ...`, an operation's output capture `Name => $x`, or a
  *   module parameter, whose list may span several lines); `assignedBy` then
- *   says which.
+ *   says which. `global` is set on an assignment that makes the variable
+ *   global (`global $x = ...`, `set global $x = ...`).
  */
 
 /**
@@ -1378,6 +1416,17 @@ function isAssignmentPrefix(text, end) {
  */
 function variableKey(sigil, name) {
   return sigil + name.toLowerCase();
+}
+
+/**
+ * A variable token's name, without its sigil or braces: `count` for `$count`,
+ * `my var` for `${my var}`.
+ *
+ * @param {string} token - `$name` or `${name}`, likewise for `@` / `%`
+ * @returns {string}
+ */
+function variableName(token) {
+  return token[1] === "{" ? token.slice(2, -1) : token.slice(1);
 }
 
 /**
@@ -1422,18 +1471,20 @@ function indexVariableOccurrences(text) {
       const isParameter =
         paramStart !== -1 && character >= paramStart && character < paramEnd &&
         MODULE_PARAMETER_PREFIX_REGEX.test(prefixTail(code, character, paramStart));
+      const assignment = !inString && !isParameter && isAssignmentPrefix(view, character);
       /** @type {AssignedBy | undefined} */
       const assignedBy = inString ? undefined
         : isParameter ? "parameter"
           : FOREACH_VARIABLE_PREFIX_REGEX.test(before) ? "foreach"
             : OUTPUT_CAPTURE_PREFIX_REGEX.test(before) ? "output"
-              : isAssignmentPrefix(view, character) && ASSIGNMENT_SUFFIX_REGEX.test(after) ? "assignment"
+              : assignment && ASSIGNMENT_SUFFIX_REGEX.test(after) ? "assignment"
                 : undefined;
 
       const key = variableKey(tokenSigil, tokenName);
       /** @type {VariableOccurrence} */
       const occurrence = { line, character, length: match[0].length, write: assignedBy !== undefined };
       if (assignedBy) occurrence.assignedBy = assignedBy;
+      if (assignedBy === "assignment" && assignment === "global") occurrence.global = true;
       const existing = index.get(key);
       if (existing) existing.push(occurrence);
       else index.set(key, [occurrence]);
@@ -1486,7 +1537,7 @@ const ARGUMENT_NAME_REGEX = /^(\s*)([A-Za-z][\w-]*)\s*(?::(?!:)|=>)/;
  */
 function findOperationArgumentContext(maskedPrefix, maskedSuffix = "") {
   // A braced variable's `}` (`${my dir}`) isn't a block's.
-  const text = maskedPrefix.replace(/[$@%]\{[^{}\n]*\}/g, (m) => "_".repeat(m.length));
+  const text = blankBracedVariables(maskedPrefix);
 
   // Back to the call's unclosed `(`, noting the last top-level `,`.
   let depth = 0;
@@ -1524,8 +1575,7 @@ function findOperationArgumentContext(maskedPrefix, maskedSuffix = "") {
     if (ch === "(" || ch === "[") depth++;
     else if (ch === ")" || ch === "]") depth--;
     else if (ch === "," && depth === 0) {
-      const name = ARGUMENT_NAME_REGEX.exec(text.slice(segmentStart, i))?.[2];
-      if (name) used.push(name);
+      addUsed(text.slice(segmentStart, i));
       segmentStart = i + 1;
     }
   }
@@ -1533,7 +1583,7 @@ function findOperationArgumentContext(maskedPrefix, maskedSuffix = "") {
   // Arguments given after the cursor: each top-level `Name:` segment up to
   // the call's `)` -- or, while it has none, the end of the statement --
   // past the rest of the name being typed, when the cursor is inside one.
-  const after = maskedSuffix.replace(/[$@%]\{[^{}\n]*\}/g, (m) => "_".repeat(m.length));
+  const after = blankBracedVariables(maskedSuffix);
   let inCurrent = /^\w/.test(after);
   segmentStart = 0;
   depth = 0;
@@ -1628,6 +1678,7 @@ module.exports = {
   // -- Text-template tags
   maskOutsideTemplateTags,
   maskTemplateTagContents,
+  maskTemplateTags,
   documentUsesTemplateTags,
   findTemplateTagDelimiters,
   findBalancedParenEnd,
@@ -1640,6 +1691,7 @@ module.exports = {
   maskCommentSpans,
   indexVariableOccurrences,
   variableKey,
+  variableName,
   NAME_PATTERN,
   BRACED_NAME_PATTERN,
 
@@ -1653,7 +1705,8 @@ module.exports = {
   splitSignatureParameters,
   blankClosedGroups,
 
-  // -- Module-name regexes & context predicates
+  // -- Module-name and function-call regexes & context predicates
+  FUNCTION_CALL_REGEX,
   MODULE_NAME_TOKEN_REGEX,
   MODULE_DECLARATION_REGEX,
   MODULE_CALL_TARGET_REGEX,
@@ -1666,6 +1719,7 @@ module.exports = {
   findTopLevelCommas,
 
   // -- Looking back from a word
+  blankBracedVariables,
   namespaceBefore,
   isStatementStart,
   findExecutionDirectives,

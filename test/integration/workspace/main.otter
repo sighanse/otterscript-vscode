@@ -4,6 +4,7 @@
 set $greeting = "hello";
 Log-Information "$greeting world";
 set %settings = %FromJson('{"level": "high"}');
+Log-Information $MapItem(%settings, level);
 
 module Greet<$name> {
     Log-Information $name;

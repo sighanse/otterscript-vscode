@@ -29,6 +29,16 @@ describe("validateDocs", () => {
     assert.equal(bad.warnings.length, 1);
   });
 
+  it("checks the shape of 'docUrls'", () => {
+    const ok = validateDocs("t", { X: { ...good, docUrls: { Otter: "https://docs.inedo.com/docs/otter/x" } } });
+    assert.deepEqual(ok.warnings, []);
+    const bad = validateDocs("t", {
+      A: { ...good, docUrls: { Otter: "https://example.com/x" } },
+      B: { ...good, docUrls: { Nope: "https://docs.inedo.com/docs/x" } },
+    });
+    assert.equal(bad.warnings.length, 2);
+  });
+
   it("errors on a missing name / description", () => {
     const { errors } = validateDocs("t", {
       A: { description: "d", namespace: null },

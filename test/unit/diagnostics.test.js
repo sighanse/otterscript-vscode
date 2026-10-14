@@ -14,7 +14,7 @@ const assert = require("node:assert/strict");
 const { makeDocument } = require("./fake-document");
 const { assertLinearTime } = require("./timing");
 
-const { DiagnosticSeverity } = require("../vscode-stub");
+const { DiagnosticSeverity, DiagnosticTag } = require("../vscode-stub");
 const {
   checkMissingDollar,
   createUnbalancedDiagnostic,
@@ -96,6 +96,7 @@ describe("updateDiagnostics — clean document", () => {
       'Log-Information "starting";',
       "if $count > 0 {",
       "    set $result = $ToJson(%( ok: true ));",
+      "    Log-Information $result;",
       "}",
       "foreach $s in @AllServers() {",
       "    Log-Information $s;",
@@ -667,7 +668,7 @@ describe("updateDiagnostics - template <% %> structural checks", () => {
 
   it("does not run any template check on a document with no tags", () => {
     // `<% ... %>` only inside a string -> not template-aware -> plain scan.
-    assert.deepEqual(diagnose('set $t = "<% foreach $x in @y { %>";'), []);
+    assert.deepEqual(diagnose('set $t = "<% foreach $x in @y { %>";\nLog-Information $t;'), []);
   });
 
   it("blanks the literal text between tags (no false unknown-function / brace noise)", () => {
@@ -851,6 +852,27 @@ describe("updateDiagnostics - Adaptive Card checks", () => {
     // this text alone would otherwise trigger it.
     const src = '{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "TextBlok" } ] }';
     assert.deepEqual(only(src, "adaptivecard-unknown-type"), []);
+  });
+});
+
+describe("updateDiagnostics - JSON in a template's literal output", () => {
+  it("warns at the first JSON syntax problem of a template", () => {
+    const [d, ...rest] = only('<% set $x = 1; %>\n{\n  "a": 1\n  "b": $ToJson($x)\n}', "template-json-syntax");
+    assert.equal(rest.length, 0);
+    assert.equal(d.severity, DiagnosticSeverity.Warning);
+    assert.equal(d.message, "Expected ',' or '}' after the property's value.");
+    assert.deepEqual([d.range.start.line, d.range.start.character, d.range.end.line, d.range.end.character], [3, 2, 3, 5]);
+  });
+
+  it("checks only a template, whose literal output starts as JSON", () => {
+    assert.deepEqual(only('{ "a": 1 "b": 2 }', "template-json-syntax"), [], "no tags: OtterScript, not a template");
+    assert.deepEqual(only("<% set $x = 1; %>\nHello $x, { this is prose", "template-json-syntax"), []);
+  });
+
+  it("finds nothing in the webhook sample", () => {
+    const fs = require("node:fs");
+    const text = fs.readFileSync(require("node:path").join(__dirname, "..", "sample-webhook-template.otter"), "utf8");
+    assert.deepEqual(only(text, "template-json-syntax"), []);
   });
 });
 
@@ -1114,7 +1136,141 @@ describe("updateDiagnostics — with directives and await", () => {
   });
 
   it("checks nothing in strings, comments or a template's literal text", () => {
-    assert.deepEqual(diagnose('# with retyr=3 {\nset $s = "with retyr=3 { }";\nawait # deploy\n;').map((d) => d.code), []);
+    assert.deepEqual(diagnose('# with retyr=3 {\nset $s = "with retyr=3 { }";\nLog-Information $s;\nawait # deploy\n;').map((d) => d.code), []);
     assert.deepEqual(only("<% with retyr=3 { %>\nwith retyr=3 { }\n<% } %>", "unknown-with-directive").length, 1, "only the tag's");
+  });
+});
+
+describe("updateDiagnostics — unused variables", () => {
+  /**
+   * Each unused-variable diagnostic in `source` as `line:start-end`.
+   *
+   * @param {string} source
+   * @returns {string[]}
+   */
+  const where = (source) => only(source, "unused-variable").map((d) => `${d.range.start.line}:${d.range.start.character}-${d.range.end.character}`);
+
+  it("hints at a variable the file assigns but never reads, shown faded", () => {
+    const [d, ...rest] = only("set $count = 1;", "unused-variable");
+    assert.equal(rest.length, 0);
+    assert.equal(d.severity, DiagnosticSeverity.Hint);
+    assert.deepEqual(d.tags, [DiagnosticTag.Unnecessary]);
+    assert.equal(d.message, "'$count' is assigned but never read.");
+    assert.deepEqual(where("set $count = 1;"), ["0:4-10"]);
+  });
+
+  it("marks every assignment of the variable, and an operation's output", () => {
+    assert.deepEqual(where("set $x = 1;\nset local $x = 2;"), ["0:4-6", "1:10-12"]);
+    assert.deepEqual(where("Get-Http(Url: u, ResponseBody => $body);"), ["0:33-38"]);
+    assert.deepEqual(where("set @list = @(1, 2);\nset %map = %(a: 1);"), ["0:4-9", "1:4-8"]);
+    assert.deepEqual(where("set ${my var} = 1;"), ["0:4-13"]);
+    assert.equal(only("set ${my var} = 1;", "unused-variable")[0].message, "'${my var}' is assigned but never read.");
+  });
+
+  it("counts any read: in code, in a string, braced, in another casing", () => {
+    for (const read of ["Log-Information $x;", 'Log-Information "value: $x";', "Log-Information ${x};", "Log-Information $X;", "if $x == 1 { }"]) {
+      assert.deepEqual(where(`set $x = 1;\n${read}`), [], read);
+    }
+    assert.deepEqual(where("set $x = 1;\nset $x = $x + 1;"), [], "a read on the right-hand side");
+  });
+
+  it("tells variables of different sigils apart", () => {
+    assert.deepEqual(where("set $x = 1;\nLog-Information @x;"), ["0:4-6"]);
+  });
+
+  it("reads in a text template's literal output count", () => {
+    assert.deepEqual(where('<% set $name = "a"; %>\n{ "name": $ToJson($name) }'), []);
+    assert.deepEqual(where('<% set $name = "a"; %>\n{ "name": "x" }'), ["0:7-12"]);
+  });
+
+  it("leaves out globals, module parameters, loop variables and documented names", () => {
+    assert.deepEqual(where("global $g = 1;\nset global $h = 2;"), [], "other scripts can read a global");
+    assert.deepEqual(where("module M<out $result> {\n  set $result = 1;\n}"), [], "the caller reads an output parameter");
+    assert.deepEqual(where("module M<in $p> {\n}"), []);
+    assert.deepEqual(where("foreach $item in @list { }"), []);
+    assert.deepEqual(where("set $PackageName = 1;"), [], "a runtime variable the product reads");
+    assert.deepEqual(where("set ${PackageName} = 1;"), [], "the same, braced");
+  });
+
+  it("checks nothing in a file that reads variables by name or runs code that can", () => {
+    for (const reader of [
+      '$GetVariableValue("x")',
+      'Log-Information $IsVariableDefined("x");',
+      'Log-Information $Eval("$x");',
+      "Apply-Template(Asset: report, OutputVariable => $out);",
+      "PSCall Script;",
+      "InedoCore::PSCall Script;",
+      'OSExec(Text: "Log-Information `$x;");',
+      "Exec(FileName: a.exe, ImportVariables: true);",
+    ]) {
+      assert.deepEqual(where(`set $x = 1;\n${reader}`), [], reader);
+    }
+  });
+
+  it("checks nothing in a file that calls a module declared elsewhere, which may read its variables", () => {
+    assert.deepEqual(where("set $x = 1;\ncall Shared;"), []);
+    assert.deepEqual(where("set $x = 1;\ncall MyRaft::Shared;\nmodule Shared {\n}"), [], "a raft's module");
+    assert.deepEqual(where("set $x = 1;\ncall Local;\nmodule Local {\n}"), ["0:4-6"], "this file's module");
+  });
+
+  it("is a rule like the others: off removes it, a severity replaces Hint", () => {
+    assert.deepEqual(only("set $x = 1;", "unused-variable", { diagnosticRules: { "unused-variable": "off" } }), []);
+    const [d] = only("set $x = 1;", "unused-variable", { diagnosticRules: { "unused-variable": "warning" } });
+    assert.equal(d.severity, DiagnosticSeverity.Warning);
+    assert.deepEqual(d.tags, [DiagnosticTag.Unnecessary]);
+  });
+
+  it("checks a long file in time linear in its length", () => {
+    // 20,000 variables, half of them unused: a check that looked each one up
+    // in the whole text again would take minutes.
+    const source = Array.from({ length: 20000 }, (_, i) => `set $v${i} = ${i};${i % 2 ? ` Log-Information $v${i};` : ""}`).join("\n");
+    assert.equal(assertLinearTime(() => only(source, "unused-variable")).length, 10000);
+  });
+});
+
+describe("updateDiagnostics — logging", () => {
+  const channel = /** @type {any} */ (require("../vscode-stub").window.createOutputChannel());
+
+  /**
+   * A collection that keeps what was set, by URI.
+   *
+   * @returns {{ collection: any, sets: () => number, current: (uri: any) => any[] | undefined }}
+   */
+  function recordingCollection() {
+    /** @type {Map<string, any[]>} */
+    const byUri = new Map();
+    let count = 0;
+    return {
+      collection: { set: (/** @type {any} */ uri, /** @type {any[]} */ issues) => { count++; byUri.set(uri.toString(), issues); } },
+      sets: () => count,
+      current: (uri) => byUri.get(uri.toString()),
+    };
+  }
+
+  it("logs a check that throws, with the file, and keeps the file's last diagnostics", () => {
+    const document = /** @type {any} */ (makeDocument("if x == 5 {\n}", { uri: "file:///broken.otter" }));
+    const { collection, sets, current } = recordingCollection();
+    updateDiagnostics(document, collection, ctx);
+    const before = current(document.uri);
+    assert.equal(before?.length, 1);
+
+    channel.lines.length = 0;
+    const failure = new Error("a check broke");
+    document.getText = () => { throw failure; };
+    assert.doesNotThrow(() => updateDiagnostics(document, collection, ctx));
+    assert.equal(sets(), 1, "the collection is left as it was");
+    assert.equal(current(document.uri), before);
+    const errors = channel.lines.filter((/** @type {any[]} */ [level]) => level === "error");
+    assert.equal(errors.length, 1);
+    assert.match(errors[0][1], /broken\.otter/);
+    assert.equal(errors[0][2], failure, "the error itself, so the log has its stack");
+  });
+
+  it("logs each run's file, problem count and time at debug level", () => {
+    channel.lines.length = 0;
+    updateDiagnostics(makeDocument("if x == 5 {\n}", { uri: "file:///timed.otter" }), recordingCollection().collection, ctx);
+    const debug = channel.lines.filter((/** @type {any[]} */ [level]) => level === "debug").map((/** @type {any[]} */ [, message]) => message);
+    assert.equal(debug.length, 1);
+    assert.match(debug[0], /^Checked timed\.otter: 1 problem\(s\) in \d+ ms$/);
   });
 });

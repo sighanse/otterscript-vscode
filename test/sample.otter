@@ -43,6 +43,7 @@
 set $name = "OtterScript";
 set $count = 3;
 set $pi = 3.14;
+Log-Information "$name: pi is about $pi";
 
 global $environment = $EnvironmentName;
 
@@ -369,6 +370,7 @@ $tooMany = $ToJson($a, $b);          # EXPECT: too-many-arguments        ('$ToJs
 %tooMany = %FromJson($a, $b);        # EXPECT: too-many-arguments        ('%FromJson' takes at most 1)
 
 @vals = @Split("a,b", ",")];         # EXPECT: unbalanced — Unexpected closing bracket: Extra ']'
+set $neverRead = 1;                  # EXPECT: unused-variable (a faded hint)
 
 # ---------------------------------------------------------------------------
 # B. FIX-ALL BLOCK — run "OtterScript: Fix All Issues" (Ctrl+Shift+Alt+F) here.
@@ -445,10 +447,11 @@ if $done {                           # EXPECT: unbalanced — Unclosed brace(s):
 #   incorrect-for-usage .......... 1   (B: for idx = 1 to 10)
 #   unbalanced (Extra ']') ....... 1   (A: @Split(...)] )
 #   unbalanced (Unclosed '{') .... 1   (F: if $done {)
+#   unused-variable .............. 1   (A: $neverRead)
 #   -----------------------------------
-#   TOTAL ........................ 17
+#   TOTAL ........................ 18
 #
 # Sections D and E of PART 2 contribute 1 more (the tracked false positive in
-# §E), so the Problems panel shows 18 items total. Everything in PART 1 and
+# §E), so the Problems panel shows 19 items total. Everything in PART 1 and
 # every "MUST NOT FLAG" line in §D must contribute 0.
 ###############################################################################

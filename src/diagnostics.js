@@ -7,21 +7,24 @@
  * `$`, symbol balance, unknown functions, operations and namespaces, `if`
  * condition operators, `for` loops, and (in a text template) the `<% %>` tag
  * checks. Over the whole masked document afterwards: duplicate map keys and
- * modules, argument counts and names, and the Adaptive Card checks
- * (adaptivecard.js). {@link DIAGNOSTIC_CODES} lists every code emitted.
+ * modules, argument counts and names, `with` directives and `await` tokens,
+ * and the Adaptive Card checks (adaptivecard.js). {@link DIAGNOSTIC_CODES}
+ * lists every code emitted.
  */
 
 const vscode = require("vscode");
 const {
   closestMatch,
+  createDiagnostic,
   isReadOnlyView,
   log,
   lookupOwn,
   NON_VARIABLE_IDENTIFIERS,
 } = require("./helpers");
 const {
-  executionDirectiveDocs,
+  EXECUTION_DIRECTIVES,
   FUNCTION_TABLES,
+  isDocumentedName,
   NAMESPACES,
   keywordDocs,
   operationArguments,
@@ -35,6 +38,7 @@ const {
   documentUsesTemplateTags,
   findExecutionDirectives,
   findTopLevelCommas,
+  FUNCTION_CALL_REGEX,
   isStatementStart,
   maskCommentSpans,
   maskNonCodeSpans,
@@ -42,8 +46,11 @@ const {
   MODULE_DECLARATION_REGEX,
   namespaceBefore,
   splitSignatureParameters,
+  variableName,
 } = require("./scanner");
 const { findAdaptiveCardDiagnostics } = require("./adaptivecard");
+const { findTemplateJsonProblem } = require("./json-check");
+const { getModuleCallReferencesByName, getModuleDeclarations, getVariableIndex } = require("./document-index");
 
 /**
  * The kind of function each call sigil calls, for messages and the
@@ -51,9 +58,6 @@ const { findAdaptiveCardDiagnostics } = require("./adaptivecard");
  * @type {Readonly<Record<"$" | "@" | "%", string>>}
  */
 const FUNCTION_KINDS = Object.freeze({ "$": "scalar", "@": "vector", "%": "map" });
-
-/** A function call: sigil (group 1) and name (group 2). Not `<%`, nor a `%(` map literal. */
-const FUNCTION_CALL_REGEX = /(?<!<)([$@%])([A-Za-z][A-Za-z0-9_]*)\s*\(/g;
 
 /** Namespaces, lower-cased: Inedo resolves them case-insensitively. */
 const KNOWN_NAMESPACES = new Set([...NAMESPACES].map((n) => n.toLowerCase()));
@@ -97,18 +101,12 @@ function checkMissingDollar(line, lineIndex, nonVariableIdentifiers) {
 
   // -- Calculate exact position of variable name within the line
   const varNameIndex = /** @type {number} */ (match.index) + match[0].indexOf(varName);
-  const diagnostic = new vscode.Diagnostic(
-    new vscode.Range(
-      new vscode.Position(lineIndex, varNameIndex),
-      new vscode.Position(lineIndex, varNameIndex + varName.length)
-    ),
+  return lineDiagnostic(
+    lineIndex, varNameIndex, varNameIndex + varName.length,
     `Missing '$' before variable: ${varName}. Use $${varName}`,
-    vscode.DiagnosticSeverity.Error
+    vscode.DiagnosticSeverity.Error,
+    "missing-dollar"
   );
-  diagnostic.code = "missing-dollar";
-  diagnostic.source = "OtterScript";
-
-  return diagnostic;
 }
 
 /**
@@ -172,17 +170,12 @@ function findDuplicateMapKeyDiagnosticsFromMasked(document, maskedText) {
         const keyStart = segmentStart + keyMatch[0].indexOf(key);
 
         if (seenKeys.has(key)) {
-          const diagnostic = new vscode.Diagnostic(
-            new vscode.Range(
-              document.positionAt(keyStart),
-              document.positionAt(keyStart + key.length)
-            ),
+          issues.push(offsetDiagnostic(
+            document, keyStart, keyStart + key.length,
             `Duplicate key '${key}' in map expression.`,
-            vscode.DiagnosticSeverity.Warning
-          );
-          diagnostic.code = "duplicate-map-key";
-          diagnostic.source = "OtterScript";
-          issues.push(diagnostic);
+            vscode.DiagnosticSeverity.Warning,
+            "duplicate-map-key"
+          ));
         } else {
           seenKeys.add(key);
         }
@@ -318,14 +311,90 @@ function findArgumentCountDiagnosticsFromMasked(document, maskedText, text = doc
     }
 
     const nameStart = /** @type {number} */ (match.index) + 1;
-    const diagnostic = new vscode.Diagnostic(
-      new vscode.Range(document.positionAt(nameStart), document.positionAt(nameStart + name.length)),
-      message,
-      vscode.DiagnosticSeverity.Warning
-    );
-    diagnostic.code = code;
-    diagnostic.source = "OtterScript";
-    issues.push(diagnostic);
+    issues.push(offsetDiagnostic(document, nameStart, nameStart + name.length, message, vscode.DiagnosticSeverity.Warning, code));
+  }
+  return issues;
+}
+
+/**
+ * Functions that read a variable whose name is only known when the script
+ * runs (`$GetVariableValue("x")`, `$Eval("$x")`): any variable the file
+ * assigns may be the one read.
+ */
+const VARIABLE_READER_FUNCTION_REGEX = /[$@%](?:GetVariableValue|IsVariableDefined|Eval)\s*\(/i;
+
+/**
+ * Operations that run other code which may read the script's variables
+ * without naming them in the script: a template (`Apply-Template`), an
+ * OtterScript text or raft script, or a script asset whose input variables
+ * come from the script (`PSCall`, `SHCall`, ...), and `Exec` importing the
+ * variables into the process's environment. From Inedo's reference.
+ */
+const VARIABLE_READER_OPERATION_REGEX =
+  /(?<![\w-])(?:Apply-Template|BATCall|OSCall|OSExec|PSCall|PSEnsure|PSVerify|PYCall|PYEnsure|PYExec|PYVerify|SHCall|SHEnsure2|SHExec|SHVerify2)(?![\w-])|\bImportVariables\s*:/i;
+
+/** A `call` of a raft's module (`call MyRaft::Shared`), declared in another script. */
+const RAFT_MODULE_CALL_REGEX = /\bcall\s+[A-Za-z][\w-]*::/;
+
+/**
+ * Whether code the file doesn't contain may read its variables, so that a
+ * variable the file never reads may still be used: the file reads variables
+ * by name, runs other code that can read them, or calls a module declared
+ * elsewhere (a module may read its caller's variables).
+ *
+ * @param {vscode.TextDocument} document
+ * @param {string} text - `document.getText()`
+ * @returns {boolean}
+ */
+function variablesReadElsewhere(document, text) {
+  if (VARIABLE_READER_FUNCTION_REGEX.test(text) || VARIABLE_READER_OPERATION_REGEX.test(text)) return true;
+  if (RAFT_MODULE_CALL_REGEX.test(text)) return true;
+  const declared = new Set(getModuleDeclarations(document).map((m) => m.name.toLowerCase()));
+  return [...getModuleCallReferencesByName(document).keys()].some((name) => !declared.has(name));
+}
+
+/**
+ * Flags each assignment of a variable the file never reads (`unused-variable`),
+ * as a faded Hint. The whole file is one scope, as in the variable index, and
+ * a read anywhere counts, also in a string or a template's literal output.
+ * Left out: global variables, which other scripts can read; module
+ * parameters and what's assigned to them (an `out` parameter is read by the
+ * caller); `foreach` loop variables; runtime variables the product documents;
+ * and every variable of a file whose variables other code may read
+ * ({@link variablesReadElsewhere}). No quick fix: removing the assignment
+ * would also remove a function call in its value.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {string} text - `document.getText()`
+ * @returns {vscode.Diagnostic[]}
+ */
+function findUnusedVariableDiagnostics(document, text) {
+  /** @type {vscode.Diagnostic[]} */
+  const issues = [];
+  const index = getVariableIndex(document);
+  if (index.size === 0 || variablesReadElsewhere(document, text)) return issues;
+
+  for (const [key, occurrences] of index) {
+    if (occurrences.some((o) => !o.write || o.global || o.assignedBy === "parameter" || o.assignedBy === "foreach")) continue;
+    /**
+     * The occurrence as written: `$x`, `${my var}`.
+     *
+     * @param {import("./scanner").VariableOccurrence} occurrence
+     * @returns {string}
+     */
+    const written = ({ line, character, length }) => document.lineAt(line).text.slice(character, character + length);
+    if (isDocumentedName(key[0], variableName(written(occurrences[0])))) continue;
+    for (const occurrence of occurrences) {
+      const { line, character, length } = occurrence;
+      const diagnostic = lineDiagnostic(
+        line, character, character + length,
+        `'${written(occurrence)}' is assigned but never read.`,
+        vscode.DiagnosticSeverity.Hint,
+        "unused-variable"
+      );
+      diagnostic.tags = [vscode.DiagnosticTag.Unnecessary];
+      issues.push(diagnostic);
+    }
   }
   return issues;
 }
@@ -373,9 +442,6 @@ function findDuplicateModuleDiagnostics(document, maskedLines) {
 // EXECUTION DIRECTIVES AND AWAIT
 // ============================================================
 
-/** The `with` directives by lower-case name: Inedo matches them ignoring case. */
-const EXECUTION_DIRECTIVES = new Map(Object.values(executionDirectiveDocs).map((d) => [d.name.toLowerCase(), d]));
-
 /**
  * Whether `value` fits a directive that takes `kind`. Only the grammar's own
  * values are checked: a number for `retry` and `timeout`, `always` or
@@ -422,10 +488,7 @@ function findExecutionDirectiveDiagnostics(document, maskedText, text) {
    * @param {string} code
    */
   const report = (start, end, message, severity, code) => {
-    const d = new vscode.Diagnostic(new vscode.Range(document.positionAt(start), document.positionAt(end)), message, severity);
-    d.code = code;
-    d.source = "OtterScript";
-    issues.push(d);
+    issues.push(offsetDiagnostic(document, start, end, message, severity, code));
   };
 
   const { withs, awaits } = findExecutionDirectives(maskedText, text);
@@ -569,12 +632,7 @@ function findOperationArgumentDiagnosticsFromMasked(document, maskedText, text =
    * @param {string} code
    */
   const hint = (start, length, message, code) => {
-    const diagnostic = new vscode.Diagnostic(
-      new vscode.Range(document.positionAt(start), document.positionAt(start + length)), message, vscode.DiagnosticSeverity.Hint
-    );
-    diagnostic.code = code;
-    diagnostic.source = "OtterScript";
-    issues.push(diagnostic);
+    issues.push(offsetDiagnostic(document, start, start + length, message, vscode.DiagnosticSeverity.Hint, code));
   };
 
   const operations = [];
@@ -651,14 +709,12 @@ function createUnbalancedDiagnostic(count, lastPos, openChar, closeChar, name, d
     ? `Unclosed ${name}(s): ${count} '${openChar}' not closed (first at line ${lineNum}, col ${colNum})`
     : `Unexpected closing ${name}: Extra '${closeChar}' at line ${lineNum}, col ${colNum}`;
 
-  const diagnostic = new vscode.Diagnostic(
+  return createDiagnostic(
     new vscode.Range(pos, document.positionAt(lastPos + 1)),
     message,
-    vscode.DiagnosticSeverity.Error
+    vscode.DiagnosticSeverity.Error,
+    "unbalanced-symbol"
   );
-  diagnostic.code = "unbalanced-symbol";
-  diagnostic.source = "OtterScript";
-  return diagnostic;
 }
 
 /**
@@ -688,6 +744,7 @@ const DIAGNOSTIC_CODES = Object.freeze([
   "incorrect-for-usage",
   "duplicate-map-key",
   "duplicate-module",
+  "unused-variable",
   // -- Unknown names & arity
   "unknown-scalar-function",
   "unknown-vector-function",
@@ -708,6 +765,7 @@ const DIAGNOSTIC_CODES = Object.freeze([
   "template-end-keyword",
   "template-missing-brace",
   "template-in-expression",
+  "template-json-syntax",
   // -- Adaptive Cards
   "adaptivecard-missing-version",
   "adaptivecard-unknown-type",
@@ -791,14 +849,22 @@ const TEMPLATE_BLOCK_OPENER_REGEX =
  * @returns {vscode.Diagnostic}
  */
 function lineDiagnostic(lineIndex, start, end, message, severity, code) {
-  const d = new vscode.Diagnostic(
-    new vscode.Range(new vscode.Position(lineIndex, start), new vscode.Position(lineIndex, end)),
-    message,
-    severity
-  );
-  d.code = code;
-  d.source = "OtterScript";
-  return d;
+  return createDiagnostic(new vscode.Range(lineIndex, start, lineIndex, end), message, severity, code);
+}
+
+/**
+ * Builds an OtterScript diagnostic spanning the document offsets `[start, end)`.
+ *
+ * @param {vscode.TextDocument} document
+ * @param {number} start
+ * @param {number} end
+ * @param {string} message
+ * @param {vscode.DiagnosticSeverity} severity
+ * @param {string} code - Diagnostic code; one of {@link DIAGNOSTIC_CODES}
+ * @returns {vscode.Diagnostic}
+ */
+function offsetDiagnostic(document, start, end, message, severity, code) {
+  return createDiagnostic(new vscode.Range(document.positionAt(start), document.positionAt(end)), message, severity, code);
 }
 
 /**
@@ -996,6 +1062,11 @@ function findIfConditionEnd(line) {
  * Updates diagnostics for an OtterScript document.
  * Performs a full scan of the document and reports all issues.
  *
+ * A check that throws is logged with the file, and the file keeps its last
+ * diagnostics: otherwise the error would reach only VS Code's Extension Host
+ * log, and the Problems panel would quietly stop following the edits. Each
+ * run is logged at debug level, with its time, for reports of a slow file.
+ *
  * @param {vscode.TextDocument} document - Document to analyze
  * @param {vscode.DiagnosticCollection} collection - Target diagnostics collection
  * @param {DiagnosticsContext} ctx - The settings the checks read
@@ -1004,6 +1075,29 @@ function findIfConditionEnd(line) {
 function updateDiagnostics(document, collection, ctx) {
   if (document.languageId !== "otterscript" || isReadOnlyView(document)) return;
 
+  const file = vscode.workspace.asRelativePath(document.uri);
+  const started = performance.now();
+  /** @type {vscode.Diagnostic[]} */
+  let issues;
+  try {
+    issues = findDocumentDiagnostics(document, ctx);
+  } catch (err) {
+    log.error(`Diagnostics failed for ${file}; its last ones are kept:`, err);
+    return;
+  }
+  collection.set(document.uri, issues);
+  log.debug(`Checked ${file}: ${issues.length} problem(s) in ${Math.round(performance.now() - started)} ms`);
+}
+
+/**
+ * Every diagnostic for an OtterScript document, after the
+ * `otterscript.diagnostics.rules` setting.
+ *
+ * @param {vscode.TextDocument} document - Document to analyze
+ * @param {DiagnosticsContext} ctx - The settings the checks read
+ * @returns {vscode.Diagnostic[]}
+ */
+function findDocumentDiagnostics(document, ctx) {
   const text = document.getText();
 
   const { diagnosticRules, adaptiveCardMaxVersion } = ctx;
@@ -1246,8 +1340,9 @@ function updateDiagnostics(document, collection, ctx) {
     ));
   }
 
-  // -- Duplicate map keys and modules, argument checks, and (template-aware documents
-  //    only) content-triggered Adaptive Card checks. Isolated in its own try/catch:
+  // -- Duplicate map keys and modules, argument checks, `with` directives and
+  //    `await` tokens, and (template-aware documents only) content-triggered
+  //    Adaptive Card checks. Isolated in its own try/catch:
   //    these run over the whole joined document rather than per-line like
   //    every check above, so a bug here must not be able to wipe out the
   //    per-line diagnostics already collected above it.
@@ -1258,15 +1353,23 @@ function updateDiagnostics(document, collection, ctx) {
     issues.push(...findOperationArgumentDiagnosticsFromMasked(document, joinedMasked, text));
     issues.push(...findDuplicateModuleDiagnostics(document, maskedLines));
     issues.push(...findExecutionDirectiveDiagnostics(document, joinedMasked, text));
+    issues.push(...findUnusedVariableDiagnostics(document, text));
     if (templateAware) {
       // Triggered by a literal "type": "AdaptiveCard" in the literal output.
       issues.push(...findAdaptiveCardDiagnostics(document, text, { maxVersion: adaptiveCardMaxVersion }));
+      // Triggered by literal output that starts with `{` or `[`.
+      const jsonProblem = findTemplateJsonProblem(text);
+      if (jsonProblem) {
+        issues.push(offsetDiagnostic(
+          document, jsonProblem.start, jsonProblem.end, jsonProblem.message, vscode.DiagnosticSeverity.Warning, "template-json-syntax"
+        ));
+      }
     }
   } catch (err) {
-    log.error(`Cross-line diagnostic scan failed for ${document.uri.toString()}:`, err);
+    log.error(`Cross-line diagnostic scan failed for ${vscode.workspace.asRelativePath(document.uri)}:`, err);
   }
 
-  collection.set(document.uri, linkDiagnosticCodes(applyDiagnosticRules(issues, diagnosticRules)));
+  return linkDiagnosticCodes(applyDiagnosticRules(issues, diagnosticRules));
 }
 
 /**

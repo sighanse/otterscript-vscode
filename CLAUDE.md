@@ -16,12 +16,18 @@ for the Web (vscode.dev, github.dev).
 
 - `src/` uses only the `vscode` API: no Node built-ins (`fs`, `path`,
   `process`, `Buffer`) and no npm packages, as the web bundle runs in a
-  browser. `npm run check` (`check:bundle`) fails otherwise
+  browser. `npm run check` (`check:bundle`) fails otherwise, and its lint and
+  type check only know the globals Node and browsers share
+- The oldest supported VS Code is `engines.vscode` (1.85, Node 18.15):
+  raising it means `@types/vscode`, the `@types/node` major and
+  `EXTENSION_HOST_NODE` in `scripts/build.js`; `build.test.js` checks they
+  agree
 - `src/extension.js`: activation, settings, when diagnostics run
 - `src/providers/`: one module per group of language features
-- `src/diagnostics.js`, `src/adaptivecard.js`: the checks
-- `src/scanner.js`: text scanning (strings, comments, template tags). It must
-  stay free of `vscode` imports (lint enforces it)
+- `src/diagnostics.js`, `src/adaptivecard.js`, `src/json-check.js`: the checks
+- `src/scanner.js`: text scanning (strings, comments, template tags). It,
+  `src/json-check.js` and `src/json-view.js` must stay free of `vscode`
+  imports (lint enforces it)
 - `src/document-index.js`: per-document caches built on the scanner
 - `src/language-data.js`: hand-written docs tables, merged with Inedo's
   generated reference (`src/inedo-reference*.js`)
@@ -49,10 +55,16 @@ for the Web (vscode.dev, github.dev).
   features not yet released.
 - **Comments explain why**, in plain sentences; every function has a JSDoc
   block with `@param` and `@returns`. Match the surrounding code.
+- **Log through `log` (`src/helpers.js`)**, the OtterScript output channel,
+  never `console`: `info` for what a user would want to see, `debug` for
+  what helps with a bug report, `error` with the error itself (its stack).
 - Add or update tests with every behavior change: unit tests in `test/unit/`
   (plain Node, a `vscode` stub), integration tests in `test/integration/`.
   A module's unit tests go in the test file named after it
-  (`src/providers/hover.js` -> `test/unit/hover.test.js`).
+  (`src/providers/hover.js` -> `test/unit/hover.test.js`). The one exception,
+  `test/unit/properties.test.js` (fast-check), runs every provider on
+  generated text; a crash, a range outside the document, a completion
+  suggested twice or valid JSON reported as broken that it finds is a bug.
 - **For a bug fix, write the test first**, run it, and see it fail for the
   reason reported before changing the code. A test that can't fail, such as
   one for a review finding that turns out to be wrong, is the sign to say so
@@ -71,6 +83,16 @@ for the Web (vscode.dev, github.dev).
 - An operation's output argument is written `Name => $variable`.
 - Quick fixes: a fix is preferred (so **Fix All** applies it) only when it
   isn't a guess, such as when only the casing differs.
+- Hover links an entry's page on docs.inedo.com (`docUrls`, by product). The
+  generator keeps each page's path from Inedo's reference archives; never
+  build these URLs from names, which don't match the pages
+  (`DotNet::Build` is `dotnet/dotnet-build`).
+- Not yet known (open questions to ProGet): whether a module reads its
+  caller's variables. `unused-variable` therefore checks nothing in a file
+  that calls a module declared elsewhere, reads variables by name or runs
+  other code that can read them.
+- A text template's `<% %>` tag can write anything, so the JSON check
+  (`src/json-check.js`) reports nothing right after one.
 
 ## Pull requests and reviews
 

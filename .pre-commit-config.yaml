@@ -8,8 +8,8 @@
 # Run the pre-push checks by hand with: pre-commit run --hook-stage pre-push
 #
 # Each hook is pinned to a commit (`rev: <sha>  # frozen: <tag>`), like the
-# workflows' actions, so a moved tag can't change what runs. Update them all
-# with: pre-commit autoupdate --freeze
+# workflows' actions, so a moved tag can't change what runs. Dependabot updates
+# them (.github/dependabot.yml); by hand: pre-commit autoupdate --freeze
 # -----------------------------------------------------------------------------
 
 # `pre-push` as a stage name needs pre-commit 3.2+.

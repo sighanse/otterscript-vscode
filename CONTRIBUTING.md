@@ -36,6 +36,9 @@ npm run test:integration   # integration tests in real VS Code (see below)
 npm run test:web           # web tests in VS Code for the Web (see below)
 npm run package            # build the .vsix, to install and try locally
                            # (Extensions view > ... > Install from VSIX)
+npm run check:vsix         # check the .vsix: exactly the files the
+                           # extension needs, this version, and bundles that
+                           # activate (Sanity and publishing run it too)
 npm run update:cards       # re-download the Adaptive Card schema and regenerate
                            # src/adaptivecard-data.js
 npm run update:reference   # re-download Inedo's function/operation reference,
@@ -47,19 +50,24 @@ npm run update:grammar     # regenerate the grammar's name lists only
 ### Project layout
 
 Plain JavaScript (CommonJS), type-checked from its JSDoc, bundled by esbuild
-into `dist/extension.js`.
+into `dist/extension.js` (desktop) and `dist/web/extension.js` (VS Code for
+the Web).
 
 - `src/extension.js`: activation, settings, and when the diagnostics run.
   It and everything in `src/` use only the `vscode` API, with no Node
   built-ins or npm packages, so the same code runs in VS Code for the Web;
-  `npm run check` fails otherwise
+  `npm run check` fails otherwise. Its type check (`jsconfig.json`) and lint
+  only know the globals both runtimes have, so `process` or `Buffer` is an
+  error in the editor too
 - `src/providers/`: one module per group of language features (completion,
   hover, signature help, inlay hints, navigation, workspace symbols, quick
   fixes)
-- `src/diagnostics.js` and `src/adaptivecard.js`: the checks
+- `src/diagnostics.js`, `src/adaptivecard.js` and `src/json-check.js` (a
+  template's JSON output): the checks
 - `src/scanner.js`: text scanning (strings, comments, template tags). It must
-  stay free of `vscode` imports; ESLint enforces it. `src/json-view.js` is the
-  same kind of layer for JSON in templates
+  stay free of `vscode` imports; ESLint enforces it, also for
+  `src/json-view.js` and `src/json-check.js`, the same kind of layer for JSON
+  in templates
 - `src/document-index.js`: per-document caches built on the scanner
 - `src/language-data.js`: the hand-written docs tables, merged with Inedo's
   generated reference (`src/inedo-reference*.js`)
@@ -83,7 +91,10 @@ Some files are generated; `npm run check` fails when one is out of date:
   `operationVariants`; look operations up with `lookupOperation(name,
   namespace)` and their arguments with `operationArguments`. Hand-written entries
   in `src/language-data.js` win over generated ones, so better docs or
-  ProGet's meaning go there.
+  ProGet's meaning go there. Each entry keeps its page on docs.inedo.com,
+  which hover links to; after `npm run update:reference`, run
+  `node scripts/update-inedo-reference.js --check-links` to request every
+  linked page (not part of `npm run check`, as it needs Inedo's site).
 - The function and operation name lists in
   `syntaxes/otterscript.tmLanguage.json`, by
   `scripts/check-language-sync.js --write` from the tables in
@@ -96,8 +107,8 @@ Optionally, install the [pre-commit](https://pre-commit.com) hooks once with
 runs `npm run check`. The hook tools install themselves on first use
 (actionlint is built with Go and zizmor installed with Python, which
 pre-commit downloads if they aren't installed), so the first commit is slow.
-The hooks are pinned to commits; update them with
-`pre-commit autoupdate --freeze`.
+The hooks are pinned to commits. Dependabot opens a weekly pull request when
+they have new releases; `pre-commit autoupdate --freeze` updates them by hand.
 
 Press <kbd>F5</kbd> in VS Code to build the bundle and launch an Extension
 Development Host with this repo loaded as the test workspace. The same checks
@@ -116,8 +127,10 @@ Every change in behavior comes with tests:
   when the test ends.
 - `test/unit/properties.test.js` runs the checks and every provider on
   documents [fast-check](https://fast-check.dev/) generates, checking what
-  must hold for any text: no crash, ranges inside the document, Fix All
-  adding no errors, time linear in the length. A failure prints the smallest
+  must hold for any text: no crash, ranges inside the document, no
+  completion suggested twice, Fix All adding no errors, time linear in the
+  length, and no JSON problem reported in valid JSON a template writes. A
+  failure prints the smallest
   input it found. The seed is fixed; `FC_SEED=<n> FC_RUNS=<n> node --test
   test/unit/properties.test.js` tries others.
 - For a bug fix, write the test first and see it fail for the reason
@@ -186,16 +199,29 @@ and a `CLAUDE_CODE_OAUTH_TOKEN` repository secret (`claude setup-token`).
    notes; `npm run check` fails until the version has one.
 2. Merge to `main` through a pull request.
 3. Run the **Publish Extension** workflow on `main`. After approval in the
-   `release` environment it checks and packages the extension once, publishes
-   that package to the Visual Studio Marketplace and Open VSX, then tags the
+   `release` environment it checks and packages the extension once, checks
+   the package (`npm run check:vsix`), publishes it to the Visual Studio Marketplace and Open VSX, then tags the
    commit `v<version>` and creates a GitHub release with the package attached
    and the version's CHANGELOG section as its notes.
    A run that failed half-way can be run again: versions already published
    are skipped.
 
-   For now the Marketplace is published to by hand: while the `VSCE_PAT`
-   secret isn't set, the workflow skips that step with a warning, so upload
-   the package from the GitHub release to the Marketplace yourself.
+   For now the Marketplace is published to by hand: while the `release`
+   environment's `AZURE_CLIENT_ID` and `AZURE_TENANT_ID` variables aren't set,
+   the workflow skips the Marketplace with a warning, so upload the package
+   from the GitHub release to the Marketplace yourself.
+   To let the workflow publish there, sign it in with Microsoft Entra ID
+   (no stored secret; the Marketplace's personal access tokens stop working
+   on 2026-12-01):
+   1. In Microsoft Entra ID, register an app and add a federated credential:
+      GitHub Actions, this repository, entity type *Environment*, `release`.
+   2. Add the app to the `sighanse` publisher on the
+      [Marketplace's management page](https://marketplace.visualstudio.com/manage)
+      as a **Contributor**; signing in alone doesn't allow publishing.
+   3. Set the app's client ID and the tenant ID as the `AZURE_CLIENT_ID` and
+      `AZURE_TENANT_ID` variables (not secrets) of the `release` environment.
+   4. Optionally, check the sign-in locally after `az login` as that app:
+      `npx vsce verify-pat --azure-credential sighanse`.
 4. Check the release package's build provenance (see
    [SECURITY.md](SECURITY.md)):
    `gh attestation verify otterscript-vscode-<version>.vsix --repo sighanse/otterscript-vscode`.

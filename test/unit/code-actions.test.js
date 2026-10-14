@@ -359,6 +359,51 @@ describe("quick fixes (lightbulb)", () => {
     assert.deepEqual(turnOff.diagnostics, [diagnostics[0]]);
   });
 
+  it("offers the fixes that need a setting: a map function's name and an Adaptive Card's version", () => {
+    const { quickFixes } = registerFixes();
+    const fixTitles = (/** @type {string} */ text) => {
+      const doc = makeDoc(text);
+      return quickFixes.provideCodeActions(doc, undefined, { diagnostics: diagnose(doc) })
+        .filter((/** @type {any} */ a) => a.edit).map((/** @type {any} */ a) => a.title);
+    };
+    assert.deepEqual(fixTitles("set %m = %MapAd(%m, k, v);"), ["Change to '%MapAdd'"]);
+    assert.deepEqual(
+      fixTitles('<% set $x = 1; %>{ "type": "AdaptiveCard", "version": "1.2", "body": [ { "type": "Table", "rows": [] } ] }'),
+      ["Change card version to 1.5"]
+    );
+  });
+
+  it("fixes a template's JSON: a comma too many or missing, a property name or backslash to quote", () => {
+    const { quickFixes } = registerFixes();
+    /**
+     * The JSON fix offered for `body` in a template, and its edits.
+     *
+     * @param {string} body
+     * @returns {{ title: string, preferred: boolean, edits: string[] }[]}
+     */
+    const jsonFixes = (body) => {
+      const doc = makeDoc(`<% set $x = 1; %>\n${body}`);
+      const diagnostics = diagnose(doc).filter((d) => d.code.value === "template-json-syntax");
+      return quickFixes.provideCodeActions(doc, undefined, { diagnostics })
+        .filter((/** @type {any} */ a) => a.edit)
+        .map((/** @type {any} */ a) => ({ title: a.title, preferred: a.isPreferred, edits: describeEdits(a.edit) }));
+    };
+    assert.deepEqual(jsonFixes('{ "a": 1, }'), [{ title: "Remove the comma", preferred: true, edits: ["1:8-9 "] }]);
+    assert.deepEqual(jsonFixes('{ "a": 1 "b": 2 }'), [{ title: "Add ','", preferred: true, edits: ["1:8-8 ,"] }]);
+    assert.deepEqual(jsonFixes("{ name: 1 }"), [{ title: "Quote 'name'", preferred: true, edits: ['1:2-6 "name"'] }]);
+    assert.deepEqual(jsonFixes('{ "p": "C:\\Program Files" }'), [{ title: "Escape the backslash", preferred: true, edits: ["1:10-11 \\\\"] }]);
+    assert.deepEqual(jsonFixes('{ "a": yes }'), [], "no fix for a guess");
+  });
+
+  it("offers no JSON fix once the text has changed under the diagnostic", () => {
+    const { quickFixes } = registerFixes();
+    const before = makeDoc('<% set $x = 1; %>\n{ "a": 1, }');
+    const [diagnostic] = diagnose(before).filter((d) => d.code.value === "template-json-syntax");
+    const after = makeDoc('<% set $x = 1; %>\n{ "a": 1 }');
+    const actions = quickFixes.provideCodeActions(after, undefined, { diagnostics: [diagnostic] });
+    assert.deepEqual(actions.filter((/** @type {any} */ a) => a.edit), []);
+  });
+
   it("ignores other extensions' diagnostics and codes it has no fix or rule for", () => {
     const { quickFixes } = registerFixes();
     const doc = makeDoc("if x == 5 {\n}");

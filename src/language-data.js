@@ -86,6 +86,11 @@
  *   what it returns (`$FromJson` / `@FromJson` / `%FromJson`), as Inedo's
  *   reference marks it. A hand-written `$` entry's `@` and `%` forms are
  *   derived from it (see `anySigilForms`).
+ * @property {Record<string, string>=} docUrls The construct's page on
+ *   docs.inedo.com, by product: from Inedo's reference for its functions and
+ *   operations, which a hand-written entry of the same name takes (see
+ *   `withReference`); ProGet's webhook page for its notifier variables. Hover
+ *   links the one for the `otterscript.product` setting.
  * @property {string=} snippet VS Code snippet insertion text
  * @property {string=} documentation Extended Markdown documentation. Do not repeat
  *   `description` verbatim as the first line — hover renders both.
@@ -2212,6 +2217,13 @@ server or repository.
   },
 });
 
+/**
+ * The `with` directives by lower-case name: Inedo matches them ignoring case.
+ *
+ * @type {ReadonlyMap<string, ExecutionDirectiveDoc>}
+ */
+const EXECUTION_DIRECTIVES = new Map(Object.values(executionDirectiveDocs).map((d) => [d.name.toLowerCase(), d]));
+
 // ============================================================
 // VARIABLE DOCS (ProGet / Execution Context)
 // ============================================================
@@ -4059,8 +4071,10 @@ const mapFunctionDocs = {};
 
 // Freeze the hand-written tables so nothing can add, remove, or replace an
 // entry at runtime. Shallow: the individual DocEntry objects are not frozen.
-// syntaxDocs and keywordDocs are exported as they are; the others are
-// merged with the generated reference below, and those tables frozen too.
+// syntaxDocs, keywordDocs and executionDirectiveDocs are exported as they
+// are; below, the function and operation tables are merged with the
+// generated reference, variableDocs gets its product list, and those copies
+// are frozen too.
 Object.freeze(operationDocs);
 Object.freeze(syntaxDocs);
 Object.freeze(keywordDocs);
@@ -4100,8 +4114,8 @@ function withReference(handWritten, generated, alsoCovered = []) {
   for (const [key, doc] of Object.entries(generated)) {
     const handKey = handKeys.get(key.toLowerCase());
     if (!covered.has(key.toLowerCase())) merged[key] = doc;
-    // A hand-written entry takes the reference's product list and argument
-    // list when it has none of its own, and its `anySigil` mark.
+    // A hand-written entry takes the reference's product list, argument
+    // list and pages when it has none of its own, and its `anySigil` mark.
     else if (handKey) {
       const own = merged[handKey];
       merged[handKey] = {
@@ -4109,6 +4123,7 @@ function withReference(handWritten, generated, alsoCovered = []) {
         ...(!own.products && doc.products ? { products: doc.products } : {}),
         ...(doc.anySigil ? { anySigil: doc.anySigil } : {}),
         ...(!own.params && doc.params ? { params: doc.params } : {}),
+        ...(!own.docUrls && doc.docUrls ? { docUrls: doc.docUrls } : {}),
       };
     }
   }
@@ -4153,6 +4168,25 @@ function anySigilForms(sigil) {
  */
 function forProducts(table, products) {
   return Object.fromEntries(Object.entries(table).map(([key, doc]) => [key, doc.products ? doc : { ...doc, products }]));
+}
+
+/**
+ * ProGet's documentation of what a notifier's webhook body can use: its
+ * variables and functions. ProGet has no reference of its own.
+ */
+const PROGET_WEBHOOK_DOCS_URL = "https://docs.inedo.com/docs/proget/administration/proget-notifications-webhooks/proget-notifications-custom-webhook";
+
+/**
+ * A table whose entries that ProGet has link to {@link PROGET_WEBHOOK_DOCS_URL}
+ * for ProGet, beside their pages for the other products. All of them are
+ * hand-written notifier variables and functions, which that page documents.
+ *
+ * @param {DocsTable} table
+ * @returns {DocsTable}
+ */
+function withProGetPage(table) {
+  return Object.fromEntries(Object.entries(table).map(([key, doc]) =>
+    [key, doc.products?.includes("ProGet") ? { ...doc, docUrls: { ...doc.docUrls, ProGet: PROGET_WEBHOOK_DOCS_URL } } : doc]));
 }
 
 /**
@@ -4277,10 +4311,10 @@ function operationArguments(name, namespace) {
 
 // The exported tables, frozen like the hand-written ones (shallowly).
 Object.freeze(mergedOperationDocs);
-const exportedVariableDocs = Object.freeze(forProducts(variableDocs, ["ProGet"]));
-const exportedScalarFunctionDocs = Object.freeze(withReference(scalarFunctionDocs, reference.scalarFunctionDocs, [variableDocs]));
-const exportedVectorFunctionDocs = Object.freeze(withReference({ ...anySigilForms("@"), ...vectorFunctionDocs }, reference.vectorFunctionDocs));
-const exportedMapFunctionDocs = Object.freeze(withReference({ ...anySigilForms("%"), ...mapFunctionDocs }, reference.mapFunctionDocs));
+const exportedVariableDocs = Object.freeze(withProGetPage(forProducts(variableDocs, ["ProGet"])));
+const exportedScalarFunctionDocs = Object.freeze(withProGetPage(withReference(scalarFunctionDocs, reference.scalarFunctionDocs, [variableDocs])));
+const exportedVectorFunctionDocs = Object.freeze(withProGetPage(withReference({ ...anySigilForms("@"), ...vectorFunctionDocs }, reference.vectorFunctionDocs)));
+const exportedMapFunctionDocs = Object.freeze(withProGetPage(withReference({ ...anySigilForms("%"), ...mapFunctionDocs }, reference.mapFunctionDocs)));
 
 /**
  * The function table for each call sigil: `$Name(` is looked up in
@@ -4295,6 +4329,20 @@ const FUNCTION_TABLES = Object.freeze({
   "%": exportedMapFunctionDocs,
 });
 
+/**
+ * Whether a docs table documents this name with this sigil: a function, or a
+ * runtime variable such as ProGet's `$PackageName`, rather than a variable
+ * of the script's own.
+ *
+ * @param {string} sigil - `$`, `@`, or `%`
+ * @param {string} name - Without its sigil
+ * @returns {boolean}
+ */
+function isDocumentedName(sigil, name) {
+  if (sigil === "$") return Object.hasOwn(exportedScalarFunctionDocs, name) || Object.hasOwn(exportedVariableDocs, name);
+  return Object.hasOwn(sigil === "@" ? exportedVectorFunctionDocs : exportedMapFunctionDocs, name);
+}
+
 module.exports = {
   NAMESPACES,
   operationDocs: mergedOperationDocs,
@@ -4305,9 +4353,11 @@ module.exports = {
   syntaxDocs,
   keywordDocs,
   executionDirectiveDocs,
+  EXECUTION_DIRECTIVES,
   variableDocs: exportedVariableDocs,
   scalarFunctionDocs: exportedScalarFunctionDocs,
   vectorFunctionDocs: exportedVectorFunctionDocs,
   mapFunctionDocs: exportedMapFunctionDocs,
   FUNCTION_TABLES,
+  isDocumentedName,
 };

@@ -5,10 +5,9 @@
  *
  * These cover the character-classification logic (strings, line/block comments,
  * swim-strings) that has historically regressed, the `<% %>` text-template
- * helpers, plus the small argument/string helpers and module-name matchers. No
+ * helpers, the variable index, the operation-argument and module-name
+ * helpers, the `with` / `await` scan and the backward scans from a word. No
  * `vscode` shim is required: scanner.js has no VS Code dependency.
- *
- * Run via `npm test` (`node --test test/unit`).
  */
 
 const { describe, it } = require("node:test");
@@ -37,6 +36,7 @@ const {
   parseModuleParameters,
   indexVariableOccurrences,
   variableKey,
+  variableName,
   blankClosedGroups,
   MODULE_NAME_TOKEN_REGEX,
   MODULE_DECLARATION_REGEX,
@@ -797,7 +797,16 @@ describe("maskCommentSpans", () => {
   });
 });
 
-describe("findVariableOccurrences", () => {
+describe("variableName", () => {
+  it("drops the sigil, and a braced name's braces", () => {
+    assert.equal(variableName("$count"), "count");
+    assert.equal(variableName("@my-list"), "my-list");
+    assert.equal(variableName("${my var}"), "my var");
+    assert.equal(variableName("%{map}"), "map");
+  });
+});
+
+describe("indexVariableOccurrences", () => {
   /**
    * @param {string[]} lines
    * @param {string} sigil
@@ -929,6 +938,17 @@ describe("findVariableOccurrences", () => {
     assert.deepEqual(how("$body"), ["output"]);
     assert.deepEqual(how("$x"), ["assignment", "read"]);
     assert.deepEqual(how("$g"), ["assignment"]);
+  });
+
+  it("marks the assignments that make a variable global", () => {
+    const text = "global $a = 1;\nset global $b = 2;\nset local $c = 3;\nset $d = 4;";
+    const index = indexVariableOccurrences(text);
+    /** @param {string} key */
+    const global = (key) => index.get(key)?.map((o) => o.global === true);
+    assert.deepEqual(global("$a"), [true]);
+    assert.deepEqual(global("$b"), [true]);
+    assert.deepEqual(global("$c"), [false]);
+    assert.deepEqual(global("$d"), [false]);
   });
 
   it("treats `set local $x = ...` as an assignment", () => {

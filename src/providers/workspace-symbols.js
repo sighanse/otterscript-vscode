@@ -9,8 +9,6 @@ const vscode = require("vscode");
 const { clearTimerForUri, log, mapWithConcurrency, readWorkspaceText, scheduleTimerForUri } = require("../helpers");
 const { findModuleDeclarations } = require("../scanner");
 
-/** Decodes the files the index reads (one, reused). */
-
 /**
  * Whether a Go to Symbol in Workspace query matches a module name: its
  * characters appear in the name in order, ignoring case (`dpm` matches
@@ -54,9 +52,9 @@ function registerWorkspaceSymbols(settings) {
   // WORKSPACE SYMBOL PROVIDER (module declarations across files)
   // ============================================================
   // Powers "Go to Symbol in Workspace" (Ctrl+T): every `module` declaration in
-  // every .otter/.oscript file in the workspace. Backed by an in-memory index
-  // and kept fresh by a file-system watcher. The open editor's live/unsaved view
-  // is still served by the document symbol provider.
+  // every .otter/.oscript file in the workspace. Backed by an in-memory index,
+  // kept fresh by a file-system watcher, and by extension.js with the open
+  // documents' unsaved text.
   //
   // The index is built lazily: activation does NO disk I/O for it. The first
   // use -- Ctrl+T, or a cross-file module feature (Go to Definition, Rename,
@@ -130,8 +128,9 @@ function registerWorkspaceSymbols(settings) {
       const text = await readWorkspaceText(uri);
       if (text === undefined) workspaceModuleIndex.delete(uri.toString());
       else setModuleIndexEntry(uri, text);
-    } catch {
+    } catch (err) {
       // Gone or unreadable -- drop it.
+      log.debug(`Left ${vscode.workspace.asRelativePath(uri)} out of the module index:`, err);
       workspaceModuleIndex.delete(uri.toString());
     }
   }
@@ -142,6 +141,7 @@ function registerWorkspaceSymbols(settings) {
    * @returns {Promise<void>}
    */
   async function rebuildWorkspaceModuleIndex() {
+    const started = performance.now();
     workspaceModuleIndex.clear();
 
     const files = await vscode.workspace.findFiles(
@@ -160,7 +160,7 @@ function registerWorkspaceSymbols(settings) {
     const moduleCount = [...workspaceModuleIndex.values()].reduce((n, e) => n + e.symbols.length, 0);
     log.info(
       `Workspace module index: ${moduleCount} module(s) in ${workspaceModuleIndex.size} file(s) ` +
-      `(${files.length} on disk)`
+      `(${files.length} on disk) in ${Math.round(performance.now() - started)} ms`
     );
   }
 

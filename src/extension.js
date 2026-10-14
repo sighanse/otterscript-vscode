@@ -4,19 +4,19 @@
  *
  * RESPONSIBILITIES
  * 1. Register the language features, each in its own module under
- *    src/providers/ (completion, hover, signature help, quick fixes,
- *    navigation, workspace symbols)
+ *    src/providers/ (completion, hover, signature help, inlay hints, quick
+ *    fixes, navigation, workspace symbols)
  * 2. Schedule diagnostics runs (the checks themselves live in diagnostics.js)
  * 3. Keep settings, diagnostics and the workspace index current as documents
  *    and settings change
  *
  * DESIGN PRINCIPLES
- * - language-data.js and scanner.js are vscode-free (plain data / plain text)
+ * - language-data.js, scanner.js, json-check.js and json-view.js are
+ *   vscode-free (plain data / plain text)
  * - Each provider module receives what it needs from here (the live settings,
- *   regex patterns, a way to re-run diagnostics) instead of reaching for
- *   shared globals; reusable logic that builds vscode objects lives in
- *   helpers.js / document-index.js / diagnostics.js / adaptivecard.js
- * - Snippets own insertion text; providers never guess prefixes
+ *   the workspace module index, a way to re-run diagnostics) instead of
+ *   reaching for shared globals; reusable logic that builds vscode objects
+ *   lives in helpers.js / document-index.js / diagnostics.js / adaptivecard.js
  *
  * DOCUMENTATION
  * @author Sigurd Hansen <sigurd.hansen@gmail.com>
@@ -28,6 +28,7 @@
  * @see src/scanner.js - vscode-free text scanning (strings, comments, template tags)
  * @see src/diagnostics.js - Diagnostic checks and rules
  * @see src/adaptivecard.js - Adaptive Card checks for template JSON bodies
+ * @see src/json-check.js - JSON syntax check of a template's output
  * @see package.json - Extension manifest and configuration schema
  * @see syntaxes/otterscript.tmLanguage.json - TextMate grammar (syntax highlighting)
  * @see snippets/otterscript.json - Snippets for structural templates only
@@ -64,7 +65,12 @@ const diagnosticTimers = new Map();
 // ============================================================
 
 /**
+ * Called by VS Code when a workspace has an OtterScript file or one is
+ * opened (package.json `activationEvents`): registers everything and checks
+ * the documents already open.
+ *
  * @param {vscode.ExtensionContext} context
+ * @returns {void}
  */
 function activate(context) {
   const pkg = context.extension.packageJSON;

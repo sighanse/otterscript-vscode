@@ -19,6 +19,11 @@
  *                                                    rewrite the snapshot first
  *   node scripts/update-inedo-reference.js --check   exit 1 if the generated file
  *                                                    is stale (run by `npm run check`)
+ *   node scripts/update-inedo-reference.js --check-links
+ *                                                    exit 1 if a docs page that hover
+ *                                                    links to isn't on docs.inedo.com
+ *                                                    (run by hand after --fetch: it
+ *                                                    requests every page)
  */
 
 "use strict";
@@ -44,6 +49,7 @@ const SNAPSHOT_PATH = path.join(__dirname, "inedo-reference.json");
 const OUTPUT_PATH = path.join(__dirname, "..", "src", "inedo-reference-data.js");
 const {
   PRODUCT_LETTERS,
+  docsUrl,
   functionSignature,
   operationParam,
   operationSignature,
@@ -141,11 +147,14 @@ const plainText = (html) => decodeEntities(html.replace(/<[^>]*>/g, " ")).replac
 
 /**
  * @typedef {{ name: string, required: boolean, description?: string, format?: string }} RefParam
+ * `pages`: each product's page, as a path under its reference on
+ * docs.inedo.com (see `docsUrl` in src/inedo-reference.js).
+ *
  * @typedef {{
  *   kind: "function" | "operation",
  *   name: string,
  *   products: string[],
- *   category: string,
+ *   pages: Record<string, string>,
  *   usage: string,
  *   description: string,
  *   params: RefParam[]
@@ -191,7 +200,23 @@ function parsePage(kind, product, filePath, html) {
     }));
   }
   if (!name) return null;
-  return { kind, name, products: [product], category: path.posix.basename(path.posix.dirname(filePath)), usage, description, params };
+  return { kind, name, products: [product], pages: { [product]: pagePath(filePath) }, usage, description, params };
+}
+
+/**
+ * Where a reference page is published, under its product's reference on
+ * docs.inedo.com: the archive's folder and file name, as the site writes
+ * them (`Operations/Configuration Files/deploy-configuration-file.html` is
+ * `configuration-files/deploy-configuration-file`). The file name can't be
+ * derived from the entry's name: DotNet's two `Build` operations are
+ * `build` and `dotnet-build`.
+ *
+ * @param {string} filePath - The page's path in the archive
+ * @returns {string}
+ */
+function pagePath(filePath) {
+  const folder = path.posix.basename(path.posix.dirname(filePath)).toLowerCase().replace(/\s+/g, "-");
+  return `${folder}/${path.posix.basename(filePath, ".html").toLowerCase()}`;
 }
 
 /**
@@ -234,8 +259,12 @@ async function fetchSnapshot() {
         pages++;
         const key = JSON.stringify([entry.kind, entry.name, entry.usage, entry.description]);
         const existing = entries.get(key);
-        if (existing) existing.products.push(product);
-        else entries.set(key, entry);
+        if (existing) {
+          existing.products.push(product);
+          existing.pages[product] = entry.pages[product];
+        } else {
+          entries.set(key, entry);
+        }
       }
       if (pages < MIN_PAGES_PER_ARCHIVE) {
         throw new Error(`${url}: only ${pages} pages could be read -- has the page format changed?`);
@@ -328,6 +357,28 @@ function compactParams(params) {
 }
 
 /**
+ * The pages of an entry, from its pages in the snapshot (one per product):
+ * `docUrls` for the docs entry, and `u` for the compact one -- one path when
+ * every product has the page at the same path (most do), else the path by
+ * product letter.
+ *
+ * @param {RefEntry[]} pages
+ * @param {string[]} products
+ * @returns {{ docUrls: Record<string, string>, u: string | Record<string, string> }}
+ */
+function entryPages(pages, products) {
+  const kind = pages[0].kind;
+  /** @type {Record<string, string>} */
+  const byProduct = Object.assign({}, ...pages.map((v) => v.pages));
+  const letters = Object.entries(PRODUCT_LETTERS).filter(([, product]) => products.includes(product));
+  const paths = new Set(letters.map(([, product]) => byProduct[product]));
+  return {
+    docUrls: Object.fromEntries(letters.map(([, product]) => [product, docsUrl(product, kind, byProduct[product])])),
+    u: paths.size === 1 ? [...paths][0] : Object.fromEntries(letters.map(([letter, product]) => [letter, byProduct[product]])),
+  };
+}
+
+/**
  * Builds the reference from the snapshot, twice over: `tables`, the four
  * docs tables as language-data.js uses them (keyed like the hand-written
  * ones: functions by bare name, operations by name), and `compact`, what
@@ -380,6 +431,7 @@ function buildReference(snapshot, declared) {
         const [first, ...rest] = pages;
         const pageProducts = PRODUCTS.filter((product) => pages.some((v) => v.products.includes(product)));
         const params = operationParams(pages);
+        const { docUrls, u } = entryPages(pages, pageProducts);
         const signature = form(first);
         /** @type {[string, string][]} */
         const pageOverloads = rest
@@ -396,6 +448,7 @@ function buildReference(snapshot, declared) {
           documentation: referenceDocumentation(null, pageProducts),
           products: pageProducts,
           params: params.map(operationParam),
+          docUrls,
         };
         /** @type {CompactEntry} */
         const entry = {
@@ -405,6 +458,7 @@ function buildReference(snapshot, declared) {
           ...compactParams(params),
           ...(signature !== operationSignature(first.name, params) ? { s: signature } : {}),
           ...(pageOverloads.length ? { o: pageOverloads } : {}),
+          u,
         };
         if (i === 0) {
           tables.operationDocs[first.name] = doc;
@@ -427,6 +481,7 @@ function buildReference(snapshot, declared) {
     const sigil = /^[$@%]/.exec(primary.name)?.[0];
     const bare = primary.name.replace(/^[$@%]/, "");
     const params = primary.params.map(cleanParam);
+    const { docUrls, u } = entryPages(variants, products);
     const base = form(primary);
     for (const s of sigil ? [sigil] : ["$", "@", "%"]) {
       const signature = `${s}${base}`;
@@ -440,6 +495,7 @@ function buildReference(snapshot, declared) {
         documentation: referenceDocumentation(params, products),
         products,
         ...(sigil ? {} : { anySigil: /** @type {const} */ (true) }),
+        docUrls,
       };
     }
     compact.functions[sigil ? primary.name : bare] = {
@@ -448,6 +504,7 @@ function buildReference(snapshot, declared) {
       ...compactParams(params),
       ...(base !== functionSignature(bare, params) ? { s: base } : {}),
       ...(overloads.length ? { o: overloads } : {}),
+      u,
     };
   }
   return { tables, compact };
@@ -501,6 +558,47 @@ module.exports = { functions, operations };
 `;
 }
 
+/** How many docs pages --check-links requests at once. */
+const LINK_CHECK_CONCURRENCY = 8;
+
+/**
+ * Requests every docs page hover links to (each entry's `docUrls`, from
+ * src/language-data.js) and lists those that docs.inedo.com doesn't serve:
+ * a missing page redirects rather than giving 404.
+ *
+ * @returns {Promise<number>} The process exit code
+ */
+async function checkLinks() {
+  const data = require(path.join(__dirname, "..", "src", "language-data.js"));
+  const docs = [
+    ...["operationDocs", "scalarFunctionDocs", "vectorFunctionDocs", "mapFunctionDocs", "variableDocs"]
+      .flatMap((table) => Object.values(data[table])),
+    ...Object.values(data.operationVariants).flat(),
+  ];
+  const urls = [...new Set(docs.flatMap((doc) => Object.values(doc.docUrls ?? {})))];
+  /** @type {string[]} */
+  const broken = [];
+  let next = 0;
+  const worker = async () => {
+    while (next < urls.length) {
+      const url = urls[next++];
+      try {
+        const response = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+        if (response.status !== 200) broken.push(`${response.status} ${url}`);
+      } catch (err) {
+        broken.push(`${err instanceof Error ? err.message : err} ${url}`);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: LINK_CHECK_CONCURRENCY }, worker));
+  if (broken.length) {
+    console.error(`${broken.length} of ${urls.length} docs pages aren't served:\n${broken.sort().join("\n")}`);
+    return 1;
+  }
+  console.log(`All ${urls.length} docs pages are served.`);
+  return 0;
+}
+
 /**
  * Runs the command-line options described at the top of this file.
  *
@@ -508,6 +606,7 @@ module.exports = { functions, operations };
  */
 async function main() {
   const args = new Set(process.argv.slice(2));
+  if (args.has("--check-links")) return checkLinks();
   if (args.has("--fetch")) await fetchSnapshot();
 
   const snapshot = JSON.parse(fs.readFileSync(SNAPSHOT_PATH, "utf8"));
